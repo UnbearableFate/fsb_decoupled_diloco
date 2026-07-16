@@ -301,6 +301,7 @@ def initialize_run(
     outer_state = init_outer_state(theta, config.outer_optimizer)
     atomic_write_json(paths.param_index_json, param_index)
     write_resolved_config(config, paths.resolved_config_yaml)
+    write_resolved_config(config, paths.run_root_config_yaml)
     publish_global(
         config=config,
         paths=paths,
@@ -357,6 +358,7 @@ def initialize_fragment_run(
     atomic_write_json(paths.param_index_json, param_index)
     save_fragment_index(fragment_index, paths.fragment_index_json)
     write_resolved_config(config, paths.resolved_config_yaml)
+    write_resolved_config(config, paths.run_root_config_yaml)
 
     fragment_thetas: dict[int, torch.Tensor] = {}
     outer_states: dict[int, dict[str, torch.Tensor]] = {}

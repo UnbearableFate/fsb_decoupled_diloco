@@ -28,6 +28,18 @@ def _setup(tmp_path):
     return config, paths, store, logger, initialized
 
 
+def test_initialize_writes_matching_resolved_config_at_run_root_and_control(tmp_path):
+    config, paths, store, _logger, _initialized = _setup(tmp_path)
+
+    assert paths.run_root_config_yaml.is_file()
+    assert paths.resolved_config_yaml.is_file()
+    assert paths.run_root_config_yaml.read_bytes() == paths.resolved_config_yaml.read_bytes()
+    snapshot = paths.run_root_config_yaml.read_text(encoding="utf-8")
+    assert f"run_id: {config.run.run_id}" in snapshot
+    assert "global_adoption_strategy: replace" in snapshot
+    store.close()
+
+
 @pytest.mark.parametrize("latest_state", ["missing", "invalid", "behind", "ahead", "wrong_run"])
 def test_resume_repairs_latest_from_persistent_db(tmp_path, latest_state):
     config, paths, store, logger, initialized = _setup(tmp_path)

@@ -21,7 +21,7 @@
 
 ## storage/paths.py — 目录布局
 
-- **`RunPaths(shared_root)`**(frozen dataclass)— 共享目录布局的**唯一权威定义**。属性:`control / weights / optim / updates_latest / updates_payloads / fragments / fragment_weights / fragment_optim / heartbeats / logs / metrics`,文件:`latest_json / stop_json / summary_json / param_index_json / fragment_index_json / resolved_config_yaml / sqlite_db / update_history_jsonl / global_version_history_jsonl`。方法:
+- **`RunPaths(shared_root)`**(frozen dataclass)— 共享目录布局的**唯一权威定义**。属性:`control / weights / optim / updates_latest / updates_payloads / fragments / fragment_weights / fragment_optim / heartbeats / logs / metrics`,文件:`latest_json / stop_json / summary_json / param_index_json / fragment_index_json / run_root_config_yaml / resolved_config_yaml / sqlite_db / update_history_jsonl / global_version_history_jsonl`。run 根与 control 中的 resolved config 内容一致。方法:
   - **`update_pointer_path(learner_id)`** / **`update_payload_dir(learner_id)`** — 全量固定 proposal pointer 与不可变 payload 目录;
   - **`global_weight_path(version)`** / **`outer_optim_path(version)`** — 按模板拼版本化文件名;
   - **`fragment_weight_path(fragment_id, version)`** / **`fragment_outer_optim_path(...)`** — `fragments/{weights|optim}/fragment_{id:03d}/v{version:06d}.safetensors`。

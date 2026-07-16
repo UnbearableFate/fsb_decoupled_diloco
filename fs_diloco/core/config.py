@@ -130,6 +130,7 @@ class IOSection:
 class LearnerSection:
     poll_latest_during_inner_steps: bool = False
     adopt_global_after_upload: bool = True
+    global_adoption_strategy: str = "replace"
 
 
 @dataclass
@@ -262,6 +263,26 @@ def resolve_config(
             raise ValueError(f"unsupported fragments.schedule: {config.fragments.schedule}")
         if config.fragments.strategy not in {"full", "balanced_tensor"}:
             raise ValueError(f"unsupported fragments.strategy: {config.fragments.strategy}")
+        if config.learner.global_adoption_strategy != "replace":
+            raise ValueError(
+                "learner.global_adoption_strategy is only supported by the full learner"
+            )
+    if config.learner.global_adoption_strategy not in {
+        "replace",
+        "rebase_post_publish_delta",
+    }:
+        raise ValueError(
+            "unsupported learner.global_adoption_strategy: "
+            f"{config.learner.global_adoption_strategy}"
+        )
+    if config.learner.global_adoption_strategy == "rebase_post_publish_delta" and (
+        not config.learner.adopt_global_after_upload
+        or not config.learner.poll_latest_during_inner_steps
+    ):
+        raise ValueError(
+            "rebase_post_publish_delta requires adopt_global_after_upload=true and "
+            "poll_latest_during_inner_steps=true"
+        )
     config.training.block_size = config.data.block_size
     return config
 

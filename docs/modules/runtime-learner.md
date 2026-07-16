@@ -35,6 +35,7 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
 ### 全局权重采纳
 
 - **`adopt_global(*, model, latest, param_index, device) -> int`** — 全量模式:加载 `latest["weight_path"]` 为扁平向量 → 整体写回模型 → 返回新版本号。调用方随后负责重建内层优化器并清零 `tokens_since_global_load`。
+- **`rebase_local_delta_onto_global(*, model, latest, param_index, device, reference_flat) -> (version, delta_norm)`** — full 实验模式:在 CPU FP32 中计算 `current_local-reference`,加到新版 global 后写回模型。调用方随后立即释放 reference、保留 carried token 计数并重建 optimizer/scheduler。
 - **`load_fragment_latest_into_model(*, model, latest, param_index, fragment_index, device) -> (global_merge_event, {fragment_id: version})`** — 启动期:加载 latest 中**所有**片、materialize 成完整向量后整体写回。
 - **`adopt_fragment_updates(*, model, latest, param_index, fragment_index, last_loaded_fragment_versions, device) -> (event, versions, changed)`** — 运行期增量采纳:flatten 当前模型 → 只加载版本更新的片并 scatter → 有变化才写回模型;返回变化片列表(调用方据此清零对应 token 计数、按配置重置优化器)。
 

@@ -6,12 +6,13 @@
 
 ```
 <shared_root>/
+├── run_config.resolved.yaml         # 解析后的完整配置快照,放在 run 根便于直接检查
 ├── control/
 │   ├── latest.json                  # 唯一全局指针(learner 轮询)
 │   ├── stop.json                    # 停机标记(syncer 发布)
 │   ├── summary.json                 # 完整训练时间与 learner 全训练资源峰值
 │   ├── param_index.json             # 参数 ↔ 扁平向量映射契约
-│   ├── run_config.resolved.yaml     # 解析后的完整配置快照
+│   ├── run_config.resolved.yaml     # 同一配置快照的 control 副本,兼容恢复与工具路径
 │   └── syncer_metadata.sqlite3      # 权威持久 DB(rollback journal,FULL sync)
 ├── weights/
 │   └── global_v{VVVVVV}.safetensors # 全局权重(全量模式每版一份;fragment 模式为 materialize 产物)

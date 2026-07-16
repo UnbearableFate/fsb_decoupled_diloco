@@ -82,8 +82,9 @@ io:
   compute_sha256: false
 
 learner:
-  poll_latest_during_inner_steps: false
+  poll_latest_during_inner_steps: true
   adopt_global_after_upload: true
+  global_adoption_strategy: rebase_post_publish_delta
 
 failure_sim:
   enabled: false

@@ -275,6 +275,53 @@ def adopt_global(
     return int(latest["version"])
 
 
+def rebase_local_delta_onto_global(
+    *,
+    model: torch.nn.Module,
+    latest: dict[str, Any],
+    param_index: dict[str, Any],
+    device: torch.device,
+    reference_flat: torch.Tensor,
+) -> tuple[int, float]:
+    """Move unsubmitted local progress onto a newer full global checkpoint.
+
+    ``reference_flat`` is the CPU FP32 parameter snapshot whose contribution is
+    treated as already handed to the syncer.  The learner keeps only
+    ``current_local - reference_flat`` and composes it onto the new global.  The
+    CPU reference is needed only until this composition succeeds; the caller
+    discards it immediately afterwards.
+    """
+
+    expected_numel = int(param_index["total_numel"])
+    reference = reference_flat.detach().to(device="cpu", dtype=torch.float32)
+    if int(reference.numel()) != expected_numel:
+        raise ValueError(
+            f"rebase reference has {reference.numel()} values, expected {expected_numel}"
+        )
+
+    local_delta = flatten_trainable_params(
+        model,
+        param_index,
+        dtype=torch.float32,
+        device="cpu",
+    )
+    global_flat = (
+        load_global_weights_flat(latest["weight_path"], param_index)
+        .detach()
+        .to(device="cpu", dtype=torch.float32)
+        .contiguous()
+    )
+    if int(global_flat.numel()) != expected_numel:
+        raise ValueError(f"new global has {global_flat.numel()} values, expected {expected_numel}")
+
+    local_delta.sub_(reference)
+    delta_norm = float(torch.linalg.vector_norm(local_delta, ord=2).item())
+    local_delta.add_(global_flat)
+    load_flat_into_model(model, local_delta, param_index)
+    model.to(device)
+    return int(latest["version"]), delta_norm
+
+
 def load_fragment_latest_into_model(
     *,
     model: torch.nn.Module,
@@ -924,6 +971,10 @@ def run_learner(config: Config, learner_id: str) -> None:
         device=device,
     )
     optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
+    rebase_enabled = config.learner.global_adoption_strategy == "rebase_post_publish_delta"
+    rebase_reference_flat: torch.Tensor | None = None
+    carried_delta_tokens = 0
+    last_published_anchor_update_id: str | None = None
     logger.event("loaded_global", version=last_loaded_global_version)
     logger.event("inner_optimizer_reset", version=last_loaded_global_version)
     write_heartbeat(
@@ -978,6 +1029,8 @@ def run_learner(config: Config, learner_id: str) -> None:
                 interval_tokens += step_tokens
                 interval_examples += step_examples
                 tokens_since_global_load += step_tokens
+                if rebase_reference_flat is not None:
+                    carried_delta_tokens += step_tokens
                 losses.append(loss)
                 if local_step % max(1, config.training.log_every_steps) == 0:
                     logger.event(
@@ -1001,17 +1054,46 @@ def run_learner(config: Config, learner_id: str) -> None:
                     )
                     logger.event("heartbeat_written", local_step=local_step)
                     last_heartbeat = time.monotonic()
-                if config.learner.poll_latest_during_inner_steps:
+                should_poll_during_inner_step = config.learner.poll_latest_during_inner_steps and (
+                    not rebase_enabled or rebase_reference_flat is not None
+                )
+                if should_poll_during_inner_step:
                     maybe_latest = read_latest_if_newer(paths, last_loaded_global_version)
                     if maybe_latest is not None:
-                        last_loaded_global_version = adopt_global(
-                            model=model,
-                            latest=maybe_latest,
-                            param_index=param_index,
-                            device=device,
-                        )
+                        previous_version = last_loaded_global_version
+                        if rebase_enabled:
+                            if rebase_reference_flat is None:
+                                raise RuntimeError("local-delta rebase reference is unavailable")
+                            anchor_update_id = last_published_anchor_update_id
+                            last_loaded_global_version, delta_norm = rebase_local_delta_onto_global(
+                                model=model,
+                                latest=maybe_latest,
+                                param_index=param_index,
+                                device=device,
+                                reference_flat=rebase_reference_flat,
+                            )
+                            tokens_since_global_load = carried_delta_tokens
+                            logger.event(
+                                "global_rebased",
+                                previous_version=previous_version,
+                                version=last_loaded_global_version,
+                                anchor_update_id=anchor_update_id,
+                                carried_delta_tokens=carried_delta_tokens,
+                                local_delta_norm=delta_norm,
+                            )
+                            rebase_reference_flat = None
+                            carried_delta_tokens = 0
+                            last_published_anchor_update_id = None
+                        else:
+                            last_loaded_global_version = adopt_global(
+                                model=model,
+                                latest=maybe_latest,
+                                param_index=param_index,
+                                device=device,
+                            )
+                            tokens_since_global_load = 0
                         optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
-                        tokens_since_global_load = 0
+                        base_global_version = last_loaded_global_version
                         logger.event("global_adopted", version=last_loaded_global_version)
                         logger.event("inner_optimizer_reset", version=last_loaded_global_version)
 
@@ -1026,10 +1108,16 @@ def run_learner(config: Config, learner_id: str) -> None:
 
             write_start = time.monotonic()
             upload_dtype = dtype_from_name(config.io.tensor_dtype)
-            flat = flatten_trainable_params(model, param_index, dtype=upload_dtype)
-            param_norm = float(
-                torch.linalg.vector_norm(flat, ord=2, dtype=torch.float32).item()
+            if rebase_enabled:
+                rebase_reference_flat = None
+                carried_delta_tokens = 0
+                last_published_anchor_update_id = None
+            flat = flatten_trainable_params(
+                model,
+                param_index,
+                dtype=upload_dtype,
             )
+            param_norm = float(torch.linalg.vector_norm(flat, ord=2, dtype=torch.float32).item())
             mean_loss = sum(losses) / len(losses)
             update_id, tensor_path, _meta_path, metadata = write_update(
                 paths=paths,
@@ -1107,6 +1195,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                 resource_metrics=cycle_resources,
             )
             logger.event("heartbeat_written", local_step=local_step)
+            del flat
 
             if config.learner.adopt_global_after_upload:
                 maybe_latest = read_latest_if_newer(paths, last_loaded_global_version)
@@ -1116,16 +1205,41 @@ def run_learner(config: Config, learner_id: str) -> None:
                     found_version=maybe_latest.get("version") if maybe_latest else None,
                 )
                 if maybe_latest is not None:
+                    previous_version = last_loaded_global_version
                     last_loaded_global_version = adopt_global(
                         model=model,
                         latest=maybe_latest,
                         param_index=param_index,
                         device=device,
                     )
-                    optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
                     tokens_since_global_load = 0
+                    if rebase_enabled:
+                        logger.event(
+                            "global_adopted_after_publish",
+                            previous_version=previous_version,
+                            version=last_loaded_global_version,
+                            update_id=update_id,
+                        )
+                    optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
                     logger.event("global_adopted", version=last_loaded_global_version)
                     logger.event("inner_optimizer_reset", version=last_loaded_global_version)
+                elif rebase_enabled:
+                    rebase_reference_flat = flatten_trainable_params(
+                        model,
+                        param_index,
+                        dtype=torch.float32,
+                        device="cpu",
+                    )
+                    carried_delta_tokens = 0
+                    last_published_anchor_update_id = update_id
+                    logger.event(
+                        "local_rebase_anchor_saved",
+                        update_id=update_id,
+                        base_global_version=base_global_version,
+                        anchor_bytes=int(
+                            rebase_reference_flat.numel() * rebase_reference_flat.element_size()
+                        ),
+                    )
             maybe_crash(config.failure_sim)
     except Exception:
         logger.exception("error", local_step=local_step, global_version=last_loaded_global_version)

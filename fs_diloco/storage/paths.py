@@ -87,6 +87,10 @@ class RunPaths:
         return self.control / "run_config.resolved.yaml"
 
     @property
+    def run_root_config_yaml(self) -> Path:
+        return self.shared_root / "run_config.resolved.yaml"
+
+    @property
     def sqlite_db(self) -> Path:
         return self.control / "syncer_metadata.sqlite3"
 

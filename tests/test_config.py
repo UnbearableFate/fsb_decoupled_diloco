@@ -75,3 +75,25 @@ def test_removed_persistence_and_retention_config_is_rejected(tmp_path, section,
 )
 def test_bfloat16_upload_configs(path):
     assert load_config(path).io.tensor_dtype == "bfloat16"
+
+
+def test_full_5000_config_enables_stepwise_local_delta_rebase():
+    config = resolve_config("configs/fs_diloco_gpt2_wikitext2_8l_5000steps.yaml")
+    assert config.learner.poll_latest_during_inner_steps is True
+    assert config.learner.adopt_global_after_upload is True
+    assert config.learner.global_adoption_strategy == "rebase_post_publish_delta"
+
+
+def test_fragment_rejects_full_local_delta_rebase(tmp_path):
+    path = tmp_path / "fragment_rebase.yaml"
+    path.write_text(
+        """
+fragments:
+  enabled: true
+learner:
+  global_adoption_strategy: rebase_post_publish_delta
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="only supported by the full learner"):
+        resolve_config(path)

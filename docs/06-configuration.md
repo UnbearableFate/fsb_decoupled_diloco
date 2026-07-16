@@ -1,6 +1,6 @@
 # 06 配置参考
 
-配置为单个 YAML 文件,由 `core/config.py` 解析为嵌套 dataclass。**所有字段都有默认值**;出现未知键会直接报错(防拼写错误)。CLI 的 `--run-id / --shared-root / --num-learners` 会覆盖对应字段。解析后的完整配置会以 `control/run_config.resolved.yaml` 快照进 run 目录。
+配置为单个 YAML 文件,由 `core/config.py` 解析为嵌套 dataclass。**所有字段都有默认值**;出现未知键会直接报错(防拼写错误)。CLI 的 `--run-id / --shared-root / --num-learners` 会覆盖对应字段。新 run 初始化时,解析后的完整配置会同时原子写入 run 根的 `run_config.resolved.yaml` 和 `control/run_config.resolved.yaml`;二者内容一致,后者保留给恢复与既有工具使用。
 
 标注 ⚠ 的字段:在配置中声明但**当前运行时代码未消费**(预留)。
 
@@ -119,6 +119,12 @@ checkpoint/update 保留数量不再是配置项。syncer 的 maintenance 按权
 |---|---|---|
 | `poll_latest_during_inner_steps` | `false` | 区间中途也轮询/采纳新版本 |
 | `adopt_global_after_upload` | `true` | 每次上传后轮询/采纳(fragment 模式会等待一小段时间) |
+| `global_adoption_strategy` | `replace` | full learner 的采纳方式:`replace` 直接替换本地权重;`rebase_post_publish_delta` 仅在发布后的第一次检查没有新版时保留 CPU FP32 发布点,随后将尚未发布的本地差值合成到首个新 global 并立即释放 reference。后者不支持 fragment |
+
+5000-step full 配置启用 `poll_latest_during_inner_steps=true` 和
+`global_adoption_strategy=rebase_post_publish_delta`:发布后仍只无阻塞检查一次 latest;若没有新版,
+才保留发布点并在每个后续 `optimizer.step()` 后再检查;若第一次检查已有新版则直接采纳且不保留发布点。
+延迟发现新版并完成 rebase 后也立即释放发布点。采用新版时仍按现有语义重建 inner optimizer 与 scheduler。
 
 ## fragments
 
