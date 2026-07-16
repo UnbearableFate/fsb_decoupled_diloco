@@ -111,6 +111,7 @@ def latest_payload(
     version: int,
     weight_path: Path,
     optim_path: Path,
+    total_update_tokens: int,
     total_seen_tokens: int,
     created_at: float | None = None,
 ) -> dict[str, Any]:
@@ -122,6 +123,7 @@ def latest_payload(
         "optim_path": str(optim_path),
         "param_index_path": str(paths.param_index_json),
         "created_at": time.time() if created_at is None else float(created_at),
+        "total_update_tokens": int(total_update_tokens),
         "total_seen_tokens": total_seen_tokens,
     }
 
@@ -190,6 +192,7 @@ def publish_global(
             version=version,
             weight_path=weight_path,
             optim_path=optim_path,
+            total_update_tokens=total_update_tokens,
             total_seen_tokens=total_seen_tokens,
             created_at=float(row["created_at"]),
         ),
@@ -476,6 +479,7 @@ def resume_run(
         version=int(committed["version"]),
         weight_path=weight_path,
         optim_path=optim_path,
+        total_update_tokens=int(committed["total_update_tokens"]),
         total_seen_tokens=total_seen_tokens,
         created_at=float(committed["created_at"]),
     )

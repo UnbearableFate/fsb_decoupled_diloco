@@ -83,6 +83,7 @@ def test_resume_repairs_latest_from_persistent_db(tmp_path, latest_state):
     assert latest["run_id"] == "resume_test"
     assert latest["version"] == 0
     assert latest["weight_path"] == committed["weight_path"]
+    assert latest["total_update_tokens"] == 0
     assert not paths.global_weight_path(99).exists()
     assert not paths.outer_optim_path(99).exists()
     store.close()
