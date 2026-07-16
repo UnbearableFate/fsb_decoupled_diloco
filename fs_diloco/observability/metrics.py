@@ -89,6 +89,7 @@ UPDATE_MANIFEST_FIELDS = [
     "local_step_start",
     "local_step_end",
     "tokens_this_update",
+    "tensor_dtype",
     "file_path",
     "file_size_bytes",
     "sha256",

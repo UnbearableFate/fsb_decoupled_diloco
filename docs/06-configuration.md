@@ -111,7 +111,7 @@
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
-| `tensor_dtype` | `float32` | update 向量落盘 dtype(合并时统一转回 fp32) |
+| `tensor_dtype` | `float32` | learner update 的构造/落盘 dtype(`float32`/`bfloat16`/`float16`;合并时统一转回 fp32)。本仓库的 GPT-2 1L debug 与两种 50x10 对照配置使用 `bfloat16` |
 | `atomic_write` | `true` | ⚠ 未消费(始终原子写) |
 | `compute_sha256` | `false` | 上传时计算张量文件摘要(分析工具可校验完整性) |
 | `keep_processed_updates` | `true` | ⚠ 未消费 |

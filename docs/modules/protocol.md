@@ -49,6 +49,7 @@ fragment index JSON 结构:`{format_version, strategy, num_fragments, total_nume
 常量 `FRAGMENT_TENSOR_KEY = "fragment_params"`(分片 safetensors 的统一键)。
 
 - **`extract_fragment(flat, fragment_index, fragment_id) -> Tensor`** — 按 slices 从完整扁平向量中切出该片(拼接为连续向量)。
+- **`extract_fragment_from_model(model, fragment_index, fragment_id, *, dtype, device="cpu") -> Tensor`** — 根据 slices 的参数名/参数内 offset 直接读取目标参数并拼成连续 fragment;只搬运目标片,同时校验参数名、切片边界与总 numel。
 - **`scatter_fragment(flat, fragment_index, fragment_id, fragment_tensor) -> Tensor`** — 逆操作:把片写回完整向量的对应区间(在 clone 上操作,返回新张量);numel 不符报错。
 - **`load_fragment_into_model(model, fragment_tensor, param_index, fragment_index, fragment_id)`** — flatten 当前模型 → scatter 该片 → `load_flat_into_model` 写回(`@torch.no_grad`)。
 - **`save_fragment_update(path, fragment_tensor, dtype)`** / **`load_fragment_update(path, device)`** — learner 上传/ syncer 读取的分片更新(存盘 dtype 可配,读取转 float32)。

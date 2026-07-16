@@ -98,6 +98,7 @@ learner `write_update()` 产出(fragment 版 `write_fragment_update()` 另有 `u
 | `local_step_start` / `local_step_end` / `inner_steps` | 区间步数信息 |
 | `tokens_this_update` / `tokens_since_global_load` / `num_examples_this_update` | token/样本计量(合并权重依据) |
 | `train_loss` / `grad_norm` / `param_norm` / `delta_norm` | 训练侧统计(`delta_norm` 当前恒为 null) |
+| `tensor_dtype` | learner update 的实际落盘 dtype(例如 `bfloat16`) |
 | `training_{cpu,gpu}_utilization_peak_percent` | 从 learner 启动至本 update 为止的 CPU/GPU 利用率最高值 |
 | `local_cycle_{cpu,gpu}_utilization_peak_percent` | 本 update 对应的上一 local 训练周期 CPU/GPU 利用率最高值 |
 | `local_cycle_step_time_seconds_mean` | 上一 local 训练周期内逐训练 step 耗时的算术平均值 |
@@ -111,8 +112,11 @@ learner `write_update()` 产出(fragment 版 `write_fragment_update()` 另有 `u
 |---|---|---|
 | `global_v*.safetensors` | 每参数一键(参数名) | 按 param index 还原的命名权重 |
 | `outer_v*.safetensors` | `theta` + 状态键(`step`,`momentum` 或 `exp_avg`/`exp_avg_sq`) | 外层优化器完整状态 |
-| `update_*.params.safetensors` | `local_params` | learner 参数扁平向量(dtype 由 `io.tensor_dtype` 决定,默认 float32) |
-| `*_fragment_*.params.safetensors`、`fragments/weights/**` | `fragment_params` | 单个 fragment 的扁平向量 |
+| `update_*.params.safetensors` | `local_params` | learner 参数扁平向量(dtype 由 `io.tensor_dtype` 决定;50x10 配置为 bfloat16) |
+| `*_fragment_*.params.safetensors` | `fragment_params` | 直接从模型目标参数切片构造的单个 fragment(dtype 由 `io.tensor_dtype` 决定) |
+| `fragments/weights/**` | `fragment_params` | syncer 发布的单个 fragment 全局权重 |
+
+update 文件可用 BF16 降低共享文件系统 payload;syncer 读取 `local_params` / learner fragment 后立即提升为 FP32 再做加权聚合和外层优化。
 
 ### 2.4 心跳 `heartbeats/learner_XXX.json`
 
@@ -126,7 +130,7 @@ learner `write_update()` 产出(fragment 版 `write_fragment_update()` 另有 `u
 
 - `syncer_metrics.csv`:每次合并一行——版本/事件号、selected_count、token 数、read/aggregation/outer_step/publish/materialize 耗时、staleness 统计、丢弃数、两次合并间隔,以及本次 selected learners 的资源指标均值。
 - `learner_metrics.csv`:每次上传一行——loss、tokens、tokens/s、写盘耗时、param/fragment norm、已加载片版本,全训练/当前 local cycle 资源峰值和 cycle 平均 step 时间等。
-- `update_manifest.csv`:每份 update 一行的清单(id、base 版本、步区间、文件指针)。
+- `update_manifest.csv`:每份 update 一行的清单(id、base 版本、步区间、`tensor_dtype`、文件指针与大小)。
 
 ### 2.7 `control/summary.json`
 
@@ -184,7 +188,8 @@ dump 机制:`SQLiteStore.backup_to()` 用 `sqlite3` 的在线 backup API 产生�
    │ tokenize + 切块
    ▼
  learner GPU:inner_steps × AdamW
-   │ flatten (param_index 契约)
+   │ 全量:按 param_index flatten;fragment:只抽取目标参数切片
+   │ 转为 io.tensor_dtype
    ▼
  updates/pending/…/update_*.params.safetensors   ──(先写)
  updates/pending/…/update_*.meta.json            ──(后写 = 提交)

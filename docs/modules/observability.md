@@ -16,7 +16,7 @@ JSONL 事件日志、CSV 指标、learner 资源采样与 W&B 遥测。观测组
 - **`append_csv_row(path, row, fieldnames=None)`** — 追加一行;文件不存在或为空时先写表头;`extrasaction="ignore"` 忽略多余键。非原子(单写者追加,可接受)。
 - **`SYNCER_METRIC_FIELDS`** — `syncer_metrics.csv` 字段:timestamp、version、global_merge_event、fragment_id/fragment_version、selected_count、total_update_tokens、read/fragment_read/aggregation/fragment_aggregation/outer_step/publish/materialize_full 各段秒数、fragment staleness min/mean/max、stale_updates_dropped、global_interval_seconds,以及本次被选 updates 的 learner 资源指标平均值。
 - **`LEARNER_METRIC_FIELDS`** — `learner_metrics.csv` 字段:timestamp、learner_id、local_step、global_version、global_merge_event、fragment_id、base_fragment_version、train_loss、tokens、tokens_per_sec、update_write_seconds、param_norm、fragment_norm、last_loaded_fragment_versions_json、fragment_adopt_count、phase,以及全训练/上一个 local cycle 的资源峰值和 cycle 平均 step 时间。
-- **`UPDATE_MANIFEST_FIELDS`** — `update_manifest.csv` 字段:每份 update 的 id/kind/base 版本/步区间/token 数/文件指针/sha256。
+- **`UPDATE_MANIFEST_FIELDS`** — `update_manifest.csv` 字段:每份 update 的 id/kind/base 版本/步区间/token 数/`tensor_dtype`/文件指针/sha256。
 
 ## observability/resource_monitor.py — learner 资源采样
 

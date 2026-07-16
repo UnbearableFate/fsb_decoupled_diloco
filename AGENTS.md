@@ -1,10 +1,6 @@
 # AGENTS.md
 
-Use the `miyabi-development` Codex skill for all Miyabi-related work.
-
-Do not run training, model loading, CUDA checks, torch imports, transformers imports, datasets preprocessing, `torchrun`, `mpirun`, or pytest runtime tests on Miyabi login nodes. Login nodes are control-plane only: inspect files, edit, run `bash -n`, review configs, submit jobs, inspect logs.
-
-For runtime validation, use PBS interactive/debug or batch compute nodes. Start with 1-node checks, then 2-node checks, then 9-node batch.
+Using the usual skill loading rules, the miyabi-development skill should only be used when the user or the dependency file explicitly indicates that testing or experimentation is required.
 
 This repository implements a filesystem-based Decoupled DiLoCo prototype:
 

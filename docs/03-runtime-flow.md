@@ -58,7 +58,7 @@ while not stop_requested():                     # max_local_steps 或 stop.json
       可选:poll_latest_during_inner_steps=true 时区间中途也轮询/采纳新全局版本
   # —— 上传阶段 ——
   failure_sim:可选随机睡眠;可选跳过上传;可选崩溃(exit 97)
-  flatten 模型参数为 float32 扁平向量,计算 param_norm
+  按 io.tensor_dtype flatten 模型参数(50x10 配置为 bfloat16),用 float32 累积计算 param_norm
   write_update():先原子写 update_<uuid>.params.safetensors,再原子写 .meta.json(提交)
   cleanup_learner_update_artifacts():只保留自己 pending 目录里最新 keep_last_learner_update_versions 份
   记 learner_metrics.csv、update_manifest.csv,写心跳(phase=update_written)
@@ -77,7 +77,8 @@ finally:
 
 ## 3. learner 主循环(fragment 模式差异)
 
-- 每轮上传前用 `select_fragment(local_update_index, K)` 决定本轮上传哪一片,从完整 flatten 向量中 `extract_fragment` 后写 `update_*_fragment_XXX.params.safetensors` + meta(带 `update_kind: "fragment"`、`fragment_id`、`base_fragment_version`、`base_global_merge_event`)。
+- 每轮上传前用 `select_fragment(local_update_index, K)` 决定本轮上传哪一片,再用 `extract_fragment_from_model()` 按 fragment slices 直接读取目标命名参数并转换为 `io.tensor_dtype`,不构造完整 flatten 向量;随后写 `update_*_fragment_XXX.params.safetensors` + meta(带 `update_kind: "fragment"`、`fragment_id`、`base_fragment_version`、`base_global_merge_event`、`tensor_dtype`)。
+- `param_norm` 通过逐参数 FP32 L2 norm 再汇总计算,同样不需要完整扁平副本;`fragment_norm` 对实际上传片以 FP32 累积计算。
 - 采纳是**增量**的:`adopt_fragment_updates()` 只加载 `latest.json` 中版本比本地新的片,scatter 进本地向量后一次性写回模型;有变化时按配置重置内层优化器。
 - **不做** pending 目录保留清理(不同片的消费节奏不同,按 local step 排序删除不安全)。
 - 收尾:到达 `max_local_steps` 后不立即退出,在 finally 中轮询等待 `global_merge_event` 达到 `stop_after_outer_steps`(带超时),期间持续采纳,最后再整体采纳一次最终版本——保证退出时本地模型是最终模型。
@@ -103,7 +104,7 @@ while True:
       (窗口结束仍不足 quorum_min → 再试 terminal drain,否则重来)
 
   mark_updates_selected(CAS:仅 pending → selected)
-  读取阶段:再查文件存在性;加载所有向量到 GPU
+  读取阶段:再查文件存在性;加载所有向量、转为 float32 后送到 GPU
       (发现丢失 → 丢该份、其余回滚 pending、放弃本次合并)
   加权:w_i ∝ tokens_i / (1 + λ·staleness_i),归一化
   聚合:p̄ = Σ wᵢ pᵢ;g = θ − p̄

@@ -2,6 +2,7 @@ import torch
 
 from fs_diloco.protocol.fragment_codec import (
     extract_fragment,
+    extract_fragment_from_model,
     load_fragment_update,
     materialize_full_from_fragments,
     save_fragment_update,
@@ -46,3 +47,35 @@ def test_fragment_update_safetensors_round_trip(tmp_path):
     save_fragment_update(path, tensor, torch.float32)
     loaded = load_fragment_update(path)
     assert torch.equal(loaded, tensor)
+
+
+def test_extract_fragment_from_model_matches_flat_extraction():
+    model = torch.nn.Module()
+    model.register_parameter("a", torch.nn.Parameter(torch.arange(4, dtype=torch.float32)))
+    model.register_parameter("b", torch.nn.Parameter(torch.arange(4, 7, dtype=torch.float32)))
+    model.register_parameter("c", torch.nn.Parameter(torch.arange(7, 10, dtype=torch.float32)))
+    fragment_index = build_fragment_index(
+        _param_index(), strategy="balanced_tensor", num_fragments=2
+    )
+    flat = torch.arange(10, dtype=torch.float32)
+    for fragment_id in range(2):
+        expected = extract_fragment(flat, fragment_index, fragment_id).to(torch.bfloat16)
+        actual = extract_fragment_from_model(
+            model,
+            fragment_index,
+            fragment_id,
+            dtype=torch.bfloat16,
+        )
+        assert actual.dtype == torch.bfloat16
+        assert torch.equal(actual, expected)
+
+
+def test_fragment_update_can_store_bfloat16(tmp_path):
+    tensor = torch.tensor([1.0, 2.0, 3.0], dtype=torch.bfloat16)
+    path = tmp_path / "fragment_bf16.safetensors"
+    save_fragment_update(path, tensor, torch.bfloat16)
+    from safetensors.torch import load_file
+
+    stored = load_file(str(path))["fragment_params"]
+    assert stored.dtype == torch.bfloat16
+    assert load_fragment_update(path).dtype == torch.float32

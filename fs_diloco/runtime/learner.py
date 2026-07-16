@@ -28,13 +28,14 @@ from ..modeling.param_index import (
     flatten_trainable_params,
     load_flat_into_model,
     load_param_index,
+    trainable_params_l2_norm,
     validate_compatible_index,
 )
 from ..observability.logging_utils import JsonlLogger, log_uncaught_exception
 from ..observability.metrics import LEARNER_METRIC_FIELDS, UPDATE_MANIFEST_FIELDS, append_csv_row
 from ..observability.resource_monitor import ResourceMonitor, finite_resource_metrics
 from ..protocol.fragment_codec import (
-    extract_fragment,
+    extract_fragment_from_model,
     load_fragment_weight,
     materialize_full_from_fragments,
     save_fragment_update,
@@ -374,6 +375,7 @@ def write_update(
         "grad_norm": grad_norm,
         "param_norm": param_norm,
         "delta_norm": None,
+        "tensor_dtype": config.io.tensor_dtype,
         "file_path": str(tensor_path),
         "file_size_bytes": file_size(tensor_path),
         "sha256": digest,
@@ -435,6 +437,7 @@ def write_fragment_update(
         "grad_norm": grad_norm,
         "param_norm": param_norm,
         "fragment_norm": fragment_norm,
+        "tensor_dtype": config.io.tensor_dtype,
         "file_path": str(tensor_path),
         "file_size_bytes": file_size(tensor_path),
         "sha256": digest,
@@ -622,8 +625,8 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                 continue
 
             write_start = time.monotonic()
-            flat = flatten_trainable_params(model, param_index).float()
-            param_norm = float(flat.norm().item())
+            upload_dtype = dtype_from_name(config.io.tensor_dtype)
+            param_norm = float(trainable_params_l2_norm(model).item())
             mean_loss = sum(losses) / len(losses)
             fragment_id = select_fragment(
                 local_update_index,
@@ -631,8 +634,15 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                 schedule=config.fragments.schedule,
             )
             base_fragment_version = int(last_loaded_fragment_versions[fragment_id])
-            fragment_tensor = extract_fragment(flat, fragment_index, fragment_id)
-            fragment_norm = float(fragment_tensor.norm().item())
+            fragment_tensor = extract_fragment_from_model(
+                model,
+                fragment_index,
+                fragment_id,
+                dtype=upload_dtype,
+            )
+            fragment_norm = float(
+                torch.linalg.vector_norm(fragment_tensor, ord=2, dtype=torch.float32).item()
+            )
             update_id, tensor_path, _meta_path, metadata = write_fragment_update(
                 paths=paths,
                 config=config,
@@ -710,6 +720,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                     "local_step_start": interval_start_step,
                     "local_step_end": local_step,
                     "tokens_this_update": interval_tokens,
+                    "tensor_dtype": metadata["tensor_dtype"],
                     "file_path": metadata["file_path"],
                     "file_size_bytes": metadata["file_size_bytes"],
                     "sha256": metadata["sha256"],
@@ -1015,8 +1026,11 @@ def run_learner(config: Config, learner_id: str) -> None:
                 continue
 
             write_start = time.monotonic()
-            flat = flatten_trainable_params(model, param_index).float()
-            param_norm = float(flat.norm().item())
+            upload_dtype = dtype_from_name(config.io.tensor_dtype)
+            flat = flatten_trainable_params(model, param_index, dtype=upload_dtype)
+            param_norm = float(
+                torch.linalg.vector_norm(flat, ord=2, dtype=torch.float32).item()
+            )
             mean_loss = sum(losses) / len(losses)
             update_id, tensor_path, _meta_path, metadata = write_update(
                 paths=paths,
@@ -1079,6 +1093,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                     "local_step_start": interval_start_step,
                     "local_step_end": local_step,
                     "tokens_this_update": interval_tokens,
+                    "tensor_dtype": metadata["tensor_dtype"],
                     "file_path": metadata["file_path"],
                     "file_size_bytes": metadata["file_size_bytes"],
                     "sha256": metadata["sha256"],

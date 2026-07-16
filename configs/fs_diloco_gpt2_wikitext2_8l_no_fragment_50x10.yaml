@@ -81,7 +81,7 @@ outer_optimizer:
   eps: 1.0e-8
 
 io:
-  tensor_dtype: float32
+  tensor_dtype: bfloat16
   atomic_write: true
   compute_sha256: false
   keep_processed_updates: true

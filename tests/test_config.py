@@ -46,3 +46,16 @@ fragments:
     bad_nested.write_text("sync:\n  mode: fragment\n", encoding="utf-8")
     with pytest.raises(ValueError, match="unknown config key"):
         load_config(bad_nested)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "configs/fs_diloco_gpt2_wikitext2_1l_debug.yaml",
+        "configs/fs_diloco_gpt2_wikitext2_1l_fragment_debug.yaml",
+        "configs/fs_diloco_gpt2_wikitext2_8l_fragment_50x10.yaml",
+        "configs/fs_diloco_gpt2_wikitext2_8l_no_fragment_50x10.yaml",
+    ],
+)
+def test_bfloat16_upload_configs(path):
+    assert load_config(path).io.tensor_dtype == "bfloat16"

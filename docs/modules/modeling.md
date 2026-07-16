@@ -34,6 +34,7 @@ param index 是"模型 ↔ 扁平向量"映射的**契约**,JSON 结构:`{format
 - **`build_param_index(model, *, model_name_or_path, trainable_only=True) -> dict`** — 遍历可训练参数累积 offset。
 - **`save_param_index / load_param_index`** — 原子写 / 读取(校验 format_version)。
 - **`flatten_trainable_params(model, param_index, *, dtype=float32, device="cpu") -> Tensor`** — 按 index 顺序把各参数 reshape(-1) 拼接为扁平向量。
+- **`trainable_params_l2_norm(model, *, dtype=float32) -> Tensor`** — 逐个可训练参数计算 L2 norm,再以同一 dtype 汇总为全局 norm;不物化完整扁平参数副本。
 - **`load_flat_into_model(model, flat, param_index, *, strict_shape=True)`** — 逆操作(`@torch.no_grad`):按 offset 切片、reshape、`param.copy_()` 写回;总长或形状不符抛错。
 - **`flat_to_named_tensors(flat, param_index) -> dict[name, Tensor]`** — 扁平向量 → 命名张量(存全局权重用)。
 - **`named_tensors_to_flat(named_tensors, param_index, *, device) -> Tensor`** — 逆向(加载全局权重用),逐张量校验 numel。

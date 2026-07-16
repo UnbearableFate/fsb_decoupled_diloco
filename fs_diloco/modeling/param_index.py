@@ -76,6 +76,22 @@ def flatten_trainable_params(
     return torch.cat(chunks, dim=0).contiguous()
 
 
+def trainable_params_l2_norm(
+    model: torch.nn.Module,
+    *,
+    dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
+    """Compute a stable global L2 norm without materializing a flat parameter vector."""
+    norms = [
+        torch.linalg.vector_norm(param.detach(), ord=2, dtype=dtype)
+        for param in model.parameters()
+        if param.requires_grad
+    ]
+    if not norms:
+        return torch.zeros((), dtype=dtype)
+    return torch.linalg.vector_norm(torch.stack(norms), ord=2, dtype=dtype)
+
+
 @torch.no_grad()
 def load_flat_into_model(
     model: torch.nn.Module,

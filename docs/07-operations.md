@@ -50,8 +50,12 @@ python -m fs_diloco.learner \
 
 ```bash
 scripts/local/run_tiny_2proc_smoke.sh      # synthetic-tiny 模型 + 合成数据,CPU 上 1 syncer + 2 learner
-scripts/local/clean_run.sh                 # 清理冒烟产物
+scripts/local/clean_run.sh runs/fs_diloco  # 递归预览将清理的 safetensors
+scripts/local/clean_run.sh --delete runs/fs_diloco
+scripts/local/clean_run.sh --delete --keep-latest-global runs/fs_diloco
 ```
+
+`clean_run.sh` 只扫描项目 `runs/` 内的目标目录；默认是 dry-run，必须传入 `--delete` 才会删除。`--keep-latest-global` 会对递归扫描到的每个目录保留编号最大的 `global_v<version>.safetensors`，删除其余所有 safetensors。
 
 对应配置 `configs/fs_diloco_tiny_local.yaml` / `fs_diloco_tiny_fragment_local.yaml`。
 
@@ -73,10 +77,11 @@ scripts/local/clean_run.sh                 # 清理冒烟产物
 ```bash
 qsub scripts/miyabi/run_9node_gpt2_wikitext2_5000steps.pbs
 # 环境变量可覆盖:CONFIG、RUN_ID、SHARED_ROOT、SYNCER_DB_DIR、WANDB_MODE、
+# HF_DATASETS_OFFLINE、HF_HUB_OFFLINE、FS_DILOCO_HF_WIKITEXT_REPO、
 # SYNCER/LEARNER_CUDA_VISIBLE_DEVICES 等(见脚本头部)
 ```
 
-脚本约定:第 1 台节点跑 syncer,其余 8 台各跑一个 learner;`SYNCER_DB_DIR` 默认 `$TMPDIR/fs_diloco/$RUN_ID`(节点本地);HF 缓存与 W&B 目录也在脚本里统一设置。
+脚本约定:第 1 台节点跑 syncer,其余 8 台各跑一个 learner;`SYNCER_DB_DIR` 默认 `$TMPDIR/fs_diloco/$RUN_ID`(节点本地);HF 缓存与 W&B 目录也在脚本里统一设置。WikiText 默认映射到 `Salesforce/wikitext`;已有完整缓存时可在 `qsub -v` 中设置 `HF_DATASETS_OFFLINE=1,HF_HUB_OFFLINE=1`,避免运行期的 Hub HEAD 请求影响启动。
 
 辅助脚本:
 
@@ -111,6 +116,19 @@ python -m fs_diloco.analysis assert-fragment-5000 ... --expected-local-steps 500
 sqlite3 runs/fs_diloco/<RUN_ID>/db_dumps/metadata_*_v000047.db \
   "SELECT status, COUNT(*) FROM updates GROUP BY status"
 ```
+
+### 5.1 BF16 upload + fragment 直接抽取的 50x10 复测(2026-07-16)
+
+变更后两个 9 节点作业均为 8 learners、10 次 merge、每次 selected count=8,正常以 `stop_after_outer_steps` 结束,无 error/no-progress/未捕获异常。fragment 作业还通过了脚本内置的 `assert-fragment-smoke`。
+
+| 模式 | run | 单份 update payload | learner 平均写 update | syncer 平均读 update | 完整训练时间 | loss(first-10 → last-10) |
+|---|---|---:|---:|---:|---:|---:|
+| fragment / FP32 基线 | `20260716_160259_fs_diloco_gpt2_wikitext2_8l_fragment_50x10` | 126.394 MB(四片加权平均) | 134.79 ms | 254.10 ms | 201.63 s | 3.9144 → 3.3156 |
+| fragment / BF16 + 直接抽取 | `codex_bf16_fragment_50x10_20260716_1724` | 63.197 MB(-50.0%) | 63.88 ms(-52.6%) | 181.71 ms(-28.5%) | 198.90 s(-1.4%) | 3.9184 → 3.3237 |
+| full / FP32 基线 | `20260716_160753_fs_diloco_gpt2_wikitext2_8l_no_fragment_50x10` | 497.759 MB | 206.81 ms | 624.27 ms | 153.62 s | 3.8981 → 3.3621 |
+| full / BF16 | `codex_bf16_full_50x10_20260716_1727` | 248.880 MB(-50.0%) | 140.18 ms(-32.2%) | 356.79 ms(-42.9%) | 150.44 s(-2.1%) | 3.8849 → 3.3716 |
+
+结论:BF16 确实把共享文件系统上的 learner update payload 减半,并明显降低 learner 写入与 syncer 读取耗时。端到端时间只改善约 1–2%,说明当前 50x10 的主耗时仍是本地训练、quorum/轮询和 syncer 发布 FP32 全局权重;fragment 行的写入改善是“直接抽取 + BF16”的合并效果,不能仅凭这组对照拆分两项各自贡献。两种新 run 的 loss 都持续下降且分析器未判定发散。
 
 ## 6. checkpoint 评测(LM Evaluation Harness)
 
