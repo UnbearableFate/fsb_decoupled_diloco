@@ -244,6 +244,18 @@ def build_inner_optimizer_and_scheduler(
     return optimizer, torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
 
 
+def inner_training_state_metrics(
+    optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.LRScheduler | None,
+) -> dict[str, int | None]:
+    """Return lightweight evidence that optimizer/scheduler state was retained."""
+
+    return {
+        "optimizer_state_entries": len(optimizer.state),
+        "scheduler_last_epoch": scheduler.last_epoch if scheduler is not None else None,
+    }
+
+
 def maybe_autocast(device: torch.device, precision: str) -> torch.autocast:
     enabled = device.type == "cuda" and precision.lower() in {"bf16", "bfloat16"}
     return torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=enabled)
@@ -1196,6 +1208,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                     maybe_latest = read_latest_if_newer(paths, last_loaded_global_version)
                     if maybe_latest is not None:
                         previous_version = last_loaded_global_version
+                        preserve_inner_training_state = False
                         if prediction_enabled:
                             if prediction_reference_flat is None:
                                 raise RuntimeError("predicted-global reference is unavailable")
@@ -1225,6 +1238,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                             prediction_carried_tokens = 0
                             prediction_update_id = None
                             prediction_base_version = None
+                            preserve_inner_training_state = True
                         elif rebase_enabled:
                             if rebase_reference_flat is None:
                                 raise RuntimeError("local-delta rebase reference is unavailable")
@@ -1258,10 +1272,24 @@ def run_learner(config: Config, learner_id: str) -> None:
                             )
                             last_loaded_latest = maybe_latest
                             tokens_since_global_load = 0
-                        optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
                         base_global_version = last_loaded_global_version
                         logger.event("global_adopted", version=last_loaded_global_version)
-                        logger.event("inner_optimizer_reset", version=last_loaded_global_version)
+                        if preserve_inner_training_state:
+                            logger.event(
+                                "inner_training_state_preserved",
+                                version=last_loaded_global_version,
+                                reason="global_prediction_reconciled",
+                                optimizer_state_preserved=True,
+                                scheduler_state_preserved=True,
+                                **inner_training_state_metrics(optimizer, scheduler),
+                            )
+                        else:
+                            optimizer, scheduler = build_inner_optimizer_and_scheduler(
+                                model, config
+                            )
+                            logger.event(
+                                "inner_optimizer_reset", version=last_loaded_global_version
+                            )
 
             if prediction_reference_flat is not None and paths.stop_json.exists():
                 logger.event(
@@ -1315,10 +1343,16 @@ def run_learner(config: Config, learner_id: str) -> None:
                 prediction_carried_tokens = 0
                 prediction_update_id = None
                 prediction_base_version = None
-                optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
                 base_global_version = last_loaded_global_version
                 logger.event("global_adopted", version=last_loaded_global_version)
-                logger.event("inner_optimizer_reset", version=last_loaded_global_version)
+                logger.event(
+                    "inner_training_state_preserved",
+                    version=last_loaded_global_version,
+                    reason="global_prediction_reconciled",
+                    optimizer_state_preserved=True,
+                    scheduler_state_preserved=True,
+                    **inner_training_state_metrics(optimizer, scheduler),
+                )
 
             if not losses:
                 continue
@@ -1502,6 +1536,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                         "inner_optimizer_reset",
                         version=last_loaded_global_version,
                         reason="global_prediction_started",
+                        **inner_training_state_metrics(optimizer, scheduler),
                     )
                 elif rebase_enabled:
                     rebase_reference_flat = flatten_trainable_params(
