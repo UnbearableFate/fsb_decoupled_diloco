@@ -17,7 +17,6 @@ PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 CONFIG="${CONFIG:-$PROJECT_ROOT/configs/fs_diloco_gpt2_wikitext2_1l_debug.yaml}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_fs_diloco_2node_debug}"
 SHARED_ROOT="${SHARED_ROOT:-$PROJECT_ROOT/runs/fs_diloco/$RUN_ID}"
-SYNCER_DB_DIR="${SYNCER_DB_DIR:-${TMPDIR:-/tmp}/fs_diloco/$RUN_ID}"
 CACHE_ROOT="${CACHE_ROOT:-$PROJECT_ROOT/.cache/fs_diloco}"
 HF_HOME="${HF_HOME:-$CACHE_ROOT/huggingface}"
 HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-$HF_HOME/datasets}"
@@ -50,7 +49,6 @@ MPI_ENV_ARGS=(
   "CONFIG=$CONFIG"
   "RUN_ID=$RUN_ID"
   "SHARED_ROOT=$SHARED_ROOT"
-  "SYNCER_DB_DIR=$SYNCER_DB_DIR"
   "HF_HOME=$HF_HOME"
   "HF_DATASETS_CACHE=$HF_DATASETS_CACHE"
   "HF_HUB_CACHE=$HF_HUB_CACHE"
@@ -66,7 +64,7 @@ echo "RUN_ID=$RUN_ID"
 echo "PROJECT_ROOT=$PROJECT_ROOT"
 echo "CONFIG=$CONFIG"
 echo "SHARED_ROOT=$SHARED_ROOT"
-echo "SYNCER_DB_DIR=$SYNCER_DB_DIR"
+echo "SQLITE_DB=$SHARED_ROOT/control/syncer_metadata.sqlite3"
 echo "SYNCER_CUDA_VISIBLE_DEVICES=$SYNCER_CUDA_VISIBLE_DEVICES"
 echo "LEARNER_CUDA_VISIBLE_DEVICES=$LEARNER_CUDA_VISIBLE_DEVICES"
 echo "PBS_JOBID=${PBS_JOBID:-}"
@@ -91,7 +89,6 @@ mpirun \
         --config "$CONFIG" \
         --run-id "$RUN_ID" \
         --shared-root "$SHARED_ROOT" \
-        --sqlite-local-dir "$SYNCER_DB_DIR" \
         --num-learners "$NUM_LEARNERS" \
         2>&1 | tee "$PROJECT_ROOT/logs/qsub_${RUN_ID}/syncer.log"
     else

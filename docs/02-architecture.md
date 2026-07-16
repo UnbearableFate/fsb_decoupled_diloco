@@ -7,7 +7,7 @@
 | 角色 | 数量 | GPU | 入口 | 关键本地状态 |
 |---|---|---|---|---|
 | learner | N(`sync.num_learners`) | 每进程 1 张 | `python -m fs_diloco.learner --config ... --learner-id learner_000` | 模型副本、内层 AdamW、数据分片迭代器 |
-| syncer | 1 | 1 张(合并与外层步进在 GPU 上做) | `python -m fs_diloco.syncer --config ...` | 全局参数扁平向量 θ、外层优化器状态、**节点本地** SQLite |
+| syncer | 1 | 1 张(合并与外层步进在 GPU 上做) | `python -m fs_diloco.syncer --config ...` | 全局参数扁平向量 θ、外层优化器状态、共享 run 内的持久 SQLite |
 
 进程间没有任何直接连接。所有协调通过共享目录 `run.shared_root`(默认 `runs/fs_diloco/<RUN_ID>`)完成。
 
@@ -17,10 +17,10 @@
 
 1. **大张量一律 safetensors**(权重、外层优化器状态、update 向量、fragment)。
 2. **原子发布**:所有共享文件通过 `storage/atomic_io.py` 的"写临时文件 → fsync → `os.replace`"发布。读者要么看到旧文件、要么看到完整的新文件,永远不会读到半截。
-3. **update 的 `.meta.json` 是提交标记**:learner 先写张量文件、再写元数据 JSON。syncer 只扫描 `*.meta.json`;元数据存在即视为该 update 已提交,其中 `file_path` 指向张量文件。
+3. **proposal pointer 是提交标记**:全量 learner 先写不可变张量 payload、再原子替换 `updates/latest/learner_XXX.json`;syncer 每轮只读取 `N` 个固定路径。fragment 模式暂保留 payload 目录扫描,但消费后同样由统一 maintenance 回收。
 4. **`control/latest.json` 是 learner 轮询的唯一全局指针**。learner 不扫描权重目录、不读数据库。
 5. **心跳 JSON 只是存活提示**,不参与正确性(丢心跳最多导致 liveness 误判,不会丢更新)。
-6. **SQLite 只属于 syncer、放节点本地盘**(`TMPDIR`,可用 `io.sqlite_local_dir` 覆盖),绝不放共享文件系统(规避 Lustre/NFS 上 SQLite 锁不可靠的问题);通过 `db_dumps/` 周期性快照到共享盘,供 resume 和离线分析。
+6. **SQLite 是共享目录中的持久提交记录**:`control/syncer_metadata.sqlite3`,使用 rollback journal(`journal_mode=DELETE`)、`synchronous=FULL`、60 秒 busy timeout。只有 syncer 改业务表,但不同计算节点可以重开并恢复同一 run;不使用 WAL、节点本地副本或 DB dump。
 7. **learner 采用"整体覆盖"语义**:采纳新全局版本时,把整个模型参数替换为全局权重,并**重置内层优化器与调度器**(`inner_optimizer.reset_on_global_update`,当前实现固定重置)。
 8. **外层优化器是显式扁平向量实现**(`modeling/outer_optim.py`),不复用 `torch.optim`,以便把优化器状态精确序列化成 safetensors 并跨 resume 保持一致。
 
@@ -74,15 +74,16 @@ g      = θ − p̄                                    (外层伪梯度)
 θ', st' = outer_optimizer_step(θ, g, st)          (SGD / momentum / Nesterov / AdamW,见 modules/modeling.md)
 ```
 
-随后 syncer 依次:保存 `global_v{v+1}.safetensors` 与 `outer_v{v+1}.safetensors` → 写 SQLite `global_versions` 行 → **原子覆盖 `latest.json`**(这一步之后新版本才对 learner 可见)→ 把选中更新标记 `applied`(记录实际权重、staleness)→ 丢弃被取代/过期的 pending 更新 → 按需 dump 数据库、清理旧版本文件。
+随后 syncer 依次:原子保存 `global_v{v+1}.safetensors` 与 `outer_v{v+1}.safetensors` → 在**一个 SQLite 事务**中校验前驱/目标版本与 selected 集合,插入 committed `global_versions` 行,把 selected 更新标记 `applied` 并把被取代、过期或未来版本 proposal 终态化 → 原子覆盖 `latest.json` → archive/GC。事务提交是全局版本的正确性边界;`latest.json` 只在提交后更新。
 
 ### 4.6 更新丢弃规则
 
 | drop_reason | 触发条件 |
 |---|---|
-| `missing_file` | 元数据在库但张量文件已不存在(如被 learner 侧保留策略删除) |
-| `stale` | staleness 超过 `max_staleness_versions`(terminal drain 阶段不执行,以免排空前误删) |
+| `missing_file` | proposal 已摄取但不可变 payload 不存在或读取前消失 |
+| `stale` | staleness 超过 `max_staleness_versions`;terminal drain 也不放宽这个正确性边界 |
 | `superseded` | 同一 learner 有更新的一份已被选中,较旧的 pending 份被取代 |
+| `future_base_version` | proposal 的 base 高于当前 committed version,不能用于当前分支 |
 
 ## 5. fragment 分片模式
 
@@ -139,11 +140,11 @@ syncer 停止条件(任一):
 - 无进展超时 → `no_progress_timeout`;
 - 异常 → `error`。
 
-无论哪种原因,syncer 退出前都会:发布 `control/stop.json`(含 reason/version)→ 最终 dump 数据库 → 关闭 W&B(fragment 模式还会先做一次最终 materialize)。
+无论哪种原因,syncer 退出前都会:发布 `control/stop.json`(含 reason/version)→ 等待 learner 收尾并摄取最后 proposal → 将未消费 proposal 终态化 → 写 summary → archive/GC → 关闭 W&B(fragment 模式还会先做一次最终 materialize)。
 
 learner 停止条件:`training.max_local_steps` 达标,或看到 `stop.json`(全量模式;fragment 模式设置了 `max_local_steps` 时只看步数,收尾在 finally 中等待最终合并结果)。退出前写 `status=stopped` 的最终心跳。
 
-有限步训练的收尾由 **terminal drain** 衔接:所有 learner 到达 `max_local_steps` 后,syncer 用 `oldest_pending` 策略、无视 `quorum_min` 地把剩余 pending 更新逐批合并,直到外层步数达标或无更新可用。
+有限步训练的收尾由 **terminal drain** 衔接:只有全部预期 learner 的最终心跳都明确为 `stopped` 时输入才闭合。syncer 再等待一个 grace/reingest 周期,随后用当前严格的 future/staleness 准入规则、`oldest_pending` 策略和放宽的 quorum 合并剩余 proposal;达到目标或耗尽合法输入后以 `input_exhausted` 停止。`dead` 但未自报 stopped 的 learner 不会触发末端排空。
 
 ## 8. 容错与崩溃恢复
 
@@ -151,13 +152,14 @@ learner 停止条件:`training.max_local_steps` 达标,或看到 `stop.json`(全
 |---|---|
 | learner 崩溃 | 心跳变旧 → stale/dead;其已提交更新照常可被合并;quorum 机制容忍缺席。 |
 | learner 变慢 | 其更新 staleness 增大 → 权重被 λ 折减,过窗即弃。 |
-| syncer 崩溃 | 重启时 `init.resume: true`:从 `latest.json`(或指定版本)恢复 θ 与外层状态,从 `db_dumps/` 恢复最近的元数据库(仅当本地库为空),重新扫描共享盘上的元数据(SQLite 唯一约束保证重复摄取幂等)。 |
+| syncer 崩溃 | `init.resume: true` 必须原地打开持久 DB;先跑 `integrity_check`,校验 run/protocol identity,以最大 committed DB 行确定版本,校验权重与 outer 文件及其中 theta 完全一致,重置遗留 selected,重建 `latest.json`,再做 archive/GC。DB 缺失或不一致时 fail closed。 |
 | 半截文件 | 不可能出现(原子 rename);张量写完前元数据不存在,syncer 不会看见。 |
 | 更新文件丢失 | 选择前后各有一次存在性检查;选择后发现丢失 → 丢弃该份、其余回滚为 pending、放弃本次合并重来。 |
 | 故障注入 | `failure_sim` 配置节可让 learner 随机睡眠/跳过上传/以 exit 97 崩溃,用于韧性实验。 |
 
 ## 9. 为什么是 SQLite + JSON 的混合
 
-- **跨进程共享的数据全是 JSON/safetensors 文件**(原子发布,天然适配共享文件系统);
-- **syncer 单进程私有的状态机放 SQLite**(节点本地盘):update 生命周期的条件状态转移(`WHERE status=?` 的 CAS 式更新)、`UNIQUE(learner_id, local_step_end, base_*_version)` 幂等去重、staleness 窗口查询、可一致快照(`conn.backup()`)。
-- 共享盘上的 `.meta.json` 才是事实源;SQLite 是可从 dump + 重扫描重建的索引。
+- **大对象与轮询面使用 JSON/safetensors**:payload 不可变,proposal/latest/heartbeat 用原子替换,避免半文件可见;
+- **权威提交与活跃状态放持久 SQLite**:版本提交、update 状态转移、identity、proposal frontier 和 active reference 处在同一共享 run 中;
+- **历史与活跃状态分离**:applied/dropped update 和旧 global row 先追加并 fsync 到 `metrics/*_history.jsonl`,再从 DB 删除;分析器合并 live DB 与 archive 并按主键去重;
+- **reference-driven GC**:只保留 DB 当前 global/fragment checkpoint、latest 引用的 materialized full、active update payload 和每 learner 固定 pointer。未发布孤儿经过至少两倍 heartbeat/scan 周期的 grace 后删除;已终态化引用可立即回收。

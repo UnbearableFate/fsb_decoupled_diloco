@@ -2,7 +2,7 @@
 
 Filesystem-backed Decoupled DiLoCo research prototype for Miyabi-G.
 
-Milestone 1 uses independent single-GPU learners and one GPU-backed syncer process. Learners train GPT-style causal language models locally, publish full trainable parameter vectors as a single logical fragment (`fragment_id = 0`) through `safetensors` files, and commit JSON metadata files on the shared filesystem. The syncer ingests those metadata files into a syncer-local SQLite database, applies token/staleness-weighted merging with quorum and grace-window behavior on its local GPU, steps an explicit flat-vector outer optimizer, logs syncer-side training telemetry to W&B, and publishes new global weights through `control/latest.json`.
+Milestone 1 uses independent single-GPU learners and one GPU-backed syncer process. Learners train GPT-style causal language models locally and publish immutable `safetensors` payloads behind one atomically replaced proposal pointer per learner. The syncer records authoritative state in a persistent SQLite database in the shared run directory, applies token/staleness-weighted merging with quorum and grace-window behavior on its local GPU, steps an explicit flat-vector outer optimizer, logs syncer-side training telemetry to W&B, and publishes new global weights through `control/latest.json`.
 
 The implementation intentionally does not use `torch.distributed`, NCCL, RPC, Ray, DeepSpeed, FSDP, or PCCL for milestone 1 communication.
 
@@ -11,7 +11,7 @@ The implementation intentionally does not use `torch.distributed`, NCCL, RPC, Ra
 - `fs_diloco/core/`: configuration and shared identifiers.
 - `fs_diloco/modeling/`: models, datasets, parameter indexing, and outer optimizers.
 - `fs_diloco/protocol/`: fragment scheduling/codecs, merge selection, and liveness rules.
-- `fs_diloco/storage/`: atomic filesystem I/O, safetensors, SQLite, paths, and retention.
+- `fs_diloco/storage/`: atomic filesystem I/O, safetensors, persistent SQLite, paths, archival, and reference-driven garbage collection.
 - `fs_diloco/observability/`: JSONL logging, CSV metrics, and W&B telemetry.
 - `fs_diloco/runtime/`: learner and syncer process implementations.
 - `fs_diloco/tools/`: run inspection and LM Evaluation Harness utilities.
@@ -21,6 +21,7 @@ The implementation intentionally does not use `torch.distributed`, NCCL, RPC, Ra
 - `scripts/local/`: synthetic CPU smoke helpers.
 - `tests/`: focused unit and integration tests.
 - `docs/`: wiki-style system documentation (architecture, runtime flow, data flow, configuration, operations, and per-module function reference).
+- `reports/`: run analysis results, implementation records, and retained validation evidence.
 
 ## Documentation
 
@@ -32,7 +33,8 @@ Start at the [documentation index](docs/README.md). Highlights:
 - [Data flow](docs/04-data-flow.md): shared-directory layout, file formats, update state machine, SQLite schema.
 - [Code structure](docs/05-code-structure.md) and [module reference](docs/modules/): per-function documentation for every package.
 - [Configuration reference](docs/06-configuration.md): every YAML section and field.
-- [Operations](docs/07-operations.md): launch commands, PBS scripts, run analysis, checkpoint evaluation, troubleshooting.
+- [Operations](docs/07-operations.md): launch commands, PBS scripts, checkpoint evaluation, troubleshooting.
+- [Run analysis report](reports/run_analysis.md): analysis commands and recorded experiment results.
 
 ## Quick Commands
 
@@ -66,10 +68,12 @@ python -m fs_diloco.analysis runs/fs_diloco/<RUN_ID>
 ## Runtime Contract
 
 - Large tensors are stored as `safetensors`.
-- Learner update metadata JSON is the commit marker.
+- `updates/latest/learner_XXX.json` is each full-mode learner's bounded proposal surface; it points to an immutable payload.
 - Heartbeat JSON files are liveness hints.
 - `control/latest.json` is the only global pointer learners poll.
-- SQLite stays local to the syncer and is backed up to `db_dumps/`.
+- `control/syncer_metadata.sqlite3` is the authoritative commit record and is opened directly from the shared filesystem with rollback journaling and `synchronous=FULL`.
+- Recovery is DB-first: `latest.json` is a rebuildable learner-facing cache, not a recovery authority.
+- The active runtime retains only current checkpoints, fixed proposal pointers, and proposals referenced by active DB rows; terminal history is archived in append-only JSONL files.
 - Learners overwrite the full model and reset the inner optimizer after adopting a newer global version.
 - Outer optimizers are explicit flat-vector SGD, momentum/Nesterov, and AdamW-style implementations.
 

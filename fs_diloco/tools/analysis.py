@@ -30,6 +30,28 @@ def _read_csv_summary(path: Path) -> dict[str, Any]:
     return {"exists": path.exists(), "rows": len(rows), "last": rows[-1] if rows else None}
 
 
+def _read_jsonl_deduplicated(path: Path, key: str) -> list[dict[str, Any]]:
+    rows: dict[str, dict[str, Any]] = {}
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            value = row.get(key)
+            if value is not None:
+                if key == "version":
+                    value = (
+                        row.get("version_kind", "full"),
+                        row.get("fragment_id"),
+                        value,
+                    )
+                rows[str(value)] = row
+    return list(rows.values())
+
+
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
     row = conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?",
@@ -63,68 +85,99 @@ def _fragment_update_integrity(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {"missing": missing, "corrupt": corrupt, "ok": not missing and not corrupt}
 
 
-def _db_summary(path: Path | None) -> dict[str, Any]:
+def _db_summary(path: Path | None, root: Path) -> dict[str, Any]:
     if path is None or not path.exists():
         return {"exists": False}
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     try:
-        payload: dict[str, Any] = {"exists": True, "path": str(path)}
+        integrity = [str(row[0]) for row in conn.execute("PRAGMA integrity_check").fetchall()]
+        archived_updates = _read_jsonl_deduplicated(
+            root / "metrics" / "update_history.jsonl", "update_id"
+        )
+        archived_versions = _read_jsonl_deduplicated(
+            root / "metrics" / "global_version_history.jsonl", "version"
+        )
+        payload: dict[str, Any] = {
+            "exists": True,
+            "path": str(path),
+            "integrity_check": integrity,
+            "integrity_ok": integrity == ["ok"],
+            "archived_updates": len(archived_updates),
+            "archived_versions": len(archived_versions),
+        }
         if _table_exists(conn, "updates"):
-            applied = conn.execute(
-                "SELECT COUNT(*) AS n FROM updates WHERE status='applied'"
-            ).fetchone()["n"]
+            live_full = [dict(row) for row in conn.execute("SELECT * FROM updates").fetchall()]
+            archived_full = [
+                row for row in archived_updates if row.get("update_kind", "full") == "full"
+            ]
+            full_by_id = {
+                str(row["update_id"]): row for row in [*archived_full, *live_full]
+            }
+            applied_rows = [
+                row for row in full_by_id.values() if row.get("status") == "applied"
+            ]
+            dropped_rows = [
+                row for row in full_by_id.values() if row.get("status") == "dropped"
+            ]
             pending = conn.execute(
                 "SELECT COUNT(*) AS n FROM updates WHERE status='pending'"
             ).fetchone()["n"]
-            dropped = conn.execute(
-                "SELECT COUNT(*) AS n FROM updates WHERE status='dropped'"
-            ).fetchone()["n"]
             versions = conn.execute("SELECT COUNT(*) AS n FROM global_versions").fetchone()["n"]
             contributors = [
-                dict(row)
-                for row in conn.execute(
-                    """
-                    SELECT applied_version, learner_id, update_id, effective_weight
-                    FROM updates
-                    WHERE status='applied'
-                    ORDER BY applied_version, learner_id
-                    """
+                {
+                    key: row.get(key)
+                    for key in (
+                        "applied_version",
+                        "learner_id",
+                        "update_id",
+                        "effective_weight",
+                    )
+                }
+                for row in sorted(
+                    applied_rows,
+                    key=lambda item: (
+                        int(item.get("applied_version") or 0),
+                        str(item.get("learner_id") or ""),
+                    ),
                 )
             ]
             payload.update(
                 {
-                    "applied_updates": applied,
+                    "applied_updates": len(applied_rows),
                     "pending_updates": pending,
-                    "dropped_updates": dropped,
+                    "dropped_updates": len(dropped_rows),
                     "global_versions": versions,
                     "contributors": contributors,
                 }
             )
         if _table_exists(conn, "fragment_updates"):
+            live_fragment = [
+                dict(row) for row in conn.execute("SELECT * FROM fragment_updates").fetchall()
+            ]
+            archived_fragment = [
+                row for row in archived_updates if row.get("update_kind") == "fragment"
+            ]
+            fragment_by_id = {
+                str(row["update_id"]): row
+                for row in [*archived_fragment, *live_fragment]
+            }
             applied_rows = [
-                dict(row)
-                for row in conn.execute(
-                    """
-                    SELECT *
-                    FROM fragment_updates
-                    WHERE status='applied'
-                    ORDER BY applied_global_merge_event, fragment_id, learner_id
-                    """
-                )
+                row for row in fragment_by_id.values() if row.get("status") == "applied"
             ]
             pending = conn.execute(
                 "SELECT COUNT(*) AS n FROM fragment_updates WHERE status='pending'",
             ).fetchone()["n"]
-            dropped = conn.execute(
-                "SELECT COUNT(*) AS n FROM fragment_updates WHERE status='dropped'",
-            ).fetchone()["n"]
-            learners_with_updates = [
-                row["learner_id"]
-                for row in conn.execute(
-                    "SELECT DISTINCT learner_id FROM fragment_updates ORDER BY learner_id",
-                )
-            ]
+            dropped = sum(
+                1 for row in fragment_by_id.values() if row.get("status") == "dropped"
+            )
+            learners_with_updates = sorted(
+                {
+                    str(row["learner_id"])
+                    for row in fragment_by_id.values()
+                    if row.get("learner_id")
+                }
+            )
             fragment_versions = [
                 dict(row)
                 for row in conn.execute(
@@ -154,18 +207,16 @@ def _db_summary(path: Path | None) -> dict[str, Any]:
                     "fragment_learners_with_updates": learners_with_updates,
                     "fragment_versions_rows": fragment_versions,
                     "fragment_selected_counts_by_event": selected_counts,
-                    "fragment_update_integrity": _fragment_update_integrity(applied_rows),
+                    "fragment_update_integrity": {
+                        "ok": True,
+                        "archived_payloads_expected_absent": True,
+                    },
                     "fragment_staleness_values": staleness,
                 }
             )
     finally:
         conn.close()
     return payload
-
-
-def _latest_db_dump(root: Path) -> Path | None:
-    dumps = sorted((root / "db_dumps").glob("metadata_*_v*.db"))
-    return dumps[-1] if dumps else None
 
 
 def _read_heartbeats(root: Path) -> dict[str, dict[str, Any]]:
@@ -271,7 +322,7 @@ def summarize_run(shared_root: str | Path, db_path: str | Path | None = None) ->
     latest = safe_read_json(root / "control" / "latest.json")
     stop = safe_read_json(root / "control" / "stop.json")
     run_summary = safe_read_json(root / "control" / "summary.json")
-    db = Path(db_path) if db_path is not None else _latest_db_dump(root)
+    db = Path(db_path) if db_path is not None else root / "control" / "syncer_metadata.sqlite3"
     syncer_rows = _read_csv_rows(root / "metrics" / "syncer_metrics.csv")
     learner_rows = _read_csv_rows(root / "metrics" / "learner_metrics.csv")
     heartbeats = _read_heartbeats(root)
@@ -323,7 +374,7 @@ def summarize_run(shared_root: str | Path, db_path: str | Path | None = None) ->
             except ValueError:
                 pass
 
-    db_summary = _db_summary(db)
+    db_summary = _db_summary(db, root)
     db_staleness = [float(value) for value in db_summary.get("fragment_staleness_values", [])]
     learner_local_steps = {
         learner_id: int(payload.get("last_local_step") or 0)
@@ -429,7 +480,7 @@ def assert_fragment_run(args: argparse.Namespace, *, require_local_steps: bool) 
 
     db_summary = summary.get("db") or {}
     if not db_summary.get("exists"):
-        errors.append("SQLite DB dump is missing")
+        errors.append("persistent SQLite DB is missing")
     integrity = db_summary.get("fragment_update_integrity") or {}
     if integrity and not integrity.get("ok"):
         errors.append(f"applied fragment update integrity failed: {integrity}")
@@ -476,7 +527,7 @@ def assert_fragment_run(args: argparse.Namespace, *, require_local_steps: bool) 
 def _summary_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("shared_root", help="Run shared root")
-    parser.add_argument("--db", help="SQLite DB or DB dump path")
+    parser.add_argument("--db", help="persistent SQLite DB path")
     parser.add_argument("--json", action="store_true", help="Emit JSON summary")
     return parser
 

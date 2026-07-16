@@ -27,7 +27,7 @@ sync:
   upload_mode: params
   quorum_min: 1
   quorum_max: 2
-  max_staleness_versions: 4
+  max_staleness_versions: 0
   staleness_lambda: 0.25
   selection_policy: most_recent_per_learner
   scan_interval_seconds: 0.2
@@ -35,7 +35,6 @@ sync:
     mode: fixed
     fixed_seconds: 0.2
     max_seconds: 0.2
-  db_dump_every_versions: 1
   stop_after_outer_steps: 2
   stop_after_global_tokens: null
   stop_file_poll_seconds: 0.2
@@ -80,9 +79,6 @@ io:
   tensor_dtype: float32
   atomic_write: true
   compute_sha256: true
-  keep_processed_updates: true
-  cleanup_applied_after_versions: null
-  sqlite_local_dir: null
 
 learner:
   poll_latest_during_inner_steps: false

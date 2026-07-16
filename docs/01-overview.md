@@ -18,7 +18,8 @@ fs_diloco 实现了一种 **Decoupled DiLoCo**(解耦的 DiLoCo)训练协议:
 1. **零网络通信依赖**:只要各节点能挂载同一个共享目录就能跑,天然适配抢占式/机会式算力。
 2. **异步容错**:任何 learner 崩溃、变慢、暂停都不阻塞全局进度;syncer 通过心跳判定 learner 存活状态,通过 staleness 窗口丢弃过期更新。
 3. **可审计**:每个 update 从产生到被应用/丢弃的完整生命周期都有记录(SQLite + JSONL 日志 + CSV 指标),可离线复盘。
-4. **崩溃一致性**:所有共享文件用原子写发布;update 的 JSON 元数据文件是"提交标记"(先写张量、后写元数据,syncer 只认元数据);syncer 的 SQLite 定期 dump 到共享盘用于恢复。
+4. **崩溃一致性**:所有共享文件用原子写发布;全量 learner 先写不可变 payload,再原子替换自己的固定 proposal pointer;syncer 以共享目录中的持久 SQLite 提交记录为恢复权威,`latest.json` 只是可重建缓存。
+5. **有界运行面**:长期 run 的活跃 DB、proposal 可见面、checkpoint 和单轮 discovery 工作量不随历史版本数增长;终态记录先 fsync 到 JSONL 历史再从活跃 DB 剪枝。
 
 ## 非目标(Milestone 1 明确不做)
 
@@ -44,7 +45,7 @@ fs_diloco 实现了一种 **Decoupled DiLoCo**(解耦的 DiLoCo)训练协议:
 | 术语 | 含义 |
 |---|---|
 | **inner step / local step** | learner 本地的一次优化器步进(含梯度累积)。 |
-| **update** | learner 每完成 `inner_steps` 个本地步后上传的一份参数(或分片)+ 元数据。 |
+| **update** | learner 每完成 `inner_steps` 个本地步后上传的一份不可变参数 payload 与描述它的 proposal pointer/metadata。 |
 | **global version** | 全量模式下 syncer 每次外层步进后的全局权重版本号,从 0 开始递增。 |
 | **global merge event** | fragment 模式下的全局合并事件计数(每次合并任一 fragment 都 +1)。 |
 | **fragment version** | 某个 fragment 自己的版本号(只在该片被合并时 +1)。 |
@@ -52,8 +53,9 @@ fs_diloco 实现了一种 **Decoupled DiLoCo**(解耦的 DiLoCo)训练协议:
 | **staleness** | `当前版本 − base 版本`,更新的陈旧度。超过 `max_staleness_versions` 的 pending 更新被丢弃。 |
 | **quorum** | 一次合并需要的 update 数下限 `quorum_min` / 上限 `quorum_max`(每个 learner 至多贡献 1 份)。 |
 | **grace window(宽限窗口)** | 达到 `quorum_min` 后,syncer 再等待一小段时间(`grace_window.fixed_seconds`)以收集更多 learner 的更新,凑满 `quorum_max` 则提前结束。 |
-| **terminal drain(末端排空)** | 有限步训练(设置了 `max_local_steps`)收尾时,所有 learner 已训练完但外层步数还没达标,syncer 放宽 quorum、按最旧优先把剩余 pending 更新排空。 |
+| **terminal drain(末端排空)** | 所有预期 learner 都明确写出 `stopped` 最终心跳后,syncer 等一个 grace/reingest 周期,在严格 future/staleness 准入下放宽 quorum、按最旧优先合并剩余 proposal;合法输入耗尽时以 `input_exhausted` 停止。 |
 | **latest.json** | learner 轮询的**唯一**全局指针文件,指向最新已提交的全局权重(或各 fragment 版本)。 |
+| **proposal pointer** | 全量模式中每 learner 固定的一份 `updates/latest/learner_XXX.json`;新 proposal 以原子替换覆盖旧可见面,SQLite 负责 latest-wins 摄取和生命周期。 |
 | **heartbeat** | learner 周期性写入的存活信号 JSON,syncer 据此把 learner 分类为 active/stale/dead/stopped。 |
 | **param index** | 参数索引:把 `model.named_parameters()` 中可训练参数按声明顺序映射到扁平向量的偏移区间,是所有"模型 ↔ 扁平向量"转换的契约。 |
 | **fragment index** | 分片索引:把扁平向量划分为若干不重叠、完全覆盖的分片,每片由若干参数切片组成。 |
@@ -63,12 +65,12 @@ fs_diloco 实现了一种 **Decoupled DiLoCo**(解耦的 DiLoCo)训练协议:
 ```
         ┌──────────────────────── 共享文件系统(一个 run 一个目录)────────────────────────┐
         │                                                                                  │
-learner_000 ──写──> updates/pending/learner_000/update_*.params.safetensors + .meta.json   │
-learner_001 ──写──> updates/pending/learner_001/...                                        │
+learner_000 ──写──> updates/payloads/learner_000/*.safetensors → updates/latest/learner_000.json │
+learner_001 ──写──> updates/payloads/learner_001/...       → updates/latest/learner_001.json │
    ...      ──写──> heartbeats/learner_*.json                                              │
         │                                              │                                   │
         │                                              ▼                                   │
-        │                          syncer:扫描元数据 → 本地 SQLite 入库 → 选择/加权合并    │
+        │                          syncer:读取固定 pointers → 共享 SQLite 入库 → 选择/加权合并 │
         │                                → 外层优化器步进 → 发布 weights/global_v*.safetensors │
         │                                → 原子更新 control/latest.json                    │
         │                                              │                                   │

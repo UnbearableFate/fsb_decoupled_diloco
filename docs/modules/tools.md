@@ -6,16 +6,16 @@
 
 ## tools/analysis.py — run 摘要与断言
 
-设计约束:只依赖标准库 + `protocol` 少量纯函数,**不需要 torch/GPU**,可在登录节点直接分析共享目录 + DB dump。
+设计约束:只依赖标准库 + `protocol` 少量纯函数,**不需要 torch/GPU**,可在登录节点直接分析共享目录、持久 DB 与 JSONL archive。
 
 ### 读取助手(私有)
 
 - **`_read_csv_rows(path)`** / **`_read_csv_summary(path)`** — CSV 全量读取 / `{exists, rows, last}` 概览。
-- **`_table_exists(conn, table)`** — 兼容不同 schema 版本的 dump。
+- **`_read_jsonl_deduplicated(path, key)`** — 读取 crash-retry 可能重复的 archive,按稳定 identity 去重。
+- **`_table_exists(conn, table)`** — 兼容不同 schema 版本的持久 DB。
 - **`_sha256_file(path)`** — 完整性校验用。
 - **`_fragment_update_integrity(rows)`** — 对 applied fragment 更新逐个检查文件存在与 sha256(有记录时),返回 `{missing, corrupt, ok}`。
-- **`_db_summary(path) -> dict`** — 打开 DB(或 dump):`updates` 表的 applied/pending/dropped 计数、版本数、每版本贡献者清单(learner/effective_weight);`fragment_updates` 表的对应统计、各事件 selected 数、staleness 值、完整性检查、`fragment_versions` 行。
-- **`_latest_db_dump(root)`** — `db_dumps/` 最新一份。
+- **`_db_summary(path, root) -> dict`** — 打开持久 DB,执行 `integrity_check`,合并 live update/version 行与 `metrics/*_history.jsonl`,按 identity 去重后生成状态计数、贡献者、fragment 事件/staleness/完整性等摘要。
 - **`_read_heartbeats(root)`** — 全部心跳 JSON。
 - **`_distribution(values)`** / **`_numeric_summary(values)`** — 计数分布 / min/max/mean(过滤非有限值)。
 - **`_loss_summary(rows)`** — learner loss 概览:整体统计 + 前 10/后 10 均值之比 + **`obvious_divergence`** 判定(末段均值 > max(3×首段, 首段+1))。
@@ -24,7 +24,7 @@
 
 ### 公开接口
 
-- **`summarize_run(shared_root, db_path=None) -> dict`** — 汇总一次 run 的全景:latest/stop 内容、latest_kind、merge event、各片版本与均衡度、selected 数分布、staleness 分布、各 learner 本地步数与采纳情况、loss 概览、心跳、三张 CSV 概览、DB 统计、syncer 日志标记。
+- **`summarize_run(shared_root, db_path=None) -> dict`** — 汇总一次 run 的全景:latest/stop、merge/fragment 状态、loss/心跳/CSV、持久 DB integrity、live+archive 历史和日志标记。默认 DB 是 `control/syncer_metadata.sqlite3`。
 - **`assert_fragment_run(args, *, require_local_steps)`** — fragment run 验收断言(冒烟/正式两档共用):latest_kind、事件数达标、片 id 齐全、**各片版本等于 round-robin 期望值**(`expected_fragment_versions_after_events`)、stop_reason 正确、materialized checkpoint 存在、指标行数与每事件 selected 数达标、心跳数量(可选:各 learner 本地步数)、DB 存在与 applied 更新完整性、每 learner 都有更新且发生过采纳、loss 无明显发散、syncer 日志无失败标记。任何一条不满足都收集后统一以 `SystemExit` 报出。
 - **`main(argv)`** — 子命令:`summary <shared_root> [--db] [--json]`(缺省子命令也走 summary,兼容 `python -m fs_diloco.analysis <root>` 旧用法)、`assert-fragment-smoke`、`assert-fragment-5000`(后者额外要求 `--expected-local-steps` 达标)。
 

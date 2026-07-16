@@ -45,7 +45,6 @@ from ..protocol.fragment_index import load_fragment_index
 from ..protocol.fragment_scheduler import select_fragment
 from ..storage.atomic_io import atomic_write_json, file_size, safe_read_json, sha256_file
 from ..storage.paths import RunPaths, prepare_run_dirs
-from ..storage.retention import cleanup_learner_update_artifacts
 from ..storage.tensor_codec import dtype_from_name, load_global_weights_flat, save_update_vector
 from .failure_sim import maybe_crash, maybe_sleep_jitter, should_skip_upload
 
@@ -351,9 +350,9 @@ def write_update(
 ) -> tuple[str, Path, Path, dict[str, Any]]:
     update_uuid = uuid.uuid4().hex[:12]
     update_id = f"{learner_id}_{local_step:08d}_{update_uuid}"
-    update_dir = paths.updates_pending / learner_id
-    tensor_path = update_dir / f"update_{update_uuid}.params.safetensors"
-    meta_path = update_dir / f"update_{update_uuid}.meta.json"
+    update_dir = paths.update_payload_dir(learner_id)
+    tensor_path = update_dir / f"{update_id}.params.safetensors"
+    meta_path = paths.update_pointer_path(learner_id)
     created_at = time.time()
     save_update_vector(tensor_path, flat, dtype=dtype_from_name(config.io.tensor_dtype))
     digest = sha256_file(tensor_path) if config.io.compute_sha256 else None
@@ -1048,11 +1047,6 @@ def run_learner(config: Config, learner_id: str) -> None:
                 param_norm=param_norm,
                 flat=flat,
                 resource_metrics=cycle_resources,
-            )
-            cleanup_learner_update_artifacts(
-                paths.updates_pending / learner_id,
-                keep_last=config.io.keep_last_learner_update_versions,
-                logger=logger,
             )
             write_seconds = time.monotonic() - write_start
             last_update_id = update_id

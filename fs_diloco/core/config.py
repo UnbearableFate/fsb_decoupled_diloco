@@ -27,9 +27,6 @@ class RunSection:
 @dataclass
 class InitSection:
     resume: bool = False
-    resume_version: str | int = "latest"
-    resume_db_dump: str | None = None
-    allow_overwrite_existing_run: bool = False
 
 
 @dataclass
@@ -73,7 +70,6 @@ class SyncSection:
     selection_policy: str = "most_recent_per_learner"
     scan_interval_seconds: float = 2.0
     grace_window: GraceWindowSection = field(default_factory=GraceWindowSection)
-    db_dump_every_versions: int = 1
     stop_after_outer_steps: int | None = 20
     stop_after_global_tokens: int | None = None
     stop_file_poll_seconds: float = 5.0
@@ -128,11 +124,6 @@ class IOSection:
     tensor_dtype: str = "float32"
     atomic_write: bool = True
     compute_sha256: bool = False
-    keep_processed_updates: bool = True
-    cleanup_applied_after_versions: int | None = None
-    keep_last_global_versions: int | None = 3
-    keep_last_learner_update_versions: int | None = 3
-    sqlite_local_dir: str | None = None
 
 
 @dataclass
@@ -245,7 +236,6 @@ def resolve_config(
     *,
     run_id: str | None = None,
     shared_root: str | None = None,
-    sqlite_local_dir: str | None = None,
     num_learners: int | None = None,
     project_root: str | Path | None = None,
 ) -> Config:
@@ -259,8 +249,6 @@ def resolve_config(
     if config.run.shared_root is None:
         root = Path(project_root or os.getcwd())
         config.run.shared_root = str(root / DEFAULT_RUNS_DIR / config.run.run_id)
-    if sqlite_local_dir is not None:
-        config.io.sqlite_local_dir = sqlite_local_dir
     if num_learners is not None:
         config.sync.num_learners = int(num_learners)
         config.sync.quorum_max = min(config.sync.quorum_max, config.sync.num_learners)

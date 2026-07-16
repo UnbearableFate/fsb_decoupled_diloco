@@ -14,7 +14,6 @@ PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 CONFIG="${CONFIG:-$PROJECT_ROOT/configs/fs_diloco_gpt2_wikitext2_8l.yaml}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_fs_diloco_gpt2_wikitext2_8l}"
 SHARED_ROOT="${SHARED_ROOT:-$PROJECT_ROOT/runs/fs_diloco/$RUN_ID}"
-SYNCER_DB_DIR="${SYNCER_DB_DIR:-${TMPDIR:-/tmp}/fs_diloco/$RUN_ID}"
 SYNCER_CUDA_VISIBLE_DEVICES="${SYNCER_CUDA_VISIBLE_DEVICES:-0}"
 LEARNER_CUDA_VISIBLE_DEVICES="${LEARNER_CUDA_VISIBLE_DEVICES:-0}"
 
@@ -39,7 +38,6 @@ MPI_ENV_ARGS=(
   "CONFIG=$CONFIG"
   "RUN_ID=$RUN_ID"
   "SHARED_ROOT=$SHARED_ROOT"
-  "SYNCER_DB_DIR=$SYNCER_DB_DIR"
   "SYNCER_CUDA_VISIBLE_DEVICES=$SYNCER_CUDA_VISIBLE_DEVICES"
   "LEARNER_CUDA_VISIBLE_DEVICES=$LEARNER_CUDA_VISIBLE_DEVICES"
   "NUM_LEARNERS=8"
@@ -49,7 +47,7 @@ echo "RUN_ID=$RUN_ID"
 echo "PROJECT_ROOT=$PROJECT_ROOT"
 echo "CONFIG=$CONFIG"
 echo "SHARED_ROOT=$SHARED_ROOT"
-echo "SYNCER_DB_DIR=$SYNCER_DB_DIR"
+echo "SQLITE_DB=$SHARED_ROOT/control/syncer_metadata.sqlite3"
 echo "SYNCER_CUDA_VISIBLE_DEVICES=$SYNCER_CUDA_VISIBLE_DEVICES"
 echo "LEARNER_CUDA_VISIBLE_DEVICES=$LEARNER_CUDA_VISIBLE_DEVICES"
 echo "NNODES=$NNODES"
@@ -72,7 +70,6 @@ mpirun \
         --config "$CONFIG" \
         --run-id "$RUN_ID" \
         --shared-root "$SHARED_ROOT" \
-        --sqlite-local-dir "$SYNCER_DB_DIR" \
         2>&1 | tee "$PROJECT_ROOT/logs/qsub_${RUN_ID}/syncer.log"
     else
       learner_num=$((rank - 1))

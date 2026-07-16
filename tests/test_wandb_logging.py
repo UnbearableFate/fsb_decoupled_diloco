@@ -12,7 +12,6 @@ def test_syncer_wandb_names_are_derived_from_config(tmp_path):
         "configs/fs_diloco_tiny_local.yaml",
         run_id="cli_run_id_should_not_be_visible_name",
         shared_root=str(tmp_path / "run"),
-        sqlite_local_dir=str(tmp_path / "db"),
         num_learners=2,
     )
     run_name = syncer_wandb_run_name(config, timestamp="20260709_120000")

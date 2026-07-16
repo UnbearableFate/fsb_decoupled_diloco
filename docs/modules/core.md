@@ -7,6 +7,7 @@
 | 常量 | 值 | 用途 |
 |---|---|---|
 | `FORMAT_VERSION` | `1` | 所有共享 JSON(latest/心跳/update 元数据/param index/fragment index)的协议版本;不匹配即拒收 |
+| `PROTOCOL_VERSION` | `2` | 持久 DB identity 中的协议版本;resume 必须精确匹配 |
 | `DEFAULT_RUNS_DIR` | `runs/fs_diloco` | 缺省 shared_root 的父目录 |
 | `LEARNER_ID_PREFIX` | `learner_` | learner id 前缀 |
 | `UPDATE_STATUS_*` | `pending/selected/applied/dropped/failed` | update 状态机(`failed` 当前未使用) |
@@ -14,7 +15,6 @@
 | `GLOBAL_STATUS_*` | `writing/committed/abandoned` | 全局版本状态(当前只写入 `committed`) |
 | `GLOBAL_WEIGHT_TEMPLATE` | `global_v{version:06d}.safetensors` | 全局权重文件名模板 |
 | `OUTER_OPTIM_TEMPLATE` | `outer_v{version:06d}.safetensors` | 外层优化器状态文件名模板 |
-| `DB_DUMP_TEMPLATE` | `metadata_{timestamp}_v{version:06d}.db` | DB dump 文件名模板 |
 
 函数:
 
@@ -34,8 +34,8 @@
 - **`config_to_dict(config) -> dict`** — `dataclasses.asdict` 全量导出(用于写快照、W&B config、SQLite run_state)。
 - **`load_config(path=None) -> Config`** — 读 YAML(可为 None/空文件 → 全默认值);顶层必须是 mapping。
 - **`_default_run_id(name)`**(私有)— `strftime("%Y%m%d_%H%M%S") + "_" + name`。
-- **`resolve_config(path, *, run_id, shared_root, sqlite_local_dir, num_learners, project_root) -> Config`** — 加载 + 运行时补全:
-  1. CLI 覆盖 run_id/shared_root/sqlite_local_dir;
+- **`resolve_config(path, *, run_id, shared_root, num_learners, project_root) -> Config`** — 加载 + 运行时补全:
+  1. CLI 覆盖 run_id/shared_root;
   2. run_id 缺省:`$RUN_ID` 或时间戳;shared_root 缺省:`<project_root|cwd>/runs/fs_diloco/<run_id>`;
   3. `num_learners` 覆盖时把 `quorum_min/max` 收紧到不超过 learner 数;
   4. fragment 合法性校验(`num_fragments>=1`、`fragments_per_update==1`、schedule/strategy 白名单);

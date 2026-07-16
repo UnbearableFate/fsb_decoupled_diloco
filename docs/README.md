@@ -16,14 +16,16 @@ fs_diloco(Filesystem-backed Decoupled DiLoCo)是一个面向 Miyabi-G 超算的�
 | [04-data-flow.md](04-data-flow.md) | 数据流:共享目录布局、每类文件的格式与生命周期、update 状态机、SQLite schema |
 | [05-code-structure.md](05-code-structure.md) | 代码结构:目录树、模块职责、模块间依赖 |
 | [06-configuration.md](06-configuration.md) | 配置参考:YAML 全部配置节与字段 |
-| [07-operations.md](07-operations.md) | 运行与运维:启动命令、PBS 脚本、run 分析、checkpoint 评测 |
+| [07-operations.md](07-operations.md) | 运行与运维:启动命令、PBS 脚本、checkpoint 评测与故障排查 |
+
+Run 分析方法和实验结果不放在系统文档中,统一维护在 [reports/run_analysis.md](../reports/run_analysis.md)。
 
 ### 模块级参考(以函数为单位)
 
 | 文档 | 模块 |
 |---|---|
 | [modules/core.md](modules/core.md) | `fs_diloco/core/` — 配置加载与共享常量 |
-| [modules/storage.md](modules/storage.md) | `fs_diloco/storage/` — 原子 I/O、safetensors 编解码、路径、SQLite、保留策略 |
+| [modules/storage.md](modules/storage.md) | `fs_diloco/storage/` — 原子 I/O、safetensors 编解码、路径、持久 SQLite、归档与引用驱动 GC |
 | [modules/protocol.md](modules/protocol.md) | `fs_diloco/protocol/` — 合并选择、liveness、fragment 索引/编解码/调度 |
 | [modules/modeling.md](modules/modeling.md) | `fs_diloco/modeling/` — 模型、数据、参数索引、外层优化器 |
 | [modules/observability.md](modules/observability.md) | `fs_diloco/observability/` — JSONL 日志、CSV 指标、W&B |

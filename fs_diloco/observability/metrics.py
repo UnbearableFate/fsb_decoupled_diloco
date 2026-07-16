@@ -38,6 +38,8 @@ SYNCER_METRIC_FIELDS = [
     "fragment_aggregation_seconds",
     "outer_step_seconds",
     "publish_seconds",
+    "sqlite_commit_seconds",
+    "maintenance_seconds",
     "materialize_full_seconds",
     "fragment_staleness_min",
     "fragment_staleness_mean",

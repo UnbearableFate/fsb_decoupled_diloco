@@ -7,7 +7,6 @@ PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 CONFIG="${CONFIG:-$PROJECT_ROOT/configs/fs_diloco_tiny_local.yaml}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_tiny_local}"
 SHARED_ROOT="${SHARED_ROOT:-$PROJECT_ROOT/runs/fs_diloco/$RUN_ID}"
-SYNCER_DB_DIR="${SYNCER_DB_DIR:-${TMPDIR:-/tmp}/fs_diloco/$RUN_ID}"
 
 cd "$PROJECT_ROOT"
 mkdir -p "$SHARED_ROOT" "$PROJECT_ROOT/logs"
@@ -18,7 +17,6 @@ mkdir -p "$LOG_ROOT"
   --config "$CONFIG" \
   --run-id "$RUN_ID" \
   --shared-root "$SHARED_ROOT" \
-  --sqlite-local-dir "$SYNCER_DB_DIR" \
   > "$LOG_ROOT/syncer.log" 2>&1 &
 syncer_pid=$!
 

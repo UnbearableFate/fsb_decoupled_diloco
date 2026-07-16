@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .atomic_io import ensure_dir
-from ..core.constants import DB_DUMP_TEMPLATE, GLOBAL_WEIGHT_TEMPLATE, OUTER_OPTIM_TEMPLATE
+from ..core.constants import GLOBAL_WEIGHT_TEMPLATE, OUTER_OPTIM_TEMPLATE
 
 
 @dataclass(frozen=True)
@@ -26,16 +26,17 @@ class RunPaths:
         return self.shared_root / "optim"
 
     @property
+    def updates_latest(self) -> Path:
+        return self.shared_root / "updates" / "latest"
+
+    @property
+    def updates_payloads(self) -> Path:
+        return self.shared_root / "updates" / "payloads"
+
+    @property
     def updates_pending(self) -> Path:
-        return self.shared_root / "updates" / "pending"
-
-    @property
-    def updates_processed(self) -> Path:
-        return self.shared_root / "updates" / "processed"
-
-    @property
-    def updates_dropped(self) -> Path:
-        return self.shared_root / "updates" / "dropped"
+        """Compatibility alias for fragment proposal payload storage."""
+        return self.updates_payloads
 
     @property
     def fragments(self) -> Path:
@@ -52,10 +53,6 @@ class RunPaths:
     @property
     def heartbeats(self) -> Path:
         return self.shared_root / "heartbeats"
-
-    @property
-    def db_dumps(self) -> Path:
-        return self.shared_root / "db_dumps"
 
     @property
     def logs(self) -> Path:
@@ -89,6 +86,24 @@ class RunPaths:
     def resolved_config_yaml(self) -> Path:
         return self.control / "run_config.resolved.yaml"
 
+    @property
+    def sqlite_db(self) -> Path:
+        return self.control / "syncer_metadata.sqlite3"
+
+    @property
+    def update_history_jsonl(self) -> Path:
+        return self.metrics / "update_history.jsonl"
+
+    @property
+    def global_version_history_jsonl(self) -> Path:
+        return self.metrics / "global_version_history.jsonl"
+
+    def update_pointer_path(self, learner_id: str) -> Path:
+        return self.updates_latest / f"{learner_id}.json"
+
+    def update_payload_dir(self, learner_id: str) -> Path:
+        return self.updates_payloads / learner_id
+
     def global_weight_path(self, version: int) -> Path:
         return self.weights / GLOBAL_WEIGHT_TEMPLATE.format(version=version)
 
@@ -101,29 +116,21 @@ class RunPaths:
     def fragment_outer_optim_path(self, fragment_id: int, version: int) -> Path:
         return self.fragment_optim / f"fragment_{fragment_id:03d}" / f"v{version:06d}.safetensors"
 
-    def db_dump_path(self, timestamp: str, version: int) -> Path:
-        return self.db_dumps / DB_DUMP_TEMPLATE.format(timestamp=timestamp, version=version)
-
-
 def prepare_run_dirs(paths: RunPaths, num_learners: int) -> None:
     for directory in [
         paths.control,
         paths.weights,
         paths.optim,
-        paths.updates_pending,
-        paths.updates_processed,
-        paths.updates_dropped,
+        paths.updates_latest,
+        paths.updates_payloads,
         paths.fragments,
         paths.fragment_weights,
         paths.fragment_optim,
         paths.heartbeats,
-        paths.db_dumps,
         paths.logs,
         paths.metrics,
     ]:
         ensure_dir(directory)
     for index in range(num_learners):
-        learner_dir = f"learner_{index:03d}"
-        ensure_dir(paths.updates_pending / learner_dir)
-        ensure_dir(paths.updates_processed / learner_dir)
-        ensure_dir(paths.updates_dropped / learner_dir)
+        learner_id = f"learner_{index:03d}"
+        ensure_dir(paths.update_payload_dir(learner_id))

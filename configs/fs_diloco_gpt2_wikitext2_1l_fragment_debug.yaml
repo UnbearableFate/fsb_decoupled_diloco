@@ -33,7 +33,6 @@ sync:
     mode: fixed
     fixed_seconds: 1.0
     max_seconds: 1.0
-  db_dump_every_versions: 1
   stop_after_outer_steps: 4
   stop_after_global_tokens: null
   stop_file_poll_seconds: 1.0
@@ -78,9 +77,6 @@ io:
   tensor_dtype: bfloat16
   atomic_write: true
   compute_sha256: false
-  keep_processed_updates: true
-  cleanup_applied_after_versions: null
-  sqlite_local_dir: null
 
 learner:
   poll_latest_during_inner_steps: false

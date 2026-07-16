@@ -40,16 +40,16 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
 
 ### update 提交
 
-- **`write_update(*, ..., resource_metrics, flat) -> (update_id, tensor_path, meta_path, metadata)`** — 全量模式提交:生成 `update_id = {learner}_{step:08d}_{uuid12}`;**先**原子写张量(dtype 按 `io.tensor_dtype`),可选 sha256,**后**原子写元数据 JSON(= 提交点)。元数据记录 `tensor_dtype`,并携带全训练至今的 CPU/GPU 峰值、上一 local cycle 的 CPU/GPU 峰值和该 cycle 的平均每 step 时间。
+- **`write_update(*, ..., resource_metrics, flat) -> (update_id, tensor_path, pointer_path, metadata)`** — 全量模式提交:生成 `update_id = {learner}_{step:08d}_{uuid12}`;**先**原子写不可变 payload(dtype 按 `io.tensor_dtype`),可选 sha256,**后**原子替换 `updates/latest/<learner>.json` 固定 pointer(= 提交点)。metadata 记录 `tensor_dtype`,并携带全训练至今的 CPU/GPU 峰值、上一 local cycle 的 CPU/GPU 峰值和该 cycle 的平均每 step 时间。
 - **`write_fragment_update(*, ..., resource_metrics, fragment_id, base_fragment_version, base_global_merge_event, tokens_since_fragment_load, fragment_norm, fragment_tensor)`** — fragment 版,文件名与 update_id 带 `fXXX`,元数据带 `update_kind: "fragment"` 和同一组资源指标。
 
 ### 主循环
 
-- **`run_learner` 全量模式主体** — 启动(种子/设备/模型/索引校验/adopt v0/优化器/心跳/数据迭代器)→ 循环:inner_steps 训练(带心跳、日志、可选中途采纳)→ 故障注入 → 直接按 `io.tensor_dtype` flatten + `write_update` → pending 目录保留清理 → CSV/心跳 → 可选上传后采纳 → 可选注入崩溃;异常记日志重抛;finally:记录 stop 原因、写 `stopped` 心跳、`process_exit`。
+- **`run_learner` 全量模式主体** — 启动(种子/设备/模型/索引校验/adopt v0/优化器/心跳/数据迭代器)→ 循环:inner_steps 训练(带心跳、日志、可选中途采纳)→ 故障注入 → 按 `io.tensor_dtype` flatten + `write_update`(不可变 payload 后原子替换固定 pointer)→ CSV/心跳 → 可选上传后采纳 → 可选注入崩溃;learner 不删除 proposal payload;finally:记录 stop 原因、写 `stopped` 心跳、`process_exit`。
 - **`run_fragment_learner(config, learner_id)`** — fragment 模式主体,差异:
   - 启动时还要等待并校验 fragment index;
   - 上传前 `select_fragment(local_update_index, K)` 选片、`extract_fragment_from_model` 直接抽取目标片,不先构造完整 flatten;
-  - **不做** pending 保留清理;
+  - proposal metadata 仍以每份独立文件放在 payload 目录,由 syncer maintenance 在消费后统一清理;
   - 采纳走增量 `adopt_fragment_updates`,变化片的 `tokens_since_fragment_load` 清零;
   - finally 中的收尾:若无错且设置了 `stop_after_outer_steps`,在 `no_progress_timeout_seconds` 预算内轮询等待 `global_merge_event` 达标(期间持续采纳),最后再整体采纳一次,保证退出时本地模型为最终版本。
 

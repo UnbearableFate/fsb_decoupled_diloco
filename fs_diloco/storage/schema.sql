@@ -31,6 +31,13 @@ CREATE TABLE IF NOT EXISTS learners (
     status_reason TEXT
 );
 
+CREATE TABLE IF NOT EXISTS proposal_frontiers (
+    learner_id TEXT PRIMARY KEY,
+    last_observed_update_id TEXT NOT NULL,
+    last_pointer_path TEXT NOT NULL,
+    observed_at REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS updates (
     update_id TEXT PRIMARY KEY,
     learner_id TEXT NOT NULL,
@@ -136,14 +143,6 @@ CREATE TABLE IF NOT EXISTS fragment_updates (
     effective_weight REAL,
     drop_reason TEXT,
     UNIQUE(learner_id, fragment_id, local_step_end, base_fragment_version)
-);
-
-CREATE TABLE IF NOT EXISTS db_dumps (
-    dump_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    created_at REAL NOT NULL,
-    global_version INTEGER NOT NULL,
-    path TEXT NOT NULL,
-    size_bytes INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_updates_status ON updates(status);

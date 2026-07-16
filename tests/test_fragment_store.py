@@ -115,3 +115,16 @@ def test_fragment_staleness_uses_fragment_version(tmp_path):
     )
     assert store.get_fragment_update("stale")["status"] == "dropped"
     store.close()
+
+
+def test_fragment_shutdown_finalizes_unconsumed_updates(tmp_path):
+    store = SQLiteStore(tmp_path / "db.sqlite3")
+    store.insert_fragment_update_metadata(_metadata("selected", local_step_end=1))
+    store.insert_fragment_update_metadata(_metadata("pending", local_step_end=2))
+    store.mark_fragment_updates_selected(["selected"], "selection")
+    assert store.finalize_unconsumed_updates(
+        fragment_mode=True, reason="stop_after_outer_steps"
+    ) == 2
+    assert store.get_fragment_update("selected")["status"] == "dropped"
+    assert store.get_fragment_update("pending")["drop_reason"] == "stop_after_outer_steps"
+    store.close()

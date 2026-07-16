@@ -1,6 +1,6 @@
 # 06 配置参考
 
-配置为单个 YAML 文件,由 `core/config.py` 解析为嵌套 dataclass。**所有字段都有默认值**;出现未知键会直接报错(防拼写错误)。CLI 的 `--run-id / --shared-root / --num-learners / --sqlite-local-dir` 会覆盖对应字段。解析后的完整配置会以 `control/run_config.resolved.yaml` 快照进 run 目录。
+配置为单个 YAML 文件,由 `core/config.py` 解析为嵌套 dataclass。**所有字段都有默认值**;出现未知键会直接报错(防拼写错误)。CLI 的 `--run-id / --shared-root / --num-learners` 会覆盖对应字段。解析后的完整配置会以 `control/run_config.resolved.yaml` 快照进 run 目录。
 
 标注 ⚠ 的字段:在配置中声明但**当前运行时代码未消费**(预留)。
 
@@ -17,10 +17,7 @@
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
-| `resume` | `false` | true 时走 `resume_run()`(fragment 模式不支持) |
-| `resume_version` | `latest` | `latest` 或具体版本号 |
-| `resume_db_dump` | `null` | 指定 DB dump 路径;缺省自动找匹配版本的最新 dump |
-| `allow_overwrite_existing_run` | `false` | `latest.json` 已存在时是否允许重新初始化 |
+| `resume` | `false` | true 时从 `<shared_root>/control/syncer_metadata.sqlite3` 的最大 committed 行恢复(fragment 模式不支持);DB 缺失或校验失败即退出 |
 
 ## model
 
@@ -58,7 +55,6 @@
 | `grace_window.mode` | `fixed` | ⚠ 仅 fixed,未消费 |
 | `grace_window.fixed_seconds` | 20.0 | 宽限窗口时长 |
 | `grace_window.max_seconds` | 60.0 | 窗口上限(与 fixed 取 min) |
-| `db_dump_every_versions` | 1 | 每 N 个版本 dump 一次 SQLite;0/null 关闭周期 dump(停机仍 dump) |
 | `stop_after_outer_steps` | 20 | 外层步数(fragment:merge event 数)停止条件;null 不限 |
 | `stop_after_global_tokens` | `null` | 累计合并 token 停止条件 |
 | `stop_file_poll_seconds` | 5.0 | learner 侧轮询 stop/latest 的间隔 |
@@ -114,11 +110,8 @@
 | `tensor_dtype` | `float32` | learner update 的构造/落盘 dtype(`float32`/`bfloat16`/`float16`;合并时统一转回 fp32)。本仓库的 GPT-2 1L debug 与两种 50x10 对照配置使用 `bfloat16` |
 | `atomic_write` | `true` | ⚠ 未消费(始终原子写) |
 | `compute_sha256` | `false` | 上传时计算张量文件摘要(分析工具可校验完整性) |
-| `keep_processed_updates` | `true` | ⚠ 未消费 |
-| `cleanup_applied_after_versions` | `null` | ⚠ 未消费 |
-| `keep_last_global_versions` | 3 | syncer 保留最近 N 版全局权重/优化器文件(其余删除) |
-| `keep_last_learner_update_versions` | 3 | learner 保留自己 pending 目录最近 N 份 update(**fragment 模式不清理**;注意需 ≥ staleness 窗口需求,否则 syncer 会遇到 missing_file) |
-| `sqlite_local_dir` | `null` | syncer SQLite 所在目录;缺省 `$TMPDIR/fs_diloco/<run_id>`。**务必指向节点本地盘,不要指向共享文件系统** |
+
+checkpoint/update 保留数量不再是配置项。syncer 的 maintenance 按权威引用集合自动保留一个 current global weight/outer、每个 fragment 一个 current weight/outer、latest 引用的一个 materialized full、active DB proposal payload 与固定 proposal pointers;历史先归档后回收。未发布孤儿的 grace 为 `max(2 × heartbeat_interval_seconds, 2 × scan_interval_seconds)`。
 
 ## learner
 

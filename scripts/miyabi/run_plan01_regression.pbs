@@ -1,0 +1,45 @@
+#!/bin/bash
+#PBS -N fsdiloco_plan01_regression
+#PBS -q debug-g
+#PBS -W group_list=xg24i002
+#PBS -l select=1:mpiprocs=1
+#PBS -l walltime=00:20:00
+#PBS -j oe
+
+set -eEuo pipefail
+trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
+
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+module list 2>&1 | cat
+
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+RUN_ID="${RUN_ID:-plan01_regression_${PBS_JOBID%%.*}}"
+RUN_ROOT="${RUN_ROOT:-$PROJECT_ROOT/runs/fs_diloco/$RUN_ID}"
+
+cd "$PROJECT_ROOT"
+"$PYTHON_BIN" -m pytest -q
+
+RUN_ID="$RUN_ID" bash scripts/local/run_tiny_2proc_smoke.sh
+
+"$PYTHON_BIN" - "$RUN_ROOT" <<'PY'
+import csv
+import sys
+from pathlib import Path
+
+run_root = Path(sys.argv[1])
+with (run_root / "metrics" / "syncer_metrics.csv").open(newline="", encoding="utf-8") as handle:
+    rows = list(csv.DictReader(handle))
+assert rows, "tiny smoke produced no syncer metrics"
+for field in ("sqlite_commit_seconds", "maintenance_seconds"):
+    assert field in rows[0], f"missing telemetry field: {field}"
+    assert all(float(row[field]) >= 0.0 for row in rows), f"invalid telemetry field: {field}"
+print(
+    {
+        "run_root": str(run_root),
+        "versions": len(rows),
+        "sqlite_commit_seconds": [float(row["sqlite_commit_seconds"]) for row in rows],
+        "maintenance_seconds": [float(row["maintenance_seconds"]) for row in rows],
+    }
+)
+PY

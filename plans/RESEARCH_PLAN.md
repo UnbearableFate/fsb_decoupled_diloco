@@ -32,18 +32,18 @@
 当前代码和近期实验又增加了几项更直接的证据：
 
 - full 和 fragment 两条端到端路径都已经可以在 1、2、9 节点上运行；
-- 参数通过 safetensors 发布，metadata 作为提交点，`latest.json` 作为全局可见指针，syncer 使用节点本地 SQLite 管理 update 生命周期；
+- 参数通过 safetensors 发布，full learner 以固定 proposal pointer 作为提交点，`latest.json` 作为 learner 可见的全局缓存，syncer 使用共享 run 内的持久 SQLite 作为权威提交记录；
 - 外层优化器以显式扁平向量实现，支持 full state 和 per-fragment state；
 - fragment 已具备版本、round-robin 调度、增量采用和完整模型 materialization；
 - learner 可以直接从目标参数切片构造 fragment，不再为上传单片而物化完整 CPU 扁平向量；
 - BF16 upload 将 full 和 fragment 的文件 payload 基本减半，syncer 读取后仍以 FP32 聚合；
-- full 模式已经有 resume 基础实现、DB dump 和有限的 retention；fragment resume 仍未实现；
+- full 模式已经实现 DB-first resume、单事务 global commit、crash-matrix 恢复与引用驱动的 current-only retention；fragment resume 仍未实现；
 - 当前 fragment 采用 `balanced_tensor`，与旧设计中的 layer-aligned 连续分片不同；两者都可以保留为后续研究选项，不必立即把其中一种定义为唯一正确方案；
 - 当前 9 节点部署由一个 co-allocated MPI 作业启动，数据面不使用 MPI，但它还没有完整复现“多个独立 PBS 作业只能通过共享文件系统协作”的动机场景。
 
-近期 50×10 对照是当前最有价值的性能信号。BF16 fragment 的平均 update payload 约为 63.2 MB，full 约为 248.9 MB；fragment 的 learner 写入和 syncer 读取都明显快于 full。然而 fragment 完整时间约为 198.9 秒，full 约为 150.4 秒，fragment 仍慢约 32%。新增的一节点 timing breakdown 显示，fragment cycle 的主要时间落在等待 latest 和 syncer 等待 quorum，而不是参数抽取、写文件、聚合或外层优化。这意味着后续 fragment 优化的中心应从“继续压缩文件写入”转向“减少协议等待和同步化行为”。
+近期 50×10 对照是当前最有价值的性能信号。BF16 fragment 的平均 update payload 约为 63.2 MB，full 约为 248.9 MB；fragment 的 learner 写入和 syncer 读取都明显快于 full。然而 fragment 完整时间约为 198.9 秒，full 约为 150.4 秒，fragment 仍慢约 32%。新增的一节点 timing breakdown 显示，fragment cycle 的主要时间落在等待 latest 和 syncer 等待 quorum，而不是参数抽取、写文件、聚合或外层优化。这意味着后续 fragment 优化的中心应从“继续压缩文件写入”转向“减少协议等待和同步化行为”。持久状态改造后的九节点 full 50×10 又验证了 DB/current-only 路径：十次 merge 均 selected=8，SQLite commit p95 为 6.2 ms，commit+maintenance 仅占完整训练时间约 0.36%，结束时只剩 v10 checkpoint、固定 pointers 与持久 DB。
 
-较长的 full 训练已经能让八个 learner 各自运行到 5000 local steps，并完成数十次 outer update，但也暴露出收尾阶段可能停在目标版本之前、syncer 持续等待而 learner 已全部退出的现象。这个信号说明，终止、terminal drain、有限训练和恢复语义之间仍需要统一设计。
+较长的 full 训练已经能让八个 learner 各自运行到 5000 local steps，并完成数十次 outer update；旧路径曾暴露收尾阶段停在目标版本之前、syncer 持续等待而 learner 已全部退出的现象。持久 full 的两次九节点终态运行都已证明 terminal drain、DB/cache 一致性和 current-only GC 正常：FP32 fresh-only 运行应用 190/400 updates 后在 v25 `input_exhausted`，BF16/staleness=2 运行应用 372/400 updates 后在 v48 `input_exhausted`。后者把 proposal payload 减半并将 update 利用率提高到 93%，但端到端时间仅改善约 0.6%，且两次运行都没有达到配置的 v50。这说明“固定 5000 local steps”和“固定 50 outer merges”不是等价完成条件；outer version 还受 supersession、quorum batching 和 learner 尾部速度差异影响。
 
 ## 4. 当前研究问题
 
@@ -53,13 +53,13 @@
 
 ### 4.2 权威状态和运行成本能否保持有界
 
-真正的有界存储意味着 update 数持续增长时，权威 payload、proposal 可见面、数据库活跃状态和单次 discovery 成本不会同步线性增长。当前 full 模式已经具备部分版本与 learner update retention；fragment 模式仍保留较多历史 update 文件和 metadata，syncer 也会扫描不断增长的目录。后续研究可以围绕固定 proposal slot、latest-wins 引用、已消费 artifact 回收、fragment checkpoint 保留窗口、DB 活跃集与历史研究数据分离等方向展开。
+真正的有界存储意味着 update 数持续增长时，权威 payload、proposal 可见面、数据库活跃状态和单次 discovery 成本不会同步线性增长。当前 full 模式已经具备每 learner 固定 proposal slot、latest-wins 摄取、活跃 DB/历史 JSONL 分离以及 current-only checkpoint/payload GC；1000-cycle 实验验证了活跃行、文件数和 DB page 使用在 warm-up 后有界。fragment checkpoint 与 payload 已纳入相同 maintenance，但 fragment proposal discovery 仍扫描 payload metadata，固定 fragment proposal surface 仍是后续方向。
 
 这里需要区分两类数据：运行正确性依赖的权威状态应当小而有界；实验日志和离线分析数据可以增长，但应有独立归档策略，不能反过来成为 runtime discovery 的组成部分。
 
 ### 4.3 存储权威状态能否带来简单可靠的恢复
 
-full resume 为研究提供了起点，但论文级恢复能力还涉及 publication、`latest.json`、outer optimizer、consumed update 状态和 DB dump 之间的一致性。值得研究的问题包括：syncer 在写 payload、替换 latest、更新 SQLite 或 dump DB 的不同时间退出后，重启应该以什么状态为准；已经选择但尚未完整提交的 update 如何处理；learner 重启后如何恢复单调 identity、重新采用全局状态并继续训练。
+full resume 已把持久 SQLite 的 committed row 定义为权威边界：publication 先写 weight/outer，再用单事务提交版本与 update 状态，最后更新可重建的 `latest.json`。六个 publication 退出点的 crash matrix 已覆盖临时权重、weight 后、outer 后、事务内、DB commit 后和 latest 后；resume 会校验 identity/integrity/checkpoint theta、回滚遗留 selected 并重建 latest。后续恢复研究可以集中在 learner identity/重启、批作业级复现，以及把同一语义推广到 fragment version vector。
 
 fragment 恢复比 full 更复杂，因为权威状态是 fragment version vector，而不是单一 global version。full 路径适合作为恢复语义的参考实现，之后可以把相同思想推广到 per-fragment current state、outer state、materialized checkpoint 和 global merge event。
 
@@ -109,7 +109,7 @@ full 模式可以承担系统语义的参考路径。近期工作可以围绕有
 
 ### 5.2 近期至中期：实现真正的有界状态
 
-full 和 fragment 可以共享一套状态分类：current authority、有限 base window、每 learner/fragment 的最新 proposal、写入中的临时对象，以及仅用于研究归档的历史记录。运行时只发现固定大小的 latest/proposal surface，历史 metrics、DB dump 和已消费 update 进入独立归档或回收路径。
+full 和 fragment 可以共享一套状态分类：current authority、有限 base window、每 learner/fragment 的最新 proposal、写入中的临时对象，以及仅用于研究归档的历史记录。full 运行时已经只发现固定大小的 proposal surface，历史 metrics 和已消费 update 进入独立 JSONL 归档或回收路径；fragment 的固定 proposal surface 仍待完成。
 
 长跑研究可以持续记录 live bytes、文件数、metadata scan 时间、DB 大小、GC backlog 和第 N 次 update 的各阶段延迟。目标不是单纯减少磁盘占用，而是展示运行成本不会因为历史变长而退化。
 
@@ -135,7 +135,7 @@ fragment 优化应同时保留 full 作为对照。若某次优化只减少 upda
 
 ### 5.5 中期至后期：形成恢复实验与长期运行证据
 
-恢复实验可以从 full 的短小故障注入开始，逐步覆盖 syncer publication 的不同阶段、learner 退出、SQLite dump 落后于 latest、孤儿 payload 和重复 metadata。随后把相同实验迁移到 fragment version vector。
+恢复实验已经从 full 的短小故障注入覆盖到 publication 六阶段、孤儿 payload、重复 pointer 和跨节点重开。下一步可以覆盖 learner 退出/重启与批作业重启，再把相同实验迁移到 fragment version vector。
 
 长期运行可以用于同时研究三件事：有界存储、discovery 延迟是否稳定、恢复后是否继续前进。相比单次超大 token 目标，多次可解释的中长运行可能更适合早期定位状态泄漏和终止问题；当运行语义稳定后，再扩大到更有代表性的模型与 token 预算。
 
@@ -157,7 +157,7 @@ stale 研究可以先做小矩阵和机制归因，再决定是否扩大到多�
 | Fragment | 观察均衡与采用成本 | fragment 数、balanced-tensor、layer-aligned、不同片大小 |
 | 存储 | 观察适用边界 | 正常 Lustre、限速、注入可见性延迟、对象存储微基准 |
 | 运行拓扑 | 验证动机场景 | co-allocated MPI launcher、独立 PBS jobs、单角色重启 |
-| 状态生命周期 | 观察有界性与恢复 | retention 窗口、GC、DB dump 间隔、故障注入时机 |
+| 状态生命周期 | 观察有界性与恢复 | 引用集合、orphan grace、archive/GC backlog、故障注入时机 |
 | 算法语义 | 区分系统与优化影响 | fresh-only、stale-aware、moment reset/retain、不同 merge |
 | 训练质量 | 建立统计解释 | pretrained 系统跑、from-scratch matched-token、多种子 |
 
@@ -186,7 +186,7 @@ stale 研究可以先做小矩阵和机制归因，再决定是否扩大到多�
 
 ### Resume 比预期复杂
 
-publication 与 DB 状态之间的 crash window 可能需要重新界定 authority。应对方向是尽量让可见的 current record 自包含，SQLite 更像可重建索引而不是唯一事实源。研究主张可以限定到进程级恢复，不必过早扩展到节点断电和自动 failover。
+full 路径已经把持久 SQLite committed row 定义为唯一恢复权威，并用 checkpoint theta 一致性和 fail-closed 校验收紧 crash window。剩余复杂度主要在 fragment 多版本向量与 learner 自身恢复；研究主张仍可限定到进程/批作业级恢复，不必过早扩展到节点断电和自动 failover。
 
 ### 有界存储与研究可审计性冲突
 
@@ -206,7 +206,7 @@ runtime 需要删除历史，研究又希望保留证据。可以把两者分层
 
 ## 9. 近期可展开的工作
 
-近期最自然的一组工作是：用已经加入的 fragment timing 指标重跑 9 节点 50×10，确认 learner wait-latest、syncer quorum wait 和 shutdown wait 在真实多 learner 场景中的占比；同时梳理 full 5000-step run 暴露的 terminal drain 与停止语义，完善 full resume 的故障注入和幂等恢复测试。
+近期最自然的一组工作是：用已经加入的 fragment timing 指标重跑 9 节点 50×10，确认 learner wait-latest、syncer quorum wait 和 shutdown wait 在真实多 learner 场景中的占比；同时基于已经完成的两次 full 5000-step run，分离 upload dtype 与 staleness 的影响。质量侧需要在当前同一代码版本上进行只改变 FP32/BF16 upload 的多 seed 对照，并对固定 global checkpoint 测量 validation loss/perplexity；系统侧需要明确 5000 local steps 与 50 outer merges 的完成语义，并研究 upload 后版本确认、round barrier 或 staleness window/lambda 对吞吐、丢弃率和质量的影响。
 
 与这两项并行，可以设计固定大小的 learner/fragment proposal 可见面和 artifact GC，把有界存储从配置意图转化为协议结构；再建立 no-communication learner 基线，使后续 full/fragment 优化都有稳定的 goodput 参照。
 

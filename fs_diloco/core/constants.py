@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 FORMAT_VERSION = 1
+PROTOCOL_VERSION = 2
 DEFAULT_RUNS_DIR = "runs/fs_diloco"
 LEARNER_ID_PREFIX = "learner_"
 
@@ -24,7 +25,6 @@ GLOBAL_STATUS_ABANDONED = "abandoned"
 
 GLOBAL_WEIGHT_TEMPLATE = "global_v{version:06d}.safetensors"
 OUTER_OPTIM_TEMPLATE = "outer_v{version:06d}.safetensors"
-DB_DUMP_TEMPLATE = "metadata_{timestamp}_v{version:06d}.db"
 
 
 def learner_id_from_index(index: int) -> str:

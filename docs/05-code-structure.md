@@ -12,9 +12,9 @@ fsb_decoupled_diloco/
 │   │   ├── atomic_io.py           #   原子写(bytes/text/json/writer)、safe_read_json、sha256
 │   │   ├── paths.py               #   RunPaths:共享目录布局的唯一定义;prepare_run_dirs
 │   │   ├── tensor_codec.py        #   safetensors 存取:全局权重/外层状态/update 向量
-│   │   ├── sqlite_store.py        #   SQLiteStore:update/learner/version 状态机(仅 syncer 用)
+│   │   ├── sqlite_store.py        #   持久 SQLite:update/learner/version/事务状态机
 │   │   ├── schema.sql             #   数据库 schema(随包分发)
-│   │   └── retention.py           #   旧版本权重与旧 update 文件的保留/清理
+│   │   └── maintenance.py         #   crash-safe JSONL 归档、DB 剪枝、引用驱动 GC
 │   ├── protocol/                  # 协议逻辑(纯函数为主,不做 I/O 或仅薄封装)
 │   │   ├── merge.py               #   staleness、加权、每 learner 选一、加权平均
 │   │   ├── liveness.py            #   心跳校验/摄取、active/stale/dead 分类、无进展超时
@@ -35,7 +35,7 @@ fsb_decoupled_diloco/
 │   │   ├── syncer.py              #   syncer 主循环(全量 + fragment 两套)、初始化/恢复/发布
 │   │   └── failure_sim.py         #   故障注入:随机睡眠/跳过上传/崩溃
 │   ├── tools/                     # 离线工具
-│   │   ├── analysis.py            #   run 摘要与断言(读共享目录 + DB dump,不依赖 torch)
+│   │   ├── analysis.py            #   run 摘要与断言(读共享目录 + 持久 DB/archive,不依赖 torch)
 │   │   └── eval_lm_harness.py     #   checkpoint 解析/导出为 HF 目录/lm-eval 结果转 CSV
 │   ├── cli.py                     # python -m fs_diloco.cli {syncer|learner|inspect}
 │   └── {learner,syncer,analysis,eval_lm_harness}.py   # 兼容入口(转发到 runtime/tools)
@@ -81,10 +81,10 @@ core  ←  storage  ←  protocol / modeling / observability  ←  runtime  ← 
 |---|---|
 | CLI 与配置 | `parse_args`, `sqlite_path`, `main` |
 | 发布 | `latest_payload`, `publish_global`(全量);`fragment_latest_payload`, `should_materialize_fragment_full`, `publish_fragment_latest`(分片);`publish_stop` |
-| 初始化/恢复 | `initialize_run`, `initialize_fragment_run`, `resume_run`(+私有 `_resume_latest_payload`, `_newest_db_dump`) |
+| 初始化/恢复 | `initialize_run`, `initialize_fragment_run`, `resume_run`(DB-first) |
 | 摄取 | `validate_update_metadata`, `ingest_update_metadata`, `sync_liveness_and_metadata` |
 | 选择 | `collect_with_grace_window` / `collect_fragment_with_grace_window`, `drop_missing_update_files` / `drop_missing_fragment_update_files`, `finite_local_training_complete`, `select_terminal_drain_updates` |
-| 观测 | `dump_db`, `init_wandb_run`, `_fragment_staleness_stats` |
+| 观测 | `init_wandb_run`, `_fragment_staleness_stats`, `wait_for_learner_shutdown`, `write_training_summary` |
 | 主循环 | `run_syncer`(全量,含分派)/ `run_fragment_syncer`(分片) |
 
 ## 4. 入口点一览
@@ -99,6 +99,6 @@ core  ←  storage  ←  protocol / modeling / observability  ←  runtime  ← 
 
 ## 5. 测试布局
 
-`tests/` 顶层为聚焦单测:原子 I/O、配置、param index 往返、merge 选择/加权、外层优化器、liveness、SQLite 状态机、retention、resume、fragment 全家桶(index/codec/scheduler/store/merge/analysis)、fragment pipeline 冒烟、syncer 选择逻辑、wandb 命名。子目录(`coordination/`、`distributed_syncer/`、`learner_protocol/`、`lifecycle/`、`performance_core/`、`protocol/`、`reference/`、`storage/`、`syncer_decomposition/`)按主题组织更多协议/生命周期测试。
+`tests/` 顶层为聚焦单测:原子 I/O、配置、param index 往返、merge 选择/加权、外层优化器、liveness、持久 SQLite/事务/1000-cycle boundedness、maintenance、DB-first resume、fixed proposal surface、fragment 全家桶、syncer 选择逻辑、共享 SQLite probe 与 W&B 命名。子目录按协议/生命周期主题组织更多测试。
 
 运行:`.venv/bin/python -m pytest tests/ -q`(需要 torch;部分测试用 `synthetic-tiny` 模型在 CPU 上跑)。

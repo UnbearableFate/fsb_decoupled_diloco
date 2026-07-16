@@ -8,12 +8,10 @@ def test_config_defaults_and_cli_overrides(tmp_path):
         "configs/fs_diloco_tiny_local.yaml",
         run_id="test_run",
         shared_root=str(tmp_path / "run"),
-        sqlite_local_dir=str(tmp_path / "db"),
         num_learners=1,
     )
     assert config.run.run_id == "test_run"
     assert config.run.shared_root == str(tmp_path / "run")
-    assert config.io.sqlite_local_dir == str(tmp_path / "db")
     assert config.sync.num_learners == 1
     assert config.sync.quorum_min == 1
     assert config.inner_optimizer.betas == (0.9, 0.95)
@@ -46,6 +44,24 @@ fragments:
     bad_nested.write_text("sync:\n  mode: fragment\n", encoding="utf-8")
     with pytest.raises(ValueError, match="unknown config key"):
         load_config(bad_nested)
+
+
+@pytest.mark.parametrize(
+    ("section", "key", "value"),
+    [
+        ("init", "resume_version", "latest"),
+        ("init", "resume_db_dump", "null"),
+        ("sync", "db_dump_every_versions", "1"),
+        ("io", "sqlite_local_dir", "null"),
+        ("io", "keep_last_global_versions", "3"),
+        ("io", "keep_last_learner_update_versions", "3"),
+    ],
+)
+def test_removed_persistence_and_retention_config_is_rejected(tmp_path, section, key, value):
+    path = tmp_path / "legacy.yaml"
+    path.write_text(f"{section}:\n  {key}: {value}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="unknown config key"):
+        load_config(path)
 
 
 @pytest.mark.parametrize(

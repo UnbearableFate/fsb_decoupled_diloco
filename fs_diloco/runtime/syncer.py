@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import signal
 import socket
 import time
 from pathlib import Path
@@ -17,6 +18,7 @@ from ..core.constants import (
     FORMAT_VERSION,
     GLOBAL_STATUS_COMMITTED,
     LEARNER_STATUS_STOPPED,
+    PROTOCOL_VERSION,
     learner_id_from_index,
 )
 from ..modeling.hf_model import choose_device, load_causal_lm_and_tokenizer
@@ -53,9 +55,9 @@ from ..protocol.merge import (
     select_one_per_learner,
     weighted_average_tensors,
 )
-from ..storage.atomic_io import atomic_write_json, read_json, safe_read_json
+from ..storage.atomic_io import atomic_write_json, safe_read_json
+from ..storage.maintenance import run_maintenance
 from ..storage.paths import RunPaths, prepare_run_dirs
-from ..storage.retention import cleanup_global_artifacts
 from ..storage.sqlite_store import SQLiteStore
 from ..storage.tensor_codec import (
     load_global_weights_flat,
@@ -71,17 +73,35 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--config", required=True)
     parser.add_argument("--run-id")
     parser.add_argument("--shared-root")
-    parser.add_argument("--sqlite-local-dir")
     parser.add_argument("--num-learners", type=int)
     return parser.parse_args(argv)
 
 
 def sqlite_path(config: Config) -> Path:
-    run_id = config.run.run_id or "unknown_run"
-    local_dir = config.io.sqlite_local_dir
-    if local_dir is None:
-        local_dir = str(Path(os.environ.get("TMPDIR", "/tmp")) / "fs_diloco" / run_id)
-    return Path(local_dir) / "syncer_metadata.sqlite3"
+    return RunPaths(Path(config.run.shared_root or ".")).sqlite_db
+
+
+def run_identity(config: Config) -> dict[str, Any]:
+    return {
+        "run_id": config.run.run_id,
+        "format_version": FORMAT_VERSION,
+        "protocol_version": PROTOCOL_VERSION,
+        "mode": "fragment" if config.fragments.enabled else "full",
+        "model_name_or_path": config.model.name_or_path,
+        "num_fragments": config.fragments.num_fragments if config.fragments.enabled else None,
+    }
+
+
+def publication_failpoint(name: str) -> None:
+    """Inject a deterministic publication crash for the recovery matrix."""
+    if os.environ.get("FS_DILOCO_PUBLICATION_FAILPOINT") != name:
+        return
+    action = os.environ.get("FS_DILOCO_FAILPOINT_ACTION", "raise")
+    if action == "kill":
+        os.kill(os.getpid(), signal.SIGKILL)
+    if action != "raise":
+        raise ValueError(f"unsupported FS_DILOCO_FAILPOINT_ACTION: {action}")
+    raise RuntimeError(f"injected publication failpoint: {name}")
 
 
 def latest_payload(
@@ -92,6 +112,7 @@ def latest_payload(
     weight_path: Path,
     optim_path: Path,
     total_seen_tokens: int,
+    created_at: float | None = None,
 ) -> dict[str, Any]:
     return {
         "format_version": FORMAT_VERSION,
@@ -100,7 +121,7 @@ def latest_payload(
         "weight_path": str(weight_path),
         "optim_path": str(optim_path),
         "param_index_path": str(paths.param_index_json),
-        "created_at": time.time(),
+        "created_at": time.time() if created_at is None else float(created_at),
         "total_seen_tokens": total_seen_tokens,
     }
 
@@ -117,21 +138,50 @@ def publish_global(
     num_updates: int,
     total_update_tokens: int,
     total_seen_tokens: int,
-) -> None:
+    selected_updates: list[dict[str, Any]] | None = None,
+    effective_weights: dict[str, float] | None = None,
+    predecessor_version: int | None = None,
+) -> dict[str, Any]:
     weight_path = paths.global_weight_path(version)
     optim_path = paths.outer_optim_path(version)
+    if os.environ.get("FS_DILOCO_PUBLICATION_FAILPOINT") == "weight_temp":
+        temp_path = weight_path.parent / f".{weight_path.name}.injected.tmp"
+        with temp_path.open("wb") as handle:
+            handle.write(b"incomplete-weight")
+            handle.flush()
+            os.fsync(handle.fileno())
+        publication_failpoint("weight_temp")
     save_global_weights(weight_path, theta, param_index)
+    publication_failpoint("after_weight")
     save_outer_state(optim_path, theta, outer_state)
-    store.upsert_global_version(
-        version,
-        str(weight_path),
-        str(optim_path),
-        num_updates=num_updates,
-        total_update_tokens=total_update_tokens,
-        total_seen_tokens=total_seen_tokens,
-        outer_optimizer=config.outer_optimizer.name,
-        status=GLOBAL_STATUS_COMMITTED,
-    )
+    publication_failpoint("after_outer")
+    sqlite_start = time.monotonic()
+    if version == 0:
+        row = store.initialize_full_run(
+            weight_path=str(weight_path),
+            optim_path=str(optim_path),
+            outer_optimizer=config.outer_optimizer.name,
+            identity=run_identity(config),
+            config_snapshot=config_to_dict(config),
+        )
+    else:
+        if predecessor_version is None or selected_updates is None or effective_weights is None:
+            raise ValueError("full merge publication requires predecessor and selected updates")
+        row = store.commit_full_merge(
+            predecessor_version=predecessor_version,
+            target_version=version,
+            weight_path=str(weight_path),
+            optim_path=str(optim_path),
+            selected_updates=selected_updates,
+            effective_weights=effective_weights,
+            total_update_tokens=total_update_tokens,
+            total_seen_tokens=total_seen_tokens,
+            outer_optimizer=config.outer_optimizer.name,
+            max_staleness_versions=config.sync.max_staleness_versions,
+            before_commit=lambda: publication_failpoint("sqlite_transaction"),
+        )
+    sqlite_commit_seconds = time.monotonic() - sqlite_start
+    publication_failpoint("after_db_commit")
     atomic_write_json(
         paths.latest_json,
         latest_payload(
@@ -141,8 +191,11 @@ def publish_global(
             weight_path=weight_path,
             optim_path=optim_path,
             total_seen_tokens=total_seen_tokens,
+            created_at=float(row["created_at"]),
         ),
     )
+    publication_failpoint("after_latest")
+    return {**row, "sqlite_commit_seconds": sqlite_commit_seconds}
 
 
 def fragment_latest_payload(
@@ -239,8 +292,8 @@ def initialize_run(
     *,
     device: torch.device | str = "cpu",
 ) -> tuple[int, torch.Tensor, dict[str, torch.Tensor], dict[str, Any], int]:
-    if paths.latest_json.exists() and not config.init.allow_overwrite_existing_run:
-        raise FileExistsError(f"{paths.latest_json} exists; set init.resume or allow overwrite")
+    if store.committed_global_count() != 0:
+        raise RuntimeError("init.resume=false cannot overwrite an existing committed run")
     model, _tokenizer = load_causal_lm_and_tokenizer(config.model)
     model.to(device)
     param_index = build_param_index(model, model_name_or_path=config.model.name_or_path)
@@ -260,8 +313,14 @@ def initialize_run(
         total_update_tokens=0,
         total_seen_tokens=0,
     )
-    store.set_run_state("config", config_to_dict(config))
+    maintenance = run_maintenance(
+        store,
+        paths,
+        heartbeat_interval_seconds=config.liveness.heartbeat_interval_seconds,
+        scan_interval_seconds=config.sync.scan_interval_seconds,
+    )
     logger.event("run_initialized", version=0, total_numel=int(theta.numel()))
+    logger.event("state_maintenance_completed", **maintenance)
     return 0, theta, outer_state, param_index, 0
 
 
@@ -283,8 +342,8 @@ def initialize_fragment_run(
     int,
     Path,
 ]:
-    if paths.latest_json.exists() and not config.init.allow_overwrite_existing_run:
-        raise FileExistsError(f"{paths.latest_json} exists; set init.resume or allow overwrite")
+    if store.current_fragment_versions():
+        raise RuntimeError("init.resume=false cannot overwrite existing committed fragments")
     model, _tokenizer = load_causal_lm_and_tokenizer(config.model)
     model.to(device)
     param_index = build_param_index(model, model_name_or_path=config.model.name_or_path)
@@ -345,6 +404,13 @@ def initialize_fragment_run(
         previous_materialized_weight_path=None,
     )
     store.set_run_state("config", config_to_dict(config))
+    store.set_run_state("identity", run_identity(config))
+    maintenance = run_maintenance(
+        store,
+        paths,
+        heartbeat_interval_seconds=config.liveness.heartbeat_interval_seconds,
+        scan_interval_seconds=config.sync.scan_interval_seconds,
+    )
     logger.event(
         "fragment_run_initialized",
         global_merge_event=0,
@@ -352,6 +418,7 @@ def initialize_fragment_run(
         num_fragments=int(fragment_index["num_fragments"]),
         strategy=fragment_index["strategy"],
     )
+    logger.event("state_maintenance_completed", **maintenance)
     return (
         0,
         fragment_thetas,
@@ -365,26 +432,6 @@ def initialize_fragment_run(
     )
 
 
-def _resume_latest_payload(config: Config, paths: RunPaths) -> dict[str, Any]:
-    if config.init.resume_version == "latest":
-        return read_json(paths.latest_json)
-    version = int(config.init.resume_version)
-    return {
-        "format_version": FORMAT_VERSION,
-        "run_id": config.run.run_id,
-        "version": version,
-        "weight_path": str(paths.global_weight_path(version)),
-        "optim_path": str(paths.outer_optim_path(version)),
-        "param_index_path": str(paths.param_index_json),
-        "total_seen_tokens": 0,
-    }
-
-
-def _newest_db_dump(paths: RunPaths, version: int) -> Path | None:
-    dumps = sorted(paths.db_dumps.glob(f"metadata_*_v{version:06d}.db"))
-    return dumps[-1] if dumps else None
-
-
 def resume_run(
     config: Config,
     paths: RunPaths,
@@ -393,37 +440,58 @@ def resume_run(
     *,
     device: torch.device | str = "cpu",
 ) -> tuple[int, torch.Tensor, dict[str, torch.Tensor], dict[str, Any], int]:
-    latest = _resume_latest_payload(config, paths)
-    param_index = load_param_index(latest["param_index_path"])
+    store.integrity_check()
+    identity = store.get_run_state("identity")
+    expected_identity = run_identity(config)
+    if identity != expected_identity:
+        raise RuntimeError(
+            f"run identity mismatch: expected {expected_identity!r}, found {identity!r}"
+        )
+    committed = store.latest_global_version()
+    if committed is None:
+        raise RuntimeError("resume requires a committed global version in persistent SQLite")
+    param_index = load_param_index(paths.param_index_json)
     model, _tokenizer = load_causal_lm_and_tokenizer(config.model)
     current_index = build_param_index(model, model_name_or_path=config.model.name_or_path)
     validate_compatible_index(current_index, param_index)
-    theta = load_global_weights_flat(latest["weight_path"], param_index, device=device)
-    optim_theta, outer_state = load_outer_state(latest["optim_path"], device=device)
-    if optim_theta.numel() == theta.numel():
-        theta = optim_theta.float()
+    weight_path = Path(str(committed["weight_path"]))
+    optim_path = Path(str(committed["optim_path"]))
+    if not weight_path.is_file() or not optim_path.is_file():
+        raise FileNotFoundError(
+            f"committed checkpoint is incomplete: weight={weight_path}, outer={optim_path}"
+        )
+    theta = load_global_weights_flat(weight_path, param_index, device=device).float()
+    optim_theta, outer_state = load_outer_state(optim_path, device=device)
+    optim_theta = optim_theta.float()
+    if theta.shape != optim_theta.shape or not torch.equal(theta, optim_theta):
+        raise RuntimeError("committed weight and outer checkpoint theta do not match")
 
-    requested_dump = Path(config.init.resume_db_dump) if config.init.resume_db_dump else None
-    dump = requested_dump or _newest_db_dump(paths, int(latest["version"]))
-    if dump and dump.exists():
-        row = store.conn.execute("SELECT COUNT(*) AS n FROM global_versions").fetchone()
-        if row["n"] == 0:
-            store.restore_from_dump(dump)
-    total_seen_tokens = int(latest.get("total_seen_tokens") or 0)
-    store.upsert_global_version(
-        int(latest["version"]),
-        latest["weight_path"],
-        latest["optim_path"],
-        num_updates=0,
-        total_update_tokens=0,
+    reset_selected = store.reset_all_selected_to_pending()
+    total_seen_tokens = int(committed["total_seen_tokens"])
+    repaired_latest = latest_payload(
+        config=config,
+        paths=paths,
+        version=int(committed["version"]),
+        weight_path=weight_path,
+        optim_path=optim_path,
         total_seen_tokens=total_seen_tokens,
-        outer_optimizer=config.outer_optimizer.name,
-        status=GLOBAL_STATUS_COMMITTED,
-        notes="resumed",
+        created_at=float(committed["created_at"]),
     )
-    logger.event("run_resumed", version=int(latest["version"]), db_dump=str(dump) if dump else None)
+    atomic_write_json(paths.latest_json, repaired_latest)
+    maintenance = run_maintenance(
+        store,
+        paths,
+        heartbeat_interval_seconds=config.liveness.heartbeat_interval_seconds,
+        scan_interval_seconds=config.sync.scan_interval_seconds,
+    )
+    logger.event(
+        "run_resumed",
+        version=int(committed["version"]),
+        reset_selected=reset_selected,
+    )
+    logger.event("state_maintenance_completed", **maintenance)
     return (
-        int(latest["version"]),
+        int(committed["version"]),
         theta.float().to(device),
         outer_state,
         param_index,
@@ -461,9 +529,9 @@ def validate_update_metadata(payload: dict[str, Any], *, config: Config, paths: 
     if not file_path.exists():
         return False
     try:
-        file_path.relative_to(paths.shared_root)
+        file_path.resolve(strict=False).relative_to(paths.shared_root.resolve(strict=False))
     except ValueError:
-        pass
+        return False
     return True
 
 
@@ -474,14 +542,21 @@ def ingest_update_metadata(
     logger: JsonlLogger,
 ) -> int:
     inserted = 0
-    for path in sorted(paths.updates_pending.glob("learner_*/update_*.meta.json")):
+    if config.fragments.enabled:
+        metadata_paths = sorted(paths.updates_payloads.glob("learner_*/update_*.meta.json"))
+    else:
+        metadata_paths = [
+            paths.update_pointer_path(learner_id_from_index(index))
+            for index in range(config.sync.num_learners)
+        ]
+    for path in metadata_paths:
         payload = safe_read_json(path)
         if payload is None or not validate_update_metadata(payload, config=config, paths=paths):
             continue
         inserted_payload = (
             store.insert_fragment_update_metadata(payload)
             if config.fragments.enabled
-            else store.insert_update_metadata(payload)
+            else store.insert_update_metadata(payload, pointer_path=path)
         )
         if inserted_payload:
             inserted += 1
@@ -606,19 +681,14 @@ def collect_fragment_with_grace_window(
     return selected
 
 
-def finite_local_training_complete(store: SQLiteStore, config: Config) -> bool:
-    if config.training.max_local_steps is None:
-        return False
-    learners = store.list_learners()
-    if len(learners) < config.sync.num_learners:
-        return False
-    max_local_steps = int(config.training.max_local_steps)
-    complete = 0
-    for learner in learners:
-        last_local_step = int(learner.get("last_local_step") or 0)
-        if last_local_step >= max_local_steps:
-            complete += 1
-    return complete >= config.sync.num_learners
+def all_expected_learners_stopped(store: SQLiteStore, config: Config) -> bool:
+    expected = {learner_id_from_index(index) for index in range(config.sync.num_learners)}
+    stopped = {
+        str(row["learner_id"])
+        for row in store.list_learners()
+        if row.get("status") == LEARNER_STATUS_STOPPED
+    }
+    return stopped == expected
 
 
 def select_terminal_drain_updates(
@@ -629,15 +699,14 @@ def select_terminal_drain_updates(
     *,
     current_version: int,
 ) -> list[dict[str, Any]]:
-    target = config.sync.stop_after_outer_steps
-    if target is None or current_version >= target:
+    if not all_expected_learners_stopped(store, config):
         return []
-    if not finite_local_training_complete(store, config):
-        return []
-    pending = drop_missing_update_files(store, store.pending_updates(), logger)
+    store.drop_ineligible_updates(current_version, config.sync.max_staleness_versions)
+    pending = store.eligible_updates(current_version, config.sync.max_staleness_versions)
+    pending = drop_missing_update_files(store, pending, logger)
     selected = select_one_per_learner(
         pending,
-        policy="oldest_pending",
+        policy=config.sync.selection_policy,
         quorum_max=config.sync.quorum_max,
     )
     if selected:
@@ -645,19 +714,16 @@ def select_terminal_drain_updates(
             "terminal_drain_selected",
             version=current_version,
             selected_count=len(selected),
-            remaining_outer_steps=int(target) - current_version,
+            remaining_outer_steps=(
+                int(config.sync.stop_after_outer_steps) - current_version
+                if config.sync.stop_after_outer_steps is not None
+                else None
+            ),
             learners=[row["learner_id"] for row in selected],
         )
-    elif paths.stop_json.exists():
+    else:
         logger.event("terminal_drain_no_pending_updates", version=current_version)
     return selected
-
-
-def dump_db(store: SQLiteStore, paths: RunPaths, version: int, logger: JsonlLogger) -> None:
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    path = paths.db_dump_path(timestamp, version)
-    store.backup_to(path, global_version=version)
-    logger.event("db_dumped", version=version, path=str(path))
 
 
 def init_wandb_run(
@@ -1109,9 +1175,6 @@ def run_fragment_syncer(
                 global_merge_event=new_global_merge_event,
                 previous_materialized_weight_path=materialized_weight_path,
             )
-            cleanup_global_artifacts(
-                paths, keep_last=config.io.keep_last_global_versions, logger=logger
-            )
             publish_seconds = time.monotonic() - publish_start
 
             store.mark_fragment_updates_applied(
@@ -1126,11 +1189,13 @@ def run_fragment_syncer(
                 current_fragment_version=new_fragment_version,
                 max_staleness_versions=config.sync.max_staleness_versions,
             )
-            if (
-                config.sync.db_dump_every_versions
-                and new_global_merge_event % config.sync.db_dump_every_versions == 0
-            ):
-                dump_db(store, paths, new_global_merge_event, logger)
+            maintenance = run_maintenance(
+                store,
+                paths,
+                heartbeat_interval_seconds=config.liveness.heartbeat_interval_seconds,
+                scan_interval_seconds=config.sync.scan_interval_seconds,
+            )
+            logger.event("state_maintenance_completed", **maintenance)
 
             stale_stats = _fragment_staleness_stats(selected, current_fragment_version)
             learner_resources = selected_resource_summary(selected)
@@ -1234,6 +1299,17 @@ def run_fragment_syncer(
                 stop_reason=stop_reason,
             )
             ingest_update_metadata(store, paths, config, logger)
+            if stop_reason != "error" and all_learners_stopped:
+                finalized = store.finalize_unconsumed_updates(
+                    fragment_mode=True,
+                    reason=stop_reason,
+                )
+                if finalized:
+                    logger.event(
+                        "unconsumed_updates_finalized",
+                        count=finalized,
+                        reason=stop_reason,
+                    )
             write_training_summary(
                 paths=paths,
                 store=store,
@@ -1247,7 +1323,15 @@ def run_fragment_syncer(
                 run_start_monotonic=run_start_monotonic,
                 all_learners_stopped=all_learners_stopped,
             )
-            dump_db(store, paths, global_merge_event, logger)
+            if stop_reason != "error":
+                maintenance = run_maintenance(
+                    store,
+                    paths,
+                    heartbeat_interval_seconds=config.liveness.heartbeat_interval_seconds,
+                    scan_interval_seconds=config.sync.scan_interval_seconds,
+                    input_closed=all_learners_stopped,
+                )
+                logger.event("state_maintenance_completed", **maintenance)
             if wandb_run is not None:
                 wandb_run.summary["stop_reason"] = stop_reason
                 wandb_run.summary["final_version"] = global_merge_event
@@ -1266,7 +1350,12 @@ def run_syncer(config: Config) -> None:
     run_start_monotonic = time.monotonic()
     paths = RunPaths(Path(config.run.shared_root or "."))
     prepare_run_dirs(paths, config.sync.num_learners)
-    store = SQLiteStore(sqlite_path(config))
+    database_path = sqlite_path(config)
+    if config.init.resume and not database_path.is_file():
+        raise FileNotFoundError(
+            f"resume requires persistent SQLite at {database_path}; latest.json is not authoritative"
+        )
+    store = SQLiteStore(database_path)
     logger = JsonlLogger(paths.logs / "syncer.jsonl", "syncer")
     log_uncaught_exception(logger)
     device = choose_device()
@@ -1319,6 +1408,7 @@ def run_syncer(config: Config) -> None:
     last_progress_time = time.time()
     last_global_time = last_progress_time
     stop_reason = "completed"
+    terminal_grace_complete = False
     try:
         while True:
             if (
@@ -1335,6 +1425,33 @@ def run_syncer(config: Config) -> None:
                 break
 
             sync_liveness_and_metadata(store, paths, config, logger)
+            input_closed = all_expected_learners_stopped(store, config)
+            if input_closed and not terminal_grace_complete:
+                logger.event("terminal_input_closed", version=version)
+                grace_seconds = min(
+                    config.sync.grace_window.fixed_seconds,
+                    config.sync.grace_window.max_seconds,
+                )
+                if grace_seconds > 0:
+                    time.sleep(grace_seconds)
+                sync_liveness_and_metadata(store, paths, config, logger)
+                terminal_grace_complete = True
+
+            if input_closed:
+                selected = select_terminal_drain_updates(
+                    store,
+                    paths,
+                    config,
+                    logger,
+                    current_version=version,
+                )
+                if not selected:
+                    stop_reason = "input_exhausted"
+                    logger.event("input_exhausted", version=version)
+                    break
+                terminal_drain = len(selected) < config.sync.quorum_min
+            else:
+                terminal_drain = False
             eligible = store.eligible_updates(version, config.sync.max_staleness_versions)
             eligible = drop_missing_update_files(store, eligible, logger)
             one_per_learner = select_one_per_learner(
@@ -1342,20 +1459,8 @@ def run_syncer(config: Config) -> None:
                 policy=config.sync.selection_policy,
                 quorum_max=config.sync.quorum_max,
             )
-            selected: list[dict[str, Any]]
-            terminal_drain = False
-            if len(one_per_learner) < config.sync.quorum_min:
-                terminal_selected = select_terminal_drain_updates(
-                    store,
-                    paths,
-                    config,
-                    logger,
-                    current_version=version,
-                )
-                if terminal_selected:
-                    selected = terminal_selected
-                    terminal_drain = True
-                else:
+            if not input_closed:
+                if len(one_per_learner) < config.sync.quorum_min:
                     logger.event(
                         "quorum_wait",
                         eligible=len(one_per_learner),
@@ -1371,26 +1476,16 @@ def run_syncer(config: Config) -> None:
                         break
                     time.sleep(config.sync.scan_interval_seconds)
                     continue
-            else:
-                selected = collect_with_grace_window(
-                    store,
-                    paths,
-                    config,
-                    logger,
-                    current_version=version,
-                )
-                if len(selected) < config.sync.quorum_min:
-                    terminal_selected = select_terminal_drain_updates(
+                else:
+                    selected = collect_with_grace_window(
                         store,
                         paths,
                         config,
                         logger,
                         current_version=version,
                     )
-                    if not terminal_selected:
+                    if len(selected) < config.sync.quorum_min:
                         continue
-                    selected = terminal_selected
-                    terminal_drain = True
 
             if not terminal_drain and len(selected) < config.sync.quorum_min:
                 logger.event(
@@ -1466,7 +1561,7 @@ def run_syncer(config: Config) -> None:
             total_update_tokens = sum(int(row["tokens_this_update"]) for row in selected)
             total_seen_tokens += total_update_tokens
             publish_start = time.monotonic()
-            publish_global(
+            publication = publish_global(
                 config=config,
                 paths=paths,
                 store=store,
@@ -1477,27 +1572,31 @@ def run_syncer(config: Config) -> None:
                 num_updates=len(selected),
                 total_update_tokens=total_update_tokens,
                 total_seen_tokens=total_seen_tokens,
-            )
-            cleanup_global_artifacts(
-                paths, keep_last=config.io.keep_last_global_versions, logger=logger
+                selected_updates=selected,
+                effective_weights=weights_by_update,
+                predecessor_version=version,
             )
             publish_seconds = time.monotonic() - publish_start
+            sqlite_commit_seconds = float(publication["sqlite_commit_seconds"])
 
-            store.mark_updates_applied(
-                selected,
-                applied_version=new_version,
-                effective_weights=weights_by_update,
+            dropped = sum(
+                1
+                for row in store.terminal_update_rows()
+                if row["update_kind"] == "full" and row["status"] == "dropped"
             )
-            dropped = store.drop_superseded_updates(selected)
-            if not terminal_drain:
-                dropped += store.drop_obsolete_updates(
-                    new_version, config.sync.max_staleness_versions
-                )
-            if (
-                config.sync.db_dump_every_versions
-                and new_version % config.sync.db_dump_every_versions == 0
-            ):
-                dump_db(store, paths, new_version, logger)
+            maintenance_start = time.monotonic()
+            maintenance = run_maintenance(
+                store,
+                paths,
+                heartbeat_interval_seconds=config.liveness.heartbeat_interval_seconds,
+                scan_interval_seconds=config.sync.scan_interval_seconds,
+            )
+            maintenance_seconds = time.monotonic() - maintenance_start
+            logger.event(
+                "state_maintenance_completed",
+                maintenance_seconds=maintenance_seconds,
+                **maintenance,
+            )
             learner_resources = selected_resource_summary(selected)
             append_csv_row(
                 paths.metrics / "syncer_metrics.csv",
@@ -1510,6 +1609,8 @@ def run_syncer(config: Config) -> None:
                     "aggregation_seconds": aggregation_seconds,
                     "outer_step_seconds": outer_seconds,
                     "publish_seconds": publish_seconds,
+                    "sqlite_commit_seconds": sqlite_commit_seconds,
+                    "maintenance_seconds": maintenance_seconds,
                     "stale_updates_dropped": dropped,
                     "global_interval_seconds": time.time() - last_global_time,
                     **_selected_resource_csv_fields(learner_resources),
@@ -1527,6 +1628,8 @@ def run_syncer(config: Config) -> None:
                         "syncer/aggregation_seconds": aggregation_seconds,
                         "syncer/outer_step_seconds": outer_seconds,
                         "syncer/publish_seconds": publish_seconds,
+                        "syncer/sqlite_commit_seconds": sqlite_commit_seconds,
+                        "syncer/maintenance_seconds": maintenance_seconds,
                         "syncer/stale_updates_dropped": dropped,
                         "syncer/global_interval_seconds": time.time() - last_global_time,
                         **selected_update_summary(selected, current_version=version),
@@ -1539,6 +1642,8 @@ def run_syncer(config: Config) -> None:
                 version=new_version,
                 selected_count=len(selected),
                 total_update_tokens=total_update_tokens,
+                sqlite_commit_seconds=sqlite_commit_seconds,
+                maintenance_seconds=maintenance_seconds,
             )
             logger.event("global_published", version=new_version)
             logger.event("updates_marked_applied", version=new_version)
@@ -1569,6 +1674,17 @@ def run_syncer(config: Config) -> None:
                 stop_reason=stop_reason,
             )
             ingest_update_metadata(store, paths, config, logger)
+            if stop_reason != "error" and all_learners_stopped:
+                finalized = store.finalize_unconsumed_updates(
+                    fragment_mode=False,
+                    reason=stop_reason,
+                )
+                if finalized:
+                    logger.event(
+                        "unconsumed_updates_finalized",
+                        count=finalized,
+                        reason=stop_reason,
+                    )
             write_training_summary(
                 paths=paths,
                 store=store,
@@ -1582,7 +1698,15 @@ def run_syncer(config: Config) -> None:
                 run_start_monotonic=run_start_monotonic,
                 all_learners_stopped=all_learners_stopped,
             )
-            dump_db(store, paths, version, logger)
+            if stop_reason != "error":
+                maintenance = run_maintenance(
+                    store,
+                    paths,
+                    heartbeat_interval_seconds=config.liveness.heartbeat_interval_seconds,
+                    scan_interval_seconds=config.sync.scan_interval_seconds,
+                    input_closed=all_learners_stopped,
+                )
+                logger.event("state_maintenance_completed", **maintenance)
             if wandb_run is not None:
                 wandb_run.summary["stop_reason"] = stop_reason
                 wandb_run.summary["final_version"] = version
@@ -1602,7 +1726,6 @@ def main(argv: list[str] | None = None) -> None:
         args.config,
         run_id=args.run_id,
         shared_root=args.shared_root,
-        sqlite_local_dir=args.sqlite_local_dir,
         num_learners=args.num_learners,
     )
     run_syncer(config)
