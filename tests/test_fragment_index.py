@@ -1,6 +1,10 @@
 import pytest
 
-from fs_diloco.fragment_index import build_fragment_index, fragment_size_summary, validate_fragment_index
+from fs_diloco.protocol.fragment_index import (
+    build_fragment_index,
+    fragment_size_summary,
+    validate_fragment_index,
+)
 
 
 def _param_index():

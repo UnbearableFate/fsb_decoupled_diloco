@@ -1,6 +1,6 @@
 import torch
 
-from fs_diloco.merge import (
+from fs_diloco.protocol.merge import (
     normalized_update_weights,
     select_one_per_learner,
     stale_update_ids,

@@ -1,7 +1,7 @@
 import json
 
-from fs_diloco.paths import RunPaths
-from fs_diloco.retention import cleanup_global_artifacts, cleanup_learner_update_artifacts
+from fs_diloco.storage.paths import RunPaths
+from fs_diloco.storage.retention import cleanup_global_artifacts, cleanup_learner_update_artifacts
 
 
 def test_cleanup_global_artifacts_keeps_newest_versions(tmp_path):

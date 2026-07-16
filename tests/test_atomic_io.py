@@ -1,4 +1,4 @@
-from fs_diloco.atomic_io import atomic_write_json, read_json
+from fs_diloco.storage.atomic_io import atomic_write_json, read_json
 
 
 def test_atomic_json_ignores_tmp_until_final(tmp_path):

@@ -1,6 +1,6 @@
 import torch
 
-from fs_diloco.outer_optim import OuterOptimizerConfig, init_outer_state, outer_optimizer_step
+from fs_diloco.modeling.outer_optim import OuterOptimizerConfig, init_outer_state, outer_optimizer_step
 
 
 def test_sgd_momentum_step():

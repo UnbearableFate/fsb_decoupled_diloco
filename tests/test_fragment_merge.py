@@ -1,4 +1,8 @@
-from fs_diloco.merge import normalized_fragment_update_weights, select_one_per_learner, stale_fragment_update_ids
+from fs_diloco.protocol.merge import (
+    normalized_fragment_update_weights,
+    select_one_per_learner,
+    stale_fragment_update_ids,
+)
 
 
 def test_fragment_weighting_and_selection_are_fragment_version_based():

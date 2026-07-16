@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .atomic_io import ensure_dir, file_size
-from .constants import (
+from ..core.constants import (
     GLOBAL_STATUS_COMMITTED,
     LEARNER_STATUS_UNKNOWN,
     UPDATE_STATUS_APPLIED,
@@ -22,7 +22,7 @@ from .constants import (
 
 
 def _schema_text() -> str:
-    return resources.files("fs_diloco").joinpath("schema.sql").read_text(encoding="utf-8")
+    return resources.files("fs_diloco.storage").joinpath("schema.sql").read_text(encoding="utf-8")
 
 
 def connect(path: str | Path) -> sqlite3.Connection:

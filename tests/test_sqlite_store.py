@@ -1,6 +1,6 @@
 import time
 
-from fs_diloco.sqlite_store import SQLiteStore
+from fs_diloco.storage.sqlite_store import SQLiteStore
 
 
 def _metadata(update_id="u1", local_step_end=1):

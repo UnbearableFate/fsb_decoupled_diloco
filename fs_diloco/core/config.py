@@ -279,6 +279,6 @@ def resolve_config(
 
 
 def write_resolved_config(config: Config, path: str | Path) -> None:
-    from .atomic_io import atomic_write_text
+    from ..storage.atomic_io import atomic_write_text
 
     atomic_write_text(path, yaml.safe_dump(config_to_dict(config), sort_keys=False))

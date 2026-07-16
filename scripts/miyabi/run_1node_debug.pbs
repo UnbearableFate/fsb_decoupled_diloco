@@ -9,6 +9,9 @@
 set -eEuo pipefail
 trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
 
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+module list 2>&1 | cat
+
 PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 CONFIG="${CONFIG:-$PROJECT_ROOT/configs/fs_diloco_gpt2_wikitext2_1l_debug.yaml}"
@@ -31,6 +34,8 @@ echo "SHARED_ROOT=$SHARED_ROOT"
 echo "SYNCER_DB_DIR=$SYNCER_DB_DIR"
 echo "SYNCER_CUDA_VISIBLE_DEVICES=$SYNCER_CUDA_VISIBLE_DEVICES"
 echo "LEARNER_CUDA_VISIBLE_DEVICES=$LEARNER_CUDA_VISIBLE_DEVICES"
+echo "PBS_JOBID=${PBS_JOBID:-}"
+echo "PBS_NODEFILE=${PBS_NODEFILE:-}"
 echo "HOST=$(hostname)"
 
 CUDA_VISIBLE_DEVICES="$SYNCER_CUDA_VISIBLE_DEVICES" "$PYTHON_BIN" -m fs_diloco.syncer \

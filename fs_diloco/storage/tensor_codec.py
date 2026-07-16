@@ -8,8 +8,8 @@ import torch
 from safetensors.torch import load_file, save_file
 
 from .atomic_io import atomic_write_with_writer
-from .outer_optim import state_from_tensors, state_to_tensors
-from .param_index import flat_to_named_tensors, named_tensors_to_flat
+from ..modeling.outer_optim import state_from_tensors, state_to_tensors
+from ..modeling.param_index import flat_to_named_tensors, named_tensors_to_flat
 
 
 def dtype_from_name(name: str) -> torch.dtype:

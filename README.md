@@ -8,7 +8,14 @@ The implementation intentionally does not use `torch.distributed`, NCCL, RPC, Ra
 
 ## Layout
 
-- `fs_diloco/`: Python package.
+- `fs_diloco/core/`: configuration and shared identifiers.
+- `fs_diloco/modeling/`: models, datasets, parameter indexing, and outer optimizers.
+- `fs_diloco/protocol/`: fragment scheduling/codecs, merge selection, and liveness rules.
+- `fs_diloco/storage/`: atomic filesystem I/O, safetensors, SQLite, paths, and retention.
+- `fs_diloco/observability/`: JSONL logging, CSV metrics, and W&B telemetry.
+- `fs_diloco/runtime/`: learner and syncer process implementations.
+- `fs_diloco/tools/`: run inspection and LM Evaluation Harness utilities.
+- `fs_diloco/{learner,syncer,analysis,eval_lm_harness}.py`: stable `python -m` compatibility entry points.
 - `configs/`: GPT-2/WikiText-2 and tiny synthetic smoke configs.
 - `scripts/miyabi/`: PBS launch and inspection scripts.
 - `scripts/local/`: synthetic CPU smoke helpers.
@@ -29,7 +36,7 @@ Static checks on a Miyabi login node:
 
 ```bash
 bash -n scripts/miyabi/*.pbs scripts/miyabi/*.sh scripts/local/*.sh
-python -m py_compile fs_diloco/*.py
+python -m compileall -q fs_diloco
 ```
 
 Runtime checks must run inside PBS compute/debug nodes, not on login nodes.

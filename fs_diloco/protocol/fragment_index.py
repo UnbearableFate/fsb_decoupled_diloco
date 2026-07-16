@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .atomic_io import atomic_write_json, read_json
-from .constants import FORMAT_VERSION
+from ..storage.atomic_io import atomic_write_json, read_json
+from ..core.constants import FORMAT_VERSION
 
 
 def _slice_from_param(entry: dict[str, Any]) -> dict[str, Any]:

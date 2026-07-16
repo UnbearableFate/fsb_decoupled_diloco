@@ -1,10 +1,10 @@
 import time
 
-from fs_diloco.config import resolve_config
-from fs_diloco.logging_utils import JsonlLogger
-from fs_diloco.paths import RunPaths, prepare_run_dirs
-from fs_diloco.sqlite_store import SQLiteStore
-from fs_diloco.syncer import initialize_run, resume_run
+from fs_diloco.core.config import resolve_config
+from fs_diloco.observability.logging_utils import JsonlLogger
+from fs_diloco.runtime.syncer import initialize_run, resume_run
+from fs_diloco.storage.paths import RunPaths, prepare_run_dirs
+from fs_diloco.storage.sqlite_store import SQLiteStore
 
 
 def test_resume_loads_global_and_restores_db_dump(tmp_path):

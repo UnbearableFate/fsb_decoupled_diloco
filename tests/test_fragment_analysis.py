@@ -1,9 +1,9 @@
 import time
 
-from fs_diloco.analysis import assert_fragment_run, summarize_run
-from fs_diloco.atomic_io import atomic_write_json
-from fs_diloco.fragment_index import build_fragment_index, save_fragment_index
-from fs_diloco.sqlite_store import SQLiteStore
+from fs_diloco.protocol.fragment_index import build_fragment_index, save_fragment_index
+from fs_diloco.storage.atomic_io import atomic_write_json
+from fs_diloco.storage.sqlite_store import SQLiteStore
+from fs_diloco.tools.analysis import assert_fragment_run, summarize_run
 
 
 class Args:

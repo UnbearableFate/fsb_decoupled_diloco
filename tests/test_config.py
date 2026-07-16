@@ -1,6 +1,6 @@
 import pytest
 
-from fs_diloco.config import load_config, resolve_config
+from fs_diloco.core.config import load_config, resolve_config
 
 
 def test_config_defaults_and_cli_overrides(tmp_path):

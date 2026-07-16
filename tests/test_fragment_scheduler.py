@@ -1,4 +1,4 @@
-from fs_diloco.fragment_scheduler import expected_fragment_versions_after_events, select_fragment
+from fs_diloco.protocol.fragment_scheduler import expected_fragment_versions_after_events, select_fragment
 
 
 def test_round_robin_fragment_schedule():

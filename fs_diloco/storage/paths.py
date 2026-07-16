@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .atomic_io import ensure_dir
-from .constants import DB_DUMP_TEMPLATE, GLOBAL_WEIGHT_TEMPLATE, OUTER_OPTIM_TEMPLATE
+from ..core.constants import DB_DUMP_TEMPLATE, GLOBAL_WEIGHT_TEMPLATE, OUTER_OPTIM_TEMPLATE
 
 
 @dataclass(frozen=True)

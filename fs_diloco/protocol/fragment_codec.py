@@ -8,8 +8,8 @@ from typing import Any
 import torch
 
 from .fragment_index import fragment_by_id
-from .param_index import flatten_trainable_params, load_flat_into_model
-from .tensor_codec import load_safetensors, save_safetensors_atomic
+from ..modeling.param_index import flatten_trainable_params, load_flat_into_model
+from ..storage.tensor_codec import load_safetensors, save_safetensors_atomic
 
 FRAGMENT_TENSOR_KEY = "fragment_params"
 

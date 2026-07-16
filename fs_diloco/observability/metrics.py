@@ -6,7 +6,7 @@ import csv
 from pathlib import Path
 from typing import Any
 
-from .atomic_io import ensure_dir
+from ..storage.atomic_io import ensure_dir
 
 
 def append_csv_row(path: str | Path, row: dict[str, Any], fieldnames: list[str] | None = None) -> None:

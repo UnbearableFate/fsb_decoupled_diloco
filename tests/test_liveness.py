@@ -1,9 +1,13 @@
 import time
 
-from fs_diloco.atomic_io import atomic_write_json
-from fs_diloco.constants import FORMAT_VERSION
-from fs_diloco.liveness import ingest_heartbeats, no_progress_timed_out, update_liveness_statuses
-from fs_diloco.sqlite_store import SQLiteStore
+from fs_diloco.core.constants import FORMAT_VERSION
+from fs_diloco.protocol.liveness import (
+    ingest_heartbeats,
+    no_progress_timed_out,
+    update_liveness_statuses,
+)
+from fs_diloco.storage.atomic_io import atomic_write_json
+from fs_diloco.storage.sqlite_store import SQLiteStore
 
 
 def test_heartbeat_ingest_and_status_transitions(tmp_path):

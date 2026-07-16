@@ -1,4 +1,4 @@
-from fs_diloco.merge import select_one_per_learner
+from fs_diloco.protocol.merge import select_one_per_learner
 
 
 def test_syncer_selection_respects_quorum_max():

@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .config import Config, config_to_dict
+from ..core.config import Config, config_to_dict
 
 
 def _slug(value: object, *, max_length: int = 48) -> str:

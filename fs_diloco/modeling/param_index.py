@@ -7,8 +7,8 @@ from typing import Any
 
 import torch
 
-from .atomic_io import atomic_write_json, read_json
-from .constants import FORMAT_VERSION
+from ..storage.atomic_io import atomic_write_json, read_json
+from ..core.constants import FORMAT_VERSION
 
 
 def torch_dtype_name(dtype: torch.dtype) -> str:

@@ -1,5 +1,5 @@
-from fs_diloco.config import resolve_config
-from fs_diloco.wandb_logging import (
+from fs_diloco.core.config import resolve_config
+from fs_diloco.observability.wandb_logging import (
     selected_update_summary,
     syncer_wandb_project_name,
     syncer_wandb_run_name,

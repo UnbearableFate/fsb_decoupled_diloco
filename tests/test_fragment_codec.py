@@ -1,13 +1,13 @@
 import torch
 
-from fs_diloco.fragment_codec import (
+from fs_diloco.protocol.fragment_codec import (
     extract_fragment,
     load_fragment_update,
     materialize_full_from_fragments,
     save_fragment_update,
     scatter_fragment,
 )
-from fs_diloco.fragment_index import build_fragment_index
+from fs_diloco.protocol.fragment_index import build_fragment_index
 
 
 def _param_index():

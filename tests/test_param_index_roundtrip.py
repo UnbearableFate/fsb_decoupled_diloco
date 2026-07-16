@@ -1,7 +1,11 @@
 import torch
 
-from fs_diloco.hf_model import TinyCausalLM
-from fs_diloco.param_index import build_param_index, flatten_trainable_params, load_flat_into_model
+from fs_diloco.modeling.hf_model import TinyCausalLM
+from fs_diloco.modeling.param_index import (
+    build_param_index,
+    flatten_trainable_params,
+    load_flat_into_model,
+)
 
 
 def test_flatten_load_roundtrip_preserves_values():
