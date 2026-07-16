@@ -56,6 +56,7 @@ class DataSection:
 class GraceWindowSection:
     mode: str = "fixed"
     fixed_seconds: float = 20.0
+    initial_seconds: float = 10.0
     max_seconds: float = 60.0
 
 
@@ -91,6 +92,7 @@ class TrainingSection:
     gradient_accumulation_steps: int = 8
     block_size: int = 1024
     max_local_steps: int | None = None
+    completion_mode: str = "local_or_global"
     precision: str = "bf16"
     seed: int = 1337
     log_every_steps: int = 10
@@ -254,6 +256,24 @@ def resolve_config(
         config.sync.num_learners = int(num_learners)
         config.sync.quorum_max = min(config.sync.quorum_max, config.sync.num_learners)
         config.sync.quorum_min = min(config.sync.quorum_min, config.sync.num_learners)
+    if config.sync.grace_window.mode not in {"fixed", "adaptive_fastest_upload_eta"}:
+        raise ValueError(
+            f"unsupported sync.grace_window.mode: {config.sync.grace_window.mode}"
+        )
+    for field_name in ("fixed_seconds", "initial_seconds", "max_seconds"):
+        if float(getattr(config.sync.grace_window, field_name)) < 0.0:
+            raise ValueError(f"sync.grace_window.{field_name} must be >= 0")
+    if config.training.completion_mode not in {"local_or_global", "global_only"}:
+        raise ValueError(
+            f"unsupported training.completion_mode: {config.training.completion_mode}"
+        )
+    if config.training.completion_mode == "global_only" and (
+        config.sync.stop_after_outer_steps is None
+        and config.sync.stop_after_global_tokens is None
+    ):
+        raise ValueError(
+            "training.completion_mode=global_only requires a configured global stop target"
+        )
     if config.fragments.enabled:
         if config.fragments.num_fragments < 1:
             raise ValueError("fragments.num_fragments must be >= 1")

@@ -18,12 +18,12 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
 - **`wait_for_json(path, *, timeout_seconds=1800, poll_seconds=1)`** — 轮询直到 `safe_read_json` 成功;启动期等待 param_index/fragment_index/latest 用;超时抛 `TimeoutError`。
 - **`read_latest_if_newer(paths, last_loaded_global_version) -> dict | None`** — 读 `latest.json`,版本不高于已加载值时返回 None(全量模式轮询原语)。
 - **`read_fragment_latest_if_newer(paths, last_loaded_global_merge_event)`** — fragment 版:要求 `latest_kind == "fragment"` 且 `global_merge_event` 更大。
-- **`wait_for_fragment_latest_if_newer(paths, last_event, config)`** — 上传后的限时等待轮询:窗口为 `max(stop_file_poll_seconds, scan_interval + grace_window.fixed + 1)`,等不到返回 None(避免 learner 无谓空转,又给 syncer 完成合并留出典型时长)。
+- **`wait_for_fragment_latest_if_newer(paths, last_event, config)`** — 上传后的限时等待轮询:fixed 使用 `fixed_seconds`,adaptive 使用 `initial_seconds`;等不到返回 None。
 
 ### 停止判定
 
-- **`stop_requested(paths, local_step, config)`** — `max_local_steps` 达标 **或** `stop.json` 存在(全量模式)。
-- **`fragment_stop_requested(paths, local_step, config)`** — 设置了 `max_local_steps` 时**只看步数**(不看 stop.json,收尾等待逻辑在 finally 中);未设置时看 stop.json。
+- **`stop_requested(paths, local_step, config)`** — 默认 `local_or_global` 在 `max_local_steps` 达标或 `stop.json` 存在时停止;`global_only` 忽略本地 horizon,只认 `stop.json`。
+- **`fragment_stop_requested(paths, local_step, config)`** — 默认模式设置 `max_local_steps` 时保持只看步数的 fragment 收尾语义;`global_only` 时只认 `stop.json`。
 
 ### 训练组件
 

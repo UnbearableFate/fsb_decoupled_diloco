@@ -52,9 +52,10 @@
 | `staleness_lambda` | 0.25 | 加权公式中的 λ |
 | `selection_policy` | `most_recent_per_learner` | 或 `oldest_pending` |
 | `scan_interval_seconds` | 2.0 | 元数据/心跳重扫描间隔 |
-| `grace_window.mode` | `fixed` | ⚠ 仅 fixed,未消费 |
-| `grace_window.fixed_seconds` | 20.0 | 宽限窗口时长 |
-| `grace_window.max_seconds` | 60.0 | 窗口上限(与 fixed 取 min) |
+| `grace_window.mode` | `fixed` | `fixed` 或 `adaptive_fastest_upload_eta` |
+| `grace_window.fixed_seconds` | 20.0 | fixed 模式的宽限窗口时长 |
+| `grace_window.initial_seconds` | 10.0 | adaptive 模式的初始窗口;运行中只会缩短 |
+| `grace_window.max_seconds` | 60.0 | 初始/固定窗口的硬上限 |
 | `stop_after_outer_steps` | 20 | 外层步数(fragment:merge event 数)停止条件;null 不限 |
 | `stop_after_global_tokens` | `null` | 累计合并 token 停止条件 |
 | `stop_file_poll_seconds` | 5.0 | learner 侧轮询 stop/latest 的间隔 |
@@ -77,7 +78,8 @@
 | `micro_batch_size` | 2 | 单次前向 batch |
 | `gradient_accumulation_steps` | 8 | 每个本地步累积次数 |
 | `block_size` | 1024 | 由 `data.block_size` 覆盖 |
-| `max_local_steps` | `null` | 有限步训练总步数;也是 cosine 调度的周期与 learner 停止条件 |
+| `max_local_steps` | `null` | 名义本地步 horizon 与 cosine 调度周期;在默认 completion mode 下也是停止上限 |
+| `completion_mode` | `local_or_global` | `local_or_global`:本地上限或 stop 任一满足即停;`global_only`:忽略本地上限,一直训练到 syncer 发布 stop(要求配置全局停止目标) |
 | `precision` | `bf16` | CUDA 上 bf16 autocast;其余 fp32 |
 | `seed` | 1337 | 实际种子 = seed + learner_index |
 | `log_every_steps` | 10 | inner_step_summary 日志频率 |

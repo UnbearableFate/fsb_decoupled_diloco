@@ -590,6 +590,68 @@ def sync_liveness_and_metadata(
     ingest_update_metadata(store, paths, config, logger)
 
 
+def configured_grace_seconds(config: Config) -> float:
+    grace = config.sync.grace_window
+    requested = (
+        grace.initial_seconds
+        if grace.mode == "adaptive_fastest_upload_eta"
+        else grace.fixed_seconds
+    )
+    return max(0.0, min(float(requested), float(grace.max_seconds)))
+
+
+def fastest_next_upload_eta_seconds(
+    updates: list[dict[str, Any]],
+    *,
+    inner_steps: int,
+    now: float | None = None,
+) -> float | None:
+    """Estimate time until the earliest selected learner's next upload.
+
+    The estimate intentionally uses measured compute time only. Serialization and
+    adoption overhead therefore act as a conservative safety margin before the
+    actual next pointer publication.
+    """
+    now = time.time() if now is None else float(now)
+    estimates: list[float] = []
+    for update in updates:
+        step_seconds = update.get("local_cycle_step_time_seconds_mean")
+        committed_at = update.get("committed_at")
+        if step_seconds is None or committed_at is None:
+            continue
+        try:
+            cycle_seconds = float(step_seconds) * max(1, int(inner_steps))
+            eta_seconds = float(committed_at) + cycle_seconds - now
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if not math.isfinite(cycle_seconds) or cycle_seconds <= 0.0:
+            continue
+        if not math.isfinite(eta_seconds):
+            continue
+        estimates.append(max(0.0, eta_seconds))
+    return min(estimates) if estimates else None
+
+
+def maybe_shorten_grace_deadline(
+    *,
+    deadline: float,
+    selected: list[dict[str, Any]],
+    config: Config,
+    now_monotonic: float,
+    now_wall: float,
+) -> tuple[float, float | None]:
+    if config.sync.grace_window.mode != "adaptive_fastest_upload_eta":
+        return deadline, None
+    eta_seconds = fastest_next_upload_eta_seconds(
+        selected,
+        inner_steps=config.training.inner_steps,
+        now=now_wall,
+    )
+    if eta_seconds is None:
+        return deadline, None
+    return min(deadline, now_monotonic + eta_seconds), eta_seconds
+
+
 def collect_with_grace_window(
     store: SQLiteStore,
     paths: RunPaths,
@@ -598,9 +660,15 @@ def collect_with_grace_window(
     *,
     current_version: int,
 ) -> list[dict[str, Any]]:
-    deadline = time.monotonic() + min(
-        config.sync.grace_window.fixed_seconds,
-        config.sync.grace_window.max_seconds,
+    started_at = time.monotonic()
+    initial_seconds = configured_grace_seconds(config)
+    deadline = started_at + initial_seconds
+    deadline_source = "initial"
+    logger.event(
+        "grace_window_started",
+        mode=config.sync.grace_window.mode,
+        initial_seconds=initial_seconds,
+        version=current_version,
     )
     selected: list[dict[str, Any]] = []
     while True:
@@ -611,12 +679,38 @@ def collect_with_grace_window(
             policy=config.sync.selection_policy,
             quorum_max=config.sync.quorum_max,
         )
+        now_monotonic = time.monotonic()
+        shortened_deadline, eta_seconds = maybe_shorten_grace_deadline(
+            deadline=deadline,
+            selected=selected,
+            config=config,
+            now_monotonic=now_monotonic,
+            now_wall=time.time(),
+        )
+        if shortened_deadline < deadline:
+            deadline = shortened_deadline
+            deadline_source = "fastest_upload_eta"
+            logger.event(
+                "grace_window_shortened",
+                version=current_version,
+                selected=len(selected),
+                fastest_next_upload_eta_seconds=eta_seconds,
+                remaining_seconds=max(0.0, deadline - now_monotonic),
+            )
         if len(selected) >= config.sync.quorum_max:
+            deadline_source = "quorum_max"
             break
-        if time.monotonic() >= deadline:
+        if now_monotonic >= deadline:
             break
         time.sleep(min(config.sync.scan_interval_seconds, max(0.0, deadline - time.monotonic())))
         sync_liveness_and_metadata(store, paths, config, logger)
+    logger.event(
+        "grace_window_completed",
+        version=current_version,
+        selected=len(selected),
+        elapsed_seconds=time.monotonic() - started_at,
+        deadline_source=deadline_source,
+    )
     return selected
 
 
@@ -657,9 +751,16 @@ def collect_fragment_with_grace_window(
     fragment_id: int,
     current_fragment_version: int,
 ) -> list[dict[str, Any]]:
-    deadline = time.monotonic() + min(
-        config.sync.grace_window.fixed_seconds,
-        config.sync.grace_window.max_seconds,
+    started_at = time.monotonic()
+    initial_seconds = configured_grace_seconds(config)
+    deadline = started_at + initial_seconds
+    deadline_source = "initial"
+    logger.event(
+        "grace_window_started",
+        mode=config.sync.grace_window.mode,
+        initial_seconds=initial_seconds,
+        fragment_id=fragment_id,
+        fragment_version=current_fragment_version,
     )
     selected: list[dict[str, Any]] = []
     while True:
@@ -674,12 +775,40 @@ def collect_fragment_with_grace_window(
             policy=config.sync.selection_policy,
             quorum_max=config.sync.quorum_max,
         )
+        now_monotonic = time.monotonic()
+        shortened_deadline, eta_seconds = maybe_shorten_grace_deadline(
+            deadline=deadline,
+            selected=selected,
+            config=config,
+            now_monotonic=now_monotonic,
+            now_wall=time.time(),
+        )
+        if shortened_deadline < deadline:
+            deadline = shortened_deadline
+            deadline_source = "fastest_upload_eta"
+            logger.event(
+                "grace_window_shortened",
+                fragment_id=fragment_id,
+                fragment_version=current_fragment_version,
+                selected=len(selected),
+                fastest_next_upload_eta_seconds=eta_seconds,
+                remaining_seconds=max(0.0, deadline - now_monotonic),
+            )
         if len(selected) >= config.sync.quorum_max:
+            deadline_source = "quorum_max"
             break
-        if time.monotonic() >= deadline:
+        if now_monotonic >= deadline:
             break
         time.sleep(min(config.sync.scan_interval_seconds, max(0.0, deadline - time.monotonic())))
         sync_liveness_and_metadata(store, paths, config, logger)
+    logger.event(
+        "grace_window_completed",
+        fragment_id=fragment_id,
+        fragment_version=current_fragment_version,
+        selected=len(selected),
+        elapsed_seconds=time.monotonic() - started_at,
+        deadline_source=deadline_source,
+    )
     return selected
 
 
@@ -1430,10 +1559,7 @@ def run_syncer(config: Config) -> None:
             input_closed = all_expected_learners_stopped(store, config)
             if input_closed and not terminal_grace_complete:
                 logger.event("terminal_input_closed", version=version)
-                grace_seconds = min(
-                    config.sync.grace_window.fixed_seconds,
-                    config.sync.grace_window.max_seconds,
-                )
+                grace_seconds = configured_grace_seconds(config)
                 if grace_seconds > 0:
                     time.sleep(grace_seconds)
                 sync_liveness_and_metadata(store, paths, config, logger)

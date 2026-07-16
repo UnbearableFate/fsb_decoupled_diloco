@@ -158,9 +158,14 @@ def wait_for_fragment_latest_if_newer(
     last_loaded_global_merge_event: int,
     config: Config,
 ) -> dict[str, Any] | None:
+    grace_seconds = (
+        config.sync.grace_window.initial_seconds
+        if config.sync.grace_window.mode == "adaptive_fastest_upload_eta"
+        else config.sync.grace_window.fixed_seconds
+    )
     deadline = time.monotonic() + max(
         config.sync.stop_file_poll_seconds,
-        config.sync.scan_interval_seconds + config.sync.grace_window.fixed_seconds + 1.0,
+        config.sync.scan_interval_seconds + grace_seconds + 1.0,
     )
     while time.monotonic() <= deadline:
         payload = read_fragment_latest_if_newer(paths, last_loaded_global_merge_event)
@@ -171,15 +176,21 @@ def wait_for_fragment_latest_if_newer(
 
 
 def stop_requested(paths: RunPaths, local_step: int, config: Config) -> bool:
+    if paths.stop_json.exists():
+        return True
+    if config.training.completion_mode == "global_only":
+        return False
     if (
         config.training.max_local_steps is not None
         and local_step >= config.training.max_local_steps
     ):
         return True
-    return paths.stop_json.exists()
+    return False
 
 
 def fragment_stop_requested(paths: RunPaths, local_step: int, config: Config) -> bool:
+    if config.training.completion_mode == "global_only":
+        return paths.stop_json.exists()
     if config.training.max_local_steps is not None:
         return local_step >= config.training.max_local_steps
     return paths.stop_json.exists()
@@ -593,6 +604,16 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                 )
                 resource_monitor.record_step_duration(time.monotonic() - step_start)
                 local_step += 1
+                if (
+                    config.training.completion_mode == "global_only"
+                    and config.training.max_local_steps is not None
+                    and local_step == config.training.max_local_steps
+                ):
+                    logger.event(
+                        "local_step_horizon_reached",
+                        local_step=local_step,
+                        awaiting_global_stop=True,
+                    )
                 interval_tokens += step_tokens
                 interval_examples += step_examples
                 for fragment_id in tokens_since_fragment_load:
@@ -1026,6 +1047,16 @@ def run_learner(config: Config, learner_id: str) -> None:
                 )
                 resource_monitor.record_step_duration(time.monotonic() - step_start)
                 local_step += 1
+                if (
+                    config.training.completion_mode == "global_only"
+                    and config.training.max_local_steps is not None
+                    and local_step == config.training.max_local_steps
+                ):
+                    logger.event(
+                        "local_step_horizon_reached",
+                        local_step=local_step,
+                        awaiting_global_stop=True,
+                    )
                 interval_tokens += step_tokens
                 interval_examples += step_examples
                 tokens_since_global_load += step_tokens

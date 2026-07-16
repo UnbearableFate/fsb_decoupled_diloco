@@ -33,8 +33,9 @@ sync:
   selection_policy: most_recent_per_learner
   scan_interval_seconds: 2.0
   grace_window:
-    mode: fixed
+    mode: adaptive_fastest_upload_eta
     fixed_seconds: 20.0
+    initial_seconds: 10.0
     max_seconds: 60.0
   stop_after_outer_steps: 50
   stop_after_global_tokens: null
@@ -53,6 +54,7 @@ training:
   gradient_accumulation_steps: 8
   block_size: 1024
   max_local_steps: 5000
+  completion_mode: global_only
   precision: bf16
   seed: 1337
   log_every_steps: 50

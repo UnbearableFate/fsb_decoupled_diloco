@@ -98,11 +98,67 @@ BF16 manifest payload 为 248.880 MB,较 FP32 精确减半;400 份 proposal 总�
 
 较高的 BF16/staleness=2 last-10 loss 不能归因于 BF16。模型训练精度在两次运行中本来都是 BF16,本轮改变的是 upload payload 精度;同时 staleness、global adoption 频率、inner optimizer reset 次数和 proposal 选择序列都发生了变化。作为旁证,旧 FP32/staleness=2 run `20260716_175316_fs_diloco_gpt2_wikitext2_8l_5000steps` 的 last-10 loss 为 3.18385,本轮 BF16/staleness=2 为 3.18917,差异仅 0.00532(约 0.17%),小于单次异步运行足以产生的调度和批次波动。并且本轮 applied update 为 372,旧 run 为 362,说明 final version 受尾部 batching 影响,不能单独代表有效工作量。
 
+### BF16 upload + staleness=2 + post-publish delta rebase 5000-step 终态
+
+九节点作业 `2399377.opbs`、run `codex_rebase_full5000_20260717_013647` 在上述 BF16/staleness=2 配置上启用 `poll_latest_during_inner_steps=true` 和 `global_adoption_strategy=rebase_post_publish_delta`;除 run ID/shared root 外,这是与上一轮 replace 对照的全部配置差异。八个 learner 均到达 local step 5000,运行在 v47 以 `input_exhausted` 正常结束,仍未达到目标 v50。
+
+400 份 update 中有 365 份 applied、35 份 dropped,利用率为 91.25%;35 份全部因 `superseded` 丢弃,没有 `too_stale`。applied update 中 359 份 staleness=0、6 份 staleness=1,即 fresh 比例从 replace 对照的 7.3% 提高到 98.4%。前 44 次 merge 均 selected=8,尾部依次 selected=6、4、3,即 `44×8+6+4+3=365`;最后一个 learner 停止后约 22.9 秒完成 terminal grace、partial merge 和 stop 发布。
+
+每份 BF16 payload 为 248.880 MB,400 份 proposal 总写入量约 99.6 GB,与 replace 对照相同;dropped update 对应约 8.71 GB,高于对照的 6.97 GB。learner update 平均写入为 0.20359 秒,p95 为 0.31183 秒,较对照分别慢 13.1% 和 15.2%;syncer 平均读取为 0.35127 秒,慢 3.0%。完整训练时间为 1275.066 秒,较对照增加 24.873 秒或 2.0%。两轮使用了不同计算节点,这些小幅 I/O 与端到端差异不能完全归因于 rebase。
+
+47 次 merge 的 SQLite commit p95 为 0.02774 秒;commit 与 maintenance 合计 5.686 秒,占完整训练时间 0.446%,与对照持平。loss first-10/last-10 均值为 3.80957 → 3.09629,对照为 3.80223 → 3.18917;新 run 的 last-10 低 0.09288 或 2.91%,且未出现明显发散。
+
+rebase 状态机的日志计数自洽:400 次发布后检查中,392 次保存了 CPU FP32 anchor,8 次在发布后立即采用新版;349 个 anchor 后续完成 rebase,加上 8 次立即采用,共产生 357 次 global adoption。八次初始 optimizer 建立加上 357 次 adoption 后重置,与 365 条 `inner_optimizer_reset` 日志一致。357 次 adoption 之后的下一份 proposal 全部使用了对应新版本作为 `base_global_version`,没有发现状态机违例。
+
+349 次 rebase 共迁移 260.194M carried-delta tokens;每次平均为 745,542 tokens 或 45.5 个 optimizer steps,中位数 42 steps,p95 为 95 steps,最大 100 steps。anchor 到 rebase 的平均等待时间为 10.36 秒,p95 为 20.95 秒。43 个 anchor 没有完成 rebase,其中 35 个在下一次发布时被替换,8 个随 learner 正常退出释放。每份 anchor 为 497,759,232 bytes(约 474.7 MiB),日志证明没有 OOM 或未释放的状态链,但本 run 没有 RSS/内存峰值 telemetry,因此不能定量验收 CPU 内存成本。
+
+发布即移交所有权的风险在实验中实际出现:349 次 rebase 中有 13 次对应的 anchor proposal 最终被 `superseded`;8 次发布后立即 adoption 中也有 3 份刚发布的 proposal 最终 dropped。这些事件中,若新 global 未包含该 proposal,发布点之前的 learner 局部贡献可能被丢弃;因此 260.194M carried-delta tokens 只能解释为“在 rebase 事件中迁移过的工作量”,不能解释为最终 global 中保留的额外训练量。
+
+对齐两次 run 的相同 learner 和相同 local step 后,400 个 loss 点中有 390 个在 rebase run 中更低,平均配对差为 -0.09258。step 100 时两者几乎相同;step 500、2500、5000 的八 learner 均值差分别为 -0.07751、-0.11351 和 -0.11120。这是 rebase 保留发布后局部进度的强一致性信号,但仍然只是 learner local training loss;在没有固定 validation loss/perplexity、相同 applied tokens/global version 和多 seed 重复前,不能据此宣称最终 global checkpoint 质量提升。
+
+终态 DB/latest/stop/summary 均为 v47,SQLite `integrity_check=ok`、`journal_mode=delete`、`synchronous=FULL`;目录只保留 v47 weight/outer、八个固定 pointers 与 DB,终态 proposal tensor/meta、临时文件、WAL 和 dump 均为零。独立 Checker 按实际 v47 返回 `PASS`,按目标 v50 返回 `BLOCKED`。综合结论是:rebase 实现和终态状态机验证通过,并显著改变了 proposal freshness 与 learner local loss 轨迹;但本次没有改善 update 利用率或端到端时间,也仍不能在固定 5000 local steps 下保证 v50。run root 为 `runs/fs_diloco/codex_rebase_full5000_20260717_013647/`。
+
+### Adaptive fastest-upload ETA + global-only 的 v50 终态
+
+九节点作业 `2399961.opbs`、run `codex_adaptive_eta_global50_full5000_20260717_055909` 在上一轮 rebase 配置上只改变完成与 grace 语义:grace 从固定 20 秒改为 `adaptive_fastest_upload_eta`,初始窗口 10 秒;`training.completion_mode=global_only` 使 learner 忽略 5000 本地步硬上限,只响应 syncer 的 stop message。作业以 PBS `Exit_status=0`、无异常节点完成,walltime 为 18 分 16 秒。DB/latest/stop/summary 均为 v50,停止原因为 `stop_after_outer_steps`,首次完成配置目标而没有进入 terminal drain 或 `input_exhausted`。
+
+| 指标 | 固定 20s + local-or-global 基线 | adaptive 10s + global-only | 变化/解释 |
+|---|---:|---:|---|
+| final version / reason | v47 / `input_exhausted` | v50 / `stop_after_outer_steps` | 配置目标达成 |
+| PBS walltime | 1286 s | 1096 s | -14.8% |
+| 完整训练时间 | 1275.066 s | 1085.107 s | -14.9% |
+| learner local steps 总和 | 40,000 | 37,533 | -6.17%;新 run 在 v50 即停 |
+| produced / applied updates | 400 / 365 | 379 / 371 | applied 增加 6,produced 减少 21 |
+| update 利用率 | 91.25% | 97.89% | +6.64 个百分点 |
+| dropped | 35 `superseded` | 8 `stop_after_outer_steps` | 活跃训练期 supersession 降为 0 |
+| applied tokens | 598.016M | 607.846M | +1.64% |
+| selected/merge 均值 | 7.766 | 7.420 | 更短窗口以较小 batch 换取更高 merge 频率 |
+| selected 分布 | `44×8,1×6,1×4,1×3` | `27×8,17×7,6×6` | 新 run 没有低于 6 的 merge |
+| applied staleness 0/1/2 | 359 / 6 / 0 | 133 / 207 / 31 | 更快 global 推进显著提高版本 staleness |
+| global interval 均值 | 26.662 s | 21.244 s | -20.3%;基线受末端三轮拖尾影响 |
+| loss first-10 → last-10 | 3.80957 → 3.09629 | 3.80891 → 3.17030 | 均未判定发散,但不能作为最终 checkpoint 质量结论 |
+
+50 个 merge 都记录了 adaptive grace telemetry。窗口 elapsed 平均 9.077 秒、中位数 10.103 秒、p95 10.188 秒,范围 4.283–10.197 秒;27 次因收齐 `quorum_max` 结束,21 次耗尽初始窗口,2 次直接由 fastest-upload ETA deadline 结束。共有 12 次 deadline 被 ETA 向前收紧,估计剩余时间均值 5.501 秒、范围 1.553–9.940 秒;其中另外 10 次在收紧后的 deadline 之前先收齐八份 update。相对“每轮固定用满 10 秒”的 500 秒预算,实际 grace 总计约 453.9 秒。与旧 20 秒窗口相比,最重要的实测结果不是单纯节省等待,而是没有任何 proposal 在被 syncer 选择前遭下一 pointer 覆盖:旧 run 的 35 次 `superseded` 在新 run 中降为 0。
+
+完成语义也按实现工作,但需要精确解释“5000-step”。v50 发布时八个 learner 的最终 local step 分别为 4461、5044、4854、4771、4925、4428、4857、4193。最快的 learner_001 在 step 5000 记录 `local_step_horizon_reached`,继续训练到 5044,看到 `stop_after_outer_steps` 后退出;其余七个 learner 因 v50 已先到达而在 5000 之前响应 stop。所有 learner 最终 heartbeat 都为 stopped 且退出时已加载 v50。因此本 run 证明“达到 5000 后不会自行退出”,但 `global_only` 并不保证每个 learner 至少完成 5000 步。如果实验目标是“八个 learner 都达到 5000 且 global≥50”,syncer 还需要一个 `global target AND all learner local horizon` 的联合停止门槛。
+
+吞吐改善伴随明显的异步性变化。虽然 applied update 的 wall-clock selection age 均值从 10.330 秒降到 9.286 秒,但 global version 推进更快,staleness=1/2 的占比从 1.64% 增至 64.15%。对齐相同 learner 与相同 local step 的 371 个完整 cycle loss 点后,新 run 只有 19 个点更低,`new-old` 平均为 +0.05051;step 100、500、2500、4000 的八 learner 均值差依次为 +0.00012、+0.00349、+0.05707、+0.08527。这是 shorter grace/更高 staleness/更频繁 global adoption 改变本地优化轨迹的清晰信号,但仍不能替代两个最终 global checkpoint 的固定 validation loss/perplexity 对照。
+
+因此本轮应明确记为“系统吞吐与完成语义通过,learner local training loss 回退”:first-10 几乎不变,但差距随 local step 持续扩大;last-10 从 3.09629 上升到 3.17030,高 0.07401(2.39%),全部 update 均值从 3.17152 上升到 3.22712。可能机制包括更高版本 staleness、较小 contributor batch,以及更快 global adoption 触发更多 optimizer/scheduler reset。由于两轮终态分别为 v47/v50、各 learner 最终 local step 也不同,这里的“回退”只描述对齐后的本地训练 loss 轨迹,不能外推为最终 global 模型质量下降。
+
+终态持久状态大部分正确:SQLite `integrity_check=ok`,active global 只有 v50,没有 pending/selected update、proposal payload、临时文件或 WAL,只保留 v50 weight/outer。379 份 update 中 371 份 applied;stop 发布后每个 learner 各有一份部分 cycle update 被统一终态化为 `dropped(stop_after_outer_steps)`。但发现一个终态一致性缺口:八份磁盘 heartbeat 都为 `stopped`,summary 也写 `all_learners_stopped=true`,SQLite `learners` 表却仍保留 stop 发布前的八行 `active` 状态。原因是 `wait_for_learner_shutdown()` 直接读取 heartbeat 判断停止,期间只调用 `ingest_update_metadata()`,没有把最终 heartbeat 摄取进 DB。旧 run 因 learner 先在本地 5000 步退出,主循环曾摄取 stopped heartbeat,所以没有暴露该问题。它不影响本次 v50 checkpoint,但应在下一次正式运行前修复并增加终态 DB/heartbeat 一致性断言。
+
+综合结论:adaptive 10 秒 grace 与 global-only 完成语义达成了主要工程目标——v50、零活跃期 supersession、更高 proposal 利用率和更短 walltime;代价是平均 selected count 下降、版本 staleness 显著增加,且不再保证每个 learner 执行 5000 步。下一步质量判断应先修复最终 heartbeat 摄取,再用相同 final global version/applied tokens 做固定 validation loss/perplexity,并明确正式协议需要 `global-only` 还是“global 与所有 learner 本地 horizon 同时满足”。run root 为 `runs/fs_diloco/codex_adaptive_eta_global50_full5000_20260717_055909/`。
+
 ### 仍需进一步研究
 
 - 在当前同一代码版本上做只改变 `io.tensor_dtype` 的 FP32/BF16 对照,固定 staleness、seed、applied tokens 或 global version,并重复多个 seed;
 - 对最终 global checkpoint 运行固定 validation loss/perplexity,不要用 learner local training loss 推断最终模型质量;
-- 明确正式实验究竟以“每 learner 5000 local steps”还是“达到 50 outer merges”为完成条件;固定 local steps 时,outer version 会受 supersession、quorum batching 和 learner 尾部速度差异影响;
+- 明确正式实验究竟以“每 learner 5000 local steps”、“达到 50 outer merges”还是两者联合为完成条件;当前 `global_only` 会在 v50 到达时停止尚未到 5000 的 learner;
 - 若必须同时保证 fresh-only 与 v50,研究 upload 后版本确认/等待或显式 round barrier;若保持异步 staleness,应系统扫描 staleness window、lambda 与质量/吞吐关系;
 - telemetry 应同时报告 actual local tokens、applied tokens、produced/applied/dropped updates 和 merge count,避免把 `total_seen_tokens` 误读为总训练计算量;
 - BF16 已显著降低 proposal I/O,但端到端改善很小;仍需分解 local training、quorum wait、global publication 和第九张 syncer GPU 低利用率的成本。
+- 对 replace/rebase 做固定 applied tokens 或 global version 的多 seed 对照,并对最终 global checkpoint 运行相同 validation loss/perplexity;
+- 为 rebase 增加 anchor 生命周期、proposal 最终状态、进程 RSS/内存峰值和临时向量峰值 telemetry,量化 dropped anchor 的所有权风险和 CPU 内存成本。
+- 修复 stop 发布后的最终 heartbeat 摄取,并断言 SQLite `learners.status`、磁盘 heartbeat 与 summary 的 stopped 状态一致。
+- 对 adaptive grace 扫描 initial window 与 staleness penalty;当前 10 秒窗口消除了 supersession,但把 staleness=1/2 比例提高到 64.15%,需要最终 checkpoint 质量评估决定吞吐/质量折中。

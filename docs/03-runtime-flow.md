@@ -49,7 +49,7 @@ fragment 模式(`initialize_fragment_run`)额外:构建并发布 `fragment_index
 每一轮(一个"更新区间"):
 
 ```
-while not stop_requested():                     # max_local_steps 或 stop.json
+while not stop_requested():                     # 默认:本地上限或 stop;global_only:只看 stop
   记录区间起点(步数、base_global_version)
   for _ in range(training.inner_steps):         # 内层训练
       train_one_step():
@@ -83,6 +83,7 @@ finally:
 - local-delta rebase 仅在发布后的第一次 latest 检查未发现新版时保留 `x_local,t`;发现首个新版并完成 `global_new+(local-x_local,t)` 后立即释放,直到下一次发布才可能重新建立。
 - learner 不自行删除 proposal;payload 生命周期由 syncer 根据 DB/指针引用统一回收。
 - 心跳、日志、指标全部只追加/原子覆盖,不依赖任何锁。
+- `completion_mode=global_only` 到达 `max_local_steps` 时记录 `local_step_horizon_reached`,但继续执行完整训练/上传循环,直到 syncer 达到全局目标并发布 `stop.json`。
 
 ## 3. learner 主循环(fragment 模式差异)
 

@@ -1,0 +1,96 @@
+run:
+  name: fs_diloco_tiny_adaptive_global_stop
+  run_id: null
+  shared_root: null
+  log_level: INFO
+
+model:
+  name_or_path: synthetic-tiny
+  dtype: float32
+  compile: false
+  synthetic_vocab_size: 64
+  synthetic_hidden_size: 16
+
+data:
+  dataset_name: synthetic
+  dataset_config_name: null
+  train_split: train
+  validation_split: validation
+  block_size: 16
+  num_proc: 1
+  cache_dir: null
+  streaming: false
+  synthetic_num_batches: 64
+
+sync:
+  num_learners: 2
+  upload_mode: params
+  quorum_min: 1
+  quorum_max: 2
+  max_staleness_versions: 2
+  staleness_lambda: 0.25
+  selection_policy: most_recent_per_learner
+  scan_interval_seconds: 0.05
+  grace_window:
+    mode: adaptive_fastest_upload_eta
+    fixed_seconds: 0.2
+    initial_seconds: 10.0
+    max_seconds: 10.0
+  stop_after_outer_steps: 4
+  stop_after_global_tokens: null
+  stop_file_poll_seconds: 0.05
+
+liveness:
+  heartbeat_interval_seconds: 1.0
+  stale_after_seconds: 5.0
+  dead_after_seconds: 10.0
+  no_progress_timeout_seconds: 30.0
+  quorum_policy: fixed
+
+training:
+  inner_steps: 2
+  micro_batch_size: 2
+  gradient_accumulation_steps: 1
+  block_size: 16
+  max_local_steps: 4
+  completion_mode: global_only
+  precision: fp32
+  seed: 1337
+  log_every_steps: 1
+  grad_clip: 1.0
+
+inner_optimizer:
+  name: adamw
+  lr: 1.0e-3
+  betas: [0.9, 0.95]
+  eps: 1.0e-8
+  weight_decay: 0.0
+  scheduler: none
+  warmup_steps: 0
+  reset_on_global_update: true
+
+outer_optimizer:
+  name: nesterov
+  lr: 0.5
+  momentum: 0.9
+  weight_decay: 0.0
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+
+io:
+  tensor_dtype: float32
+  atomic_write: true
+  compute_sha256: true
+
+learner:
+  poll_latest_during_inner_steps: false
+  adopt_global_after_upload: true
+
+failure_sim:
+  enabled: false
+  sleep_jitter_seconds: 0.0
+  upload_skip_probability: 0.0
+  crash_probability: 0.0
+
+wandb:
+  enabled: false

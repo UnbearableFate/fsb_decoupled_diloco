@@ -6,7 +6,10 @@ from fs_diloco.observability.logging_utils import JsonlLogger
 from fs_diloco.protocol.merge import select_one_per_learner
 from fs_diloco.runtime.syncer import (
     all_expected_learners_stopped,
+    configured_grace_seconds,
+    fastest_next_upload_eta_seconds,
     ingest_update_metadata,
+    maybe_shorten_grace_deadline,
     select_terminal_drain_updates,
 )
 from fs_diloco.storage.atomic_io import atomic_write_json
@@ -23,6 +26,55 @@ def test_syncer_selection_respects_quorum_max():
     selected = select_one_per_learner(updates, quorum_max=2)
     assert len(selected) == 2
     assert {row["learner_id"] for row in selected} == {"learner_000", "learner_001"}
+
+
+def test_fastest_next_upload_eta_uses_measured_cycle_compute_time():
+    updates = [
+        {
+            "committed_at": 90.0,
+            "local_cycle_step_time_seconds_mean": 0.3,
+        },
+        {
+            "committed_at": 99.0,
+            "local_cycle_step_time_seconds_mean": 0.05,
+        },
+        {"committed_at": 100.0, "local_cycle_step_time_seconds_mean": None},
+    ]
+    assert fastest_next_upload_eta_seconds(updates, inner_steps=100, now=100.0) == 4.0
+
+
+def test_adaptive_grace_starts_at_ten_seconds_and_only_shortens():
+    config = resolve_config("configs/fs_diloco_gpt2_wikitext2_8l_5000steps.yaml")
+    assert configured_grace_seconds(config) == 10.0
+    deadline, eta = maybe_shorten_grace_deadline(
+        deadline=110.0,
+        selected=[
+            {
+                "committed_at": 998.0,
+                "local_cycle_step_time_seconds_mean": 0.05,
+            }
+        ],
+        config=config,
+        now_monotonic=100.0,
+        now_wall=1000.0,
+    )
+    assert eta == 3.0
+    assert deadline == 103.0
+
+    later_deadline, later_eta = maybe_shorten_grace_deadline(
+        deadline=deadline,
+        selected=[
+            {
+                "committed_at": 1000.0,
+                "local_cycle_step_time_seconds_mean": 0.2,
+            }
+        ],
+        config=config,
+        now_monotonic=101.0,
+        now_wall=1001.0,
+    )
+    assert later_eta == 19.0
+    assert later_deadline == deadline
 
 
 def _pointer(config, paths, learner_id, update_id, *, base=0, step=1):

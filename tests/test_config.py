@@ -82,6 +82,34 @@ def test_full_5000_config_enables_stepwise_local_delta_rebase():
     assert config.learner.poll_latest_during_inner_steps is True
     assert config.learner.adopt_global_after_upload is True
     assert config.learner.global_adoption_strategy == "rebase_post_publish_delta"
+    assert config.sync.grace_window.mode == "adaptive_fastest_upload_eta"
+    assert config.sync.grace_window.initial_seconds == 10.0
+    assert config.training.max_local_steps == 5000
+    assert config.training.completion_mode == "global_only"
+
+
+def test_global_only_completion_requires_global_target(tmp_path):
+    path = tmp_path / "global_only_without_target.yaml"
+    path.write_text(
+        """
+sync:
+  stop_after_outer_steps: null
+  stop_after_global_tokens: null
+training:
+  completion_mode: global_only
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="requires a configured global stop target"):
+        resolve_config(path)
+
+
+@pytest.mark.parametrize("mode", ["unknown", "adaptive_eta"])
+def test_rejects_unsupported_grace_mode(tmp_path, mode):
+    path = tmp_path / "bad_grace.yaml"
+    path.write_text(f"sync:\n  grace_window:\n    mode: {mode}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="unsupported sync.grace_window.mode"):
+        resolve_config(path)
 
 
 def test_fragment_rejects_full_local_delta_rebase(tmp_path):
