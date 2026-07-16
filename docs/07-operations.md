@@ -6,6 +6,17 @@
 - 依赖:torch、transformers、datasets、safetensors、pyyaml、nvidia-ml-py(GPU 利用率采样)、wandb(可选)、lm-eval(评测用,可选);
 - Miyabi 上**登录节点只做静态检查**,运行必须在 PBS 计算/调试节点:
 
+在 PBS 计算节点中根据 `.python-version` 和 `pyproject.toml` 创建或同步完整开发/评测环境:
+
+```bash
+uv sync --all-extras
+source .venv/bin/activate
+```
+
+项目通过 setuptools 以 editable 模式安装，`fs-diloco-*` 命令与 `python -m fs_diloco.*` 入口均指向当前工作区源码。
+
+登录节点上的静态检查:
+
 ```bash
 bash -n scripts/miyabi/*.pbs scripts/miyabi/*.sh scripts/local/*.sh
 python -m compileall -q fs_diloco

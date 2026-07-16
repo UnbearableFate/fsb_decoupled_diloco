@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=78"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "fs-diloco-miyabi"
 version = "0.1.0"
@@ -34,10 +38,13 @@ fs-diloco-lm-eval = "fs_diloco.tools.eval_lm_harness:main"
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py313"
 
 [tool.setuptools.package-data]
 "fs_diloco.storage" = ["schema.sql"]
+
+[tool.setuptools.packages.find]
+include = ["fs_diloco*"]
 
 [tool.uv]
 prerelease = "allow"
