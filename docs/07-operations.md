@@ -50,12 +50,12 @@ python -m fs_diloco.learner \
 
 ```bash
 scripts/local/run_tiny_2proc_smoke.sh      # synthetic-tiny 模型 + 合成数据,CPU 上 1 syncer + 2 learner
-scripts/local/clean_run.sh runs/fs_diloco  # 递归预览将清理的 safetensors
+scripts/local/clean_run.sh runs/fs_diloco  # 递归预览将清理的 safetensors 和 .db
 scripts/local/clean_run.sh --delete runs/fs_diloco
 scripts/local/clean_run.sh --delete --keep-latest-global runs/fs_diloco
 ```
 
-`clean_run.sh` 只扫描项目 `runs/` 内的目标目录；默认是 dry-run，必须传入 `--delete` 才会删除。`--keep-latest-global` 会对递归扫描到的每个目录保留编号最大的 `global_v<version>.safetensors`，删除其余所有 safetensors。
+`clean_run.sh` 只扫描项目 `runs/` 内的目标目录；默认是 dry-run，必须传入 `--delete` 才会删除。脚本会递归删除 `*.safetensors` 和 `*.db`；`--keep-latest-global` 会对递归扫描到的每个目录保留编号最大的 `global_v<version>.safetensors`，删除其余匹配文件（包括 `.db`）。
 
 对应配置 `configs/fs_diloco_tiny_local.yaml` / `fs_diloco_tiny_fragment_local.yaml`。
 

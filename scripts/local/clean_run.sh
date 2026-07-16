@@ -12,15 +12,15 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") [--delete] [--keep-latest-global] [TARGET_DIR]
 
-Recursively find *.safetensors files below TARGET_DIR. Without --delete, only
-print the files that would be removed. TARGET_DIR defaults to:
+Recursively find *.safetensors and *.db files below TARGET_DIR. Without
+--delete, only print the files that would be removed. TARGET_DIR defaults to:
   $DEFAULT_TARGET
 
 Options:
   --delete                 Remove the discovered files.
   --keep-latest-global     In each directory, preserve the highest-numbered
                            global_v<version>.safetensors file and remove all
-                           other *.safetensors files.
+                           other discovered files, including *.db files.
   -h, --help               Show this help message.
 
 For safety, TARGET_DIR must be the project's runs directory or one of its
@@ -94,10 +94,10 @@ esac
 files=()
 while IFS= read -r -d '' file; do
   files+=("$file")
-done < <(find "$target_dir" -type f -name '*.safetensors' -print0)
+done < <(find "$target_dir" -type f \( -name '*.safetensors' -o -name '*.db' \) -print0)
 
 if ((${#files[@]} == 0)); then
-  echo "No safetensors files found below $target_dir"
+  echo "No safetensors or DB files found below $target_dir"
   exit 0
 fi
 
@@ -162,10 +162,10 @@ for file in "${files[@]}"; do
 done
 
 if $delete; then
-  printf 'Deleted %d safetensors file(s); kept %d latest global checkpoint(s).\n' \
+  printf 'Deleted %d file(s); kept %d latest global checkpoint(s).\n' \
     "$removed" "$kept"
 else
-  printf 'Dry run: would delete %d safetensors file(s); would keep %d latest global checkpoint(s).\n' \
+  printf 'Dry run: would delete %d file(s); would keep %d latest global checkpoint(s).\n' \
     "$removed" "$kept"
   echo "Re-run with --delete to remove them."
 fi
