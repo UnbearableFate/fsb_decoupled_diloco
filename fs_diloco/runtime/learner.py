@@ -139,6 +139,31 @@ def read_latest_if_newer(paths: RunPaths, last_loaded_global_version: int) -> di
     return payload
 
 
+def wait_for_latest_if_newer(
+    paths: RunPaths,
+    last_loaded_global_version: int,
+    *,
+    wait_seconds: float,
+    poll_seconds: float,
+) -> tuple[dict[str, Any] | None, float]:
+    """Poll briefly for the first newer global after a proposal publication."""
+
+    wait_seconds = max(0.0, float(wait_seconds))
+    poll_seconds = float(poll_seconds)
+    if poll_seconds <= 0.0:
+        raise ValueError("poll_seconds must be > 0")
+    started = time.monotonic()
+    deadline = started + wait_seconds
+    while True:
+        payload = read_latest_if_newer(paths, last_loaded_global_version)
+        if payload is not None:
+            return payload, time.monotonic() - started
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.0 or paths.stop_json.exists():
+            return None, time.monotonic() - started
+        time.sleep(min(poll_seconds, remaining))
+
+
 def read_fragment_latest_if_newer(
     paths: RunPaths, last_loaded_global_merge_event: int
 ) -> dict[str, Any] | None:
@@ -1204,6 +1229,30 @@ def run_learner(config: Config, learner_id: str) -> None:
                     current_version=last_loaded_global_version,
                     found_version=maybe_latest.get("version") if maybe_latest else None,
                 )
+                if (
+                    maybe_latest is None
+                    and config.learner.post_publish_latest_wait_seconds > 0.0
+                ):
+                    logger.event(
+                        "post_publish_latest_wait_started",
+                        current_version=last_loaded_global_version,
+                        update_id=update_id,
+                        wait_seconds=config.learner.post_publish_latest_wait_seconds,
+                        poll_seconds=config.learner.post_publish_latest_poll_seconds,
+                    )
+                    maybe_latest, waited_seconds = wait_for_latest_if_newer(
+                        paths,
+                        last_loaded_global_version,
+                        wait_seconds=config.learner.post_publish_latest_wait_seconds,
+                        poll_seconds=config.learner.post_publish_latest_poll_seconds,
+                    )
+                    logger.event(
+                        "post_publish_latest_wait_finished",
+                        current_version=last_loaded_global_version,
+                        found_version=maybe_latest.get("version") if maybe_latest else None,
+                        update_id=update_id,
+                        waited_seconds=waited_seconds,
+                    )
                 if maybe_latest is not None:
                     previous_version = last_loaded_global_version
                     last_loaded_global_version = adopt_global(

@@ -131,6 +131,8 @@ class LearnerSection:
     poll_latest_during_inner_steps: bool = False
     adopt_global_after_upload: bool = True
     global_adoption_strategy: str = "replace"
+    post_publish_latest_wait_seconds: float = 0.0
+    post_publish_latest_poll_seconds: float = 0.2
 
 
 @dataclass
@@ -283,6 +285,10 @@ def resolve_config(
             "rebase_post_publish_delta requires adopt_global_after_upload=true and "
             "poll_latest_during_inner_steps=true"
         )
+    if config.learner.post_publish_latest_wait_seconds < 0.0:
+        raise ValueError("learner.post_publish_latest_wait_seconds must be >= 0")
+    if config.learner.post_publish_latest_poll_seconds <= 0.0:
+        raise ValueError("learner.post_publish_latest_poll_seconds must be > 0")
     config.training.block_size = config.data.block_size
     return config
 

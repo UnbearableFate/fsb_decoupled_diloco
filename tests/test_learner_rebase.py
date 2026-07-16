@@ -7,7 +7,11 @@ from fs_diloco.modeling.param_index import (
     flatten_trainable_params,
     load_flat_into_model,
 )
-from fs_diloco.runtime.learner import rebase_local_delta_onto_global
+from fs_diloco.runtime.learner import (
+    rebase_local_delta_onto_global,
+    wait_for_latest_if_newer,
+)
+from fs_diloco.storage.paths import RunPaths, prepare_run_dirs
 from fs_diloco.storage.tensor_codec import save_global_weights
 
 
@@ -73,3 +77,56 @@ def test_rebase_rejects_reference_with_wrong_size(tmp_path):
             device=torch.device("cpu"),
             reference_flat=flat[:-1],
         )
+
+
+def test_post_publish_wait_polls_until_newer_latest(tmp_path, monkeypatch):
+    paths = RunPaths(tmp_path / "run")
+    prepare_run_dirs(paths, 1)
+    reads = iter([None, None, {"version": 2}])
+    clock = [10.0]
+
+    monkeypatch.setattr(
+        "fs_diloco.runtime.learner.read_latest_if_newer",
+        lambda *_args, **_kwargs: next(reads),
+    )
+    monkeypatch.setattr("fs_diloco.runtime.learner.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr(
+        "fs_diloco.runtime.learner.time.sleep",
+        lambda seconds: clock.__setitem__(0, clock[0] + seconds),
+    )
+
+    latest, waited_seconds = wait_for_latest_if_newer(
+        paths,
+        1,
+        wait_seconds=2.5,
+        poll_seconds=0.2,
+    )
+
+    assert latest == {"version": 2}
+    assert waited_seconds == pytest.approx(0.4)
+
+
+def test_post_publish_wait_stops_at_deadline(tmp_path, monkeypatch):
+    paths = RunPaths(tmp_path / "run")
+    prepare_run_dirs(paths, 1)
+    clock = [10.0]
+
+    monkeypatch.setattr(
+        "fs_diloco.runtime.learner.read_latest_if_newer",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr("fs_diloco.runtime.learner.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr(
+        "fs_diloco.runtime.learner.time.sleep",
+        lambda seconds: clock.__setitem__(0, clock[0] + seconds),
+    )
+
+    latest, waited_seconds = wait_for_latest_if_newer(
+        paths,
+        1,
+        wait_seconds=2.5,
+        poll_seconds=0.2,
+    )
+
+    assert latest is None
+    assert waited_seconds == pytest.approx(2.5)

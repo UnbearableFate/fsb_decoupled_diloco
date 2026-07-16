@@ -84,6 +84,20 @@ def test_full_5000_config_enables_stepwise_local_delta_rebase():
     assert config.learner.global_adoption_strategy == "rebase_post_publish_delta"
 
 
+def test_wait_only_5000_config_uses_post_publish_grace_without_rebase():
+    config = resolve_config(
+        "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_wait2p5.yaml"
+    )
+    assert config.training.max_local_steps == 5000
+    assert config.model.dtype == "bfloat16"
+    assert config.io.tensor_dtype == "bfloat16"
+    assert config.sync.max_staleness_versions == 2
+    assert config.learner.poll_latest_during_inner_steps is False
+    assert config.learner.global_adoption_strategy == "replace"
+    assert config.learner.post_publish_latest_wait_seconds == 2.5
+    assert config.learner.post_publish_latest_poll_seconds == 0.2
+
+
 def test_fragment_rejects_full_local_delta_rebase(tmp_path):
     path = tmp_path / "fragment_rebase.yaml"
     path.write_text(
@@ -96,4 +110,18 @@ learner:
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="only supported by the full learner"):
+        resolve_config(path)
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "message"),
+    [
+        ("post_publish_latest_wait_seconds", -0.1, "must be >= 0"),
+        ("post_publish_latest_poll_seconds", 0.0, "must be > 0"),
+    ],
+)
+def test_post_publish_wait_config_rejects_invalid_values(tmp_path, key, value, message):
+    path = tmp_path / "invalid_wait.yaml"
+    path.write_text(f"learner:\n  {key}: {value}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=message):
         resolve_config(path)
