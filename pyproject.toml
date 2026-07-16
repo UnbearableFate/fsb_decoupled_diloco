@@ -1,0 +1,36 @@
+[project]
+name = "fs-diloco-miyabi"
+version = "0.1.0"
+description = "Filesystem-backed Decoupled DiLoCo prototype for Miyabi"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "torch",
+    "transformers",
+    "datasets",
+    "safetensors",
+    "pyyaml",
+    "numpy",
+    "tqdm",
+    "typing-extensions",
+    "wandb",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+eval = [
+    "lm-eval[hf]>=0.4.12",
+]
+
+[project.scripts]
+fs-diloco-syncer = "fs_diloco.syncer:main"
+fs-diloco-learner = "fs_diloco.learner:main"
+fs-diloco-inspect = "fs_diloco.analysis:main"
+fs-diloco-lm-eval = "fs_diloco.eval_lm_harness:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
