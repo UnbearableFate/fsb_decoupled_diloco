@@ -1,18 +1,21 @@
 import pytest
 import torch
 
+from fs_diloco.core.config import resolve_config
 from fs_diloco.modeling.hf_model import TinyCausalLM
+from fs_diloco.modeling.outer_optim import outer_optimizer_step
 from fs_diloco.modeling.param_index import (
     build_param_index,
     flatten_trainable_params,
     load_flat_into_model,
 )
 from fs_diloco.runtime.learner import (
+    predict_next_global_weight,
     rebase_local_delta_onto_global,
     wait_for_latest_if_newer,
 )
 from fs_diloco.storage.paths import RunPaths, prepare_run_dirs
-from fs_diloco.storage.tensor_codec import save_global_weights
+from fs_diloco.storage.tensor_codec import save_global_weights, save_outer_state
 
 
 def test_rebase_preserves_only_progress_after_each_published_reference(tmp_path):
@@ -130,3 +133,85 @@ def test_post_publish_wait_stops_at_deadline(tmp_path, monkeypatch):
 
     assert latest is None
     assert waited_seconds == pytest.approx(2.5)
+
+
+def test_predict_next_global_uses_token_weighted_delta_and_outer_step(tmp_path):
+    config = resolve_config("configs/fs_diloco_tiny_local.yaml", num_learners=2)
+    config.learner.global_adoption_strategy = "predict_post_publish_global"
+    model = TinyCausalLM(vocab_size=16, hidden_size=8)
+    index = build_param_index(model, model_name_or_path="synthetic-tiny")
+    global_flat = flatten_trainable_params(model, index)
+    local_delta = torch.full_like(global_flat, 0.1)
+    load_flat_into_model(model, global_flat + local_delta, index)
+    momentum = torch.full_like(global_flat, 0.2)
+    outer_state = {"step": torch.tensor(3), "momentum": momentum}
+    weight_path = tmp_path / "global.safetensors"
+    outer_path = tmp_path / "outer.safetensors"
+    save_global_weights(weight_path, global_flat, index)
+    save_outer_state(outer_path, global_flat, outer_state)
+    latest = {
+        "version": 4,
+        "weight_path": str(weight_path),
+        "optim_path": str(outer_path),
+        "total_update_tokens": 100,
+    }
+
+    predicted, stats = predict_next_global_weight(
+        model=model,
+        latest=latest,
+        param_index=index,
+        device=torch.device("cpu"),
+        config=config,
+        local_tokens=25,
+    )
+
+    historical_delta = momentum * -(1.0 - config.outer_optimizer.momentum)
+    predicted_aggregate_delta = historical_delta * 0.75 + local_delta * 0.25
+    expected, _ = outer_optimizer_step(
+        global_flat,
+        -predicted_aggregate_delta,
+        outer_state,
+        config.outer_optimizer,
+    )
+    assert torch.allclose(predicted, expected)
+    assert torch.allclose(flatten_trainable_params(model, index), expected)
+    assert stats["base_version"] == 4
+    assert stats["predicted_version"] == 5
+    assert stats["local_weight"] == pytest.approx(0.25)
+    assert stats["estimated_total_tokens"] == 100
+    assert stats["bootstrapped_total_tokens"] is False
+
+
+def test_predict_next_global_bootstraps_zero_token_initial_checkpoint(tmp_path):
+    config = resolve_config("configs/fs_diloco_tiny_local.yaml", num_learners=2)
+    config.sync.quorum_min = 2
+    model = TinyCausalLM(vocab_size=16, hidden_size=8)
+    index = build_param_index(model, model_name_or_path="synthetic-tiny")
+    global_flat = flatten_trainable_params(model, index)
+    outer_state = {
+        "step": torch.tensor(0),
+        "momentum": torch.zeros_like(global_flat),
+    }
+    weight_path = tmp_path / "global.safetensors"
+    outer_path = tmp_path / "outer.safetensors"
+    save_global_weights(weight_path, global_flat, index)
+    save_outer_state(outer_path, global_flat, outer_state)
+    load_flat_into_model(model, global_flat + 0.1, index)
+
+    _predicted, stats = predict_next_global_weight(
+        model=model,
+        latest={
+            "version": 0,
+            "weight_path": str(weight_path),
+            "optim_path": str(outer_path),
+            "total_update_tokens": 0,
+        },
+        param_index=index,
+        device=torch.device("cpu"),
+        config=config,
+        local_tokens=32,
+    )
+
+    assert stats["bootstrapped_total_tokens"] is True
+    assert stats["estimated_total_tokens"] == 64
+    assert stats["local_weight"] == pytest.approx(0.5)

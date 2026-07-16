@@ -23,6 +23,7 @@ from ..core.constants import (
 )
 from ..modeling.hf_data import Batch, build_batch_iterator
 from ..modeling.hf_model import choose_device, load_causal_lm_and_tokenizer
+from ..modeling.outer_optim import outer_optimizer_step
 from ..modeling.param_index import (
     build_param_index,
     flatten_trainable_params,
@@ -45,7 +46,12 @@ from ..protocol.fragment_index import load_fragment_index
 from ..protocol.fragment_scheduler import select_fragment
 from ..storage.atomic_io import atomic_write_json, file_size, safe_read_json, sha256_file
 from ..storage.paths import RunPaths, prepare_run_dirs
-from ..storage.tensor_codec import dtype_from_name, load_global_weights_flat, save_update_vector
+from ..storage.tensor_codec import (
+    dtype_from_name,
+    load_global_weights_flat,
+    load_outer_state,
+    save_update_vector,
+)
 from .failure_sim import maybe_crash, maybe_sleep_jitter, should_skip_upload
 
 
@@ -345,6 +351,98 @@ def rebase_local_delta_onto_global(
     load_flat_into_model(model, local_delta, param_index)
     model.to(device)
     return int(latest["version"]), delta_norm
+
+
+def predict_next_global_weight(
+    *,
+    model: torch.nn.Module,
+    latest: dict[str, Any],
+    param_index: dict[str, Any],
+    device: torch.device,
+    config: Config,
+    local_tokens: int,
+) -> tuple[torch.Tensor, dict[str, float | int | bool]]:
+    """Predict one full outer step from one local proposal and historical momentum.
+
+    The outer momentum is a gradient-space state, so it is first converted to a
+    displacement proxy.  The predicted aggregate displacement is then passed
+    through the real outer optimizer instead of being added directly to the
+    model parameters.
+    """
+
+    if config.outer_optimizer.name.lower() != "nesterov":
+        raise ValueError("global prediction currently requires outer nesterov")
+    if config.outer_optimizer.weight_decay != 0.0:
+        raise ValueError("global prediction currently requires outer weight_decay=0")
+    local_tokens = int(local_tokens)
+    if local_tokens <= 0:
+        raise ValueError("global prediction requires positive local_tokens")
+
+    expected_numel = int(param_index["total_numel"])
+    local_flat = flatten_trainable_params(
+        model,
+        param_index,
+        dtype=torch.float32,
+        device="cpu",
+    )
+    global_flat = (
+        load_global_weights_flat(latest["weight_path"], param_index)
+        .detach()
+        .to(device="cpu", dtype=torch.float32)
+        .contiguous()
+    )
+    outer_theta, outer_state = load_outer_state(latest["optim_path"], device="cpu")
+    outer_theta = outer_theta.detach().to(dtype=torch.float32).contiguous()
+    if any(int(tensor.numel()) != expected_numel for tensor in (local_flat, global_flat, outer_theta)):
+        raise ValueError("prediction inputs do not match the parameter index")
+    if not torch.equal(global_flat, outer_theta):
+        raise RuntimeError("global weight and outer checkpoint theta do not match")
+    momentum = outer_state.get("momentum")
+    if momentum is None or int(momentum.numel()) != expected_numel:
+        raise ValueError("outer checkpoint does not contain compatible momentum")
+    momentum = momentum.detach().to(device="cpu", dtype=torch.float32).contiguous()
+
+    previous_total_update_tokens = int(latest.get("total_update_tokens", 0) or 0)
+    bootstrapped_total_tokens = previous_total_update_tokens <= 0
+    estimated_total_tokens = previous_total_update_tokens
+    if bootstrapped_total_tokens:
+        estimated_total_tokens = local_tokens * max(1, int(config.sync.quorum_min))
+    estimated_total_tokens = max(local_tokens, estimated_total_tokens)
+    local_weight = min(1.0, float(local_tokens) / float(estimated_total_tokens))
+
+    local_delta = local_flat.sub(global_flat)
+    historical_delta = momentum.mul(-(1.0 - float(config.outer_optimizer.momentum)))
+    predicted_aggregate_delta = historical_delta.mul(1.0 - local_weight).add(
+        local_delta,
+        alpha=local_weight,
+    )
+    predicted_grad = predicted_aggregate_delta.neg()
+    predicted_flat, _predicted_state = outer_optimizer_step(
+        global_flat,
+        predicted_grad,
+        outer_state,
+        config.outer_optimizer,
+    )
+    predicted_flat = predicted_flat.detach().to(device="cpu", dtype=torch.float32).contiguous()
+    prediction_delta_norm = float(
+        torch.linalg.vector_norm(predicted_flat - global_flat, ord=2).item()
+    )
+    local_delta_norm = float(torch.linalg.vector_norm(local_delta, ord=2).item())
+    historical_delta_norm = float(torch.linalg.vector_norm(historical_delta, ord=2).item())
+    load_flat_into_model(model, predicted_flat, param_index)
+    model.to(device)
+    return predicted_flat, {
+        "base_version": int(latest["version"]),
+        "predicted_version": int(latest["version"]) + 1,
+        "local_tokens": local_tokens,
+        "previous_total_update_tokens": previous_total_update_tokens,
+        "estimated_total_tokens": estimated_total_tokens,
+        "bootstrapped_total_tokens": bootstrapped_total_tokens,
+        "local_weight": local_weight,
+        "local_delta_norm": local_delta_norm,
+        "historical_delta_norm": historical_delta_norm,
+        "prediction_delta_norm": prediction_delta_norm,
+    }
 
 
 def load_fragment_latest_into_model(
@@ -995,11 +1093,19 @@ def run_learner(config: Config, learner_id: str) -> None:
         param_index=param_index,
         device=device,
     )
+    last_loaded_latest = latest
     optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
     rebase_enabled = config.learner.global_adoption_strategy == "rebase_post_publish_delta"
+    prediction_enabled = (
+        config.learner.global_adoption_strategy == "predict_post_publish_global"
+    )
     rebase_reference_flat: torch.Tensor | None = None
     carried_delta_tokens = 0
     last_published_anchor_update_id: str | None = None
+    prediction_reference_flat: torch.Tensor | None = None
+    prediction_carried_tokens = 0
+    prediction_update_id: str | None = None
+    prediction_base_version: int | None = None
     logger.event("loaded_global", version=last_loaded_global_version)
     logger.event("inner_optimizer_reset", version=last_loaded_global_version)
     write_heartbeat(
@@ -1056,6 +1162,8 @@ def run_learner(config: Config, learner_id: str) -> None:
                 tokens_since_global_load += step_tokens
                 if rebase_reference_flat is not None:
                     carried_delta_tokens += step_tokens
+                if prediction_reference_flat is not None:
+                    prediction_carried_tokens += step_tokens
                 losses.append(loss)
                 if local_step % max(1, config.training.log_every_steps) == 0:
                     logger.event(
@@ -1080,13 +1188,44 @@ def run_learner(config: Config, learner_id: str) -> None:
                     logger.event("heartbeat_written", local_step=local_step)
                     last_heartbeat = time.monotonic()
                 should_poll_during_inner_step = config.learner.poll_latest_during_inner_steps and (
-                    not rebase_enabled or rebase_reference_flat is not None
+                    (not rebase_enabled and not prediction_enabled)
+                    or rebase_reference_flat is not None
+                    or prediction_reference_flat is not None
                 )
                 if should_poll_during_inner_step:
                     maybe_latest = read_latest_if_newer(paths, last_loaded_global_version)
                     if maybe_latest is not None:
                         previous_version = last_loaded_global_version
-                        if rebase_enabled:
+                        if prediction_enabled:
+                            if prediction_reference_flat is None:
+                                raise RuntimeError("predicted-global reference is unavailable")
+                            reconciled_update_id = prediction_update_id
+                            reconciled_base_version = prediction_base_version
+                            last_loaded_global_version, delta_norm = (
+                                rebase_local_delta_onto_global(
+                                    model=model,
+                                    latest=maybe_latest,
+                                    param_index=param_index,
+                                    device=device,
+                                    reference_flat=prediction_reference_flat,
+                                )
+                            )
+                            last_loaded_latest = maybe_latest
+                            tokens_since_global_load = prediction_carried_tokens
+                            logger.event(
+                                "global_prediction_reconciled",
+                                previous_version=previous_version,
+                                version=last_loaded_global_version,
+                                prediction_base_version=reconciled_base_version,
+                                prediction_update_id=reconciled_update_id,
+                                carried_delta_tokens=prediction_carried_tokens,
+                                post_prediction_delta_norm=delta_norm,
+                            )
+                            prediction_reference_flat = None
+                            prediction_carried_tokens = 0
+                            prediction_update_id = None
+                            prediction_base_version = None
+                        elif rebase_enabled:
                             if rebase_reference_flat is None:
                                 raise RuntimeError("local-delta rebase reference is unavailable")
                             anchor_update_id = last_published_anchor_update_id
@@ -1097,6 +1236,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                                 device=device,
                                 reference_flat=rebase_reference_flat,
                             )
+                            last_loaded_latest = maybe_latest
                             tokens_since_global_load = carried_delta_tokens
                             logger.event(
                                 "global_rebased",
@@ -1116,11 +1256,69 @@ def run_learner(config: Config, learner_id: str) -> None:
                                 param_index=param_index,
                                 device=device,
                             )
+                            last_loaded_latest = maybe_latest
                             tokens_since_global_load = 0
                         optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
                         base_global_version = last_loaded_global_version
                         logger.event("global_adopted", version=last_loaded_global_version)
                         logger.event("inner_optimizer_reset", version=last_loaded_global_version)
+
+            if prediction_reference_flat is not None and paths.stop_json.exists():
+                logger.event(
+                    "global_prediction_abandoned_on_stop",
+                    prediction_base_version=prediction_base_version,
+                    prediction_update_id=prediction_update_id,
+                    carried_delta_tokens=prediction_carried_tokens,
+                )
+                continue
+            if prediction_reference_flat is not None:
+                logger.event(
+                    "global_prediction_reconcile_wait_started",
+                    current_version=last_loaded_global_version,
+                    prediction_base_version=prediction_base_version,
+                    prediction_update_id=prediction_update_id,
+                    timeout_seconds=config.learner.prediction_reconcile_timeout_seconds,
+                )
+                maybe_latest, reconcile_waited_seconds = wait_for_latest_if_newer(
+                    paths,
+                    last_loaded_global_version,
+                    wait_seconds=config.learner.prediction_reconcile_timeout_seconds,
+                    poll_seconds=config.learner.post_publish_latest_poll_seconds,
+                )
+                if maybe_latest is None:
+                    raise TimeoutError(
+                        "timed out waiting to reconcile predicted global before publication"
+                    )
+                previous_version = last_loaded_global_version
+                reconciled_update_id = prediction_update_id
+                reconciled_base_version = prediction_base_version
+                last_loaded_global_version, delta_norm = rebase_local_delta_onto_global(
+                    model=model,
+                    latest=maybe_latest,
+                    param_index=param_index,
+                    device=device,
+                    reference_flat=prediction_reference_flat,
+                )
+                last_loaded_latest = maybe_latest
+                tokens_since_global_load = prediction_carried_tokens
+                logger.event(
+                    "global_prediction_reconciled",
+                    previous_version=previous_version,
+                    version=last_loaded_global_version,
+                    prediction_base_version=reconciled_base_version,
+                    prediction_update_id=reconciled_update_id,
+                    carried_delta_tokens=prediction_carried_tokens,
+                    post_prediction_delta_norm=delta_norm,
+                    reconcile_waited_seconds=reconcile_waited_seconds,
+                )
+                prediction_reference_flat = None
+                prediction_carried_tokens = 0
+                prediction_update_id = None
+                prediction_base_version = None
+                optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
+                base_global_version = last_loaded_global_version
+                logger.event("global_adopted", version=last_loaded_global_version)
+                logger.event("inner_optimizer_reset", version=last_loaded_global_version)
 
             if not losses:
                 continue
@@ -1137,6 +1335,8 @@ def run_learner(config: Config, learner_id: str) -> None:
                 rebase_reference_flat = None
                 carried_delta_tokens = 0
                 last_published_anchor_update_id = None
+            if prediction_enabled and prediction_reference_flat is not None:
+                raise RuntimeError("cannot publish a proposal while training on predicted global")
             flat = flatten_trainable_params(
                 model,
                 param_index,
@@ -1261,8 +1461,9 @@ def run_learner(config: Config, learner_id: str) -> None:
                         param_index=param_index,
                         device=device,
                     )
+                    last_loaded_latest = maybe_latest
                     tokens_since_global_load = 0
-                    if rebase_enabled:
+                    if rebase_enabled or prediction_enabled:
                         logger.event(
                             "global_adopted_after_publish",
                             previous_version=previous_version,
@@ -1272,6 +1473,36 @@ def run_learner(config: Config, learner_id: str) -> None:
                     optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
                     logger.event("global_adopted", version=last_loaded_global_version)
                     logger.event("inner_optimizer_reset", version=last_loaded_global_version)
+                elif prediction_enabled:
+                    if int(last_loaded_latest["version"]) != last_loaded_global_version:
+                        raise RuntimeError("cached latest metadata does not match learner base")
+                    prediction_reference_flat, prediction_stats = predict_next_global_weight(
+                        model=model,
+                        latest=last_loaded_latest,
+                        param_index=param_index,
+                        device=device,
+                        config=config,
+                        local_tokens=tokens_since_global_load,
+                    )
+                    prediction_carried_tokens = 0
+                    prediction_update_id = update_id
+                    prediction_base_version = last_loaded_global_version
+                    tokens_since_global_load = 0
+                    optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
+                    logger.event(
+                        "global_prediction_started",
+                        update_id=update_id,
+                        reference_bytes=int(
+                            prediction_reference_flat.numel()
+                            * prediction_reference_flat.element_size()
+                        ),
+                        **prediction_stats,
+                    )
+                    logger.event(
+                        "inner_optimizer_reset",
+                        version=last_loaded_global_version,
+                        reason="global_prediction_started",
+                    )
                 elif rebase_enabled:
                     rebase_reference_flat = flatten_trainable_params(
                         model,
