@@ -20,15 +20,19 @@ The implementation intentionally does not use `torch.distributed`, NCCL, RPC, Ra
 - `scripts/miyabi/`: PBS launch and inspection scripts.
 - `scripts/local/`: synthetic CPU smoke helpers.
 - `tests/`: focused unit and integration tests.
-- `docs/`: split bilingual user guide, design notes, Miyabi runbook, and experiment plan.
+- `docs/`: wiki-style system documentation (architecture, runtime flow, data flow, configuration, operations, and per-module function reference).
 
 ## Documentation
 
-- [Bilingual documentation index](docs/user-guide/00-README.zh-en.md): Chinese and English docs split by overview, training, dataflow, storage/schema, modules, configuration, and operations.
-- [Compatibility guide entry](docs/USER_GUIDE.zh-en.md): short redirect for the original single-file guide path.
-- [Miyabi runbook](docs/miyabi_runbook.md): node policy and PBS launch commands.
-- [Design notes](docs/design.md): protocol-level design summary.
-- [Experiments](docs/experiments.md): suggested correctness, optimizer, and resilience matrices.
+Start at the [documentation index](docs/README.md). Highlights:
+
+- [Overview](docs/01-overview.md): what the system is, design goals, full vs fragment modes, terminology.
+- [Architecture](docs/02-architecture.md): process roles, runtime contract, merge protocol, liveness, fault tolerance.
+- [Runtime flow](docs/03-runtime-flow.md): initialization, learner/syncer main loops, shutdown and resume.
+- [Data flow](docs/04-data-flow.md): shared-directory layout, file formats, update state machine, SQLite schema.
+- [Code structure](docs/05-code-structure.md) and [module reference](docs/modules/): per-function documentation for every package.
+- [Configuration reference](docs/06-configuration.md): every YAML section and field.
+- [Operations](docs/07-operations.md): launch commands, PBS scripts, run analysis, checkpoint evaluation, troubleshooting.
 
 ## Quick Commands
 
@@ -69,4 +73,4 @@ python -m fs_diloco.analysis runs/fs_diloco/<RUN_ID>
 - Learners overwrite the full model and reset the inner optimizer after adopting a newer global version.
 - Outer optimizers are explicit flat-vector SGD, momentum/Nesterov, and AdamW-style implementations.
 
-See `docs/miyabi_runbook.md` before launching on Miyabi.
+See [docs/07-operations.md](docs/07-operations.md) before launching on Miyabi.

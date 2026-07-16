@@ -1,0 +1,197 @@
+# 04 数据流:目录布局、文件格式与状态机
+
+## 1. 共享目录布局
+
+一次 run 的 `shared_root`(默认 `runs/fs_diloco/<RUN_ID>/`)由 `storage/paths.py: RunPaths` 定义、`prepare_run_dirs()` 创建:
+
+```
+<shared_root>/
+├── control/
+│   ├── latest.json                  # 唯一全局指针(learner 轮询)
+│   ├── stop.json                    # 停机标记(syncer 发布)
+│   ├── param_index.json             # 参数 ↔ 扁平向量映射契约
+│   └── run_config.resolved.yaml     # 解析后的完整配置快照
+├── weights/
+│   └── global_v{VVVVVV}.safetensors # 全局权重(全量模式每版一份;fragment 模式为 materialize 产物)
+├── optim/
+│   └── outer_v{VVVVVV}.safetensors  # 外层优化器状态(theta + momentum/exp_avg 等)
+├── updates/
+│   ├── pending/learner_{III}/       # learner 提交区(★ 核心数据流)
+│   │   ├── update_{uuid}.params.safetensors
+│   │   ├── update_{uuid}.meta.json
+│   │   └── update_{uuid}_fragment_{FFF}.{params.safetensors,meta.json}   # fragment 模式
+│   ├── processed/learner_{III}/     # 预留目录,当前代码不移动文件(状态在 SQLite 中跟踪)
+│   └── dropped/learner_{III}/       # 同上,预留
+├── fragments/                       # fragment 模式专用
+│   ├── fragment_index.json
+│   ├── weights/fragment_{FFF}/v{VVVVVV}.safetensors
+│   └── optim/fragment_{FFF}/v{VVVVVV}.safetensors
+├── heartbeats/
+│   └── learner_{III}.json           # 每 learner 一份,原子覆盖
+├── db_dumps/
+│   └── metadata_{时间戳}_v{VVVVVV}.db   # syncer SQLite 的一致快照
+├── logs/
+│   ├── syncer.jsonl                 # JSONL 事件日志(每进程一份)
+│   ├── learner_{III}.jsonl
+│   └── wandb/                       # W&B 本地目录
+└── metrics/
+    ├── syncer_metrics.csv
+    ├── learner_metrics.csv
+    └── update_manifest.csv
+```
+
+syncer 私有(**节点本地盘**,不在共享目录):`$TMPDIR/fs_diloco/<RUN_ID>/syncer_metadata.sqlite3`(可用 `io.sqlite_local_dir` 改)。
+
+## 2. 文件格式详解
+
+### 2.1 `control/latest.json`
+
+全量模式(`runtime/syncer.py: latest_payload`):
+
+```json
+{
+  "format_version": 1,
+  "run_id": "...",
+  "version": 12,
+  "weight_path": ".../weights/global_v000012.safetensors",
+  "optim_path": ".../optim/outer_v000012.safetensors",
+  "param_index_path": ".../control/param_index.json",
+  "created_at": 1752650000.0,
+  "total_seen_tokens": 123456789
+}
+```
+
+fragment 模式(`fragment_latest_payload`,`latest_kind` 用于区分):
+
+```json
+{
+  "format_version": 1,
+  "latest_kind": "fragment",
+  "latest_layout_version": 2,
+  "run_id": "...",
+  "version": 37,
+  "global_merge_event": 37,
+  "param_index_path": ".../control/param_index.json",
+  "fragment_index_path": ".../fragments/fragment_index.json",
+  "materialized_weight_path": ".../weights/global_v000030.safetensors",
+  "created_at": ...,
+  "total_seen_tokens": ...,
+  "fragments": {
+    "0": {"version": 10, "weight_path": "...", "optim_path": "...", "updated_at_global_merge_event": 37},
+    "1": {"version": 9,  ...},
+    ...
+  }
+}
+```
+
+### 2.2 update 元数据 `update_*.meta.json`(提交标记)
+
+learner `write_update()` 产出(fragment 版 `write_fragment_update()` 另有 `update_kind/fragment_id/base_fragment_version/base_global_merge_event/tokens_since_fragment_load/fragment_norm` 字段):
+
+| 字段 | 含义 |
+|---|---|
+| `format_version` / `run_id` | 协议版本与所属 run(syncer 校验不匹配即忽略) |
+| `update_id` | `learner_XXX_{local_step:08d}_{uuid12}`(fragment:中间再加 `fXXX`) |
+| `learner_id` / `hostname` / `pid` | 来源标识 |
+| `base_global_version` | 本区间出发时加载的全局版本(staleness 依据) |
+| `local_step_start` / `local_step_end` / `inner_steps` | 区间步数信息 |
+| `tokens_this_update` / `tokens_since_global_load` / `num_examples_this_update` | token/样本计量(合并权重依据) |
+| `train_loss` / `grad_norm` / `param_norm` / `delta_norm` | 训练侧统计(`delta_norm` 当前恒为 null) |
+| `file_path` / `file_size_bytes` / `sha256` | 张量文件指针(sha256 仅在 `io.compute_sha256` 开启时计算) |
+| `created_at` / `committed_at` | 张量写完时间 / 元数据提交时间 |
+
+### 2.3 张量文件(safetensors)
+
+| 文件 | 键 | 内容 |
+|---|---|---|
+| `global_v*.safetensors` | 每参数一键(参数名) | 按 param index 还原的命名权重 |
+| `outer_v*.safetensors` | `theta` + 状态键(`step`,`momentum` 或 `exp_avg`/`exp_avg_sq`) | 外层优化器完整状态 |
+| `update_*.params.safetensors` | `local_params` | learner 参数扁平向量(dtype 由 `io.tensor_dtype` 决定,默认 float32) |
+| `*_fragment_*.params.safetensors`、`fragments/weights/**` | `fragment_params` | 单个 fragment 的扁平向量 |
+
+### 2.4 心跳 `heartbeats/learner_XXX.json`
+
+`write_heartbeat()` 原子覆盖:`format_version, run_id, learner_id, hostname, pid, timestamp, status(active/stopped), phase(inner_steps/update_written/...), last_loaded_global_version, last_local_step, last_update_id, tokens_per_sec`;fragment 模式追加 `last_loaded_global_merge_event, last_loaded_fragment_versions, last_adopted_fragments`。
+
+### 2.5 `control/stop.json`
+
+`{format_version, run_id, reason, version, total_seen_tokens, timestamp}`;`reason ∈ {stop_after_outer_steps, stop_after_global_tokens, no_progress_timeout, completed, error}`。
+
+### 2.6 CSV 指标(字段清单见 `observability/metrics.py`)
+
+- `syncer_metrics.csv`:每次合并一行——版本/事件号、selected_count、token 数、read/aggregation/outer_step/publish/materialize 耗时、staleness 统计、丢弃数、两次合并间隔。
+- `learner_metrics.csv`:每次上传一行——loss、tokens、tokens/s、写盘耗时、param/fragment norm、已加载片版本等。
+- `update_manifest.csv`:每份 update 一行的清单(id、base 版本、步区间、文件指针)。
+
+### 2.7 JSONL 日志 `logs/*.jsonl`
+
+`JsonlLogger` 逐行追加 `{timestamp, actor, event_type, hostname, ...payload}` 并镜像到 stdout,fsync 落盘。关键事件类型:learner 侧 `process_start / loaded_global / update_written / global_adopted / fragments_adopted / heartbeat_written / error / process_exit`;syncer 侧 `run_initialized / metadata_ingested / quorum_wait / updates_selected / outer_step_applied / global_published / updates_dropped / db_dumped / stop_published / no_progress_timeout / error`。
+
+## 3. update 生命周期状态机(SQLite 中跟踪)
+
+```
+                    learner 提交 meta.json
+                            │  syncer 扫描入库 (INSERT OR IGNORE)
+                            ▼
+                        ┌─────────┐
+       宽限窗口选中     │ pending │──────────────┐
+     ┌──────────────────└─────────┘              │ 超过 staleness 窗口 → dropped(stale)
+     ▼                       ▲                   │ 同 learner 更新被选 → dropped(superseded)
+┌──────────┐  文件丢失回滚   │                   │ 张量文件消失      → dropped(missing_file)
+│ selected │─────────────────┘                   ▼
+└──────────┘                                ┌─────────┐
+     │ 合并成功,记录 applied_version、      │ dropped │(记录 drop_reason)
+     ▼ staleness、effective_weight          └─────────┘
+┌─────────┐
+│ applied │
+└─────────┘
+```
+
+- `pending → selected`、`selected → pending`(回滚)、`* → dropped` 都是带 `WHERE status = ?` 条件的 CAS 式更新,防止状态被并发/重放破坏。
+- 常量定义在 `core/constants.py`(另有 `failed` 状态常量,当前未使用)。
+- 文件本身不移动、不改名;`updates/processed|dropped/` 目录为预留。学习者侧的文件删除只来自保留策略(retention)。
+
+## 4. SQLite schema(`storage/schema.sql`)
+
+库只由 syncer 单进程读写(WAL、`synchronous=NORMAL`、每语句提交)。
+
+| 表 | 作用 | 关键列/约束 |
+|---|---|---|
+| `run_state` | 键值杂项(如解析后配置) | `key` 主键,值为 JSON 文本 |
+| `global_versions` | 每个全局版本一行 | `version` 主键;weight/optim 路径、num_updates、token 计数、status、notes |
+| `learners` | 每 learner 最新快照 | `learner_id` 主键;last_seen、last_local_step、tokens_per_sec、status(+reason) |
+| `updates` | 全量模式 update 生命周期 | `update_id` 主键;`UNIQUE(learner_id, local_step_end, base_global_version)` 幂等去重;status 索引 |
+| `fragments` | fragment 定义 | `fragment_id` 主键;strategy、numel、slices_json |
+| `fragment_versions` | 每片每版本一行 | `(fragment_id, version)` 主键;global_merge_event 索引 |
+| `fragment_updates` | fragment 模式 update 生命周期 | `UNIQUE(learner_id, fragment_id, local_step_end, base_fragment_version)`;`(fragment_id, status, base_fragment_version)` 索引 |
+| `db_dumps` | dump 台账 | 每次 backup 的路径/大小/对应版本 |
+
+dump 机制:`SQLiteStore.backup_to()` 用 `sqlite3` 的在线 backup API 产生一致快照写到 `db_dumps/`(按 `sync.db_dump_every_versions` 周期 + 停机时最终一次);resume 时 `restore_from_dump()` 整文件拷回本地再重开连接。
+
+## 5. 端到端数据流小结
+
+```
+ 数据集(HF WikiText-2,按 learner 连续分片)
+   │ tokenize + 切块
+   ▼
+ learner GPU:inner_steps × AdamW
+   │ flatten (param_index 契约)
+   ▼
+ updates/pending/…/update_*.params.safetensors   ──(先写)
+ updates/pending/…/update_*.meta.json            ──(后写 = 提交)
+   │ syncer 周期扫描 → SQLite(pending)
+   ▼
+ 资格筛选 → 每 learner 选一 → quorum/宽限窗口 → selected
+   │ 读向量到 GPU
+   ▼
+ p̄ = Σ wᵢ pᵢ  →  g = θ − p̄  →  外层步进 θ′
+   │
+   ├─ weights/global_v{v+1}.safetensors + optim/outer_v{v+1}.safetensors
+   ├─ SQLite:global_versions 行、updates → applied/dropped
+   ├─ db_dumps/、metrics/、logs/、W&B
+   ▼
+ control/latest.json(原子覆盖,新版本全局可见)
+   │ learner 轮询
+   ▼
+ learner 整体加载 θ′、重置内层优化器 → 下一个区间
+```

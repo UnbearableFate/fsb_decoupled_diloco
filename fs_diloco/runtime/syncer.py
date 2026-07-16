@@ -250,7 +250,6 @@ def initialize_run(
         total_seen_tokens=0,
     )
     store.set_run_state("config", config_to_dict(config))
-    store.insert_event("syncer", "run_initialized", global_version=0)
     logger.event("run_initialized", version=0, total_numel=int(theta.numel()))
     return 0, theta, outer_state, param_index, 0
 
@@ -333,7 +332,6 @@ def initialize_fragment_run(
         previous_materialized_weight_path=None,
     )
     store.set_run_state("config", config_to_dict(config))
-    store.insert_event("syncer", "fragment_run_initialized", global_version=0)
     logger.event(
         "fragment_run_initialized",
         global_merge_event=0,
@@ -464,13 +462,6 @@ def ingest_update_metadata(
         )
         if inserted_payload:
             inserted += 1
-            store.insert_event(
-                "syncer",
-                "metadata_ingested",
-                learner_id=payload["learner_id"],
-                update_id=payload["update_id"],
-                payload={"path": str(path)},
-            )
     if inserted:
         logger.event("metadata_ingested", count=inserted)
     return inserted

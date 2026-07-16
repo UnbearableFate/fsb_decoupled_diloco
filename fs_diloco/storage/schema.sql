@@ -124,17 +124,6 @@ CREATE TABLE IF NOT EXISTS fragment_updates (
     UNIQUE(learner_id, fragment_id, local_step_end, base_fragment_version)
 );
 
-CREATE TABLE IF NOT EXISTS events (
-    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp REAL NOT NULL,
-    actor TEXT NOT NULL,
-    event_type TEXT NOT NULL,
-    global_version INTEGER,
-    learner_id TEXT,
-    update_id TEXT,
-    payload_json TEXT
-);
-
 CREATE TABLE IF NOT EXISTS db_dumps (
     dump_id INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at REAL NOT NULL,

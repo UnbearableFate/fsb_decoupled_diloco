@@ -73,33 +73,6 @@ class SQLiteStore:
             return None
         return json.loads(row["value"])
 
-    def insert_event(
-        self,
-        actor: str,
-        event_type: str,
-        *,
-        global_version: int | None = None,
-        learner_id: str | None = None,
-        update_id: str | None = None,
-        payload: dict[str, Any] | None = None,
-    ) -> None:
-        self.conn.execute(
-            """
-            INSERT INTO events(timestamp, actor, event_type, global_version, learner_id, update_id, payload_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                time.time(),
-                actor,
-                event_type,
-                global_version,
-                learner_id,
-                update_id,
-                json.dumps(payload or {}, sort_keys=True),
-            ),
-        )
-        self.conn.commit()
-
     def upsert_global_version(
         self,
         version: int,
