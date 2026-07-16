@@ -1,11 +1,25 @@
-# AGENTS.md
+# Repository Agent Instructions
 
-Using the usual skill loading rules, the miyabi-development skill should only be used when the user or the dependency file explicitly indicates that testing or experimentation is required.
+## Skill Usage
 
-This repository implements a filesystem-based Decoupled DiLoCo prototype:
+Follow the standard skill-loading rules. Invoke the `miyabi-development` skill only when the user request or an applicable scoped instruction explicitly requires testing or experimentation. Do not invoke it for work limited to static source inspection, documentation analysis, or file-only editing.
 
-Before submitting PBS scripts, run `bash -n scripts/miyabi/*.pbs` on a safe node. Fill real `#PBS -W group_list=<group_id>` values before submission.
+## Project Context
 
-Code changes that have been verified through testing need to be synchronized to the documentation.
+This repository implements a filesystem-based Decoupled DiLoCo prototype.
 
-Parallel operations using subagents are permitted, but please use them with caution, only when absolutely necessary, and avoid having more than 2 subagents running simultaneously.
+## PBS Script Validation
+
+Before submitting any PBS script:
+
+1. Run `bash -n scripts/miyabi/*.pbs` in a safe static-validation environment.
+2. Replace every `#PBS -W group_list=<group_id>` placeholder with a valid, literal group ID.
+3. Do not submit the script until both checks are complete.
+
+## Documentation Synchronization
+
+When a code change has been verified by a 9-node experiment whose workload exceeds the 50-local-step × 10-global-step baseline, update the relevant documentation to reflect the verified behavior and experimental result.
+
+## Subagent Usage
+
+Use subagents only when the task materially benefits from parallel execution. Avoid delegation for routine sequential work, and do not run more than two subagents concurrently within the same task.
