@@ -20,6 +20,13 @@ def _metadata(update_id="u1", local_step_end=1):
         "grad_norm": None,
         "param_norm": 1.0,
         "delta_norm": None,
+        "training_cpu_utilization_peak_percent": 40.0,
+        "training_gpu_utilization_peak_percent": 90.0,
+        "local_cycle_cpu_utilization_peak_percent": 30.0,
+        "local_cycle_gpu_utilization_peak_percent": 80.0,
+        "local_cycle_step_time_seconds_mean": 1.5,
+        "local_cycle_step_count": 1,
+        "local_cycle_resource_sample_count": 2,
         "file_path": "/tmp/update.safetensors",
         "file_size_bytes": 1,
         "sha256": None,
@@ -39,6 +46,14 @@ def test_insert_select_apply_and_uniqueness(tmp_path):
     row = store.get_update("u1")
     assert row["status"] == "applied"
     assert row["applied_version"] == 1
+    assert row["local_cycle_step_time_seconds_mean"] == 1.5
+    assert store.learner_resource_peaks(fragment_mode=False) == [
+        {
+            "learner_id": "learner_000",
+            "training_cpu_utilization_peak_percent": 40.0,
+            "training_gpu_utilization_peak_percent": 90.0,
+        }
+    ]
     store.close()
 
 

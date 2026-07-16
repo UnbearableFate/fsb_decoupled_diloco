@@ -74,6 +74,10 @@ class RunPaths:
         return self.control / "stop.json"
 
     @property
+    def summary_json(self) -> Path:
+        return self.control / "summary.json"
+
+    @property
     def param_index_json(self) -> Path:
         return self.control / "param_index.json"
 

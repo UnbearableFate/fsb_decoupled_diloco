@@ -62,7 +62,9 @@ def test_fragment_summary_and_assertions(tmp_path):
     (root / "logs").mkdir()
     final_weight = root / "weights" / "global_v000004.safetensors"
     final_weight.write_bytes(b"fake")
-    fragment_index = build_fragment_index(_param_index(), strategy="balanced_tensor", num_fragments=4)
+    fragment_index = build_fragment_index(
+        _param_index(), strategy="balanced_tensor", num_fragments=4
+    )
     save_fragment_index(fragment_index, root / "fragments" / "fragment_index.json")
     atomic_write_json(
         root / "control" / "latest.json",
@@ -88,7 +90,19 @@ def test_fragment_summary_and_assertions(tmp_path):
             },
         },
     )
-    atomic_write_json(root / "control" / "stop.json", {"reason": "stop_after_outer_steps", "version": 4})
+    atomic_write_json(
+        root / "control" / "stop.json", {"reason": "stop_after_outer_steps", "version": 4}
+    )
+    atomic_write_json(
+        root / "control" / "summary.json",
+        {
+            "complete_training_time_seconds": 123.0,
+            "learner_resources": {
+                "training_cpu_utilization_peak_percent_max": 42.0,
+                "training_gpu_utilization_peak_percent_max": 99.0,
+            },
+        },
+    )
     for learner in ("learner_000", "learner_001"):
         atomic_write_json(
             root / "heartbeats" / f"{learner}.json",
@@ -141,7 +155,9 @@ def test_fragment_summary_and_assertions(tmp_path):
         for learner in ("learner_000", "learner_001"):
             update_path = root / f"{learner}_{fragment_id}.safetensors"
             update_path.write_bytes(b"fake")
-            metadata = _metadata(f"{learner}_f{fragment_id}", learner, fragment_id, event, update_path)
+            metadata = _metadata(
+                f"{learner}_f{fragment_id}", learner, fragment_id, event, update_path
+            )
             store.insert_fragment_update_metadata(metadata)
             row = store.get_fragment_update(metadata["update_id"])
             store.mark_fragment_updates_applied(
@@ -155,6 +171,8 @@ def test_fragment_summary_and_assertions(tmp_path):
     summary = summarize_run(root, db_path)
     assert summary["latest_kind"] == "fragment"
     assert summary["fragment_versions"] == {"0": 1, "1": 1, "2": 1, "3": 1}
+    assert summary["complete_training_time_seconds"] == 123.0
+    assert summary["learner_resources"]["training_gpu_utilization_peak_percent_max"] == 99.0
     args = Args()
     args.run_root = str(root)
     args.db = str(db_path)

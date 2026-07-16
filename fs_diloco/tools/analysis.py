@@ -71,9 +71,15 @@ def _db_summary(path: Path | None) -> dict[str, Any]:
     try:
         payload: dict[str, Any] = {"exists": True, "path": str(path)}
         if _table_exists(conn, "updates"):
-            applied = conn.execute("SELECT COUNT(*) AS n FROM updates WHERE status='applied'").fetchone()["n"]
-            pending = conn.execute("SELECT COUNT(*) AS n FROM updates WHERE status='pending'").fetchone()["n"]
-            dropped = conn.execute("SELECT COUNT(*) AS n FROM updates WHERE status='dropped'").fetchone()["n"]
+            applied = conn.execute(
+                "SELECT COUNT(*) AS n FROM updates WHERE status='applied'"
+            ).fetchone()["n"]
+            pending = conn.execute(
+                "SELECT COUNT(*) AS n FROM updates WHERE status='pending'"
+            ).fetchone()["n"]
+            dropped = conn.execute(
+                "SELECT COUNT(*) AS n FROM updates WHERE status='dropped'"
+            ).fetchone()["n"]
             versions = conn.execute("SELECT COUNT(*) AS n FROM global_versions").fetchone()["n"]
             contributors = [
                 dict(row)
@@ -133,8 +139,7 @@ def _db_summary(path: Path | None) -> dict[str, Any]:
             for row in applied_rows:
                 selected_by_event[int(row["applied_global_merge_event"])].append(row)
             selected_counts = {
-                str(event): len(rows)
-                for event, rows in sorted(selected_by_event.items())
+                str(event): len(rows) for event, rows in sorted(selected_by_event.items())
             }
             staleness = [
                 int(row["staleness_fragment_versions"])
@@ -246,7 +251,12 @@ def _learner_fragment_adoption(
 
 def _syncer_log_flags(root: Path) -> dict[str, bool]:
     path = root / "logs" / "syncer.jsonl"
-    flags = {"exists": path.exists(), "error": False, "no_progress_timeout": False, "uncaught_exception": False}
+    flags = {
+        "exists": path.exists(),
+        "error": False,
+        "no_progress_timeout": False,
+        "uncaught_exception": False,
+    }
     if not path.exists():
         return flags
     text = path.read_text(encoding="utf-8", errors="replace").lower()
@@ -260,6 +270,7 @@ def summarize_run(shared_root: str | Path, db_path: str | Path | None = None) ->
     root = Path(shared_root)
     latest = safe_read_json(root / "control" / "latest.json")
     stop = safe_read_json(root / "control" / "stop.json")
+    run_summary = safe_read_json(root / "control" / "summary.json")
     db = Path(db_path) if db_path is not None else _latest_db_dump(root)
     syncer_rows = _read_csv_rows(root / "metrics" / "syncer_metrics.csv")
     learner_rows = _read_csv_rows(root / "metrics" / "learner_metrics.csv")
@@ -279,12 +290,22 @@ def summarize_run(shared_root: str | Path, db_path: str | Path | None = None) ->
                 for fragment_id, info in (latest.get("fragments") or {}).items()
             }
             materialized_path = latest.get("materialized_weight_path")
-            materialized_weight_exists = bool(materialized_path and Path(materialized_path).exists())
-            fragment_index_path = latest.get("fragment_index_path") or root / "fragments" / "fragment_index.json"
+            materialized_weight_exists = bool(
+                materialized_path and Path(materialized_path).exists()
+            )
+            fragment_index_path = (
+                latest.get("fragment_index_path") or root / "fragments" / "fragment_index.json"
+            )
             try:
                 fragment_sizes = fragment_size_summary(load_fragment_index(fragment_index_path))
             except Exception as exc:
-                fragment_sizes = {"error": repr(exc), "min": 0, "max": 0, "mean": 0.0, "imbalance_ratio": 0.0}
+                fragment_sizes = {
+                    "error": repr(exc),
+                    "min": 0,
+                    "max": 0,
+                    "mean": 0.0,
+                    "imbalance_ratio": 0.0,
+                }
 
     selected_counts = []
     metric_staleness = []
@@ -324,6 +345,9 @@ def summarize_run(shared_root: str | Path, db_path: str | Path | None = None) ->
         "loss_summary": _loss_summary(learner_rows),
         "stop": stop,
         "stop_reason": (stop or {}).get("reason"),
+        "run_summary": run_summary,
+        "complete_training_time_seconds": (run_summary or {}).get("complete_training_time_seconds"),
+        "learner_resources": (run_summary or {}).get("learner_resources"),
         "materialized_weight_exists": materialized_weight_exists,
         "heartbeats": heartbeats,
         "syncer_metrics": _read_csv_summary(root / "metrics" / "syncer_metrics.csv"),
@@ -358,7 +382,9 @@ def assert_fragment_run(args: argparse.Namespace, *, require_local_steps: bool) 
         len(expected_ids),
         int(args.expected_global_merge_events),
     )
-    actual_versions = {int(key): int(value) for key, value in (summary.get("fragment_versions") or {}).items()}
+    actual_versions = {
+        int(key): int(value) for key, value in (summary.get("fragment_versions") or {}).items()
+    }
     for fragment_id in expected_ids:
         expected_version = expected_versions[fragment_id]
         if actual_versions.get(fragment_id) != expected_version:
@@ -367,13 +393,17 @@ def assert_fragment_run(args: argparse.Namespace, *, require_local_steps: bool) 
                 f"expected {expected_version}"
             )
     if summary.get("stop_reason") != "stop_after_outer_steps":
-        errors.append(f"stop_reason is {summary.get('stop_reason')!r}, expected 'stop_after_outer_steps'")
+        errors.append(
+            f"stop_reason is {summary.get('stop_reason')!r}, expected 'stop_after_outer_steps'"
+        )
     if not summary.get("materialized_weight_exists"):
         errors.append("materialized full checkpoint is missing")
 
     syncer_rows = _read_csv_rows(Path(args.run_root) / "metrics" / "syncer_metrics.csv")
     if len(syncer_rows) < int(args.expected_global_merge_events):
-        errors.append(f"syncer metric rows {len(syncer_rows)} < expected events {args.expected_global_merge_events}")
+        errors.append(
+            f"syncer metric rows {len(syncer_rows)} < expected events {args.expected_global_merge_events}"
+        )
     low_quorum_rows = []
     for row in syncer_rows:
         try:
@@ -393,7 +423,9 @@ def assert_fragment_run(args: argparse.Namespace, *, require_local_steps: bool) 
             learner_id = f"learner_{index:03d}"
             local_step = int((summary.get("learner_local_steps") or {}).get(learner_id, 0))
             if local_step < int(args.expected_local_steps):
-                errors.append(f"{learner_id} local_step {local_step} < expected {args.expected_local_steps}")
+                errors.append(
+                    f"{learner_id} local_step {local_step} < expected {args.expected_local_steps}"
+                )
 
     db_summary = summary.get("db") or {}
     if not db_summary.get("exists"):
@@ -411,7 +443,9 @@ def assert_fragment_run(args: argparse.Namespace, *, require_local_steps: bool) 
     for event in range(1, int(args.expected_global_merge_events) + 1):
         count = int(selected_by_event.get(str(event), 0))
         if count < int(args.min_selected_count):
-            errors.append(f"DB selected count for event {event} is {count}, expected >= {args.min_selected_count}")
+            errors.append(
+                f"DB selected count for event {event} is {count}, expected >= {args.min_selected_count}"
+            )
 
     adoption = summary.get("learner_fragment_adoption") or {}
     for index in range(int(args.expected_learners)):
@@ -426,11 +460,17 @@ def assert_fragment_run(args: argparse.Namespace, *, require_local_steps: bool) 
         errors.append(f"learner losses show obvious divergence: {loss_summary}")
 
     log_flags = summary.get("syncer_log_flags") or {}
-    if log_flags.get("error") or log_flags.get("no_progress_timeout") or log_flags.get("uncaught_exception"):
+    if (
+        log_flags.get("error")
+        or log_flags.get("no_progress_timeout")
+        or log_flags.get("uncaught_exception")
+    ):
         errors.append(f"syncer log contains failure markers: {log_flags}")
 
     if errors:
-        raise SystemExit("fragment assertion failed:\n" + "\n".join(f"- {error}" for error in errors))
+        raise SystemExit(
+            "fragment assertion failed:\n" + "\n".join(f"- {error}" for error in errors)
+        )
 
 
 def _summary_parser() -> argparse.ArgumentParser:

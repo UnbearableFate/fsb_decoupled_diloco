@@ -3,7 +3,7 @@
 ## 1. 环境
 
 - 项目虚拟环境:`.venv/`(PBS 脚本默认 `PYTHON_BIN=$PROJECT_ROOT/.venv/bin/python`);
-- 依赖:torch、transformers、datasets、safetensors、pyyaml、wandb(可选)、lm-eval(评测用,可选);
+- 依赖:torch、transformers、datasets、safetensors、pyyaml、nvidia-ml-py(GPU 利用率采样)、wandb(可选)、lm-eval(评测用,可选);
 - Miyabi 上**登录节点只做静态检查**,运行必须在 PBS 计算/调试节点:
 
 ```bash
@@ -54,6 +54,7 @@ scripts/local/clean_run.sh                 # 清理冒烟产物
 | `run_9node_gpt2_wikitext2.pbs` | 9 节点 | 8 learner + 1 syncer 短跑 |
 | `run_9node_gpt2_wikitext2_5000steps.pbs` | 9 节点 | 5000 本地步正式实验 |
 | `run_9node_fragment_gpt2_wikitext2_5000steps.pbs` / `..._50x4.pbs` | 9 节点 | fragment 版实验 |
+| `run_9node_fragment_gpt2_wikitext2_50x10.pbs` / `run_9node_no_fragment_gpt2_wikitext2_50x10.pbs` | 9 节点 | 8 learner、inner steps=50、outer steps=10 的 fragment/no-fragment 对照实验 |
 | `run_1node_lm_eval.pbs` | 1 节点 | checkpoint 导出 + lm-eval |
 
 提交与自定义(以 9 节点为例):
@@ -90,6 +91,8 @@ python -m fs_diloco.analysis assert-fragment-5000 ... --expected-local-steps 500
 ```
 
 分析读取:共享目录的 `latest.json/stop.json/heartbeats/metrics/*.csv` + 最新 DB dump(可用 `--db` 指定),不需要 torch/GPU。
+
+`control/summary.json` 和分析摘要中的 `complete_training_time_seconds` 从 syncer 启动计至 learner 全部 stopped;`learner_resources` 给出每个 learner 的全训练 CPU/GPU 峰值及跨 learner 聚合。若 W&B 未认证,用 `WANDB_MODE=offline qsub ...` 保留完整 run,认证后执行 `wandb sync <run_root>/logs/wandb/offline-run-*`。
 
 也可以直接对 DB dump 跑 SQL:
 

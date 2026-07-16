@@ -12,7 +12,9 @@ def _fragment():
     }
 
 
-def _metadata(update_id="u1", learner_id="learner_000", fragment_id=0, local_step_end=1, base_version=0):
+def _metadata(
+    update_id="u1", learner_id="learner_000", fragment_id=0, local_step_end=1, base_version=0
+):
     now = time.time()
     return {
         "update_id": update_id,
@@ -31,6 +33,13 @@ def _metadata(update_id="u1", learner_id="learner_000", fragment_id=0, local_ste
         "grad_norm": None,
         "param_norm": 1.0,
         "fragment_norm": 1.0,
+        "training_cpu_utilization_peak_percent": 45.0,
+        "training_gpu_utilization_peak_percent": 95.0,
+        "local_cycle_cpu_utilization_peak_percent": 35.0,
+        "local_cycle_gpu_utilization_peak_percent": 85.0,
+        "local_cycle_step_time_seconds_mean": 1.25,
+        "local_cycle_step_count": 1,
+        "local_cycle_resource_sample_count": 2,
         "file_path": "/tmp/update.safetensors",
         "file_size_bytes": 1,
         "sha256": None,
@@ -52,7 +61,9 @@ def test_fragment_version_and_update_lifecycle(tmp_path):
     )
     assert store.insert_fragment_update_metadata(_metadata()) is True
     assert store.insert_fragment_update_metadata(_metadata()) is False
-    pending = store.eligible_fragment_updates(fragment_id=0, current_fragment_version=0, max_staleness_versions=2)
+    pending = store.eligible_fragment_updates(
+        fragment_id=0, current_fragment_version=0, max_staleness_versions=2
+    )
     assert len(pending) == 1
     store.mark_fragment_updates_selected(["u1"], "selection")
     store.mark_fragment_updates_applied(
@@ -65,6 +76,14 @@ def test_fragment_version_and_update_lifecycle(tmp_path):
     assert row["status"] == "applied"
     assert row["applied_fragment_version"] == 1
     assert row["staleness_fragment_versions"] == 0
+    assert row["local_cycle_gpu_utilization_peak_percent"] == 85.0
+    assert store.learner_resource_peaks(fragment_mode=True) == [
+        {
+            "learner_id": "learner_000",
+            "training_cpu_utilization_peak_percent": 45.0,
+            "training_gpu_utilization_peak_percent": 95.0,
+        }
+    ]
     store.close()
 
 
@@ -84,8 +103,15 @@ def test_fragment_staleness_uses_fragment_version(tmp_path):
     store = SQLiteStore(tmp_path / "db.sqlite3")
     store.insert_fragment_update_metadata(_metadata("fresh", base_version=3))
     store.insert_fragment_update_metadata(_metadata("stale", base_version=0, local_step_end=2))
-    rows = store.eligible_fragment_updates(fragment_id=0, current_fragment_version=3, max_staleness_versions=2)
+    rows = store.eligible_fragment_updates(
+        fragment_id=0, current_fragment_version=3, max_staleness_versions=2
+    )
     assert [row["update_id"] for row in rows] == ["fresh"]
-    assert store.drop_obsolete_fragment_updates(fragment_id=0, current_fragment_version=3, max_staleness_versions=2) == 1
+    assert (
+        store.drop_obsolete_fragment_updates(
+            fragment_id=0, current_fragment_version=3, max_staleness_versions=2
+        )
+        == 1
+    )
     assert store.get_fragment_update("stale")["status"] == "dropped"
     store.close()

@@ -9,7 +9,9 @@ from typing import Any
 from ..storage.atomic_io import ensure_dir
 
 
-def append_csv_row(path: str | Path, row: dict[str, Any], fieldnames: list[str] | None = None) -> None:
+def append_csv_row(
+    path: str | Path, row: dict[str, Any], fieldnames: list[str] | None = None
+) -> None:
     path = Path(path)
     ensure_dir(path.parent)
     if fieldnames is None:
@@ -42,6 +44,11 @@ SYNCER_METRIC_FIELDS = [
     "fragment_staleness_max",
     "stale_updates_dropped",
     "global_interval_seconds",
+    "learner_training_cpu_utilization_peak_percent_mean",
+    "learner_training_gpu_utilization_peak_percent_mean",
+    "learner_local_cycle_cpu_utilization_peak_percent_mean",
+    "learner_local_cycle_gpu_utilization_peak_percent_mean",
+    "learner_local_cycle_step_time_seconds_mean",
 ]
 
 LEARNER_METRIC_FIELDS = [
@@ -61,6 +68,13 @@ LEARNER_METRIC_FIELDS = [
     "last_loaded_fragment_versions_json",
     "fragment_adopt_count",
     "phase",
+    "training_cpu_utilization_peak_percent",
+    "training_gpu_utilization_peak_percent",
+    "local_cycle_cpu_utilization_peak_percent",
+    "local_cycle_gpu_utilization_peak_percent",
+    "local_cycle_step_time_seconds_mean",
+    "local_cycle_step_count",
+    "local_cycle_resource_sample_count",
 ]
 
 UPDATE_MANIFEST_FIELDS = [

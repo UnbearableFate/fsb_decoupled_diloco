@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import socket
 import time
@@ -12,7 +13,12 @@ from typing import Any
 import torch
 
 from ..core.config import Config, config_to_dict, resolve_config, write_resolved_config
-from ..core.constants import FORMAT_VERSION, GLOBAL_STATUS_COMMITTED, learner_id_from_index
+from ..core.constants import (
+    FORMAT_VERSION,
+    GLOBAL_STATUS_COMMITTED,
+    LEARNER_STATUS_STOPPED,
+    learner_id_from_index,
+)
 from ..modeling.hf_model import choose_device, load_causal_lm_and_tokenizer
 from ..modeling.outer_optim import init_outer_state, outer_optimizer_step
 from ..modeling.param_index import (
@@ -24,6 +30,7 @@ from ..modeling.param_index import (
 from ..observability.logging_utils import JsonlLogger, log_uncaught_exception
 from ..observability.metrics import SYNCER_METRIC_FIELDS, append_csv_row
 from ..observability.wandb_logging import (
+    selected_resource_summary,
     selected_update_summary,
     syncer_wandb_project_name,
     syncer_wandb_run_name,
@@ -199,9 +206,13 @@ def publish_fragment_latest(
 ) -> tuple[Path, float]:
     materialize_seconds = 0.0
     materialized_weight_path = previous_materialized_weight_path
-    if materialized_weight_path is None or should_materialize_fragment_full(config, global_merge_event):
+    if materialized_weight_path is None or should_materialize_fragment_full(
+        config, global_merge_event
+    ):
         materialize_start = time.monotonic()
-        full = materialize_full_from_fragments(fragment_thetas, fragment_index, int(param_index["total_numel"]))
+        full = materialize_full_from_fragments(
+            fragment_thetas, fragment_index, int(param_index["total_numel"])
+        )
         materialized_weight_path = paths.global_weight_path(global_merge_event)
         save_global_weights(materialized_weight_path, full, param_index)
         materialize_seconds = time.monotonic() - materialize_start
@@ -294,7 +305,9 @@ def initialize_fragment_run(
     fragment_updated_events: dict[int, int] = {}
     for fragment in fragment_index["fragments"]:
         fragment_id = int(fragment["fragment_id"])
-        theta_f = extract_fragment(theta, fragment_index, fragment_id).to(device=device, dtype=torch.float32)
+        theta_f = extract_fragment(theta, fragment_index, fragment_id).to(
+            device=device, dtype=torch.float32
+        )
         state_f = init_outer_state(theta_f, config.outer_optimizer)
         weight_path = paths.fragment_weight_path(fragment_id, 0)
         optim_path = paths.fragment_outer_optim_path(fragment_id, 0)
@@ -409,7 +422,13 @@ def resume_run(
         notes="resumed",
     )
     logger.event("run_resumed", version=int(latest["version"]), db_dump=str(dump) if dump else None)
-    return int(latest["version"]), theta.float().to(device), outer_state, param_index, total_seen_tokens
+    return (
+        int(latest["version"]),
+        theta.float().to(device),
+        outer_state,
+        param_index,
+        total_seen_tokens,
+    )
 
 
 def validate_update_metadata(payload: dict[str, Any], *, config: Config, paths: RunPaths) -> bool:
@@ -426,7 +445,11 @@ def validate_update_metadata(payload: dict[str, Any], *, config: Config, paths: 
             return False
         if fragment_id < 0 or fragment_id >= int(config.fragments.num_fragments):
             return False
-        required = ["base_fragment_version", "base_global_merge_event", "tokens_since_fragment_load"]
+        required = [
+            "base_fragment_version",
+            "base_global_merge_event",
+            "tokens_since_fragment_load",
+        ]
         if any(key not in payload for key in required):
             return False
     elif payload.get("update_kind") == "fragment":
@@ -541,7 +564,9 @@ def drop_missing_fragment_update_files(
     missing = [row["update_id"] for row in updates if not Path(row["file_path"]).exists()]
     if missing:
         store.drop_fragment_updates(missing, "missing_file")
-        logger.event("fragment_updates_dropped_missing_files", count=len(missing), update_ids=missing)
+        logger.event(
+            "fragment_updates_dropped_missing_files", count=len(missing), update_ids=missing
+        )
     missing_ids = set(missing)
     return [row for row in updates if row["update_id"] not in missing_ids]
 
@@ -708,7 +733,156 @@ def publish_stop(
     )
 
 
-def _fragment_staleness_stats(selected: list[dict[str, Any]], current_fragment_version: int) -> dict[str, float | int]:
+def _selected_resource_csv_fields(metrics: dict[str, float]) -> dict[str, float]:
+    return {key.replace("learner/", "learner_", 1): value for key, value in metrics.items()}
+
+
+def wait_for_learner_shutdown(
+    *,
+    paths: RunPaths,
+    store: SQLiteStore,
+    config: Config,
+    logger: JsonlLogger,
+    stop_reason: str,
+) -> bool:
+    if stop_reason == "error":
+        return False
+    expected = {learner_id_from_index(index) for index in range(config.sync.num_learners)}
+    timeout_seconds = max(
+        30.0,
+        min(120.0, 2.0 * config.liveness.heartbeat_interval_seconds),
+    )
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() <= deadline:
+        ingest_update_metadata(store, paths, config, logger)
+        stopped: set[str] = set()
+        for learner_id in expected:
+            heartbeat = safe_read_json(paths.heartbeats / f"{learner_id}.json") or {}
+            if heartbeat.get("status") == LEARNER_STATUS_STOPPED:
+                stopped.add(learner_id)
+        if stopped == expected:
+            logger.event("all_learners_stopped", count=len(stopped))
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(1.0, remaining))
+    logger.event(
+        "learner_shutdown_timeout",
+        timeout_seconds=timeout_seconds,
+        expected_count=len(expected),
+    )
+    return False
+
+
+def learner_resource_summary(
+    *,
+    paths: RunPaths,
+    store: SQLiteStore,
+    config: Config,
+) -> dict[str, Any]:
+    per_learner: dict[str, dict[str, float | int | str | None]] = {
+        learner_id_from_index(index): {} for index in range(config.sync.num_learners)
+    }
+    for row in store.learner_resource_peaks(fragment_mode=config.fragments.enabled):
+        learner_id = str(row["learner_id"])
+        target = per_learner.setdefault(learner_id, {})
+        for key in (
+            "training_cpu_utilization_peak_percent",
+            "training_gpu_utilization_peak_percent",
+        ):
+            value = row.get(key)
+            if value is not None and math.isfinite(float(value)):
+                target[key] = float(value)
+
+    for learner_id, target in per_learner.items():
+        heartbeat = safe_read_json(paths.heartbeats / f"{learner_id}.json") or {}
+        target["status"] = heartbeat.get("status")
+        target["last_local_step"] = int(heartbeat.get("last_local_step") or 0)
+        for key in (
+            "training_cpu_utilization_peak_percent",
+            "training_gpu_utilization_peak_percent",
+        ):
+            value = heartbeat.get(key)
+            if value is None or not math.isfinite(float(value)):
+                continue
+            target[key] = max(float(value), float(target.get(key) or 0.0))
+
+    def values(key: str) -> list[float]:
+        return [
+            float(row[key])
+            for row in per_learner.values()
+            if row.get(key) is not None and math.isfinite(float(row[key]))
+        ]
+
+    cpu = values("training_cpu_utilization_peak_percent")
+    gpu = values("training_gpu_utilization_peak_percent")
+    return {
+        "cpu_utilization_scope": "whole_node",
+        "gpu_utilization_scope": "learner_cuda_visible_device",
+        "per_learner": per_learner,
+        "training_cpu_utilization_peak_percent_max": max(cpu) if cpu else None,
+        "training_cpu_utilization_peak_percent_mean": sum(cpu) / len(cpu) if cpu else None,
+        "training_gpu_utilization_peak_percent_max": max(gpu) if gpu else None,
+        "training_gpu_utilization_peak_percent_mean": sum(gpu) / len(gpu) if gpu else None,
+    }
+
+
+def write_training_summary(
+    *,
+    paths: RunPaths,
+    store: SQLiteStore,
+    config: Config,
+    logger: JsonlLogger,
+    wandb_run: Any | None,
+    stop_reason: str,
+    final_version: int,
+    total_seen_tokens: int,
+    run_started_at: float,
+    run_start_monotonic: float,
+    all_learners_stopped: bool,
+) -> dict[str, Any]:
+    completed_at = time.time()
+    complete_duration_seconds = time.monotonic() - run_start_monotonic
+    resources = learner_resource_summary(paths=paths, store=store, config=config)
+    summary = {
+        "format_version": FORMAT_VERSION,
+        "run_id": config.run.run_id,
+        "stop_reason": stop_reason,
+        "final_version": int(final_version),
+        "total_seen_tokens": int(total_seen_tokens),
+        "training_started_at": run_started_at,
+        "training_completed_at": completed_at,
+        "complete_training_time_seconds": complete_duration_seconds,
+        "all_learners_stopped": all_learners_stopped,
+        "learner_resources": resources,
+    }
+    atomic_write_json(paths.summary_json, summary)
+    store.set_run_state("summary", summary)
+    if wandb_run is not None:
+        wandb_run.summary["training/complete_time_seconds"] = complete_duration_seconds
+        wandb_run.summary["training/all_learners_stopped"] = all_learners_stopped
+        for key in (
+            "training_cpu_utilization_peak_percent_max",
+            "training_cpu_utilization_peak_percent_mean",
+            "training_gpu_utilization_peak_percent_max",
+            "training_gpu_utilization_peak_percent_mean",
+        ):
+            value = resources.get(key)
+            if value is not None:
+                wandb_run.summary[f"learner/{key}"] = value
+    logger.event(
+        "training_summary_written",
+        path=str(paths.summary_json),
+        complete_training_time_seconds=complete_duration_seconds,
+        all_learners_stopped=all_learners_stopped,
+    )
+    return summary
+
+
+def _fragment_staleness_stats(
+    selected: list[dict[str, Any]], current_fragment_version: int
+) -> dict[str, float | int]:
     values = [
         max(0, int(current_fragment_version) - int(row["base_fragment_version"]))
         for row in selected
@@ -730,6 +904,8 @@ def run_fragment_syncer(
     logger: JsonlLogger,
     device: torch.device,
     wandb_run: Any | None,
+    run_started_at: float,
+    run_start_monotonic: float,
 ) -> None:
     if config.init.resume:
         raise NotImplementedError("fragment mode resume is not implemented yet")
@@ -750,9 +926,8 @@ def run_fragment_syncer(
     stop_reason = "completed"
     try:
         while True:
-            if (
-                config.sync.stop_after_outer_steps is not None
-                and global_merge_event >= int(config.sync.stop_after_outer_steps)
+            if config.sync.stop_after_outer_steps is not None and global_merge_event >= int(
+                config.sync.stop_after_outer_steps
             ):
                 stop_reason = "stop_after_outer_steps"
                 break
@@ -826,7 +1001,9 @@ def run_fragment_syncer(
             run_selection_id = (
                 f"{config.run.run_id}_g{global_merge_event + 1:06d}_f{target_fragment:03d}"
             )
-            store.mark_fragment_updates_selected([row["update_id"] for row in selected], run_selection_id)
+            store.mark_fragment_updates_selected(
+                [row["update_id"] for row in selected], run_selection_id
+            )
             logger.event(
                 "fragment_updates_selected",
                 global_merge_event=global_merge_event,
@@ -837,24 +1014,36 @@ def run_fragment_syncer(
             )
 
             read_start = time.monotonic()
-            missing_after_select = [row["update_id"] for row in selected if not Path(row["file_path"]).exists()]
+            missing_after_select = [
+                row["update_id"] for row in selected if not Path(row["file_path"]).exists()
+            ]
             if missing_after_select:
                 missing_ids = set(missing_after_select)
                 store.drop_fragment_updates(missing_after_select, "missing_file")
                 store.reset_fragment_selected_to_pending(
                     [row["update_id"] for row in selected if row["update_id"] not in missing_ids]
                 )
-                logger.event("selected_fragment_updates_missing_files", count=len(missing_after_select))
+                logger.event(
+                    "selected_fragment_updates_missing_files", count=len(missing_after_select)
+                )
                 continue
             try:
-                vectors = [load_fragment_update(row["file_path"], device=device) for row in selected]
+                vectors = [
+                    load_fragment_update(row["file_path"], device=device) for row in selected
+                ]
             except FileNotFoundError:
-                missing = [row["update_id"] for row in selected if not Path(row["file_path"]).exists()]
+                missing = [
+                    row["update_id"] for row in selected if not Path(row["file_path"]).exists()
+                ]
                 if missing:
                     missing_ids = set(missing)
                     store.drop_fragment_updates(missing, "missing_file")
                     store.reset_fragment_selected_to_pending(
-                        [row["update_id"] for row in selected if row["update_id"] not in missing_ids]
+                        [
+                            row["update_id"]
+                            for row in selected
+                            if row["update_id"] not in missing_ids
+                        ]
                     )
                     logger.event("selected_fragment_updates_missing_files", count=len(missing))
                     continue
@@ -920,7 +1109,9 @@ def run_fragment_syncer(
                 global_merge_event=new_global_merge_event,
                 previous_materialized_weight_path=materialized_weight_path,
             )
-            cleanup_global_artifacts(paths, keep_last=config.io.keep_last_global_versions, logger=logger)
+            cleanup_global_artifacts(
+                paths, keep_last=config.io.keep_last_global_versions, logger=logger
+            )
             publish_seconds = time.monotonic() - publish_start
 
             store.mark_fragment_updates_applied(
@@ -935,10 +1126,14 @@ def run_fragment_syncer(
                 current_fragment_version=new_fragment_version,
                 max_staleness_versions=config.sync.max_staleness_versions,
             )
-            if config.sync.db_dump_every_versions and new_global_merge_event % config.sync.db_dump_every_versions == 0:
+            if (
+                config.sync.db_dump_every_versions
+                and new_global_merge_event % config.sync.db_dump_every_versions == 0
+            ):
                 dump_db(store, paths, new_global_merge_event, logger)
 
             stale_stats = _fragment_staleness_stats(selected, current_fragment_version)
+            learner_resources = selected_resource_summary(selected)
             append_csv_row(
                 paths.metrics / "syncer_metrics.csv",
                 {
@@ -961,6 +1156,7 @@ def run_fragment_syncer(
                     "fragment_staleness_max": stale_stats["max"],
                     "stale_updates_dropped": dropped,
                     "global_interval_seconds": time.time() - last_global_time,
+                    **_selected_resource_csv_fields(learner_resources),
                 },
                 SYNCER_METRIC_FIELDS,
             )
@@ -980,6 +1176,7 @@ def run_fragment_syncer(
                         "syncer/publish_seconds": publish_seconds,
                         "syncer/materialize_full_seconds": materialize_seconds,
                         "syncer/stale_updates_dropped": dropped,
+                        **learner_resources,
                     },
                     step=new_global_merge_event,
                 )
@@ -1029,6 +1226,27 @@ def run_fragment_syncer(
                 total_seen_tokens=total_seen_tokens,
             )
             logger.event("stop_published", reason=stop_reason, version=global_merge_event)
+            all_learners_stopped = wait_for_learner_shutdown(
+                paths=paths,
+                store=store,
+                config=config,
+                logger=logger,
+                stop_reason=stop_reason,
+            )
+            ingest_update_metadata(store, paths, config, logger)
+            write_training_summary(
+                paths=paths,
+                store=store,
+                config=config,
+                logger=logger,
+                wandb_run=wandb_run,
+                stop_reason=stop_reason,
+                final_version=global_merge_event,
+                total_seen_tokens=total_seen_tokens,
+                run_started_at=run_started_at,
+                run_start_monotonic=run_start_monotonic,
+                all_learners_stopped=all_learners_stopped,
+            )
             dump_db(store, paths, global_merge_event, logger)
             if wandb_run is not None:
                 wandb_run.summary["stop_reason"] = stop_reason
@@ -1044,6 +1262,8 @@ def run_fragment_syncer(
 
 
 def run_syncer(config: Config) -> None:
+    run_started_at = time.time()
+    run_start_monotonic = time.monotonic()
     paths = RunPaths(Path(config.run.shared_root or "."))
     prepare_run_dirs(paths, config.sync.num_learners)
     store = SQLiteStore(sqlite_path(config))
@@ -1075,6 +1295,8 @@ def run_syncer(config: Config) -> None:
             logger=logger,
             device=device,
             wandb_run=wandb_run,
+            run_started_at=run_started_at,
+            run_start_monotonic=run_start_monotonic,
         )
         return
     if config.init.resume:
@@ -1099,7 +1321,10 @@ def run_syncer(config: Config) -> None:
     stop_reason = "completed"
     try:
         while True:
-            if config.sync.stop_after_outer_steps is not None and version >= config.sync.stop_after_outer_steps:
+            if (
+                config.sync.stop_after_outer_steps is not None
+                and version >= config.sync.stop_after_outer_steps
+            ):
                 stop_reason = "stop_after_outer_steps"
                 break
             if (
@@ -1186,22 +1411,34 @@ def run_syncer(config: Config) -> None:
             )
 
             read_start = time.monotonic()
-            missing_after_select = [row["update_id"] for row in selected if not Path(row["file_path"]).exists()]
+            missing_after_select = [
+                row["update_id"] for row in selected if not Path(row["file_path"]).exists()
+            ]
             if missing_after_select:
                 store.drop_updates(missing_after_select, "missing_file")
                 store.reset_selected_to_pending(
-                    [row["update_id"] for row in selected if row["update_id"] not in set(missing_after_select)]
+                    [
+                        row["update_id"]
+                        for row in selected
+                        if row["update_id"] not in set(missing_after_select)
+                    ]
                 )
                 logger.event("selected_updates_missing_files", count=len(missing_after_select))
                 continue
             try:
                 vectors = [load_update_vector(row["file_path"], device=device) for row in selected]
             except FileNotFoundError:
-                missing = [row["update_id"] for row in selected if not Path(row["file_path"]).exists()]
+                missing = [
+                    row["update_id"] for row in selected if not Path(row["file_path"]).exists()
+                ]
                 if missing:
                     store.drop_updates(missing, "missing_file")
                     store.reset_selected_to_pending(
-                        [row["update_id"] for row in selected if row["update_id"] not in set(missing)]
+                        [
+                            row["update_id"]
+                            for row in selected
+                            if row["update_id"] not in set(missing)
+                        ]
                     )
                     logger.event("selected_updates_missing_files", count=len(missing))
                     continue
@@ -1220,7 +1457,9 @@ def run_syncer(config: Config) -> None:
             aggregation_seconds = time.monotonic() - aggregation_start
 
             outer_start = time.monotonic()
-            theta, outer_state = outer_optimizer_step(theta, grad, outer_state, config.outer_optimizer)
+            theta, outer_state = outer_optimizer_step(
+                theta, grad, outer_state, config.outer_optimizer
+            )
             outer_seconds = time.monotonic() - outer_start
 
             new_version = version + 1
@@ -1239,7 +1478,9 @@ def run_syncer(config: Config) -> None:
                 total_update_tokens=total_update_tokens,
                 total_seen_tokens=total_seen_tokens,
             )
-            cleanup_global_artifacts(paths, keep_last=config.io.keep_last_global_versions, logger=logger)
+            cleanup_global_artifacts(
+                paths, keep_last=config.io.keep_last_global_versions, logger=logger
+            )
             publish_seconds = time.monotonic() - publish_start
 
             store.mark_updates_applied(
@@ -1249,9 +1490,15 @@ def run_syncer(config: Config) -> None:
             )
             dropped = store.drop_superseded_updates(selected)
             if not terminal_drain:
-                dropped += store.drop_obsolete_updates(new_version, config.sync.max_staleness_versions)
-            if config.sync.db_dump_every_versions and new_version % config.sync.db_dump_every_versions == 0:
+                dropped += store.drop_obsolete_updates(
+                    new_version, config.sync.max_staleness_versions
+                )
+            if (
+                config.sync.db_dump_every_versions
+                and new_version % config.sync.db_dump_every_versions == 0
+            ):
                 dump_db(store, paths, new_version, logger)
+            learner_resources = selected_resource_summary(selected)
             append_csv_row(
                 paths.metrics / "syncer_metrics.csv",
                 {
@@ -1265,6 +1512,7 @@ def run_syncer(config: Config) -> None:
                     "publish_seconds": publish_seconds,
                     "stale_updates_dropped": dropped,
                     "global_interval_seconds": time.time() - last_global_time,
+                    **_selected_resource_csv_fields(learner_resources),
                 },
                 SYNCER_METRIC_FIELDS,
             )
@@ -1282,6 +1530,7 @@ def run_syncer(config: Config) -> None:
                         "syncer/stale_updates_dropped": dropped,
                         "syncer/global_interval_seconds": time.time() - last_global_time,
                         **selected_update_summary(selected, current_version=version),
+                        **learner_resources,
                     },
                     step=new_version,
                 )
@@ -1312,6 +1561,27 @@ def run_syncer(config: Config) -> None:
                 total_seen_tokens=total_seen_tokens,
             )
             logger.event("stop_published", reason=stop_reason, version=version)
+            all_learners_stopped = wait_for_learner_shutdown(
+                paths=paths,
+                store=store,
+                config=config,
+                logger=logger,
+                stop_reason=stop_reason,
+            )
+            ingest_update_metadata(store, paths, config, logger)
+            write_training_summary(
+                paths=paths,
+                store=store,
+                config=config,
+                logger=logger,
+                wandb_run=wandb_run,
+                stop_reason=stop_reason,
+                final_version=version,
+                total_seen_tokens=total_seen_tokens,
+                run_started_at=run_started_at,
+                run_start_monotonic=run_start_monotonic,
+                all_learners_stopped=all_learners_stopped,
+            )
             dump_db(store, paths, version, logger)
             if wandb_run is not None:
                 wandb_run.summary["stop_reason"] = stop_reason

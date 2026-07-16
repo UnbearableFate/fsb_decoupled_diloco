@@ -78,7 +78,9 @@ def wandb_config(config: Config, *, device: str, hostname: str, shared_root: str
     return payload
 
 
-def selected_update_summary(selected: list[dict[str, Any]], *, current_version: int) -> dict[str, float]:
+def selected_update_summary(
+    selected: list[dict[str, Any]], *, current_version: int
+) -> dict[str, float]:
     summary: dict[str, float] = {}
     for key in ("train_loss", "param_norm", "grad_norm", "delta_norm"):
         values = []
@@ -97,6 +99,39 @@ def selected_update_summary(selected: list[dict[str, Any]], *, current_version: 
         stale = [max(0, current_version - int(row["base_global_version"])) for row in selected]
         summary["selected/staleness_mean"] = sum(stale) / len(stale)
         summary["selected/staleness_max"] = float(max(stale))
+    return summary
+
+
+def selected_resource_summary(selected: list[dict[str, Any]]) -> dict[str, float]:
+    """Average learner resource metadata for the updates in one sync event."""
+
+    fields = {
+        "training_cpu_utilization_peak_percent": (
+            "learner/training_cpu_utilization_peak_percent_mean"
+        ),
+        "training_gpu_utilization_peak_percent": (
+            "learner/training_gpu_utilization_peak_percent_mean"
+        ),
+        "local_cycle_cpu_utilization_peak_percent": (
+            "learner/local_cycle_cpu_utilization_peak_percent_mean"
+        ),
+        "local_cycle_gpu_utilization_peak_percent": (
+            "learner/local_cycle_gpu_utilization_peak_percent_mean"
+        ),
+        "local_cycle_step_time_seconds_mean": "learner/local_cycle_step_time_seconds_mean",
+    }
+    summary: dict[str, float] = {}
+    for source, target in fields.items():
+        values: list[float] = []
+        for row in selected:
+            value = row.get(source)
+            if value is None:
+                continue
+            numeric = float(value)
+            if math.isfinite(numeric):
+                values.append(numeric)
+        if values:
+            summary[target] = sum(values) / len(values)
     return summary
 
 

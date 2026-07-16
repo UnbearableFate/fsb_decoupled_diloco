@@ -14,7 +14,7 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
 
 ### 共享文件交互
 
-- **`write_heartbeat(*, paths, config, learner_id, status, phase, last_loaded_global_version, last_local_step, last_update_id, tokens_per_sec=None, last_loaded_global_merge_event=None, last_loaded_fragment_versions=None, last_adopted_fragments=None)`** — 组装心跳 payload 原子覆盖 `heartbeats/<id>.json`;fragment 相关字段仅在传入时包含。
+- **`write_heartbeat(*, paths, config, learner_id, status, phase, last_loaded_global_version, last_local_step, last_update_id, tokens_per_sec=None, last_loaded_global_merge_event=None, last_loaded_fragment_versions=None, last_adopted_fragments=None, resource_metrics=None)`** — 组装心跳 payload 原子覆盖 `heartbeats/<id>.json`;fragment 相关字段仅在传入时包含;active update 心跳携带上一 local cycle 的资源指标,最终 stopped 心跳携带全训练资源峰值。
 - **`wait_for_json(path, *, timeout_seconds=1800, poll_seconds=1)`** — 轮询直到 `safe_read_json` 成功;启动期等待 param_index/fragment_index/latest 用;超时抛 `TimeoutError`。
 - **`read_latest_if_newer(paths, last_loaded_global_version) -> dict | None`** — 读 `latest.json`,版本不高于已加载值时返回 None(全量模式轮询原语)。
 - **`read_fragment_latest_if_newer(paths, last_loaded_global_merge_event)`** — fragment 版:要求 `latest_kind == "fragment"` 且 `global_merge_event` 更大。
@@ -30,6 +30,7 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
 - **`build_inner_optimizer_and_scheduler(model, config) -> (optimizer, scheduler|None)`** — 仅支持 AdamW;调度器:`none` 返回 None,否则 LambdaLR 实现"线性 warmup + (可选)cosine 衰减"(cosine 需要 `max_local_steps` 作为周期)。**每次采纳新全局版本后都会重建**(即重置)。
 - **`maybe_autocast(device, precision)`** — CUDA + bf16 时启用 autocast,否则禁用的空上下文。
 - **`train_one_step(model, batch_iter, optimizer, scheduler, *, device, config) -> (loss, tokens, examples, grad_norm)`** — 一个本地步:`gradient_accumulation_steps` 次前向/反向(loss 除以累积数;**非有限 loss 直接抛 `FloatingPointError`**)、可选梯度裁剪、`optimizer.step()`、`scheduler.step()`;返回本步平均 loss 与计量。
+- **`create_resource_monitor(device)`** — 创建整节点 CPU + 当前 CUDA 设备 GPU 的后台利用率采样器。每个 local cycle 开始时清零 cycle 统计,每个 `train_one_step` 以单调时钟计时;训练期峰值跨 cycle 保留。
 
 ### 全局权重采纳
 
@@ -39,8 +40,8 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
 
 ### update 提交
 
-- **`write_update(*, paths, config, learner_id, base_global_version, interval_start_step, local_step, inner_steps, tokens_this_update, tokens_since_global_load, num_examples, train_loss, grad_norm, param_norm, flat) -> (update_id, tensor_path, meta_path, metadata)`** — 全量模式提交:生成 `update_id = {learner}_{step:08d}_{uuid12}`;**先**原子写张量(dtype 按 `io.tensor_dtype`),可选 sha256,**后**原子写元数据 JSON(= 提交点)。
-- **`write_fragment_update(*, ..., fragment_id, base_fragment_version, base_global_merge_event, tokens_since_fragment_load, fragment_norm, fragment_tensor)`** — fragment 版,文件名与 update_id 带 `fXXX`,元数据带 `update_kind: "fragment"`。
+- **`write_update(*, ..., resource_metrics, flat) -> (update_id, tensor_path, meta_path, metadata)`** — 全量模式提交:生成 `update_id = {learner}_{step:08d}_{uuid12}`;**先**原子写张量(dtype 按 `io.tensor_dtype`),可选 sha256,**后**原子写元数据 JSON(= 提交点)。元数据随 update 携带全训练至今的 CPU/GPU 峰值、上一 local cycle 的 CPU/GPU 峰值和该 cycle 的平均每 step 时间。
+- **`write_fragment_update(*, ..., resource_metrics, fragment_id, base_fragment_version, base_global_merge_event, tokens_since_fragment_load, fragment_norm, fragment_tensor)`** — fragment 版,文件名与 update_id 带 `fXXX`,元数据带 `update_kind: "fragment"` 和同一组资源指标。
 
 ### 主循环
 

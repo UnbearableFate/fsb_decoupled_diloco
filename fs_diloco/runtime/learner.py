@@ -32,6 +32,7 @@ from ..modeling.param_index import (
 )
 from ..observability.logging_utils import JsonlLogger, log_uncaught_exception
 from ..observability.metrics import LEARNER_METRIC_FIELDS, UPDATE_MANIFEST_FIELDS, append_csv_row
+from ..observability.resource_monitor import ResourceMonitor, finite_resource_metrics
 from ..protocol.fragment_codec import (
     extract_fragment,
     load_fragment_weight,
@@ -72,6 +73,7 @@ def write_heartbeat(
     last_loaded_global_merge_event: int | None = None,
     last_loaded_fragment_versions: dict[int, int] | None = None,
     last_adopted_fragments: list[int] | None = None,
+    resource_metrics: dict[str, float | int] | None = None,
 ) -> None:
     payload = {
         "format_version": FORMAT_VERSION,
@@ -95,11 +97,30 @@ def write_heartbeat(
             for fragment_id, version in sorted(last_loaded_fragment_versions.items())
         }
     if last_adopted_fragments is not None:
-        payload["last_adopted_fragments"] = [int(fragment_id) for fragment_id in last_adopted_fragments]
+        payload["last_adopted_fragments"] = [
+            int(fragment_id) for fragment_id in last_adopted_fragments
+        ]
+    if resource_metrics:
+        payload.update(resource_metrics)
     atomic_write_json(paths.heartbeats / f"{learner_id}.json", payload)
 
 
-def wait_for_json(path: Path, *, timeout_seconds: float = 1800.0, poll_seconds: float = 1.0) -> dict[str, Any]:
+def create_resource_monitor(device: torch.device) -> ResourceMonitor:
+    gpu_reader = None
+    if device.type == "cuda":
+        utilization = getattr(torch.cuda, "utilization", None)
+        if utilization is not None:
+
+            def read_gpu_utilization() -> float:
+                return float(utilization(device))
+
+            gpu_reader = read_gpu_utilization
+    return ResourceMonitor(gpu_utilization_reader=gpu_reader, sample_interval_seconds=1.0)
+
+
+def wait_for_json(
+    path: Path, *, timeout_seconds: float = 1800.0, poll_seconds: float = 1.0
+) -> dict[str, Any]:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         payload = safe_read_json(path)
@@ -118,11 +139,16 @@ def read_latest_if_newer(paths: RunPaths, last_loaded_global_version: int) -> di
     return payload
 
 
-def read_fragment_latest_if_newer(paths: RunPaths, last_loaded_global_merge_event: int) -> dict[str, Any] | None:
+def read_fragment_latest_if_newer(
+    paths: RunPaths, last_loaded_global_merge_event: int
+) -> dict[str, Any] | None:
     payload = safe_read_json(paths.latest_json)
     if payload is None or payload.get("latest_kind") != "fragment":
         return None
-    if int(payload.get("global_merge_event", payload.get("version", -1))) <= last_loaded_global_merge_event:
+    if (
+        int(payload.get("global_merge_event", payload.get("version", -1)))
+        <= last_loaded_global_merge_event
+    ):
         return None
     return payload
 
@@ -145,7 +171,10 @@ def wait_for_fragment_latest_if_newer(
 
 
 def stop_requested(paths: RunPaths, local_step: int, config: Config) -> bool:
-    if config.training.max_local_steps is not None and local_step >= config.training.max_local_steps:
+    if (
+        config.training.max_local_steps is not None
+        and local_step >= config.training.max_local_steps
+    ):
         return True
     return paths.stop_json.exists()
 
@@ -218,12 +247,19 @@ def train_one_step(
     grad_norm = None
     if config.training.grad_clip is not None:
         grad_norm = float(
-            torch.nn.utils.clip_grad_norm_(model.parameters(), config.training.grad_clip).detach().cpu()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), config.training.grad_clip)
+            .detach()
+            .cpu()
         )
     optimizer.step()
     if scheduler is not None:
         scheduler.step()
-    return total_loss / config.training.gradient_accumulation_steps, total_tokens, total_examples, grad_norm
+    return (
+        total_loss / config.training.gradient_accumulation_steps,
+        total_tokens,
+        total_examples,
+        grad_norm,
+    )
 
 
 def adopt_global(
@@ -287,7 +323,11 @@ def adopt_fragment_updates(
     if changed:
         load_flat_into_model(model, flat, param_index)
         model.to(device)
-    return int(latest.get("global_merge_event", latest.get("version", 0))), last_loaded_fragment_versions, changed
+    return (
+        int(latest.get("global_merge_event", latest.get("version", 0))),
+        last_loaded_fragment_versions,
+        changed,
+    )
 
 
 def write_update(
@@ -306,6 +346,7 @@ def write_update(
     grad_norm: float | None,
     param_norm: float,
     flat: torch.Tensor,
+    resource_metrics: dict[str, float | int],
 ) -> tuple[str, Path, Path, dict[str, Any]]:
     update_uuid = uuid.uuid4().hex[:12]
     update_id = f"{learner_id}_{local_step:08d}_{update_uuid}"
@@ -339,6 +380,7 @@ def write_update(
         "created_at": created_at,
         "committed_at": time.time(),
     }
+    metadata.update(resource_metrics)
     atomic_write_json(meta_path, metadata)
     return update_id, tensor_path, meta_path, metadata
 
@@ -362,6 +404,7 @@ def write_fragment_update(
     param_norm: float,
     fragment_norm: float,
     fragment_tensor: torch.Tensor,
+    resource_metrics: dict[str, float | int],
 ) -> tuple[str, Path, Path, dict[str, Any]]:
     update_uuid = uuid.uuid4().hex[:12]
     update_id = f"{learner_id}_{local_step:08d}_f{fragment_id:03d}_{update_uuid}"
@@ -398,6 +441,7 @@ def write_fragment_update(
         "created_at": created_at,
         "committed_at": time.time(),
     }
+    metadata.update(resource_metrics)
     atomic_write_json(meta_path, metadata)
     return update_id, tensor_path, meta_path, metadata
 
@@ -468,6 +512,8 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
         learner_index=learner_index,
         num_learners=config.sync.num_learners,
     )
+    resource_monitor = create_resource_monitor(device)
+    resource_monitor.start()
     local_step = 0
     last_heartbeat = time.monotonic()
     last_update_id: str | None = None
@@ -475,6 +521,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
 
     try:
         while not fragment_stop_requested(paths, local_step, config):
+            resource_monitor.begin_cycle()
             interval_start_time = time.monotonic()
             interval_start_step = local_step
             base_global_merge_event = last_loaded_global_merge_event
@@ -486,6 +533,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
             for _ in range(config.training.inner_steps):
                 if fragment_stop_requested(paths, local_step, config):
                     break
+                step_start = time.monotonic()
                 loss, step_tokens, step_examples, grad_norm = train_one_step(
                     model,
                     batch_iter,
@@ -494,6 +542,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                     device=device,
                     config=config,
                 )
+                resource_monitor.record_step_duration(time.monotonic() - step_start)
                 local_step += 1
                 interval_tokens += step_tokens
                 interval_examples += step_examples
@@ -526,7 +575,9 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                     logger.event("heartbeat_written", local_step=local_step)
                     last_heartbeat = time.monotonic()
                 if config.learner.poll_latest_during_inner_steps:
-                    maybe_latest = read_fragment_latest_if_newer(paths, last_loaded_global_merge_event)
+                    maybe_latest = read_fragment_latest_if_newer(
+                        paths, last_loaded_global_merge_event
+                    )
                     if maybe_latest is not None:
                         (
                             last_loaded_global_merge_event,
@@ -546,7 +597,9 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                             for fragment_id in changed:
                                 tokens_since_fragment_load[fragment_id] = 0
                             if config.fragments.reset_inner_optimizer_on_fragment_adopt:
-                                optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
+                                optimizer, scheduler = build_inner_optimizer_and_scheduler(
+                                    model, config
+                                )
                                 logger.event(
                                     "inner_optimizer_reset",
                                     version=last_loaded_global_merge_event,
@@ -561,6 +614,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
 
             if not losses:
                 continue
+            cycle_resources = finite_resource_metrics(resource_monitor.cycle_snapshot())
             maybe_sleep_jitter(config.failure_sim)
             if should_skip_upload(config.failure_sim):
                 logger.event("update_skipped", local_step=local_step)
@@ -597,6 +651,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                 param_norm=param_norm,
                 fragment_norm=fragment_norm,
                 fragment_tensor=fragment_tensor,
+                resource_metrics=cycle_resources,
             )
             # Fragment updates are consumed on a per-fragment schedule, so local
             # step order is not a safe retention key for pending files.
@@ -637,6 +692,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                     ),
                     "fragment_adopt_count": fragment_adopt_count,
                     "phase": "fragment_update_written",
+                    **cycle_resources,
                 },
                 LEARNER_METRIC_FIELDS,
             )
@@ -673,11 +729,14 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                 last_local_step=local_step,
                 last_update_id=last_update_id,
                 tokens_per_sec=tokens_per_sec,
+                resource_metrics=cycle_resources,
             )
             logger.event("heartbeat_written", local_step=local_step)
 
             if config.learner.adopt_global_after_upload:
-                maybe_latest = wait_for_fragment_latest_if_newer(paths, last_loaded_global_merge_event, config)
+                maybe_latest = wait_for_fragment_latest_if_newer(
+                    paths, last_loaded_global_merge_event, config
+                )
                 logger.event(
                     "fragment_latest_polled",
                     current_global_merge_event=last_loaded_global_merge_event,
@@ -704,7 +763,9 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                         for changed_fragment_id in changed:
                             tokens_since_fragment_load[changed_fragment_id] = 0
                         if config.fragments.reset_inner_optimizer_on_fragment_adopt:
-                            optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
+                            optimizer, scheduler = build_inner_optimizer_and_scheduler(
+                                model, config
+                            )
                             logger.event(
                                 "inner_optimizer_reset",
                                 version=last_loaded_global_merge_event,
@@ -719,14 +780,21 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
             maybe_crash(config.failure_sim)
     except Exception:
         had_error = True
-        logger.exception("error", local_step=local_step, global_version=last_loaded_global_merge_event)
+        logger.exception(
+            "error", local_step=local_step, global_version=last_loaded_global_merge_event
+        )
         raise
     finally:
+        resource_monitor.stop()
+        training_resources = finite_resource_metrics(resource_monitor.training_snapshot())
         try:
             target_event = config.sync.stop_after_outer_steps
             if not had_error and target_event is not None:
                 deadline = time.monotonic() + config.liveness.no_progress_timeout_seconds
-                while last_loaded_global_merge_event < int(target_event) and not paths.stop_json.exists():
+                while (
+                    last_loaded_global_merge_event < int(target_event)
+                    and not paths.stop_json.exists()
+                ):
                     if time.monotonic() >= deadline:
                         logger.event(
                             "final_fragment_wait_timeout",
@@ -734,7 +802,9 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                             target_global_merge_event=int(target_event),
                         )
                         break
-                    maybe_latest = read_fragment_latest_if_newer(paths, last_loaded_global_merge_event)
+                    maybe_latest = read_fragment_latest_if_newer(
+                        paths, last_loaded_global_merge_event
+                    )
                     if maybe_latest is not None:
                         (
                             last_loaded_global_merge_event,
@@ -799,6 +869,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
             last_adopted_fragments=last_adopted_fragments,
             last_local_step=local_step,
             last_update_id=last_update_id,
+            resource_metrics=training_resources,
         )
         logger.event(
             "process_exit",
@@ -806,6 +877,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
             global_version=last_loaded_global_merge_event,
             fragment_versions=last_loaded_fragment_versions,
             fragment_adopt_count=fragment_adopt_count,
+            **training_resources,
         )
 
 
@@ -861,6 +933,8 @@ def run_learner(config: Config, learner_id: str) -> None:
         learner_index=learner_index,
         num_learners=config.sync.num_learners,
     )
+    resource_monitor = create_resource_monitor(device)
+    resource_monitor.start()
     local_step = 0
     tokens_since_global_load = 0
     last_heartbeat = time.monotonic()
@@ -868,6 +942,7 @@ def run_learner(config: Config, learner_id: str) -> None:
 
     try:
         while not stop_requested(paths, local_step, config):
+            resource_monitor.begin_cycle()
             interval_start_time = time.monotonic()
             interval_start_step = local_step
             base_global_version = last_loaded_global_version
@@ -879,6 +954,7 @@ def run_learner(config: Config, learner_id: str) -> None:
             for _ in range(config.training.inner_steps):
                 if stop_requested(paths, local_step, config):
                     break
+                step_start = time.monotonic()
                 loss, step_tokens, step_examples, grad_norm = train_one_step(
                     model,
                     batch_iter,
@@ -887,6 +963,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                     device=device,
                     config=config,
                 )
+                resource_monitor.record_step_duration(time.monotonic() - step_start)
                 local_step += 1
                 interval_tokens += step_tokens
                 interval_examples += step_examples
@@ -930,6 +1007,7 @@ def run_learner(config: Config, learner_id: str) -> None:
 
             if not losses:
                 continue
+            cycle_resources = finite_resource_metrics(resource_monitor.cycle_snapshot())
             maybe_sleep_jitter(config.failure_sim)
             if should_skip_upload(config.failure_sim):
                 logger.event("update_skipped", local_step=local_step)
@@ -955,6 +1033,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                 grad_norm=grad_norm,
                 param_norm=param_norm,
                 flat=flat,
+                resource_metrics=cycle_resources,
             )
             cleanup_learner_update_artifacts(
                 paths.updates_pending / learner_id,
@@ -986,6 +1065,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                     "update_write_seconds": write_seconds,
                     "param_norm": param_norm,
                     "phase": "update_written",
+                    **cycle_resources,
                 },
                 LEARNER_METRIC_FIELDS,
             )
@@ -1015,6 +1095,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                 last_local_step=local_step,
                 last_update_id=last_update_id,
                 tokens_per_sec=tokens_per_sec,
+                resource_metrics=cycle_resources,
             )
             logger.event("heartbeat_written", local_step=local_step)
 
@@ -1041,6 +1122,8 @@ def run_learner(config: Config, learner_id: str) -> None:
         logger.exception("error", local_step=local_step, global_version=last_loaded_global_version)
         raise
     finally:
+        resource_monitor.stop()
+        training_resources = finite_resource_metrics(resource_monitor.training_snapshot())
         if paths.stop_json.exists():
             stop_payload = safe_read_json(paths.stop_json) or {}
             logger.event("stop_seen", reason=stop_payload.get("reason"))
@@ -1053,8 +1136,14 @@ def run_learner(config: Config, learner_id: str) -> None:
             last_loaded_global_version=last_loaded_global_version,
             last_local_step=local_step,
             last_update_id=last_update_id,
+            resource_metrics=training_resources,
         )
-        logger.event("process_exit", local_step=local_step, global_version=last_loaded_global_version)
+        logger.event(
+            "process_exit",
+            local_step=local_step,
+            global_version=last_loaded_global_version,
+            **training_resources,
+        )
 
 
 def main(argv: list[str] | None = None) -> None:

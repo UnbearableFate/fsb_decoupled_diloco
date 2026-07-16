@@ -1,5 +1,6 @@
 from fs_diloco.core.config import resolve_config
 from fs_diloco.observability.wandb_logging import (
+    selected_resource_summary,
     selected_update_summary,
     syncer_wandb_project_name,
     syncer_wandb_run_name,
@@ -34,3 +35,29 @@ def test_selected_update_summary_skips_missing_and_nonfinite_values():
     assert summary["selected/param_norm_mean"] == 4.0
     assert summary["selected/staleness_mean"] == 1.5
     assert summary["selected/staleness_max"] == 2.0
+
+
+def test_selected_resource_summary_averages_finite_metadata():
+    summary = selected_resource_summary(
+        [
+            {
+                "training_cpu_utilization_peak_percent": 30.0,
+                "training_gpu_utilization_peak_percent": 90.0,
+                "local_cycle_cpu_utilization_peak_percent": 20.0,
+                "local_cycle_gpu_utilization_peak_percent": 80.0,
+                "local_cycle_step_time_seconds_mean": 1.5,
+            },
+            {
+                "training_cpu_utilization_peak_percent": 50.0,
+                "training_gpu_utilization_peak_percent": 100.0,
+                "local_cycle_cpu_utilization_peak_percent": float("nan"),
+                "local_cycle_gpu_utilization_peak_percent": 60.0,
+                "local_cycle_step_time_seconds_mean": 2.5,
+            },
+        ]
+    )
+    assert summary["learner/training_cpu_utilization_peak_percent_mean"] == 40.0
+    assert summary["learner/training_gpu_utilization_peak_percent_mean"] == 95.0
+    assert summary["learner/local_cycle_cpu_utilization_peak_percent_mean"] == 20.0
+    assert summary["learner/local_cycle_gpu_utilization_peak_percent_mean"] == 70.0
+    assert summary["learner/local_cycle_step_time_seconds_mean"] == 2.0

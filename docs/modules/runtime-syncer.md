@@ -31,6 +31,7 @@ syncer 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.md
 - **`validate_update_metadata(payload, *, config, paths) -> bool`** — 元数据准入:format_version、run_id、learner_id 合法;fragment 模式要求 `update_kind == "fragment"`、fragment_id 在界内、fragment 专属字段齐全(全量模式反之拒绝 fragment 更新);张量文件必须存在。
 - **`ingest_update_metadata(store, paths, config, logger) -> int`** — 扫描 `updates/pending/learner_*/update_*.meta.json`,合法者入库(`INSERT OR IGNORE`,唯一约束幂等),返回新插入数。
 - **`sync_liveness_and_metadata(store, paths, config, logger)`** — 每轮例行:摄取心跳 → 重分类 liveness → 摄取元数据。
+- update 元数据中的 learner 资源字段随 `updates`/`fragment_updates` 行持久化;已有 SQLite 文件在连接时用兼容迁移补齐新列。
 
 ## 选择
 
@@ -44,6 +45,9 @@ syncer 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.md
 - **`dump_db(store, paths, version, logger)`** — backup 到 `db_dumps/metadata_{ts}_v{version:06d}.db`。
 - **`init_wandb_run(*, config, paths, logger, device, hostname) -> run | None`** — W&B 初始化(项目/名称/标签/config 由 `observability/wandb_logging.py` 生成;`syncer/version` 定义为 step 轴);禁用、import 失败、init 失败都返回 None 并记日志,不影响训练。
 - **`_fragment_staleness_stats(selected, current_fragment_version)`**(私有)— 选中集合的 staleness min/mean/max。
+- **`wait_for_learner_shutdown(...)`** — 发布 stop 后在有界窗口内等待所有 learner 写 stopped 心跳并继续摄取元数据,使完整训练耗时覆盖 learner 收尾。
+- **`learner_resource_summary(...)`** — 合并 SQLite 历史 update 与最终 stopped 心跳,生成逐 learner 训练期 CPU/GPU 峰值及 max/mean 聚合。
+- **`write_training_summary(...)`** — 原子写 `control/summary.json`,包含 syncer 启动至 learner 全部停止的完整训练时间、最终版本/token 数/停止原因及 learner 资源峰值;同样更新 W&B run summary。
 
 ## 主循环
 
@@ -55,7 +59,7 @@ syncer 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.md
 - `run_selection_id = f"{run_id}_v{v+1:06d}"` 写入 selected_by_run,便于审计"哪次合并选了它";
 - terminal drain 轮次跳过 `drop_obsolete_updates`(排空时旧更新是主角);
 - 每次成功合并后刷新 `last_progress_time`;quorum 等待期间超过 `no_progress_timeout_seconds` 即停机;
-- finally 序列:`publish_stop` → 最终 `dump_db` → W&B summary/finish → `store.close()`(嵌套 try/finally 保证逐层执行)。
+- finally 序列:`publish_stop` → 等待 learner stopped 心跳 → 最终 `dump_db` → 写 `control/summary.json` 与 W&B summary → `wandb.finish()` → `store.close()`(嵌套 try/finally 保证逐层执行)。
 
 ### fragment 模式(`run_fragment_syncer`)
 

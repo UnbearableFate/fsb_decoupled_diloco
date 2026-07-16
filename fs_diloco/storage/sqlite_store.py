@@ -25,6 +25,24 @@ def _schema_text() -> str:
     return resources.files("fs_diloco.storage").joinpath("schema.sql").read_text(encoding="utf-8")
 
 
+RESOURCE_COLUMNS = {
+    "training_cpu_utilization_peak_percent": "REAL",
+    "training_gpu_utilization_peak_percent": "REAL",
+    "local_cycle_cpu_utilization_peak_percent": "REAL",
+    "local_cycle_gpu_utilization_peak_percent": "REAL",
+    "local_cycle_step_time_seconds_mean": "REAL",
+    "local_cycle_step_count": "INTEGER",
+    "local_cycle_resource_sample_count": "INTEGER",
+}
+
+
+def _ensure_resource_columns(conn: sqlite3.Connection, table: str) -> None:
+    existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    for name, sql_type in RESOURCE_COLUMNS.items():
+        if name not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}")
+
+
 def connect(path: str | Path) -> sqlite3.Connection:
     path = Path(path)
     ensure_dir(path.parent)
@@ -33,6 +51,8 @@ def connect(path: str | Path) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.executescript(_schema_text())
+    _ensure_resource_columns(conn, "updates")
+    _ensure_resource_columns(conn, "fragment_updates")
     conn.commit()
     return conn
 
@@ -171,7 +191,9 @@ class SQLiteStore:
         )
         self.conn.commit()
 
-    def update_learner_status(self, learner_id: str, status: str, reason: str | None = None) -> None:
+    def update_learner_status(
+        self, learner_id: str, status: str, reason: str | None = None
+    ) -> None:
         self.conn.execute(
             "UPDATE learners SET status = ?, status_reason = ? WHERE learner_id = ?",
             (status, reason, learner_id),
@@ -182,7 +204,26 @@ class SQLiteStore:
         rows = self.conn.execute("SELECT * FROM learners ORDER BY learner_id").fetchall()
         return [dict(row) for row in rows]
 
-    def insert_update_metadata(self, metadata: dict[str, Any], *, ingested_at: float | None = None) -> bool:
+    def learner_resource_peaks(self, *, fragment_mode: bool) -> list[dict[str, Any]]:
+        table = "fragment_updates" if fragment_mode else "updates"
+        rows = self.conn.execute(
+            f"""
+            SELECT
+                learner_id,
+                MAX(training_cpu_utilization_peak_percent)
+                    AS training_cpu_utilization_peak_percent,
+                MAX(training_gpu_utilization_peak_percent)
+                    AS training_gpu_utilization_peak_percent
+            FROM {table}
+            GROUP BY learner_id
+            ORDER BY learner_id
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def insert_update_metadata(
+        self, metadata: dict[str, Any], *, ingested_at: float | None = None
+    ) -> bool:
         ingested_at = time.time() if ingested_at is None else ingested_at
         params = {
             "update_id": metadata["update_id"],
@@ -199,6 +240,7 @@ class SQLiteStore:
             "grad_norm": metadata.get("grad_norm"),
             "param_norm": metadata.get("param_norm"),
             "delta_norm": metadata.get("delta_norm"),
+            **{name: metadata.get(name) for name in RESOURCE_COLUMNS},
             "file_path": metadata["file_path"],
             "file_size_bytes": metadata.get("file_size_bytes"),
             "sha256": metadata.get("sha256"),
@@ -213,12 +255,20 @@ class SQLiteStore:
                 update_id, learner_id, hostname, base_global_version, local_step_start,
                 local_step_end, inner_steps, tokens_this_update, tokens_since_global_load,
                 num_examples_this_update, train_loss, grad_norm, param_norm, delta_norm,
+                training_cpu_utilization_peak_percent, training_gpu_utilization_peak_percent,
+                local_cycle_cpu_utilization_peak_percent, local_cycle_gpu_utilization_peak_percent,
+                local_cycle_step_time_seconds_mean, local_cycle_step_count,
+                local_cycle_resource_sample_count,
                 file_path, file_size_bytes, sha256, created_at, committed_at, ingested_at, status
             )
             VALUES (
                 :update_id, :learner_id, :hostname, :base_global_version, :local_step_start,
                 :local_step_end, :inner_steps, :tokens_this_update, :tokens_since_global_load,
                 :num_examples_this_update, :train_loss, :grad_norm, :param_norm, :delta_norm,
+                :training_cpu_utilization_peak_percent, :training_gpu_utilization_peak_percent,
+                :local_cycle_cpu_utilization_peak_percent, :local_cycle_gpu_utilization_peak_percent,
+                :local_cycle_step_time_seconds_mean, :local_cycle_step_count,
+                :local_cycle_resource_sample_count,
                 :file_path, :file_size_bytes, :sha256, :created_at, :committed_at, :ingested_at,
                 :status
             )
@@ -235,7 +285,9 @@ class SQLiteStore:
         ).fetchall()
         return [dict(row) for row in rows]
 
-    def eligible_updates(self, current_version: int, max_staleness_versions: int) -> list[dict[str, Any]]:
+    def eligible_updates(
+        self, current_version: int, max_staleness_versions: int
+    ) -> list[dict[str, Any]]:
         rows = self.conn.execute(
             """
             SELECT * FROM updates
@@ -257,7 +309,13 @@ class SQLiteStore:
             WHERE update_id = ? AND status = ?
             """,
             [
-                (UPDATE_STATUS_SELECTED, time.time(), selected_by_run, update_id, UPDATE_STATUS_PENDING)
+                (
+                    UPDATE_STATUS_SELECTED,
+                    time.time(),
+                    selected_by_run,
+                    update_id,
+                    UPDATE_STATUS_PENDING,
+                )
                 for update_id in update_ids
             ],
         )
@@ -297,7 +355,10 @@ class SQLiteStore:
             return
         self.conn.executemany(
             "UPDATE updates SET status = ?, selected_at = NULL WHERE update_id = ? AND status = ?",
-            [(UPDATE_STATUS_PENDING, update_id, UPDATE_STATUS_SELECTED) for update_id in update_ids],
+            [
+                (UPDATE_STATUS_PENDING, update_id, UPDATE_STATUS_SELECTED)
+                for update_id in update_ids
+            ],
         )
         self.conn.commit()
 
@@ -341,7 +402,9 @@ class SQLiteStore:
         self.conn.commit()
         return cur.rowcount
 
-    def drop_superseded_updates(self, selected_updates: list[dict[str, Any]], reason: str = "superseded") -> int:
+    def drop_superseded_updates(
+        self, selected_updates: list[dict[str, Any]], reason: str = "superseded"
+    ) -> int:
         """Drop older pending updates from learners already represented in an outer step."""
         if not selected_updates:
             return 0
@@ -397,11 +460,15 @@ class SQLiteStore:
         self.conn = connect(self.path)
 
     def get_update(self, update_id: str) -> dict[str, Any] | None:
-        row = self.conn.execute("SELECT * FROM updates WHERE update_id = ?", (update_id,)).fetchone()
+        row = self.conn.execute(
+            "SELECT * FROM updates WHERE update_id = ?", (update_id,)
+        ).fetchone()
         return row_to_dict(row)
 
     def get_global_version(self, version: int) -> dict[str, Any] | None:
-        row = self.conn.execute("SELECT * FROM global_versions WHERE version = ?", (version,)).fetchone()
+        row = self.conn.execute(
+            "SELECT * FROM global_versions WHERE version = ?", (version,)
+        ).fetchone()
         return row_to_dict(row)
 
     def upsert_fragment_definition(self, fragment: dict[str, Any], *, strategy: str) -> None:
@@ -477,7 +544,9 @@ class SQLiteStore:
         )
         self.conn.commit()
 
-    def insert_fragment_update_metadata(self, metadata: dict[str, Any], *, ingested_at: float | None = None) -> bool:
+    def insert_fragment_update_metadata(
+        self, metadata: dict[str, Any], *, ingested_at: float | None = None
+    ) -> bool:
         ingested_at = time.time() if ingested_at is None else ingested_at
         params = {
             "update_id": metadata["update_id"],
@@ -496,6 +565,7 @@ class SQLiteStore:
             "grad_norm": metadata.get("grad_norm"),
             "param_norm": metadata.get("param_norm"),
             "fragment_norm": metadata.get("fragment_norm"),
+            **{name: metadata.get(name) for name in RESOURCE_COLUMNS},
             "file_path": metadata["file_path"],
             "file_size_bytes": metadata.get("file_size_bytes"),
             "sha256": metadata.get("sha256"),
@@ -510,14 +580,22 @@ class SQLiteStore:
                 update_id, learner_id, hostname, fragment_id, base_fragment_version,
                 base_global_merge_event, local_step_start, local_step_end, inner_steps,
                 tokens_this_update, tokens_since_fragment_load, num_examples_this_update,
-                train_loss, grad_norm, param_norm, fragment_norm, file_path,
+                train_loss, grad_norm, param_norm, fragment_norm,
+                training_cpu_utilization_peak_percent, training_gpu_utilization_peak_percent,
+                local_cycle_cpu_utilization_peak_percent, local_cycle_gpu_utilization_peak_percent,
+                local_cycle_step_time_seconds_mean, local_cycle_step_count,
+                local_cycle_resource_sample_count, file_path,
                 file_size_bytes, sha256, created_at, committed_at, ingested_at, status
             )
             VALUES (
                 :update_id, :learner_id, :hostname, :fragment_id, :base_fragment_version,
                 :base_global_merge_event, :local_step_start, :local_step_end, :inner_steps,
                 :tokens_this_update, :tokens_since_fragment_load, :num_examples_this_update,
-                :train_loss, :grad_norm, :param_norm, :fragment_norm, :file_path,
+                :train_loss, :grad_norm, :param_norm, :fragment_norm,
+                :training_cpu_utilization_peak_percent, :training_gpu_utilization_peak_percent,
+                :local_cycle_cpu_utilization_peak_percent, :local_cycle_gpu_utilization_peak_percent,
+                :local_cycle_step_time_seconds_mean, :local_cycle_step_count,
+                :local_cycle_resource_sample_count, :file_path,
                 :file_size_bytes, :sha256, :created_at, :committed_at, :ingested_at,
                 :status
             )
@@ -578,7 +656,13 @@ class SQLiteStore:
             WHERE update_id = ? AND status = ?
             """,
             [
-                (UPDATE_STATUS_SELECTED, time.time(), selected_by_run, update_id, UPDATE_STATUS_PENDING)
+                (
+                    UPDATE_STATUS_SELECTED,
+                    time.time(),
+                    selected_by_run,
+                    update_id,
+                    UPDATE_STATUS_PENDING,
+                )
                 for update_id in update_ids
             ],
         )
@@ -622,7 +706,10 @@ class SQLiteStore:
             return
         self.conn.executemany(
             "UPDATE fragment_updates SET status = ?, selected_at = NULL WHERE update_id = ? AND status = ?",
-            [(UPDATE_STATUS_PENDING, update_id, UPDATE_STATUS_SELECTED) for update_id in update_ids],
+            [
+                (UPDATE_STATUS_PENDING, update_id, UPDATE_STATUS_SELECTED)
+                for update_id in update_ids
+            ],
         )
         self.conn.commit()
 
@@ -714,7 +801,9 @@ class SQLiteStore:
         return total
 
     def get_fragment_update(self, update_id: str) -> dict[str, Any] | None:
-        row = self.conn.execute("SELECT * FROM fragment_updates WHERE update_id = ?", (update_id,)).fetchone()
+        row = self.conn.execute(
+            "SELECT * FROM fragment_updates WHERE update_id = ?", (update_id,)
+        ).fetchone()
         return row_to_dict(row)
 
     def list_fragment_versions(self) -> list[dict[str, Any]]:

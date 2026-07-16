@@ -9,6 +9,7 @@
 ├── control/
 │   ├── latest.json                  # 唯一全局指针(learner 轮询)
 │   ├── stop.json                    # 停机标记(syncer 发布)
+│   ├── summary.json                 # 完整训练时间与 learner 全训练资源峰值
 │   ├── param_index.json             # 参数 ↔ 扁平向量映射契约
 │   └── run_config.resolved.yaml     # 解析后的完整配置快照
 ├── weights/
@@ -97,6 +98,10 @@ learner `write_update()` 产出(fragment 版 `write_fragment_update()` 另有 `u
 | `local_step_start` / `local_step_end` / `inner_steps` | 区间步数信息 |
 | `tokens_this_update` / `tokens_since_global_load` / `num_examples_this_update` | token/样本计量(合并权重依据) |
 | `train_loss` / `grad_norm` / `param_norm` / `delta_norm` | 训练侧统计(`delta_norm` 当前恒为 null) |
+| `training_{cpu,gpu}_utilization_peak_percent` | 从 learner 启动至本 update 为止的 CPU/GPU 利用率最高值 |
+| `local_cycle_{cpu,gpu}_utilization_peak_percent` | 本 update 对应的上一 local 训练周期 CPU/GPU 利用率最高值 |
+| `local_cycle_step_time_seconds_mean` | 上一 local 训练周期内逐训练 step 耗时的算术平均值 |
+| `local_cycle_step_count` / `local_cycle_resource_sample_count` | 上一周期的计时 step 数与资源采样数 |
 | `file_path` / `file_size_bytes` / `sha256` | 张量文件指针(sha256 仅在 `io.compute_sha256` 开启时计算) |
 | `created_at` / `committed_at` | 张量写完时间 / 元数据提交时间 |
 
@@ -111,7 +116,7 @@ learner `write_update()` 产出(fragment 版 `write_fragment_update()` 另有 `u
 
 ### 2.4 心跳 `heartbeats/learner_XXX.json`
 
-`write_heartbeat()` 原子覆盖:`format_version, run_id, learner_id, hostname, pid, timestamp, status(active/stopped), phase(inner_steps/update_written/...), last_loaded_global_version, last_local_step, last_update_id, tokens_per_sec`;fragment 模式追加 `last_loaded_global_merge_event, last_loaded_fragment_versions, last_adopted_fragments`。
+`write_heartbeat()` 原子覆盖:`format_version, run_id, learner_id, hostname, pid, timestamp, status(active/stopped), phase(inner_steps/update_written/...), last_loaded_global_version, last_local_step, last_update_id, tokens_per_sec`;fragment 模式追加 `last_loaded_global_merge_event, last_loaded_fragment_versions, last_adopted_fragments`;update_written 阶段追加 local cycle 资源指标,stopped 阶段追加全训练 CPU/GPU 峰值、采样数与读取错误数。
 
 ### 2.5 `control/stop.json`
 
@@ -119,11 +124,15 @@ learner `write_update()` 产出(fragment 版 `write_fragment_update()` 另有 `u
 
 ### 2.6 CSV 指标(字段清单见 `observability/metrics.py`)
 
-- `syncer_metrics.csv`:每次合并一行——版本/事件号、selected_count、token 数、read/aggregation/outer_step/publish/materialize 耗时、staleness 统计、丢弃数、两次合并间隔。
-- `learner_metrics.csv`:每次上传一行——loss、tokens、tokens/s、写盘耗时、param/fragment norm、已加载片版本等。
+- `syncer_metrics.csv`:每次合并一行——版本/事件号、selected_count、token 数、read/aggregation/outer_step/publish/materialize 耗时、staleness 统计、丢弃数、两次合并间隔,以及本次 selected learners 的资源指标均值。
+- `learner_metrics.csv`:每次上传一行——loss、tokens、tokens/s、写盘耗时、param/fragment norm、已加载片版本,全训练/当前 local cycle 资源峰值和 cycle 平均 step 时间等。
 - `update_manifest.csv`:每份 update 一行的清单(id、base 版本、步区间、文件指针)。
 
-### 2.7 JSONL 日志 `logs/*.jsonl`
+### 2.7 `control/summary.json`
+
+syncer 停止后等待 learner 收尾,然后写入 `run_id, final_version, stop_reason, total_seen_tokens, training_started_at, training_completed_at, complete_training_time_seconds, all_learners_stopped`。`learner_resources` 包含逐 learner 的全训练 CPU/GPU 峰值、跨 learner 的 max/mean,并显式注明 CPU 是整节点利用率、GPU 是 learner CUDA 可见设备利用率。相同聚合也写入 W&B summary。
+
+### 2.8 JSONL 日志 `logs/*.jsonl`
 
 `JsonlLogger` 逐行追加 `{timestamp, actor, event_type, hostname, ...payload}` 并镜像到 stdout,fsync 落盘。关键事件类型:learner 侧 `process_start / loaded_global / update_written / global_adopted / fragments_adopted / heartbeat_written / error / process_exit`;syncer 侧 `run_initialized / metadata_ingested / quorum_wait / updates_selected / outer_step_applied / global_published / updates_dropped / db_dumped / stop_published / no_progress_timeout / error`。
 
@@ -160,10 +169,10 @@ learner `write_update()` 产出(fragment 版 `write_fragment_update()` 另有 `u
 | `run_state` | 键值杂项(如解析后配置) | `key` 主键,值为 JSON 文本 |
 | `global_versions` | 每个全局版本一行 | `version` 主键;weight/optim 路径、num_updates、token 计数、status、notes |
 | `learners` | 每 learner 最新快照 | `learner_id` 主键;last_seen、last_local_step、tokens_per_sec、status(+reason) |
-| `updates` | 全量模式 update 生命周期 | `update_id` 主键;`UNIQUE(learner_id, local_step_end, base_global_version)` 幂等去重;status 索引 |
+| `updates` | 全量模式 update 生命周期 | `update_id` 主键;`UNIQUE(learner_id, local_step_end, base_global_version)` 幂等去重;status 索引;learner 资源指标列 |
 | `fragments` | fragment 定义 | `fragment_id` 主键;strategy、numel、slices_json |
 | `fragment_versions` | 每片每版本一行 | `(fragment_id, version)` 主键;global_merge_event 索引 |
-| `fragment_updates` | fragment 模式 update 生命周期 | `UNIQUE(learner_id, fragment_id, local_step_end, base_fragment_version)`;`(fragment_id, status, base_fragment_version)` 索引 |
+| `fragment_updates` | fragment 模式 update 生命周期 | `UNIQUE(learner_id, fragment_id, local_step_end, base_fragment_version)`;`(fragment_id, status, base_fragment_version)` 索引;learner 资源指标列 |
 | `db_dumps` | dump 台账 | 每次 backup 的路径/大小/对应版本 |
 
 dump 机制:`SQLiteStore.backup_to()` 用 `sqlite3` 的在线 backup API 产生一致快照写到 `db_dumps/`(按 `sync.db_dump_every_versions` 周期 + 停机时最终一次);resume 时 `restore_from_dump()` 整文件拷回本地再重开连接。
