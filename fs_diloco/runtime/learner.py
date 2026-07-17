@@ -375,14 +375,6 @@ def stop_requested(paths: RunPaths, local_step: int, config: Config) -> bool:
     return False
 
 
-def fragment_stop_requested(paths: RunPaths, local_step: int, config: Config) -> bool:
-    if config.training.completion_mode == "global_only":
-        return paths.stop_json.exists()
-    if config.training.max_local_steps is not None:
-        return local_step >= config.training.max_local_steps
-    return paths.stop_json.exists()
-
-
 def build_inner_optimizer_and_scheduler(
     model: torch.nn.Module,
     config: Config,
@@ -1112,7 +1104,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
     had_error = False
 
     try:
-        while not fragment_stop_requested(paths, local_step, config):
+        while not stop_requested(paths, local_step, config):
             resource_monitor.begin_cycle()
             interval_start_time = time.monotonic()
             interval_start_step = local_step
@@ -1123,7 +1115,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
             grad_norm: float | None = None
 
             for _ in range(config.training.inner_steps):
-                if fragment_stop_requested(paths, local_step, config):
+                if stop_requested(paths, local_step, config):
                     break
                 step_start = time.monotonic()
                 loss, step_tokens, step_examples, grad_norm = train_one_step(

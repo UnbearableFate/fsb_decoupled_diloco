@@ -69,7 +69,7 @@ core  ←  storage  ←  protocol / modeling / observability  ←  runtime  ← 
 |---|---|
 | CLI 与配置 | `parse_args`, `main` |
 | 共享文件读写 | `write_heartbeat`, `wait_for_json`, `read_latest_if_newer`, `read_fragment_latest_if_newer`, `wait_for_fragment_latest_if_newer` |
-| 停止判定 | `stop_requested`, `fragment_stop_requested` |
+| 停止判定 | `stop_requested`（full/fragment 共用） |
 | 训练组件 | `build_inner_optimizer_and_scheduler`, `maybe_autocast`, `train_one_step` |
 | 全局权重采纳 | `adopt_global`(全量)/ `load_fragment_latest_into_model`, `adopt_fragment_updates`(分片) |
 | update 提交 | `write_update` / `write_fragment_update` |

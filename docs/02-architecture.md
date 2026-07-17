@@ -142,7 +142,7 @@ syncer 停止条件(任一):
 
 无论哪种原因,syncer 退出前都会:发布 `control/stop.json`(含 reason/version)→ 等待 learner 收尾并摄取最后 proposal → 将未消费 proposal 终态化 → 写 summary → archive/GC → 关闭 W&B(fragment 模式还会先做一次最终 materialize)。
 
-learner 停止条件由 `training.completion_mode` 决定。默认 `local_or_global` 保持原语义:`max_local_steps` 达标或看到 `stop.json`(fragment 设置本地上限时仍由本地上限收尾);`global_only` 则把 `max_local_steps` 视为名义训练/调度 horizon,达到后继续训练与上传,只在 syncer 达到全局目标并发布 `stop.json` 后退出。退出前写 `status=stopped` 的最终心跳。
+learner 停止条件由 `training.completion_mode` 决定，full 与 fragment 共用同一判定。默认 `local_or_global` 在 `max_local_steps` 达标或看到 `stop.json` 时停止；`global_only` 则把 `max_local_steps` 视为名义训练/调度 horizon,达到后继续训练与上传,只在 syncer 达到全局目标并发布 `stop.json` 后退出。退出前写 `status=stopped` 的最终心跳。
 
 有限步训练的收尾由 **terminal drain** 衔接:只有全部预期 learner 的最终心跳都明确为 `stopped` 时输入才闭合。syncer 再等待一个 grace/reingest 周期,随后用当前严格的 future/staleness 准入规则、`oldest_pending` 策略和放宽的 quorum 合并剩余 proposal;达到目标或耗尽合法输入后以 `input_exhausted` 停止。`dead` 但未自报 stopped 的 learner 不会触发末端排空。
 

@@ -23,7 +23,7 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
 ### 停止判定
 
 - **`stop_requested(paths, local_step, config)`** — 默认 `local_or_global` 在 `max_local_steps` 达标或 `stop.json` 存在时停止;`global_only` 忽略本地 horizon,只认 `stop.json`。
-- **`fragment_stop_requested(paths, local_step, config)`** — 默认模式设置 `max_local_steps` 时保持只看步数的 fragment 收尾语义;`global_only` 时只认 `stop.json`。
+  full 与 fragment learner 共用该谓词，`stop.json` 始终优先于本地 horizon。
 
 ### 训练组件
 
