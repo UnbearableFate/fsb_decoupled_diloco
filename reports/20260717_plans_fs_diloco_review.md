@@ -61,6 +61,8 @@ def fragment_stop_requested(paths, local_step, config):
 
 **建议**：与 full 版合并为一个函数：`stop_json.exists() or (completion_mode != "global_only" and local_step >= max_local_steps)`。补一个"fragment learner 在 stop 发布后一个 cycle 内退出"的单元测试。
 
+**修复状态（2026-07-17）**：已由 commit `dab45e8` 合并为 full/fragment 共用的 `stop_requested`。STP-03 单元回归修复前 RED、修复后 GREEN；1 节点 tiny fragment 管线中两个 learner 均在 `local_step=10 < max_local_steps=12` 看到 `stop_after_outer_steps` 后退出。
+
 ### B2（高）scheduler 语义缺陷（训练质量影响见 Q1）
 
 `fs_diloco/runtime/learner.py:362-368`：
@@ -159,6 +161,8 @@ learner.py:1556-1589（inner poll 内）与 1657-1716（cycle 末等待）是同
 ### S4（低）`stop_requested`/`fragment_stop_requested` 应合并
 
 见 B1。两个函数语义本应只差 completion_mode 解释，分开维护直接导致了不一致。
+
+**完成状态（2026-07-17）**：commit `dab45e8` 已删除 `fragment_stop_requested` 并统一两个 learner 主循环的停止判定。
 
 ### S5（低）配置分组与校验位置
 
