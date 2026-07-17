@@ -14,7 +14,7 @@
 1. 存在 `GlobalAdoptionStrategy` 抽象与 replace / rebase / predict 三个实现类，策略由配置经唯一工厂构造（STR-01）。
 2. 静态谓词：§1 列出的 7 个状态变量与 2 个布尔开关在 `run_learner` 函数体内出现次数为 **0**（STR-08，grep 可查）；策略状态只存在于策略对象私有字段。
 3. `global_adopted`、`inner_training_state_preserved`、`inner_optimizer_reset` 三个事件由**统一的 adoption 收尾路径**发出，不再散布于各分支（STR-02–04 断言事件顺序）。
-4. 三种策略各自的 tiny run 归一化事件轨迹与基线 commit 等价（STR-05/06/07）。
+4. replace/predict 的可重复 tiny 投影与基线等价；rebase 的 publish 后即时 poll 存在合法竞态，采用受控 latest-read 序列的集成轨迹作为硬门禁，并以真实 tiny run 的终态不变量补强（STR-05/06/07）。
 5. 全量 pytest 通过；tiny run 上 `scripts/miyabi/check_plan01_invariants.py` 维持 PASS。
 
 ## 3. 权威关系与故障模型
@@ -58,13 +58,14 @@ class GlobalAdoptionStrategy:
     def on_local_tokens(self, tokens: int) -> None: ...
     # reference 存在时累计 carried tokens；runner 不读取策略私有字段。
 
-    def on_stop(self, ctx) -> None: ...
-    # 现 abandon-on-stop（1649-1656）。
+    def on_stop(self, ctx) -> bool: ...
+    # 现 abandon-on-stop（1649-1656）；返回本 cycle 是否必须跳过 publication。
 ```
 
 - `AdoptionOutcome` 携带：新 global version、新 latest metadata、重置后的 `tokens_since_global_load`、`preserve_inner_state: bool`、`reason`。`StrategyAction` 可携带 adoption outcome，或携带“未 adopt 但需 reset optimizer”的原因（prediction started）；二者不得同时出现。**统一 adoption 收尾**由 runner 完成：发 `global_adopted`；按 `preserve_inner_state` 发 `inner_training_state_preserved`（带 `inner_training_state_metrics`）或重建 optimizer/scheduler 并发 `inner_optimizer_reset`。prediction-start 的 reset 也走单一 action 收尾，但不伪造 `global_adopted`。
 - `ctx` 只提供模型、I/O、logger 与当前 runner 状态所需的显式依赖；策略专属 reference/token/update-id 状态不得放回 ctx。
 - 现 publish 前防御检查（1729-1734）移入 `before_publish`，从 `run_learner` 移除；训练 token 累计统一经 `on_local_tokens`，否则无法满足 STR-08 的私有状态要求。
+- `on_stop` 必须显式返回是否跳过本 cycle publication：predict 持有未 reconcile reference 时返回 true 并发 abandon 事件，replace/rebase 返回 false，以保持 stop 在 inner cycle 中到达时的现有差异。
 - 互斥由构造保证：run_learner 只持有一个策略实例，不再有 enabled 布尔。
 
 ## 6. Loop Engineering 实施循环
@@ -73,9 +74,9 @@ class GlobalAdoptionStrategy:
 | --- | --- | --- | --- |
 | L0 基线冻结 | 确认三种策略各有可用 tiny 配置：replace=`fs_diloco_tiny_local.yaml`、predict=`fs_diloco_tiny_predict_local.yaml`；rebase 若无 tiny 配置则新增 `fs_diloco_tiny_rebase_local.yaml`（新增配置先在基线 commit 上跑通再冻结） | 基线 commit 上跑三种 tiny run（固定 seed） | 三份归一化轨迹 + commit + 配置入 artifacts |
 | L1 接口与 replace | STR-01/02 先 RED：工厂分派、replace 类的 adopt+reset 事件顺序 | 新建策略模块；replace 类落地；run_learner 的 replace 路径切换到策略调用 | STR-05 轨迹等价；全量 pytest；progress 记录 |
-| L2 rebase 迁移 | STR-03 先 RED：publish 后建 anchor、newer latest 时 rebase+preserve、状态清空 | rebase 类迁移，删除对应内联分支与变量 | STR-06 轨迹等价；`tests/test_learner_rebase.py` 全通过 |
+| L2 rebase 迁移 | STR-03 先 RED：publish 后建 anchor、newer latest 时 rebase+preserve、状态清空 | rebase 类迁移，删除对应内联分支与变量 | STR-06 受控事件轨迹等价 + tiny 终态不变量；`tests/test_learner_rebase.py` 全通过 |
 | L3 predict 迁移 | STR-04/09 先 RED：prediction 建立、reconcile（复用 S2 helper）、超时、abandon-on-stop | predict 类迁移，删除对应内联分支与变量 | STR-07 轨迹等价；S2 的 REC 矩阵回归通过 |
-| L4 清扫与静态断言 | STR-08 先 RED（此时变量仍有残留即 RED） | 移除全部策略局部变量、布尔开关、防御分支；收尾事件归一 | STR-08 GREEN；三份轨迹等价复跑；tiny run 上 invariant Checker PASS；全量 pytest |
+| L4 清扫与静态断言 | STR-08 先 RED（此时变量仍有残留即 RED） | 移除全部策略局部变量、布尔开关、防御分支；收尾事件归一 | STR-08 GREEN；三策略按各自可重复门禁复跑；tiny run 上 invariant Checker PASS；全量 pytest |
 
 每个 loop 的 PERSIST 均含：测试命令、关键日志路径、轨迹对比输出、下一 loop 的已知风险。
 
@@ -88,7 +89,7 @@ class GlobalAdoptionStrategy:
 | STR-03 | rebase 单元 | publish 后 anchor 建立；newer latest→rebase、preserve 收尾、状态清空 |
 | STR-04 | predict 单元 | publish 后 prediction 建立；reconcile 清空状态；超时抛 `TimeoutError` |
 | STR-05 | replace 轨迹等价 | tiny run 归一化轨迹与基线一致 |
-| STR-06 | rebase 轨迹等价 | 同上（rebase tiny 配置） |
+| STR-06 | rebase 行为等价 | 受控 latest-read 序列下事件/状态轨迹与基线断言一致；真实 rebase tiny run 正常完成且 Checker PASS。不得把即时 poll 的 anchor/direct-adopt 竞态强制为 whole-run 逐事件相等 |
 | STR-07 | predict 轨迹等价 | 同上（predict tiny 配置） |
 | STR-08 | 静态清扫 | 7 状态变量 + 2 布尔在 `run_learner` 体内出现 0 次 |
 | STR-09 | stop 路径 | predict 策略 on_stop 发出 `global_prediction_abandoned_on_stop`，字段不变 |
@@ -98,15 +99,15 @@ progress.md 每条记录必须列出覆盖的 STR ID（P8）。
 ## 8. 验证阶梯
 
 1. **登录节点**：lint、`git diff --check`、STR-08 grep。
-2. **1 节点 compute**：STR 单元测试 → 全量 pytest → 三种 tiny run 轨迹等价 → `check_plan01_invariants.py` 对 tiny run 目录 PASS。
+2. **1 节点 compute**：STR 单元测试 → 全量 pytest → replace/predict 可重复投影 + rebase 受控轨迹 → 三种 tiny run → `check_plan01_invariants.py` 以各 run 的权威最终版本验收。`local_or_global` tiny full 允许在配置 global target 前以内部一致的 `input_exhausted` 结束，不把“必须达到配置 target”误作本重构门禁。
 3. **2 节点/9 节点**：不需要——协议与磁盘布局未变。下一次 9 节点实验落在重构后 commit 上时在 run_analysis 注明 commit（P6）。
 4. 性能不设门槛也不做口头承诺：本计划不改热路径计算；如观察到 tiny run 明显变慢，作为事实记入 progress 并在扩大规模前排查。
 
 ## 9. 报告、证据与 Checker
 
 - 报告目录：`reports/imp_plans/bug_fixing/S1/`，规则按 [plans/AGENTS.md](../AGENTS.md)。
-- 核心验收证据 = STR-05/06/07 三份轨迹对比输出 + STR-08 grep 输出 + Checker PASS，全部入 artifacts。
-- 每个 loop 结束时 `git stash`/临时提交留存可回退点；三策略迁移不得挤在单一提交里（回退粒度 = loop）。
+- 核心验收证据 = STR-05/07 可重复投影、STR-06 受控轨迹与真实 smoke、STR-08 grep 输出 + Checker PASS，全部入 artifacts。rebase 原始 whole-run 差异保留为竞态诊断证据，不作硬门禁。
+- 状态机实现/单元测试与 runner 集成必须使用不同提交，形成可独立审查和回退的边界；不要为互相依赖且同批切换的三种实现制造无效中间态提交。
 
 ## 10. 停止与升级规则
 

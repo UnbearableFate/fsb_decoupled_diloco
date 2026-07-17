@@ -63,7 +63,7 @@ core  ←  storage  ←  protocol / modeling / observability  ←  runtime  ← 
 
 ## 3. 两个运行时进程的内部结构
 
-### `runtime/learner.py`(约 1070 行)
+### `runtime/learner.py` 与 `runtime/adoption.py`
 
 | 区块 | 函数 |
 |---|---|
@@ -72,6 +72,7 @@ core  ←  storage  ←  protocol / modeling / observability  ←  runtime  ← 
 | 停止判定 | `stop_requested`（full/fragment 共用） |
 | 训练组件 | `build_inner_optimizer_and_scheduler`, `maybe_autocast`, `train_one_step` |
 | 全局权重采纳 | `adopt_global`(全量)/ `load_fragment_latest_into_model`, `adopt_fragment_updates`(分片) |
+| full 采纳策略 | `GlobalAdoptionStrategy` 及 replace/rebase/predict 实现、`make_global_adoption_strategy` |
 | update 提交 | `write_update` / `write_fragment_update` |
 | 主循环 | `run_learner`(全量)/ `run_fragment_learner`(分片);`run_learner` 按配置分派 |
 

@@ -57,9 +57,9 @@ while not stop_requested():                     # 默认:本地上限或 stop;gl
           可选梯度裁剪 → optimizer.step() → scheduler.step()
       按 log_every_steps 记 JSONL;按 heartbeat_interval 写心跳
       可选:poll_latest_during_inner_steps=true 时每个 optimizer.step() 后无阻塞轮询新版
-           replace:整体替换本地权重
-           rebase_post_publish_delta:仅当 reconcile reference 尚在等待新版时轮询;
-                                     发现后 local ← global_new + (local - reference),随即释放 reference
+           由 GlobalAdoptionStrategy 决定是否轮询与如何采纳:
+             replace:整体替换本地权重
+             rebase/predict:仅当私有 reference 尚在等待新版时轮询并 reconcile
   # —— 上传阶段 ——
   failure_sim:可选随机睡眠;可选跳过上传;可选崩溃(exit 97)
   按 io.tensor_dtype flatten 模型参数(50x10 配置为 bfloat16),用 float32 累积计算 param_norm
@@ -68,11 +68,9 @@ while not stop_requested():                     # 默认:本地上限或 stop;gl
   记 learner_metrics.csv、update_manifest.csv,写心跳(phase=update_written)
   # —— 采纳阶段 ——
   if learner.adopt_global_after_upload:
-      读 latest.json
-      若已有新版:直接采纳,不构造 reconcile reference
-      若无新版且使用 local-delta rebase:才按 syncer.compute_dtype 从当前模型构造 reference;
-          默认保留在 learner GPU,估算有 OOM 风险或实际 CUDA OOM 时回退 CPU
-      采纳后重建内层优化器/调度器
+      strategy.on_after_publish():读 latest;若已有新版则直接采纳
+      rebase 无新版才构造 anchor;predict 无新版才构造预测 reference
+      runner 根据 StrategyAction 统一 reset 或 preserve optimizer/scheduler 并发公共事件
 finally:
   写 status=stopped 的最终心跳,记 process_exit
 ```

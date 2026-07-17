@@ -1,4 +1,4 @@
-# 模块参考:fs_diloco/runtime/learner.py 与 failure_sim.py
+# 模块参考:fs_diloco/runtime/learner.py、adoption.py 与 failure_sim.py
 
 learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.md) 第 2、3 节。
 
@@ -27,7 +27,7 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
 
 ### 训练组件
 
-- **`build_inner_optimizer_and_scheduler(model, config) -> (optimizer, scheduler|None)`** — 仅支持 AdamW;调度器:`none` 返回 None,否则 LambdaLR 实现"线性 warmup + (可选)cosine 衰减"(cosine 需要 `max_local_steps` 作为周期)。**每次采纳新全局版本后都会重建**(即重置)。
+- **`build_inner_optimizer_and_scheduler(model, config) -> (optimizer, scheduler|None)`** — 仅支持 AdamW;调度器:`none` 返回 None,否则 LambdaLR 实现"线性 warmup + (可选)cosine 衰减"(cosine 需要 `max_local_steps` 作为周期)。replace/direct adoption 会重建；rebase/prediction reconcile 按策略结果保留状态。
 - **`maybe_autocast(device, precision)`** — CUDA + bf16 时启用 autocast,否则禁用的空上下文。
 - **`train_one_step(model, batch_iter, optimizer, scheduler, *, device, config) -> (loss, tokens, examples, grad_norm)`** — 一个本地步:`gradient_accumulation_steps` 次前向/反向(loss 除以累积数;**非有限 loss 直接抛 `FloatingPointError`**)、可选梯度裁剪、`optimizer.step()`、`scheduler.step()`;返回本步平均 loss 与计量。
 - **`create_resource_monitor(device)`** — 创建整节点 CPU + 当前 CUDA 设备 GPU 的后台利用率采样器。每个 local cycle 开始时清零 cycle 统计,每个 `train_one_step` 以单调时钟计时;训练期峰值跨 cycle 保留。
@@ -56,6 +56,16 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
   - proposal metadata 仍以每份独立文件放在 payload 目录,由 syncer maintenance 在消费后统一清理;
   - 采纳走增量 `adopt_fragment_updates`,变化片的 `tokens_since_fragment_load` 清零;
   - finally 中的收尾:若无错且设置了 `stop_after_outer_steps`,在 `no_progress_timeout_seconds` 预算内轮询等待 `global_merge_event` 达标(期间持续采纳),最后再整体采纳一次,保证退出时本地模型为最终版本。
+
+---
+
+## runtime/adoption.py
+
+- **`GlobalAdoptionStrategy`** — full learner 的采纳状态机接口；runner 只持有工厂构造的一个策略对象。
+- **`ReplaceGlobalAdoptionStrategy` / `RebaseGlobalAdoptionStrategy` / `PredictGlobalAdoptionStrategy`** — 分别封装直接覆盖、发布点 local-delta rebase、prediction/reconcile 的私有 reference、token 和 update-id 状态。
+- **钩子顺序** — 每个 cycle 依次为 `on_local_tokens` → 可选 `on_newer_latest` → `on_stop` 或 `on_cycle_end` → `before_publish` → `on_after_publish`。
+- **`StrategyAction` / `AdoptionOutcome`** — 把新版本、latest metadata、token 计数与 preserve/reset 决策返回 runner；`global_adopted`、`inner_training_state_preserved`、`inner_optimizer_reset` 只由 learner 的统一收尾函数发出。
+- **`make_global_adoption_strategy(config)`** — 唯一策略工厂；非法策略名启动即拒绝。策略状态只存在于进程内，不写入磁盘或 DB。
 
 ---
 

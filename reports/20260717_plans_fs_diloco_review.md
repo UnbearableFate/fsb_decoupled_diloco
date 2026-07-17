@@ -145,9 +145,13 @@ replace + `poll_latest_during_inner_steps` 下，inner step 中途 adoption 会�
 
 **建议**：提炼 `GlobalAdoptionStrategy` 接口（`on_after_publish(latest_found)` / `on_newer_latest(latest)` / `wants_inner_poll()` / `on_cycle_end()` / `on_stop()`），replace/rebase/predict 各自成类，携带自己的 reference/token 状态。收益：新策略只写一个类；`inner_optimizer_reset` vs `inner_training_state_preserved` 的事件语义由基类统一发出，报告对账从"数日志"降为"看单元测试"。这是对后续 agent 实施效率回报最大的一项重构。
 
+**完成状态（2026-07-17）**：commit `4ce7262` 增加独立策略状态机与单元测试；commit `f2c6961` 将三种 full adoption 路径统一经工厂、hook 与 `StrategyAction` 收尾，`run_learner` 中原 7 个并行状态变量和 2 个策略布尔均已清零。replace/predict 可重复轨迹与基线一致；rebase 用受控 latest-read 轨迹和真实 tiny 终态不变量验收，避免把 publish 后即时 poll 的合法竞态误判为回归。
+
 ### S2（中）prediction reconcile 两处近似重复
 
 learner.py:1556-1589（inner poll 内）与 1657-1716（cycle 末等待）是同一段 reconcile 逻辑的两份拷贝（差异只有 `reconcile_waited_seconds` 字段）。B6 的通用 helper + S1 的策略类可一并消除。
+
+**完成状态（2026-07-17）**：commit `19414a1` 抽取显式 `PredictionState`/`reconcile_prediction`，并加入可复用的 profile-driven 逐 actor 事件轨迹比较器；S1 随后把 reconcile helper 迁入无 torch 导入的策略模块，inner poll 与 cycle-end wait 共用同一实现。
 
 ### S3（中）full/fragment 双份主循环与工具函数
 
