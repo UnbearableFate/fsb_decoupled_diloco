@@ -18,7 +18,7 @@
 
 1. `prepare_run_dirs()` 建齐共享目录树;直接打开 `<shared_root>/control/syncer_metadata.sqlite3`(建表幂等,rollback journal + FULL sync);
 2. 若 DB 已有 committed global row → 报错退出(防误覆盖已有 run;`latest.json` 不参与这个判定);
-3. 加载模型 → `build_param_index()` → flatten 出初始 θ(float32)→ `init_outer_state()`;
+3. 按 `syncer.device` 选择 CPU/GPU,加载模型 → `build_param_index()` → 按 `syncer.compute_dtype` flatten 初始 θ → `init_outer_state()`;
 4. 原子发布 `control/param_index.json`,并把完整配置快照同时写到 run 根和 `control/run_config.resolved.yaml`;
 5. `publish_global(version=0)`:保存 `global_v000000.safetensors` + `outer_v000000.safetensors`,在一个 DB 事务中写 committed v0、run identity 与配置快照,**最后**原子写 `latest.json`(v0 就绪,learner 可以开工);
 6. 执行首次 archive/GC;初始化 W&B(失败降级为不上报)。
@@ -114,7 +114,7 @@ while True:
       (窗口结束仍不足 quorum_min → 再试 terminal drain,否则重来)
 
   mark_updates_selected(CAS:仅 pending → selected)
-  读取阶段:再查文件存在性;加载所有向量、转为 float32 后送到 GPU
+  读取阶段:再查文件存在性;加载所有向量、转为 syncer.compute_dtype 后送到 syncer.device
       (发现丢失 → 丢该份、其余回滚 pending、放弃本次合并)
   加权:w_i ∝ tokens_i / (1 + λ·staleness_i),归一化
   聚合:p̄ = Σ wᵢ pᵢ;g = θ − p̄

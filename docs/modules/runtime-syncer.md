@@ -7,6 +7,9 @@ syncer 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.md
 - **`parse_args(argv)`** — `--config`(必填)、`--run-id`、`--shared-root`、`--num-learners`。
 - **`sqlite_path(config) -> Path`** — 唯一持久库路径:`<shared_root>/control/syncer_metadata.sqlite3`。
 - **`run_identity(config)`** — 形成写入 DB 的 run/format/protocol/mode/model identity,恢复时逐项严格比对。
+- **`resolve_syncer_device(config) -> torch.device`** — 解析 `syncer.device=auto/cpu/cuda`;显式 CUDA 不可用时 fail fast。
+- **`syncer_compute_dtype(config)`** / **`syncer_publish_dtype(config)`** — 把 syncer 的计算/发布 dtype 配置解析为 torch dtype。
+- **`align_state_to_publication_dtype(config, theta, state)`** — 每次发布前按发布 dtype 量化浮点权重/状态并转回计算 dtype,让持续运行、learner 可见 checkpoint 与 resume 共享同一数值边界。
 - **`publication_failpoint(name)`** — 由环境变量控制的确定性崩溃注入点,用于 publication crash matrix。
 - **`main(argv)`** — `resolve_config` 后调 `run_syncer`。
 - **`run_syncer(config)`** — 公共启动(目录、SQLite、日志、设备、W&B)后分派:fragment 模式 → `run_fragment_syncer`;否则按 `init.resume` 走 `resume_run`/`initialize_run`,再执行全量模式主循环(函数体内,详见下文)。
@@ -22,9 +25,9 @@ syncer 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.md
 
 ## 初始化与恢复
 
-- **`initialize_run(config, paths, store, logger, *, device) -> (version=0, theta, outer_state, param_index, total_seen_tokens=0)`** — 全新 run:DB committed 防覆盖 → 加载模型/index/θ/outer → 发布 index/config → `publish_global(0)` 在一个事务写 v0+identity+config → maintenance。
+- **`initialize_run(config, paths, store, logger, *, device) -> (version=0, theta, outer_state, param_index, total_seen_tokens=0)`** — 全新 run:DB committed 防覆盖 → 按 `syncer.compute_dtype` 加载模型/index/θ/outer → 按 `syncer.publish_dtype` 发布 index/config/checkpoint → `publish_global(0)` 在一个事务写 v0+identity+config → maintenance。
 - **`initialize_fragment_run(config, paths, store, logger, *, device) -> (event=0, fragment_thetas, outer_states, param_index, fragment_index, fragment_versions, fragment_updated_events, total_seen_tokens=0, materialized_weight_path)`** — fragment 版:另建并发布 fragment index;逐片抽取 θ_f、建状态、存 v0、写 `fragments`/`fragment_versions` 表;materialize 事件 0 并发布 fragment latest。
-- **`resume_run(config, paths, store, logger, *, device)`** — DB-first 恢复(仅全量模式):integrity → identity/protocol → 最大 committed row → model/index → 引用文件存在 → weight θ 与 outer θ 精确相等 → 全部 selected 回滚 → 重建 latest → maintenance。任何权威状态缺失/冲突都 fail closed;不读取 latest 决定版本,不回退 DB dump。
+- **`resume_run(config, paths, store, logger, *, device)`** — DB-first 恢复(仅全量模式):integrity → identity/protocol → 最大 committed row → model/index → 引用文件存在 → 浮点状态转换到 `syncer.compute_dtype` → weight θ 与 outer θ 精确相等 → 全部 selected 回滚 → 重建 latest → maintenance。任何权威状态缺失/冲突都 fail closed;不读取 latest 决定版本,不回退 DB dump。
 
 ## 摄取(共享盘 → SQLite)
 
@@ -46,7 +49,7 @@ syncer 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.md
 
 - **`init_wandb_run(*, config, paths, logger, device, hostname) -> run | None`** — W&B 初始化(项目/名称/标签/config 由 `observability/wandb_logging.py` 生成;`syncer/version` 定义为 step 轴);禁用、import 失败、init 失败都返回 None 并记日志,不影响训练。
 - **`_fragment_staleness_stats(selected, current_fragment_version)`**(私有)— 选中集合的 staleness min/mean/max。
-- **`wait_for_learner_shutdown(...)`** — 发布 stop 后在有界窗口内等待所有 learner 写 stopped 心跳并继续摄取元数据,使完整训练耗时覆盖 learner 收尾。
+- **`wait_for_learner_shutdown(...)`** — 发布 stop 后在有界窗口内持续摄取 heartbeat 与 update 元数据;只有 SQLite `learners` 表中的全部预期 learner 都成为 stopped 才返回成功,从而保证磁盘 heartbeat、持久 DB 与 summary 的终态一致。
 - **`learner_resource_summary(...)`** — 合并 SQLite 历史 update 与最终 stopped 心跳,生成逐 learner 训练期 CPU/GPU 峰值及 max/mean 聚合。
 - **`write_training_summary(...)`** — 原子写 `control/summary.json`,包含 syncer 启动至 learner 全部停止的完整训练时间、最终版本/token 数/停止原因及 learner 资源峰值;同样更新 W&B run summary。
 

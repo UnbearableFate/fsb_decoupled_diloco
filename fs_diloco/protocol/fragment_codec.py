@@ -113,15 +113,30 @@ def save_fragment_update(path: str | Path, fragment_tensor: torch.Tensor, dtype:
     )
 
 
-def load_fragment_update(path: str | Path, device: str | torch.device = "cpu") -> torch.Tensor:
+def load_fragment_update(
+    path: str | Path,
+    device: str | torch.device = "cpu",
+    dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
     tensors = load_safetensors(path, device=device)
     if FRAGMENT_TENSOR_KEY not in tensors:
         raise ValueError(f"{path} does not contain {FRAGMENT_TENSOR_KEY}")
-    return tensors[FRAGMENT_TENSOR_KEY].detach().to(device=device, dtype=torch.float32)
+    return tensors[FRAGMENT_TENSOR_KEY].detach().to(device=device, dtype=dtype)
 
 
-def save_fragment_weight(path: str | Path, fragment_tensor: torch.Tensor) -> Path:
-    return save_safetensors_atomic(path, {FRAGMENT_TENSOR_KEY: fragment_tensor.detach().cpu().contiguous()})
+def save_fragment_weight(
+    path: str | Path,
+    fragment_tensor: torch.Tensor,
+    *,
+    dtype: torch.dtype | None = None,
+) -> Path:
+    published = fragment_tensor.detach().cpu()
+    if dtype is not None:
+        published = published.to(dtype=dtype)
+    return save_safetensors_atomic(
+        path,
+        {FRAGMENT_TENSOR_KEY: published.contiguous()},
+    )
 
 
 def load_fragment_weight(path: str | Path, device: str | torch.device = "cpu") -> torch.Tensor:

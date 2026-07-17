@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import torch
+from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 
 from .atomic_io import atomic_write_with_writer
@@ -46,15 +47,29 @@ def save_update_vector(path: str | Path, flat: torch.Tensor, *, dtype: torch.dty
     return save_safetensors_atomic(path, {"local_params": flat.detach().cpu().to(dtype=dtype).contiguous()})
 
 
-def load_update_vector(path: str | Path, *, device: str | torch.device = "cpu") -> torch.Tensor:
+def load_update_vector(
+    path: str | Path,
+    *,
+    device: str | torch.device = "cpu",
+    dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
     tensors = load_safetensors(path, device=device)
     if "local_params" not in tensors:
         raise ValueError(f"{path} does not contain local_params")
-    return tensors["local_params"].detach().to(device=device, dtype=torch.float32)
+    return tensors["local_params"].detach().to(device=device, dtype=dtype)
 
 
-def save_global_weights(path: str | Path, theta: torch.Tensor, param_index: dict) -> Path:
-    return save_safetensors_atomic(path, flat_to_named_tensors(theta.detach().cpu(), param_index))
+def save_global_weights(
+    path: str | Path,
+    theta: torch.Tensor,
+    param_index: dict,
+    *,
+    dtype: torch.dtype | None = None,
+) -> Path:
+    published = theta.detach().cpu()
+    if dtype is not None:
+        published = published.to(dtype=dtype)
+    return save_safetensors_atomic(path, flat_to_named_tensors(published, param_index))
 
 
 def load_global_weights_flat(
@@ -62,18 +77,75 @@ def load_global_weights_flat(
     param_index: dict,
     *,
     device: str | torch.device = "cpu",
+    dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
     tensors = load_safetensors(path, device=device)
-    return named_tensors_to_flat(tensors, param_index, device=device)
+    return named_tensors_to_flat(tensors, param_index, device=device, dtype=dtype)
 
 
-def save_outer_state(path: str | Path, theta: torch.Tensor, state: dict[str, torch.Tensor]) -> Path:
-    return save_safetensors_atomic(path, state_to_tensors(theta, state))
+@torch.no_grad()
+def load_global_weights_into_model(
+    path: str | Path,
+    model: torch.nn.Module,
+    param_index: dict,
+    *,
+    strict_shape: bool = True,
+) -> None:
+    """Stream a named checkpoint directly into the model's parameter dtype.
+
+    Direct adoption does not perform any arithmetic, so flattening a BF16
+    checkpoint into a CPU FP32 vector only to cast it back to a BF16 model is
+    both unnecessary and expensive.  Loading one named tensor at a time also
+    avoids materializing a second full flat checkpoint in host memory.
+    """
+
+    named_params = dict(model.named_parameters())
+    with safe_open(str(path), framework="pt", device="cpu") as checkpoint:
+        checkpoint_names = set(checkpoint.keys())
+        for entry in param_index["params"]:
+            name = entry["name"]
+            if name not in named_params:
+                raise ValueError(f"model does not contain parameter {name}")
+            if name not in checkpoint_names:
+                raise ValueError(f"{path} does not contain parameter {name}")
+
+            param = named_params[name]
+            expected_shape = tuple(entry["shape"])
+            if strict_shape and tuple(param.shape) != expected_shape:
+                raise ValueError(
+                    f"shape mismatch for {name}: {tuple(param.shape)} != {expected_shape}"
+                )
+
+            tensor = checkpoint.get_tensor(name)
+            if int(tensor.numel()) != int(entry["numel"]):
+                raise ValueError(f"tensor size mismatch for {name}")
+            if strict_shape and tuple(tensor.shape) != expected_shape:
+                raise ValueError(
+                    f"checkpoint shape mismatch for {name}: "
+                    f"{tuple(tensor.shape)} != {expected_shape}"
+                )
+
+            param.copy_(tensor.to(device=param.device, dtype=param.dtype))
+
+
+def save_outer_state(
+    path: str | Path,
+    theta: torch.Tensor,
+    state: dict[str, torch.Tensor],
+    *,
+    dtype: torch.dtype | None = None,
+) -> Path:
+    return save_safetensors_atomic(path, state_to_tensors(theta, state, dtype=dtype))
 
 
 def load_outer_state(
     path: str | Path,
     *,
     device: str | torch.device = "cpu",
+    dtype: torch.dtype | None = None,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    return state_from_tensors(load_safetensors(path, device=device), device=device)
+    return state_from_tensors(
+        load_safetensors(path, device=device),
+        device=device,
+        dtype=dtype,
+    )

@@ -79,3 +79,4 @@ def test_fragment_update_can_store_bfloat16(tmp_path):
     stored = load_file(str(path))["fragment_params"]
     assert stored.dtype == torch.bfloat16
     assert load_fragment_update(path).dtype == torch.float32
+    assert load_fragment_update(path, dtype=torch.bfloat16).dtype == torch.bfloat16

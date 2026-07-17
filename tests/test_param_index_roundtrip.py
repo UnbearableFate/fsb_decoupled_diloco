@@ -1,6 +1,7 @@
 import torch
 
-from fs_diloco.modeling.hf_model import TinyCausalLM
+from fs_diloco.core.config import resolve_config
+from fs_diloco.modeling.hf_model import TinyCausalLM, load_causal_lm_and_tokenizer
 from fs_diloco.modeling.param_index import (
     build_param_index,
     flatten_trainable_params,
@@ -26,3 +27,11 @@ def test_flatten_dtype_and_norm_without_flattening():
     expected = torch.linalg.vector_norm(flat, ord=2, dtype=torch.float32)
     assert flat.dtype == torch.bfloat16
     assert torch.allclose(trainable_params_l2_norm(model), expected)
+
+
+def test_synthetic_model_respects_configured_dtype():
+    config = resolve_config("configs/fs_diloco_tiny_syncer_bf16_gpu.yaml")
+
+    model, _tokenizer = load_causal_lm_and_tokenizer(config.model)
+
+    assert {param.dtype for param in model.parameters()} == {torch.bfloat16}

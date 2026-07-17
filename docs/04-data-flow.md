@@ -111,13 +111,13 @@ fragment 模式(`fragment_latest_payload`,`latest_kind` 用于区分):
 
 | 文件 | 键 | 内容 |
 |---|---|---|
-| `global_v*.safetensors` | 每参数一键(参数名) | 按 param index 还原的命名权重 |
-| `outer_v*.safetensors` | `theta` + 状态键(`step`,`momentum` 或 `exp_avg`/`exp_avg_sq`) | 外层优化器完整状态 |
+| `global_v*.safetensors` | 每参数一键(参数名) | 按 param index 还原的命名权重；浮点 dtype 由 `syncer.publish_dtype` 决定 |
+| `outer_v*.safetensors` | `theta` + 状态键(`step`,`momentum` 或 `exp_avg`/`exp_avg_sq`) | 外层优化器完整状态；浮点张量按 `syncer.publish_dtype` 发布，整数 step 保持 int64 |
 | `update_*.params.safetensors` | `local_params` | learner 参数扁平向量(dtype 由 `io.tensor_dtype` 决定;50x10 配置为 bfloat16) |
 | `*_fragment_*.params.safetensors` | `fragment_params` | 直接从模型目标参数切片构造的单个 fragment(dtype 由 `io.tensor_dtype` 决定) |
-| `fragments/weights/**` | `fragment_params` | syncer 发布的单个 fragment 全局权重 |
+| `fragments/weights/**` | `fragment_params` | syncer 发布的单个 fragment 全局权重(dtype 由 `syncer.publish_dtype` 决定) |
 
-update 文件可用 BF16 降低共享文件系统 payload;syncer 读取 `local_params` / learner fragment 后立即提升为 FP32 再做加权聚合和外层优化。
+update 文件可用 BF16 降低共享文件系统 payload;syncer 读取 `local_params` / learner fragment 后转换到 `syncer.compute_dtype`,并在 `syncer.device` 指定的 CPU/GPU 上做加权聚合和外层优化。
 
 ### 2.4 心跳 `heartbeats/learner_XXX.json`
 

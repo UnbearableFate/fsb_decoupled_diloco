@@ -32,10 +32,11 @@
 - **`dtype_from_name(name) -> torch.dtype`** — `"float32"/"bf16"/"fp16"` 等别名 → torch dtype;未知报错。
 - **`save_safetensors_atomic(path, tensors)`** — 张量搬到 CPU、contiguous 后用 `atomic_write_with_writer` + `safetensors.save_file` 原子保存。
 - **`load_safetensors(path, device)`** — `safetensors.load_file` 薄封装。
-- **`save_update_vector(path, flat, dtype)`** / **`load_update_vector(path, device)`** — update 扁平向量,单键 `local_params`;可用 BF16 落盘,加载时统一转 float32。
+- **`save_update_vector(path, flat, dtype)`** / **`load_update_vector(path, device, dtype=float32)`** — update 扁平向量,单键 `local_params`;落盘和加载 dtype 可分别配置。
+- **`save_global_weights(path, theta, param_index, dtype=None)`** / **`load_global_weights_flat(path, param_index, device, dtype=float32)`** — 命名 global 权重与扁平向量互转；syncer 可直接按计算 dtype 加载。
 - **`save_global_weights(path, theta, param_index)`** — 扁平 θ 先经 `flat_to_named_tensors` 还原为命名张量再存(每参数一键,可独立加载/导出)。
 - **`load_global_weights_flat(path, param_index, device) -> Tensor`** — 逆向:命名张量 → 扁平向量。
-- **`save_outer_state(path, theta, state)`** / **`load_outer_state(path, device) -> (theta, state)`** — 外层优化器状态,`theta` + 各状态张量平铺为键;加载时 theta 转 float32、缺 `step` 时补 0。
+- **`save_outer_state(path, theta, state, dtype=None)`** / **`load_outer_state(path, device, dtype=None) -> (theta, state)`** — 外层优化器状态,`theta` + 各状态张量平铺为键;可统一转换浮点状态的发布/加载 dtype,整数状态不转换,缺 `step` 时补 0。
 
 ## storage/sqlite_store.py — 权威持久元数据库
 

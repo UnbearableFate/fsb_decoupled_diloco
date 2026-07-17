@@ -60,12 +60,48 @@ from ..storage.maintenance import run_maintenance
 from ..storage.paths import RunPaths, prepare_run_dirs
 from ..storage.sqlite_store import SQLiteStore
 from ..storage.tensor_codec import (
+    dtype_from_name,
     load_global_weights_flat,
     load_outer_state,
     load_update_vector,
     save_global_weights,
     save_outer_state,
 )
+
+
+def resolve_syncer_device(config: Config) -> torch.device:
+    configured = config.syncer.device.lower()
+    if configured == "auto":
+        return choose_device()
+    if configured == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("syncer.device=cuda requires an available CUDA device")
+    return torch.device(configured)
+
+
+def syncer_compute_dtype(config: Config) -> torch.dtype:
+    return dtype_from_name(config.syncer.compute_dtype)
+
+
+def syncer_publish_dtype(config: Config) -> torch.dtype:
+    return dtype_from_name(config.syncer.publish_dtype)
+
+
+def align_state_to_publication_dtype(
+    config: Config,
+    theta: torch.Tensor,
+    state: dict[str, torch.Tensor],
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    """Make the next published values the authoritative in-memory state."""
+    compute_dtype = syncer_compute_dtype(config)
+    publish_dtype = syncer_publish_dtype(config)
+
+    def align(value: torch.Tensor) -> torch.Tensor:
+        result = value.detach()
+        if result.is_floating_point():
+            result = result.to(dtype=publish_dtype).to(dtype=compute_dtype)
+        return result.contiguous()
+
+    return align(theta), {key: align(value) for key, value in state.items()}
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -153,9 +189,10 @@ def publish_global(
             handle.flush()
             os.fsync(handle.fileno())
         publication_failpoint("weight_temp")
-    save_global_weights(weight_path, theta, param_index)
+    publish_dtype = syncer_publish_dtype(config)
+    save_global_weights(weight_path, theta, param_index, dtype=publish_dtype)
     publication_failpoint("after_weight")
-    save_outer_state(optim_path, theta, outer_state)
+    save_outer_state(optim_path, theta, outer_state, dtype=publish_dtype)
     publication_failpoint("after_outer")
     sqlite_start = time.monotonic()
     if version == 0:
@@ -270,7 +307,12 @@ def publish_fragment_latest(
             fragment_thetas, fragment_index, int(param_index["total_numel"])
         )
         materialized_weight_path = paths.global_weight_path(global_merge_event)
-        save_global_weights(materialized_weight_path, full, param_index)
+        save_global_weights(
+            materialized_weight_path,
+            full,
+            param_index,
+            dtype=syncer_publish_dtype(config),
+        )
         materialize_seconds = time.monotonic() - materialize_start
     atomic_write_json(
         paths.latest_json,
@@ -300,8 +342,15 @@ def initialize_run(
     model, _tokenizer = load_causal_lm_and_tokenizer(config.model)
     model.to(device)
     param_index = build_param_index(model, model_name_or_path=config.model.name_or_path)
-    theta = flatten_trainable_params(model, param_index, device=device).float()
+    compute_dtype = syncer_compute_dtype(config)
+    theta = flatten_trainable_params(
+        model,
+        param_index,
+        dtype=compute_dtype,
+        device=device,
+    )
     outer_state = init_outer_state(theta, config.outer_optimizer)
+    theta, outer_state = align_state_to_publication_dtype(config, theta, outer_state)
     atomic_write_json(paths.param_index_json, param_index)
     write_resolved_config(config, paths.resolved_config_yaml)
     write_resolved_config(config, paths.run_root_config_yaml)
@@ -351,7 +400,14 @@ def initialize_fragment_run(
     model, _tokenizer = load_causal_lm_and_tokenizer(config.model)
     model.to(device)
     param_index = build_param_index(model, model_name_or_path=config.model.name_or_path)
-    theta = flatten_trainable_params(model, param_index, device=device).float()
+    compute_dtype = syncer_compute_dtype(config)
+    publish_dtype = syncer_publish_dtype(config)
+    theta = flatten_trainable_params(
+        model,
+        param_index,
+        dtype=compute_dtype,
+        device=device,
+    )
     fragment_index = build_fragment_index(
         param_index,
         strategy=config.fragments.strategy,
@@ -370,13 +426,14 @@ def initialize_fragment_run(
     for fragment in fragment_index["fragments"]:
         fragment_id = int(fragment["fragment_id"])
         theta_f = extract_fragment(theta, fragment_index, fragment_id).to(
-            device=device, dtype=torch.float32
+            device=device, dtype=compute_dtype
         )
         state_f = init_outer_state(theta_f, config.outer_optimizer)
+        theta_f, state_f = align_state_to_publication_dtype(config, theta_f, state_f)
         weight_path = paths.fragment_weight_path(fragment_id, 0)
         optim_path = paths.fragment_outer_optim_path(fragment_id, 0)
-        save_fragment_weight(weight_path, theta_f)
-        save_outer_state(optim_path, theta_f, state_f)
+        save_fragment_weight(weight_path, theta_f, dtype=publish_dtype)
+        save_outer_state(optim_path, theta_f, state_f, dtype=publish_dtype)
         store.upsert_fragment_definition(fragment, strategy=config.fragments.strategy)
         store.upsert_fragment_version(
             fragment_id=fragment_id,
@@ -465,9 +522,18 @@ def resume_run(
         raise FileNotFoundError(
             f"committed checkpoint is incomplete: weight={weight_path}, outer={optim_path}"
         )
-    theta = load_global_weights_flat(weight_path, param_index, device=device).float()
-    optim_theta, outer_state = load_outer_state(optim_path, device=device)
-    optim_theta = optim_theta.float()
+    compute_dtype = syncer_compute_dtype(config)
+    theta = load_global_weights_flat(
+        weight_path,
+        param_index,
+        device=device,
+        dtype=compute_dtype,
+    )
+    optim_theta, outer_state = load_outer_state(
+        optim_path,
+        device=device,
+        dtype=compute_dtype,
+    )
     if theta.shape != optim_theta.shape or not torch.equal(theta, optim_theta):
         raise RuntimeError("committed weight and outer checkpoint theta do not match")
 
@@ -498,7 +564,7 @@ def resume_run(
     logger.event("state_maintenance_completed", **maintenance)
     return (
         int(committed["version"]),
-        theta.float().to(device),
+        theta.to(device=device, dtype=compute_dtype),
         outer_state,
         param_index,
         total_seen_tokens,
@@ -955,14 +1021,9 @@ def wait_for_learner_shutdown(
     )
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() <= deadline:
-        ingest_update_metadata(store, paths, config, logger)
-        stopped: set[str] = set()
-        for learner_id in expected:
-            heartbeat = safe_read_json(paths.heartbeats / f"{learner_id}.json") or {}
-            if heartbeat.get("status") == LEARNER_STATUS_STOPPED:
-                stopped.add(learner_id)
-        if stopped == expected:
-            logger.event("all_learners_stopped", count=len(stopped))
+        sync_liveness_and_metadata(store, paths, config, logger)
+        if all_expected_learners_stopped(store, config):
+            logger.event("all_learners_stopped", count=len(expected))
             return True
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -1230,7 +1291,12 @@ def run_fragment_syncer(
                 continue
             try:
                 vectors = [
-                    load_fragment_update(row["file_path"], device=device) for row in selected
+                    load_fragment_update(
+                        row["file_path"],
+                        device=device,
+                        dtype=syncer_compute_dtype(config),
+                    )
+                    for row in selected
                 ]
             except FileNotFoundError:
                 missing = [
@@ -1270,6 +1336,11 @@ def run_fragment_syncer(
                 outer_states[target_fragment],
                 config.outer_optimizer,
             )
+            theta_f, outer_state_f = align_state_to_publication_dtype(
+                config,
+                theta_f,
+                outer_state_f,
+            )
             outer_seconds = time.monotonic() - outer_start
 
             new_fragment_version = current_fragment_version + 1
@@ -1284,8 +1355,14 @@ def run_fragment_syncer(
             publish_start = time.monotonic()
             weight_path = paths.fragment_weight_path(target_fragment, new_fragment_version)
             optim_path = paths.fragment_outer_optim_path(target_fragment, new_fragment_version)
-            save_fragment_weight(weight_path, theta_f)
-            save_outer_state(optim_path, theta_f, outer_state_f)
+            publish_dtype = syncer_publish_dtype(config)
+            save_fragment_weight(weight_path, theta_f, dtype=publish_dtype)
+            save_outer_state(
+                optim_path,
+                theta_f,
+                outer_state_f,
+                dtype=publish_dtype,
+            )
             store.upsert_fragment_version(
                 fragment_id=target_fragment,
                 version=new_fragment_version,
@@ -1483,6 +1560,7 @@ def run_fragment_syncer(
 def run_syncer(config: Config) -> None:
     run_started_at = time.time()
     run_start_monotonic = time.monotonic()
+    device = resolve_syncer_device(config)
     paths = RunPaths(Path(config.run.shared_root or "."))
     prepare_run_dirs(paths, config.sync.num_learners)
     database_path = sqlite_path(config)
@@ -1493,7 +1571,6 @@ def run_syncer(config: Config) -> None:
     store = SQLiteStore(database_path)
     logger = JsonlLogger(paths.logs / "syncer.jsonl", "syncer")
     log_uncaught_exception(logger)
-    device = choose_device()
     hostname = socket.gethostname()
     logger.event(
         "process_start",
@@ -1502,6 +1579,8 @@ def run_syncer(config: Config) -> None:
         sqlite_path=str(store.path),
         hostname=hostname,
         device=str(device),
+        compute_dtype=config.syncer.compute_dtype,
+        publish_dtype=config.syncer.publish_dtype,
         cuda_visible_devices=os.environ.get("CUDA_VISIBLE_DEVICES"),
     )
     wandb_run = init_wandb_run(
@@ -1653,7 +1732,14 @@ def run_syncer(config: Config) -> None:
                 logger.event("selected_updates_missing_files", count=len(missing_after_select))
                 continue
             try:
-                vectors = [load_update_vector(row["file_path"], device=device) for row in selected]
+                vectors = [
+                    load_update_vector(
+                        row["file_path"],
+                        device=device,
+                        dtype=syncer_compute_dtype(config),
+                    )
+                    for row in selected
+                ]
             except FileNotFoundError:
                 missing = [
                     row["update_id"] for row in selected if not Path(row["file_path"]).exists()
@@ -1686,6 +1772,11 @@ def run_syncer(config: Config) -> None:
             outer_start = time.monotonic()
             theta, outer_state = outer_optimizer_step(
                 theta, grad, outer_state, config.outer_optimizer
+            )
+            theta, outer_state = align_state_to_publication_dtype(
+                config,
+                theta,
+                outer_state,
             )
             outer_seconds = time.monotonic() - outer_start
 

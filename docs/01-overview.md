@@ -11,7 +11,7 @@ fs_diloco 实现了一种 **Decoupled DiLoCo**(解耦的 DiLoCo)训练协议:
 一次训练 run 的参与者:
 
 - **N 个 learner 进程**(`fs_diloco.runtime.learner`),每个占一张 GPU,通常每节点一个;
-- **1 个 syncer 进程**(`fs_diloco.runtime.syncer`),也占一张 GPU(在 GPU 上做合并和外层优化器步进)。
+- **1 个 syncer 进程**(`fs_diloco.runtime.syncer`),按 `syncer.device` 在 GPU 或 CPU 上做合并和外层优化器步进。
 
 ## 设计目标
 

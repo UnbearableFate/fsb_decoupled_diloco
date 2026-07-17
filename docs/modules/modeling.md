@@ -11,7 +11,7 @@
 - **`SyntheticTokenizer(vocab_size)`** — 配套占位 tokenizer(只有 vocab_size/eos/pad 属性)。
 - **`is_synthetic_model(name_or_path) -> bool`** — `synthetic-tiny / tiny-synthetic / tiny-local` 判定。
 - **`model_dtype(dtype_name) -> torch.dtype`** — `bf16/fp16/其他 → bfloat16/float16/float32`。
-- **`load_causal_lm_and_tokenizer(config) -> (model, tokenizer)`** — 合成模型或 HF `AutoModelForCausalLM/AutoTokenizer`(按需 trust_remote_code、torch_dtype、pad_token 兜底为 eos、可选 `torch.compile`)。
+- **`load_causal_lm_and_tokenizer(config) -> (model, tokenizer)`** — 合成模型或 HF `AutoModelForCausalLM/AutoTokenizer`(按需 trust_remote_code、dtype、pad_token 兜底为 eos、可选 `torch.compile`)。
 - **`choose_device() -> torch.device`** — 有 CUDA 用 cuda,否则 cpu。
 
 ## modeling/hf_data.py — 数据管道
@@ -30,10 +30,11 @@
 
 param index 是"模型 ↔ 扁平向量"映射的**契约**,JSON 结构:`{format_version, model_name_or_path, trainable_only, total_numel, params: [{name, shape, dtype, numel, offset}]}`,顺序 = `named_parameters()` 声明顺序。
 
-- **`torch_dtype_name(dtype)`** — `str(dtype)`。
+- **`dtype_name(dtype)`** — `str(dtype)`。
 - **`build_param_index(model, *, model_name_or_path, trainable_only=True) -> dict`** — 遍历可训练参数累积 offset。
 - **`save_param_index / load_param_index`** — 原子写 / 读取(校验 format_version)。
 - **`flatten_trainable_params(model, param_index, *, dtype=float32, device="cpu") -> Tensor`** — 按 index 顺序把各参数 reshape(-1) 拼接为扁平向量。
+- **`named_tensors_to_flat(named_tensors, param_index, *, device="cpu", dtype=float32) -> Tensor`** — 按 index 把 checkpoint 的命名张量直接转换到目标 device/dtype 后拼接，避免 syncer BF16 恢复时先物化 FP32 扁平向量。
 - **`trainable_params_l2_norm(model, *, dtype=float32) -> Tensor`** — 逐个可训练参数计算 L2 norm,再以同一 dtype 汇总为全局 norm;不物化完整扁平参数副本。
 - **`load_flat_into_model(model, flat, param_index, *, strict_shape=True)`** — 逆操作(`@torch.no_grad`):按 offset 切片、reshape、`param.copy_()` 写回;总长或形状不符抛错。
 - **`flat_to_named_tensors(flat, param_index) -> dict[name, Tensor]`** — 扁平向量 → 命名张量(存全局权重用)。

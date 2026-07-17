@@ -61,7 +61,7 @@ def load_causal_lm_and_tokenizer(config: Any) -> tuple[torch.nn.Module, Any]:
         model = TinyCausalLM(
             vocab_size=int(getattr(config, "synthetic_vocab_size", 128)),
             hidden_size=int(getattr(config, "synthetic_hidden_size", 32)),
-        )
+        ).to(dtype=model_dtype(getattr(config, "dtype", "float32")))
         return model, SyntheticTokenizer(model.config.vocab_size)
 
     from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -75,7 +75,7 @@ def load_causal_lm_and_tokenizer(config: Any) -> tuple[torch.nn.Module, Any]:
     model = AutoModelForCausalLM.from_pretrained(
         name,
         trust_remote_code=bool(getattr(config, "trust_remote_code", False)),
-        torch_dtype=model_dtype(getattr(config, "dtype", "float32")),
+        dtype=model_dtype(getattr(config, "dtype", "float32")),
     )
     if bool(getattr(config, "compile", False)):
         model = torch.compile(model)

@@ -11,7 +11,7 @@ from ..storage.atomic_io import atomic_write_json, read_json
 from ..core.constants import FORMAT_VERSION
 
 
-def torch_dtype_name(dtype: torch.dtype) -> str:
+def dtype_name(dtype: torch.dtype) -> str:
     return str(dtype)
 
 
@@ -26,7 +26,7 @@ def build_param_index(model: torch.nn.Module, *, model_name_or_path: str, traina
             {
                 "name": name,
                 "shape": list(param.shape),
-                "dtype": torch_dtype_name(param.dtype),
+                "dtype": dtype_name(param.dtype),
                 "numel": numel,
                 "offset": offset,
             }
@@ -68,9 +68,13 @@ def flatten_trainable_params(
     for entry in param_index["params"]:
         param = named_params[entry["name"]]
         tensor = param.detach().reshape(-1)
-        if dtype is not None:
-            tensor = tensor.to(dtype=dtype)
-        chunks.append(tensor.to(device=device, non_blocking=False))
+        chunks.append(
+            tensor.to(
+                device=device,
+                dtype=dtype if dtype is not None else tensor.dtype,
+                non_blocking=False,
+            )
+        )
     if not chunks:
         return torch.empty(0, dtype=dtype or torch.float32, device=device)
     return torch.cat(chunks, dim=0).contiguous()
@@ -130,15 +134,21 @@ def named_tensors_to_flat(
     param_index: dict[str, Any],
     *,
     device: torch.device | str = "cpu",
+    dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
     chunks = []
     for entry in param_index["params"]:
-        tensor = named_tensors[entry["name"]].detach().to(device=device).reshape(-1).float()
+        tensor = (
+            named_tensors[entry["name"]]
+            .detach()
+            .to(device=device, dtype=dtype)
+            .reshape(-1)
+        )
         if int(tensor.numel()) != int(entry["numel"]):
             raise ValueError(f"tensor size mismatch for {entry['name']}")
         chunks.append(tensor)
     if not chunks:
-        return torch.empty(0, dtype=torch.float32, device=device)
+        return torch.empty(0, dtype=dtype, device=device)
     return torch.cat(chunks).contiguous()
 
 

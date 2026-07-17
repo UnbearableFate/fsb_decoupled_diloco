@@ -34,6 +34,7 @@ eval = [
 fs-diloco-syncer = "fs_diloco.runtime.syncer:main"
 fs-diloco-learner = "fs_diloco.runtime.learner:main"
 fs-diloco-inspect = "fs_diloco.tools.analysis:main"
+fs-diloco-export-run-metrics = "fs_diloco.tools.run_metrics_csv:main"
 fs-diloco-lm-eval = "fs_diloco.tools.eval_lm_harness:main"
 
 [tool.ruff]

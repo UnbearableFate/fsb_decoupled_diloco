@@ -77,6 +77,13 @@ class SyncSection:
 
 
 @dataclass
+class SyncerSection:
+    device: str = "auto"
+    compute_dtype: str = "float32"
+    publish_dtype: str = "float32"
+
+
+@dataclass
 class LivenessSection:
     heartbeat_interval_seconds: float = 30.0
     stale_after_seconds: float = 120.0
@@ -173,6 +180,7 @@ class Config:
     model: ModelSection = field(default_factory=ModelSection)
     data: DataSection = field(default_factory=DataSection)
     sync: SyncSection = field(default_factory=SyncSection)
+    syncer: SyncerSection = field(default_factory=SyncerSection)
     liveness: LivenessSection = field(default_factory=LivenessSection)
     training: TrainingSection = field(default_factory=TrainingSection)
     inner_optimizer: InnerOptimizerSection = field(default_factory=InnerOptimizerSection)
@@ -259,6 +267,21 @@ def resolve_config(
         config.sync.num_learners = int(num_learners)
         config.sync.quorum_max = min(config.sync.quorum_max, config.sync.num_learners)
         config.sync.quorum_min = min(config.sync.quorum_min, config.sync.num_learners)
+    config.syncer.device = config.syncer.device.lower()
+    if config.syncer.device not in {"auto", "cpu", "cuda"}:
+        raise ValueError(f"unsupported syncer.device: {config.syncer.device}")
+    dtype_aliases = {
+        "float32": "float32",
+        "fp32": "float32",
+        "float": "float32",
+        "bfloat16": "bfloat16",
+        "bf16": "bfloat16",
+    }
+    for field_name in ("compute_dtype", "publish_dtype"):
+        configured = getattr(config.syncer, field_name).lower().replace("torch.", "")
+        if configured not in dtype_aliases:
+            raise ValueError(f"unsupported syncer.{field_name}: {configured}")
+        setattr(config.syncer, field_name, dtype_aliases[configured])
     if config.sync.grace_window.mode not in {"fixed", "adaptive_fastest_upload_eta"}:
         raise ValueError(
             f"unsupported sync.grace_window.mode: {config.sync.grace_window.mode}"

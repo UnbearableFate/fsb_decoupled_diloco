@@ -11,6 +11,7 @@ from fs_diloco.runtime.syncer import (
     ingest_update_metadata,
     maybe_shorten_grace_deadline,
     select_terminal_drain_updates,
+    wait_for_learner_shutdown,
 )
 from fs_diloco.storage.atomic_io import atomic_write_json
 from fs_diloco.storage.paths import RunPaths, prepare_run_dirs
@@ -156,4 +157,56 @@ def test_terminal_drain_requires_stopped_and_keeps_strict_eligibility(tmp_path):
     assert select_terminal_drain_updates(
         store, paths, config, logger, current_version=3
     ) == []
+    store.close()
+
+
+def test_shutdown_wait_ingests_final_heartbeats_into_learner_table(tmp_path):
+    config = resolve_config(
+        "configs/fs_diloco_tiny_local.yaml",
+        run_id="shutdown_ingest",
+        shared_root=str(tmp_path),
+        num_learners=2,
+    )
+    paths = RunPaths(tmp_path)
+    prepare_run_dirs(paths, 2)
+    store = SQLiteStore(paths.sqlite_db)
+    logger = JsonlLogger(paths.logs / "test.jsonl", "test", mirror_stdout=False)
+    now = time.time()
+    for index in range(2):
+        learner_id = f"learner_{index:03d}"
+        store.upsert_learner(
+            learner_id,
+            last_seen=now - 1.0,
+            last_local_step=10,
+            status="active",
+        )
+        atomic_write_json(
+            paths.heartbeats / f"{learner_id}.json",
+            {
+                "format_version": FORMAT_VERSION,
+                "run_id": config.run.run_id,
+                "learner_id": learner_id,
+                "hostname": "host",
+                "pid": 100 + index,
+                "timestamp": now,
+                "status": "stopped",
+                "phase": "process_exit",
+                "last_loaded_global_version": 50,
+                "last_local_step": 20 + index,
+                "last_update_id": f"update_{index}",
+            },
+        )
+
+    assert wait_for_learner_shutdown(
+        paths=paths,
+        store=store,
+        config=config,
+        logger=logger,
+        stop_reason="stop_after_outer_steps",
+    )
+    learners = store.list_learners()
+    assert [row["status"] for row in learners] == ["stopped", "stopped"]
+    assert [row["status_reason"] for row in learners] == ["stopped", "stopped"]
+    assert [row["last_local_step"] for row in learners] == [20, 21]
+    assert [row["last_loaded_global_version"] for row in learners] == [50, 50]
     store.close()

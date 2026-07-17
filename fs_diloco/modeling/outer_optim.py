@@ -108,10 +108,21 @@ def outer_optimizer_step(
     raise ValueError(f"unsupported outer optimizer: {cfg.name}")
 
 
-def state_to_tensors(theta: torch.Tensor, state: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    tensors = {"theta": theta.detach().cpu()}
+def state_to_tensors(
+    theta: torch.Tensor,
+    state: dict[str, torch.Tensor],
+    *,
+    dtype: torch.dtype | None = None,
+) -> dict[str, torch.Tensor]:
+    def prepare(value: torch.Tensor) -> torch.Tensor:
+        result = value.detach().cpu()
+        if dtype is not None and result.is_floating_point():
+            result = result.to(dtype=dtype)
+        return result
+
+    tensors = {"theta": prepare(theta)}
     for key, value in state.items():
-        tensors[key] = value.detach().cpu()
+        tensors[key] = prepare(value)
     return tensors
 
 
@@ -119,9 +130,18 @@ def state_from_tensors(
     tensors: dict[str, torch.Tensor],
     *,
     device: torch.device | str = "cpu",
+    dtype: torch.dtype | None = None,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    theta = tensors["theta"].detach().to(device=device, dtype=torch.float32)
-    state = {key: value.detach().to(device=device) for key, value in tensors.items() if key != "theta"}
+    target_dtype = dtype or torch.float32
+    theta = tensors["theta"].detach().to(device=device, dtype=target_dtype)
+    state = {}
+    for key, value in tensors.items():
+        if key == "theta":
+            continue
+        target = value.detach().to(device=device)
+        if dtype is not None and target.is_floating_point():
+            target = target.to(dtype=dtype)
+        state[key] = target
     if "step" not in state:
         state["step"] = torch.tensor(0, dtype=torch.int64, device=device)
     return theta, state

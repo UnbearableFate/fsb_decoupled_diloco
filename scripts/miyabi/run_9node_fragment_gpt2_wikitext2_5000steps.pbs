@@ -12,8 +12,8 @@ trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
 
 PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
-CONFIG="${CONFIG:-$PROJECT_ROOT/configs/fs_diloco_gpt2_wikitext2_8l_fragment_5000steps.yaml}"
-RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_fs_diloco_gpt2_wikitext2_8l_fragment_5000steps}"
+CONFIG="${CONFIG:-$PROJECT_ROOT/configs/fs_diloco_gpt2_wikitext2_8l_5000steps_predict_bf16all_cuda.yaml}"
+RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_fs_diloco_gpt2_wikitext2_8l_5000steps_predict_bf16all_cuda}"
 SHARED_ROOT="${SHARED_ROOT:-$PROJECT_ROOT/runs/fs_diloco/$RUN_ID}"
 LOCAL_RUNTIME_DIR="${LOCAL_RUNTIME_DIR:-${TMPDIR:-/tmp}/fs_diloco/$RUN_ID}"
 CACHE_ROOT="${CACHE_ROOT:-$PROJECT_ROOT/.cache/fs_diloco}"

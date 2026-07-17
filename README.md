@@ -2,7 +2,7 @@
 
 Filesystem-backed Decoupled DiLoCo research prototype for Miyabi-G.
 
-Milestone 1 uses independent single-GPU learners and one GPU-backed syncer process. Learners train GPT-style causal language models locally and publish immutable `safetensors` payloads behind one atomically replaced proposal pointer per learner. The syncer records authoritative state in a persistent SQLite database in the shared run directory, applies token/staleness-weighted merging with quorum and grace-window behavior on its local GPU, steps an explicit flat-vector outer optimizer, logs syncer-side training telemetry to W&B, and publishes new global weights through `control/latest.json`.
+Milestone 1 uses independent single-GPU learners and one configurable CPU/GPU syncer process. Learners train GPT-style causal language models locally and publish immutable `safetensors` payloads behind one atomically replaced proposal pointer per learner. The syncer records authoritative state in a persistent SQLite database in the shared run directory, applies token/staleness-weighted merging with quorum and grace-window behavior on its configured device and dtype, steps an explicit flat-vector outer optimizer, logs syncer-side training telemetry to W&B, and publishes global weights in the configured publication dtype through `control/latest.json`.
 
 The implementation intentionally does not use `torch.distributed`, NCCL, RPC, Ray, DeepSpeed, FSDP, or PCCL for milestone 1 communication.
 

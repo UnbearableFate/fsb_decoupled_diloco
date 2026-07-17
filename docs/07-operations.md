@@ -96,6 +96,23 @@ python scripts/miyabi/check_plan01_invariants.py --help # current-only/一致性
 
 Run 分析方法和实验结果统一维护在 [reports/run_analysis.md](../reports/run_analysis.md)。
 
+把一个或多个 run 中用于实验对比的核心指标抽取到 CSV：
+
+```bash
+# 默认追加到 reports/run_metrics.csv
+python -m fs_diloco.tools.run_metrics_csv \
+  runs/fs_diloco/run_a runs/fs_diloco/run_b
+
+# 指定输出；--overwrite 原子覆盖，否则追加并校验既有表头
+python -m fs_diloco.tools.run_metrics_csv \
+  runs/fs_diloco/run_a -o reports/my_metrics.csv --overwrite
+
+# 安装 editable package 后也可使用
+fs-diloco-export-run-metrics runs/fs_diloco/run_c -o reports/my_metrics.csv
+```
+
+每个 run 输出一行，包括 produced/applied/dropped、proposal 利用率、drop reason、local steps、完整训练时间、selected 分布、applied staleness 0/1/2、produced/applied tokens、loss first-10/last-10/全量均值及关键配置。新 run 优先使用 `update_history.jsonl + SQLite` 的终态；旧 run 缺少 history 时，从 committed syncer merge 指标和 `updates_selected` 日志重建 applied/staleness。未完成 run 的未知 proposal 记入 `pending_or_unclassified_updates`，不会误计为 dropped。
+
 ## 5. checkpoint 评测(LM Evaluation Harness)
 
 ```bash

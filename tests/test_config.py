@@ -16,6 +16,41 @@ def test_config_defaults_and_cli_overrides(tmp_path):
     assert config.sync.quorum_min == 1
     assert config.inner_optimizer.betas == (0.9, 0.95)
     assert config.fragments.enabled is False
+    assert config.syncer.device == "auto"
+    assert config.syncer.compute_dtype == "float32"
+    assert config.syncer.publish_dtype == "float32"
+
+
+def test_syncer_runtime_config_accepts_cpu_bfloat16_aliases(tmp_path):
+    path = tmp_path / "syncer_bf16.yaml"
+    path.write_text(
+        """
+syncer:
+  device: CPU
+  compute_dtype: bf16
+  publish_dtype: torch.bfloat16
+""",
+        encoding="utf-8",
+    )
+    config = resolve_config(path)
+    assert config.syncer.device == "cpu"
+    assert config.syncer.compute_dtype == "bfloat16"
+    assert config.syncer.publish_dtype == "bfloat16"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("device", "gpu"),
+        ("compute_dtype", "float16"),
+        ("publish_dtype", "int8"),
+    ],
+)
+def test_syncer_runtime_config_rejects_unsupported_values(tmp_path, field, value):
+    path = tmp_path / "bad_syncer.yaml"
+    path.write_text(f"syncer:\n  {field}: {value}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=f"unsupported syncer.{field}"):
+        resolve_config(path)
 
 
 def test_fragment_config_and_unknown_keys(tmp_path):
@@ -146,6 +181,19 @@ def test_predict_5000_configs_differ_only_in_post_publish_wait(path, wait_second
     assert config.learner.global_adoption_strategy == "predict_post_publish_global"
     assert config.learner.post_publish_latest_wait_seconds == wait_seconds
     assert config.learner.prediction_reconcile_timeout_seconds == 60.0
+
+
+def test_predict_wait_zero_5000_config_stops_only_at_global_target():
+    config = resolve_config(
+        "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_predict.yaml"
+    )
+    assert config.training.max_local_steps == 5000
+    assert config.training.completion_mode == "global_only"
+    assert config.sync.stop_after_outer_steps == 50
+    assert config.sync.grace_window.mode == "fixed"
+    assert config.sync.grace_window.fixed_seconds == 20.0
+    assert config.learner.global_adoption_strategy == "predict_post_publish_global"
+    assert config.learner.post_publish_latest_wait_seconds == 0.0
 
 
 def test_fragment_rejects_full_local_delta_rebase(tmp_path):

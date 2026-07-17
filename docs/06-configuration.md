@@ -60,6 +60,25 @@
 | `stop_after_global_tokens` | `null` | 累计合并 token 停止条件 |
 | `stop_file_poll_seconds` | 5.0 | learner 侧轮询 stop/latest 的间隔 |
 
+## syncer — syncer 计算与发布
+
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `device` | `auto` | `auto` 自动选择可用 CUDA、否则 CPU；也可显式设为 `cpu` 或 `cuda`。显式 `cuda` 但 CUDA 不可用时启动失败 |
+| `compute_dtype` | `float32` | syncer 内存中的全局参数、learner update、加权聚合和外层优化器浮点状态 dtype；支持 `float32`/`fp32` 与 `bfloat16`/`bf16` |
+| `publish_dtype` | `float32` | syncer 发布的 global/fragment 权重和外层优化器浮点状态落盘 dtype；支持同上。`step` 等整数状态保持整数 |
+
+例如在 GPU 上用 BF16 合并并发布 BF16 checkpoint：
+
+```yaml
+syncer:
+  device: cuda
+  compute_dtype: bfloat16
+  publish_dtype: bfloat16
+```
+
+`compute_dtype` 与 `publish_dtype` 可以独立配置。每次发布前，syncer 先按 `publish_dtype` 量化权重和浮点优化器状态，再转换回 `compute_dtype` 作为下一轮内存状态，因此 learner 可见 checkpoint、持续运行和 resume 使用同一个权威数值边界。恢复 full run 时，checkpoint 中的浮点状态会转换到当前配置的 `compute_dtype` 后继续计算；fragment 模式仍不支持恢复。
+
 ## liveness
 
 | 字段 | 默认 | 说明 |
@@ -109,7 +128,7 @@
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
-| `tensor_dtype` | `float32` | learner update 的构造/落盘 dtype(`float32`/`bfloat16`/`float16`;合并时统一转回 fp32)。本仓库的 GPT-2 1L debug 与两种 50x10 对照配置使用 `bfloat16` |
+| `tensor_dtype` | `float32` | learner update 的构造/落盘 dtype(`float32`/`bfloat16`/`float16`；syncer 读取时转换为 `syncer.compute_dtype`)。本仓库的 GPT-2 1L debug 与两种 50x10 对照配置使用 `bfloat16` |
 | `atomic_write` | `true` | ⚠ 未消费(始终原子写) |
 | `compute_sha256` | `false` | 上传时计算张量文件摘要(分析工具可校验完整性) |
 

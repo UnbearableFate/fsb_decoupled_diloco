@@ -7,7 +7,7 @@
 | 角色 | 数量 | GPU | 入口 | 关键本地状态 |
 |---|---|---|---|---|
 | learner | N(`sync.num_learners`) | 每进程 1 张 | `python -m fs_diloco.learner --config ... --learner-id learner_000` | 模型副本、内层 AdamW、数据分片迭代器 |
-| syncer | 1 | 1 张(合并与外层步进在 GPU 上做) | `python -m fs_diloco.syncer --config ...` | 全局参数扁平向量 θ、外层优化器状态、共享 run 内的持久 SQLite |
+| syncer | 1 | `syncer.device=cuda` 时 1 张；也可用 CPU | `python -m fs_diloco.syncer --config ...` | 全局参数扁平向量 θ、外层优化器状态、共享 run 内的持久 SQLite |
 
 进程间没有任何直接连接。所有协调通过共享目录 `run.shared_root`(默认 `runs/fs_diloco/<RUN_ID>`)完成。
 
@@ -110,7 +110,7 @@ fragment index 发布为 `fragments/fragment_index.json`,构建时经过严格�
 - **materialize**:按 `fragments.materialize_full_every_events` 周期(以及事件 0 和到达目标步数时)把所有片拼回完整向量,存成 `weights/global_v{event:06d}.safetensors`,供评测/导出使用。
 - **learner 采纳是增量的**:对比 `latest.json` 中每片版本与本地已加载版本,只加载变化的片、scatter 进本地扁平向量再写回模型(`adopt_fragment_updates`),并按 `fragments.reset_inner_optimizer_on_fragment_adopt` 决定是否重置内层优化器。
 
-learner 上传文件的 dtype 由 `io.tensor_dtype` 决定。使用 BF16 时,全量和 fragment 的参数 payload 都约为 FP32 的一半;syncer 的 `load_update_vector()` / `load_fragment_update()` 在合并前统一提升为 FP32,外层参数、聚合与优化器状态仍保持 FP32。BF16 只压缩 learner→共享文件系统这段传输与落盘,不会把 syncer 的数值主路径降为 BF16。
+learner 上传文件的 dtype 由 `io.tensor_dtype` 决定。使用 BF16 时,全量和 fragment 的参数 payload 都约为 FP32 的一半。syncer 的 `load_update_vector()` / `load_fragment_update()` 在读取时转换为 `syncer.compute_dtype`；全局参数、聚合与外层优化器浮点状态也使用该 dtype。global/fragment 权重及外层状态按 `syncer.publish_dtype` 发布，因此可以分别控制 learner→syncer update、syncer 数值路径和 syncer→learner/checkpoint 三段的精度与 I/O 大小。
 
 ### 5.4 限制
 

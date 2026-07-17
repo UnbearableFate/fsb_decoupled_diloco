@@ -31,3 +31,16 @@ def test_adamw_step_known_vector():
     theta2, state2 = outer_optimizer_step(theta, grad, state, cfg)
     assert torch.allclose(theta2, torch.tensor([0.999]), atol=1e-7)
     assert int(state2["step"].item()) == 1
+
+
+def test_nesterov_step_preserves_bfloat16_compute_dtype_on_cpu():
+    theta = torch.tensor([1.0, 2.0], dtype=torch.bfloat16)
+    grad = torch.tensor([0.5, -0.5], dtype=torch.bfloat16)
+    cfg = OuterOptimizerConfig(name="nesterov", lr=0.1, momentum=0.9)
+    state = init_outer_state(theta, cfg)
+
+    updated, updated_state = outer_optimizer_step(theta, grad, state, cfg)
+
+    assert updated.dtype == torch.bfloat16
+    assert updated_state["momentum"].dtype == torch.bfloat16
+    assert updated_state["step"].dtype == torch.int64

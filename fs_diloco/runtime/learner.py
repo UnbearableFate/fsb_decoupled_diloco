@@ -49,6 +49,7 @@ from ..storage.paths import RunPaths, prepare_run_dirs
 from ..storage.tensor_codec import (
     dtype_from_name,
     load_global_weights_flat,
+    load_global_weights_into_model,
     load_outer_state,
     save_update_vector,
 )
@@ -258,11 +259,12 @@ def build_inner_optimizer_and_scheduler(
 def inner_training_state_metrics(
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler.LRScheduler | None,
-) -> dict[str, int | None]:
+) -> dict[str, Any]:
     """Return lightweight evidence that optimizer/scheduler state was retained."""
 
     return {
         "optimizer_state_entries": len(optimizer.state),
+        "optimizer_lrs": [float(group["lr"]) for group in optimizer.param_groups],
         "scheduler_last_epoch": scheduler.last_epoch if scheduler is not None else None,
     }
 
@@ -323,8 +325,7 @@ def adopt_global(
     param_index: dict[str, Any],
     device: torch.device,
 ) -> int:
-    flat = load_global_weights_flat(latest["weight_path"], param_index)
-    load_flat_into_model(model, flat, param_index)
+    load_global_weights_into_model(latest["weight_path"], model, param_index)
     model.to(device)
     return int(latest["version"])
 
@@ -416,7 +417,9 @@ def predict_next_global_weight(
     )
     outer_theta, outer_state = load_outer_state(latest["optim_path"], device="cpu")
     outer_theta = outer_theta.detach().to(dtype=torch.float32).contiguous()
-    if any(int(tensor.numel()) != expected_numel for tensor in (local_flat, global_flat, outer_theta)):
+    if any(
+        int(tensor.numel()) != expected_numel for tensor in (local_flat, global_flat, outer_theta)
+    ):
         raise ValueError("prediction inputs do not match the parameter index")
     if not torch.equal(global_flat, outer_theta):
         raise RuntimeError("global weight and outer checkpoint theta do not match")
@@ -466,6 +469,89 @@ def predict_next_global_weight(
         "historical_delta_norm": historical_delta_norm,
         "prediction_delta_norm": prediction_delta_norm,
     }
+
+
+def prepare_prediction_or_find_newer_latest(
+    *,
+    paths: RunPaths,
+    model: torch.nn.Module,
+    cached_latest: dict[str, Any],
+    param_index: dict[str, Any],
+    device: torch.device,
+    config: Config,
+    local_tokens: int,
+) -> tuple[
+    torch.Tensor | None,
+    dict[str, float | int | bool] | None,
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+]:
+    """Prepare a prediction without racing current-only checkpoint GC.
+
+    A learner may observe no newer ``latest.json`` immediately before the
+    syncer publishes the next version.  In that window the cached checkpoint
+    can be collected while its weight and outer files are being loaded.  A
+    newer latest always wins: check immediately before and after the snapshot,
+    and recover a missing cached file by waiting boundedly for that latest.
+    """
+
+    base_version = int(cached_latest["version"])
+    newer_latest = read_latest_if_newer(paths, base_version)
+    if newer_latest is not None:
+        return (
+            None,
+            None,
+            newer_latest,
+            {
+                "reason": "newer_latest_before_prediction",
+                "cached_version": base_version,
+                "waited_seconds": 0.0,
+            },
+        )
+
+    try:
+        reference_flat, stats = predict_next_global_weight(
+            model=model,
+            latest=cached_latest,
+            param_index=param_index,
+            device=device,
+            config=config,
+            local_tokens=local_tokens,
+        )
+    except FileNotFoundError as exc:
+        newer_latest, waited_seconds = wait_for_latest_if_newer(
+            paths,
+            base_version,
+            wait_seconds=config.learner.prediction_reconcile_timeout_seconds,
+            poll_seconds=config.learner.post_publish_latest_poll_seconds,
+        )
+        if newer_latest is None:
+            raise
+        return (
+            None,
+            None,
+            newer_latest,
+            {
+                "reason": "cached_checkpoint_collected",
+                "cached_version": base_version,
+                "missing_path": getattr(exc, "filename", None) or str(exc),
+                "waited_seconds": waited_seconds,
+            },
+        )
+
+    newer_latest = read_latest_if_newer(paths, base_version)
+    if newer_latest is not None:
+        return (
+            None,
+            None,
+            newer_latest,
+            {
+                "reason": "newer_latest_after_prediction_snapshot",
+                "cached_version": base_version,
+                "waited_seconds": 0.0,
+            },
+        )
+    return reference_flat, stats, None, None
 
 
 def load_fragment_latest_into_model(
@@ -1129,9 +1215,7 @@ def run_learner(config: Config, learner_id: str) -> None:
     last_loaded_latest = latest
     optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
     rebase_enabled = config.learner.global_adoption_strategy == "rebase_post_publish_delta"
-    prediction_enabled = (
-        config.learner.global_adoption_strategy == "predict_post_publish_global"
-    )
+    prediction_enabled = config.learner.global_adoption_strategy == "predict_post_publish_global"
     rebase_reference_flat: torch.Tensor | None = None
     carried_delta_tokens = 0
     last_published_anchor_update_id: str | None = None
@@ -1239,20 +1323,18 @@ def run_learner(config: Config, learner_id: str) -> None:
                     maybe_latest = read_latest_if_newer(paths, last_loaded_global_version)
                     if maybe_latest is not None:
                         previous_version = last_loaded_global_version
-                        preserve_inner_training_state = False
+                        preserve_inner_training_state_reason: str | None = None
                         if prediction_enabled:
                             if prediction_reference_flat is None:
                                 raise RuntimeError("predicted-global reference is unavailable")
                             reconciled_update_id = prediction_update_id
                             reconciled_base_version = prediction_base_version
-                            last_loaded_global_version, delta_norm = (
-                                rebase_local_delta_onto_global(
-                                    model=model,
-                                    latest=maybe_latest,
-                                    param_index=param_index,
-                                    device=device,
-                                    reference_flat=prediction_reference_flat,
-                                )
+                            last_loaded_global_version, delta_norm = rebase_local_delta_onto_global(
+                                model=model,
+                                latest=maybe_latest,
+                                param_index=param_index,
+                                device=device,
+                                reference_flat=prediction_reference_flat,
                             )
                             last_loaded_latest = maybe_latest
                             tokens_since_global_load = prediction_carried_tokens
@@ -1269,7 +1351,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                             prediction_carried_tokens = 0
                             prediction_update_id = None
                             prediction_base_version = None
-                            preserve_inner_training_state = True
+                            preserve_inner_training_state_reason = "global_prediction_reconciled"
                         elif rebase_enabled:
                             if rebase_reference_flat is None:
                                 raise RuntimeError("local-delta rebase reference is unavailable")
@@ -1294,6 +1376,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                             rebase_reference_flat = None
                             carried_delta_tokens = 0
                             last_published_anchor_update_id = None
+                            preserve_inner_training_state_reason = "global_rebased"
                         else:
                             last_loaded_global_version = adopt_global(
                                 model=model,
@@ -1305,11 +1388,11 @@ def run_learner(config: Config, learner_id: str) -> None:
                             tokens_since_global_load = 0
                         base_global_version = last_loaded_global_version
                         logger.event("global_adopted", version=last_loaded_global_version)
-                        if preserve_inner_training_state:
+                        if preserve_inner_training_state_reason is not None:
                             logger.event(
                                 "inner_training_state_preserved",
                                 version=last_loaded_global_version,
-                                reason="global_prediction_reconciled",
+                                reason=preserve_inner_training_state_reason,
                                 optimizer_state_preserved=True,
                                 scheduler_state_preserved=True,
                                 **inner_training_state_metrics(optimizer, scheduler),
@@ -1494,10 +1577,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                     current_version=last_loaded_global_version,
                     found_version=maybe_latest.get("version") if maybe_latest else None,
                 )
-                if (
-                    maybe_latest is None
-                    and config.learner.post_publish_latest_wait_seconds > 0.0
-                ):
+                if maybe_latest is None and config.learner.post_publish_latest_wait_seconds > 0.0:
                     logger.event(
                         "post_publish_latest_wait_started",
                         current_version=last_loaded_global_version,
@@ -1518,6 +1598,37 @@ def run_learner(config: Config, learner_id: str) -> None:
                         update_id=update_id,
                         waited_seconds=waited_seconds,
                     )
+                prepared_prediction_reference: torch.Tensor | None = None
+                prepared_prediction_stats: dict[str, float | int | bool] | None = None
+                prediction_preparation_recovery: dict[str, Any] | None = None
+                if maybe_latest is None and prediction_enabled:
+                    if int(last_loaded_latest["version"]) != last_loaded_global_version:
+                        raise RuntimeError("cached latest metadata does not match learner base")
+                    (
+                        prepared_prediction_reference,
+                        prepared_prediction_stats,
+                        maybe_latest,
+                        prediction_preparation_recovery,
+                    ) = prepare_prediction_or_find_newer_latest(
+                        paths=paths,
+                        model=model,
+                        cached_latest=last_loaded_latest,
+                        param_index=param_index,
+                        device=device,
+                        config=config,
+                        local_tokens=tokens_since_global_load,
+                    )
+                    if prediction_preparation_recovery is not None:
+                        if maybe_latest is None:
+                            raise RuntimeError(
+                                "prediction preparation recovery did not return newer latest"
+                            )
+                        logger.event(
+                            "global_prediction_preparation_recovered",
+                            update_id=update_id,
+                            found_version=int(maybe_latest["version"]),
+                            **prediction_preparation_recovery,
+                        )
                 if maybe_latest is not None:
                     previous_version = last_loaded_global_version
                     last_loaded_global_version = adopt_global(
@@ -1539,16 +1650,10 @@ def run_learner(config: Config, learner_id: str) -> None:
                     logger.event("global_adopted", version=last_loaded_global_version)
                     logger.event("inner_optimizer_reset", version=last_loaded_global_version)
                 elif prediction_enabled:
-                    if int(last_loaded_latest["version"]) != last_loaded_global_version:
-                        raise RuntimeError("cached latest metadata does not match learner base")
-                    prediction_reference_flat, prediction_stats = predict_next_global_weight(
-                        model=model,
-                        latest=last_loaded_latest,
-                        param_index=param_index,
-                        device=device,
-                        config=config,
-                        local_tokens=tokens_since_global_load,
-                    )
+                    if prepared_prediction_reference is None or prepared_prediction_stats is None:
+                        raise RuntimeError("prediction preparation did not return a snapshot")
+                    prediction_reference_flat = prepared_prediction_reference
+                    prediction_stats = prepared_prediction_stats
                     prediction_carried_tokens = 0
                     prediction_update_id = update_id
                     prediction_base_version = last_loaded_global_version
