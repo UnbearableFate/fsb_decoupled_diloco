@@ -203,6 +203,7 @@ class GlobalAdoptionStrategy(ABC):
     @classmethod
     def validate(cls, config: Any) -> None:
         """Validate constraints owned by this strategy; replace is a no-op."""
+        return None
 
     @abstractmethod
     def wants_inner_poll(self, config: Any) -> bool:
@@ -292,6 +293,11 @@ class GlobalAdoptionStrategy(ABC):
 
 class ReplaceGlobalAdoptionStrategy(GlobalAdoptionStrategy):
     name = "replace"
+
+    @classmethod
+    def validate(cls, config: Any) -> None:
+        del config
+        return None
 
     def wants_inner_poll(self, config: Any) -> bool:
         return bool(config.learner.poll_latest_during_inner_steps)
@@ -425,6 +431,10 @@ class PredictGlobalAdoptionStrategy(GlobalAdoptionStrategy):
             raise ValueError("predict_post_publish_global currently requires outer nesterov")
         if config.outer_optimizer.weight_decay != 0.0:
             raise ValueError("predict_post_publish_global currently requires outer weight_decay=0")
+        if config.learner.prediction.reconcile_timeout_seconds <= 0.0:
+            raise ValueError(
+                "learner.prediction.reconcile_timeout_seconds must be > 0"
+            )
 
     def wants_inner_poll(self, config: Any) -> bool:
         return bool(config.learner.poll_latest_during_inner_steps and self._state.active)
@@ -464,10 +474,10 @@ class PredictGlobalAdoptionStrategy(GlobalAdoptionStrategy):
             current_version=ctx.last_loaded_global_version,
             prediction_base_version=active.base_version,
             prediction_update_id=active.update_id,
-            timeout_seconds=ctx.config.learner.prediction_reconcile_timeout_seconds,
+            timeout_seconds=ctx.config.learner.prediction.reconcile_timeout_seconds,
         )
         maybe_latest, waited_seconds = ctx.wait_for_newer_latest(
-            wait_seconds=ctx.config.learner.prediction_reconcile_timeout_seconds
+            wait_seconds=ctx.config.learner.prediction.reconcile_timeout_seconds
         )
         if maybe_latest is None:
             raise TimeoutError("timed out waiting to reconcile predicted global before publication")
@@ -559,10 +569,19 @@ STRATEGY_TYPES: dict[str, type[GlobalAdoptionStrategy]] = {
 }
 
 
-def make_global_adoption_strategy(config: Any) -> GlobalAdoptionStrategy:
+def strategy_type_for_config(config: Any) -> type[GlobalAdoptionStrategy]:
     name = config.learner.global_adoption_strategy
     strategy_type = STRATEGY_TYPES.get(name)
     if strategy_type is None:
         raise ValueError(f"unsupported learner.global_adoption_strategy: {name}")
+    return strategy_type
+
+
+def validate_global_adoption_strategy(config: Any) -> None:
+    strategy_type_for_config(config).validate(config)
+
+
+def make_global_adoption_strategy(config: Any) -> GlobalAdoptionStrategy:
+    strategy_type = strategy_type_for_config(config)
     strategy_type.validate(config)
     return strategy_type()

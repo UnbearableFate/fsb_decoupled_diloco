@@ -24,7 +24,6 @@ data:
 
 sync:
   num_learners: 1
-  upload_mode: params
   quorum_min: 1
   quorum_max: 1
   max_staleness_versions: 0
@@ -44,7 +43,6 @@ liveness:
   stale_after_seconds: 5.0
   dead_after_seconds: 10.0
   no_progress_timeout_seconds: 30.0
-  quorum_policy: fixed
 
 training:
   inner_steps: 2
@@ -66,7 +64,6 @@ inner_optimizer:
   weight_decay: 0.0
   scheduler: cosine
   warmup_steps: 2
-  reset_on_global_update: true
 
 outer_optimizer:
   name: nesterov
@@ -87,7 +84,8 @@ learner:
   global_adoption_strategy: predict_post_publish_global
   post_publish_latest_wait_seconds: 0.0
   post_publish_latest_poll_seconds: 0.05
-  prediction_reconcile_timeout_seconds: 5.0
+  prediction:
+    reconcile_timeout_seconds: 5.0
 
 failure_sim:
   enabled: false

@@ -1,6 +1,11 @@
+from pathlib import Path
+
 import pytest
 
 from fs_diloco.core.config import load_config, resolve_config
+
+
+CONFIG_PATHS = sorted(Path("configs").glob("*.yaml"))
 
 
 def test_config_defaults_and_cli_overrides(tmp_path):
@@ -180,7 +185,7 @@ def test_predict_5000_configs_differ_only_in_post_publish_wait(path, wait_second
     assert config.learner.poll_latest_during_inner_steps is True
     assert config.learner.global_adoption_strategy == "predict_post_publish_global"
     assert config.learner.post_publish_latest_wait_seconds == wait_seconds
-    assert config.learner.prediction_reconcile_timeout_seconds == 60.0
+    assert config.learner.prediction.reconcile_timeout_seconds == 60.0
 
 
 def test_predict_wait_zero_5000_config_stops_only_at_global_target():
@@ -237,3 +242,90 @@ learner:
     )
     with pytest.raises(ValueError, match="requires adopt_global_after_upload"):
         resolve_config(path)
+
+
+@pytest.mark.parametrize(
+    ("section", "key"),
+    [
+        ("sync", "upload_mode"),
+        ("liveness", "quorum_policy"),
+        ("inner_optimizer", "reset_on_global_update"),
+    ],
+)
+def test_removed_dead_config_fields_have_actionable_error(tmp_path, section, key):
+    path = tmp_path / "removed.yaml"
+    path.write_text(f"{section}:\n  {key}: true\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=rf"{section}\.{key}.*字段已移除"):
+        load_config(path)
+
+
+def test_flat_prediction_timeout_is_rejected_with_new_path(tmp_path):
+    path = tmp_path / "legacy_prediction.yaml"
+    path.write_text(
+        "learner:\n  prediction_reconcile_timeout_seconds: 5.0\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"learner\.prediction_reconcile_timeout_seconds.*"
+        r"learner\.prediction\.reconcile_timeout_seconds",
+    ):
+        load_config(path)
+
+
+def test_nested_prediction_timeout_default_and_override(tmp_path):
+    default = resolve_config()
+    assert default.learner.prediction.reconcile_timeout_seconds == 60.0
+
+    path = tmp_path / "prediction.yaml"
+    path.write_text(
+        """
+learner:
+  prediction:
+    reconcile_timeout_seconds: 2.5
+""",
+        encoding="utf-8",
+    )
+    overridden = resolve_config(path)
+    assert overridden.learner.prediction.reconcile_timeout_seconds == 2.5
+
+
+@pytest.mark.parametrize(
+    ("strategy", "timeout", "should_raise"),
+    [
+        ("replace", 0.0, False),
+        ("rebase_post_publish_delta", 0.0, False),
+        ("predict_post_publish_global", 0.0, True),
+    ],
+)
+def test_prediction_timeout_validation_only_applies_to_prediction_strategy(
+    tmp_path, strategy, timeout, should_raise
+):
+    path = tmp_path / "strategy.yaml"
+    path.write_text(
+        f"""
+learner:
+  global_adoption_strategy: {strategy}
+  adopt_global_after_upload: true
+  poll_latest_during_inner_steps: true
+  prediction:
+    reconcile_timeout_seconds: {timeout}
+""",
+        encoding="utf-8",
+    )
+
+    if should_raise:
+        with pytest.raises(
+            ValueError,
+            match="learner.prediction.reconcile_timeout_seconds must be > 0",
+        ):
+            resolve_config(path)
+    else:
+        assert resolve_config(path).learner.global_adoption_strategy == strategy
+
+
+@pytest.mark.parametrize("path", CONFIG_PATHS, ids=lambda path: path.name)
+def test_every_repository_config_resolves(path):
+    assert resolve_config(path).run.name

@@ -25,7 +25,6 @@ data:
 
 sync:
   num_learners: 8
-  upload_mode: params
   quorum_min: 4
   quorum_max: 8
   max_staleness_versions: 0
@@ -45,7 +44,6 @@ liveness:
   stale_after_seconds: 180.0
   dead_after_seconds: 600.0
   no_progress_timeout_seconds: 1800.0
-  quorum_policy: fixed
 
 training:
   inner_steps: 50
@@ -66,7 +64,6 @@ inner_optimizer:
   weight_decay: 0.1
   scheduler: cosine
   warmup_steps: 50
-  reset_on_global_update: true
 
 outer_optimizer:
   name: nesterov

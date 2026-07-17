@@ -15,6 +15,15 @@ from .constants import DEFAULT_RUNS_DIR
 
 T = TypeVar("T")
 
+REMOVED_CONFIG_KEYS: dict[str, str | None] = {
+    "sync.upload_mode": None,
+    "liveness.quorum_policy": None,
+    "inner_optimizer.reset_on_global_update": None,
+    "learner.prediction_reconcile_timeout_seconds": (
+        "learner.prediction.reconcile_timeout_seconds"
+    ),
+}
+
 
 @dataclass
 class RunSection:
@@ -63,7 +72,6 @@ class GraceWindowSection:
 @dataclass
 class SyncSection:
     num_learners: int = 8
-    upload_mode: str = "params"
     quorum_min: int = 4
     quorum_max: int = 8
     max_staleness_versions: int = 2
@@ -89,7 +97,6 @@ class LivenessSection:
     stale_after_seconds: float = 120.0
     dead_after_seconds: float = 300.0
     no_progress_timeout_seconds: float = 600.0
-    quorum_policy: str = "fixed"
 
 
 @dataclass
@@ -115,7 +122,6 @@ class InnerOptimizerSection:
     weight_decay: float = 0.1
     scheduler: str = "cosine"
     warmup_steps: int = 100
-    reset_on_global_update: bool = True
 
 
 @dataclass
@@ -136,13 +142,18 @@ class IOSection:
 
 
 @dataclass
+class PredictionSection:
+    reconcile_timeout_seconds: float = 60.0
+
+
+@dataclass
 class LearnerSection:
     poll_latest_during_inner_steps: bool = False
     adopt_global_after_upload: bool = True
     global_adoption_strategy: str = "replace"
     post_publish_latest_wait_seconds: float = 0.0
     post_publish_latest_poll_seconds: float = 0.2
-    prediction_reconcile_timeout_seconds: float = 60.0
+    prediction: PredictionSection = field(default_factory=PredictionSection)
 
 
 @dataclass
@@ -206,13 +217,30 @@ def _coerce_scalar(value: Any, target_type: Any) -> Any:
     return value
 
 
-def _from_dict(cls: type[T], data: dict[str, Any]) -> T:
+def _from_dict(
+    cls: type[T],
+    data: dict[str, Any],
+    *,
+    path: tuple[str, ...] = (),
+) -> T:
     type_hints = get_type_hints(cls)
     field_names = {field_info.name for field_info in dataclasses.fields(cls)}
     unknown = sorted(set(data) - field_names)
     if unknown:
-        joined = ", ".join(unknown)
-        raise ValueError(f"unknown config key(s) for {cls.__name__}: {joined}")
+        messages: list[str] = []
+        for key in unknown:
+            dotted = ".".join((*path, key))
+            replacement = REMOVED_CONFIG_KEYS.get(dotted)
+            if dotted in REMOVED_CONFIG_KEYS:
+                message = f"config key {dotted} 字段已移除"
+                if replacement is not None:
+                    message += f"; use {replacement} instead"
+                else:
+                    message += "; it has no replacement"
+                messages.append(message)
+            else:
+                messages.append(f"unknown config key: {dotted}")
+        raise ValueError("; ".join(messages))
     kwargs: dict[str, Any] = {}
     for field_info in dataclasses.fields(cls):
         if field_info.name not in data:
@@ -220,7 +248,11 @@ def _from_dict(cls: type[T], data: dict[str, Any]) -> T:
         value = data[field_info.name]
         field_type = type_hints.get(field_info.name, field_info.type)
         if dataclasses.is_dataclass(field_type) and isinstance(value, dict):
-            kwargs[field_info.name] = _from_dict(field_type, value)
+            kwargs[field_info.name] = _from_dict(
+                field_type,
+                value,
+                path=(*path, field_info.name),
+            )
         else:
             kwargs[field_info.name] = _coerce_scalar(value, field_type)
     return cls(**kwargs)
@@ -313,44 +345,13 @@ def resolve_config(
             raise ValueError(
                 "learner.global_adoption_strategy is only supported by the full learner"
             )
-    if config.learner.global_adoption_strategy not in {
-        "replace",
-        "rebase_post_publish_delta",
-        "predict_post_publish_global",
-    }:
-        raise ValueError(
-            "unsupported learner.global_adoption_strategy: "
-            f"{config.learner.global_adoption_strategy}"
-        )
-    if config.learner.global_adoption_strategy == "rebase_post_publish_delta" and (
-        not config.learner.adopt_global_after_upload
-        or not config.learner.poll_latest_during_inner_steps
-    ):
-        raise ValueError(
-            "rebase_post_publish_delta requires adopt_global_after_upload=true and "
-            "poll_latest_during_inner_steps=true"
-        )
-    if config.learner.global_adoption_strategy == "predict_post_publish_global":
-        if (
-            not config.learner.adopt_global_after_upload
-            or not config.learner.poll_latest_during_inner_steps
-        ):
-            raise ValueError(
-                "predict_post_publish_global requires adopt_global_after_upload=true and "
-                "poll_latest_during_inner_steps=true"
-            )
-        if config.outer_optimizer.name.lower() != "nesterov":
-            raise ValueError("predict_post_publish_global currently requires outer nesterov")
-        if config.outer_optimizer.weight_decay != 0.0:
-            raise ValueError(
-                "predict_post_publish_global currently requires outer weight_decay=0"
-            )
+    from ..runtime.adoption import validate_global_adoption_strategy
+
+    validate_global_adoption_strategy(config)
     if config.learner.post_publish_latest_wait_seconds < 0.0:
         raise ValueError("learner.post_publish_latest_wait_seconds must be >= 0")
     if config.learner.post_publish_latest_poll_seconds <= 0.0:
         raise ValueError("learner.post_publish_latest_poll_seconds must be > 0")
-    if config.learner.prediction_reconcile_timeout_seconds <= 0.0:
-        raise ValueError("learner.prediction_reconcile_timeout_seconds must be > 0")
     config.training.block_size = config.data.block_size
     return config
 

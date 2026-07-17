@@ -749,7 +749,7 @@ def prepare_prediction_or_find_newer_latest(
         newer_latest, waited_seconds = wait_for_latest_if_newer(
             paths,
             base_version,
-            wait_seconds=config.learner.prediction_reconcile_timeout_seconds,
+            wait_seconds=config.learner.prediction.reconcile_timeout_seconds,
             poll_seconds=config.learner.post_publish_latest_poll_seconds,
         )
         if newer_latest is None:
