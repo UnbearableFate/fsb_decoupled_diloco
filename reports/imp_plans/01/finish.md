@@ -1,6 +1,6 @@
 结论：按计划中的主要研究主题粗略计算，本轮实现与实验将整体完成度推进到了约 **70%**。如果只看 full reference 和 full 模式的有界状态，完成度约 **85%**；剩余工作主要集中在独立重启、fragment 推广和训练质量结论。
 
-需要注意，[原计划](/work/xg24i002/x10041/fsb_decoupled_diloco/plans/FULL_REFERENCE_AND_BOUNDED_STATE_PLAN.md)本身不是验收清单，因此这里的比例是按研究主题和证据完整性估算的。
+需要注意，[原计划](/work/xg24i002/x10041/fsb_decoupled_diloco/plans/01-FULL_REFERENCE_AND_BOUNDED_STATE_PLAN.md)本身不是验收清单，因此这里的比例是按研究主题和证据完整性估算的。
 
 | 计划部分 | 当前状态 | 判断 |
 |---|---|---|
