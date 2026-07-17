@@ -90,6 +90,8 @@ def lr_lambda(step):
 
 **建议**：要么删除，要么让其成为 preserve/reset 语义的真实开关（后者与 run_analysis "为 reset/preserve 增加同一代码版本下的显式消融开关" 的诉求一致，推荐）。
 
+**完成状态（2026-07-17）**：commit `c53f14d` 删除三个未消费 dataclass 字段与全部仓库 YAML 条目。path-aware parser 对旧键 fail-closed 并明确报“字段已移除”；旧 prediction timeout 同时指向新路径。23 份仓库配置均有常驻 resolve 回归。
+
 ### B4（中）fragment syncer 缺少 input-closed / terminal drain
 
 `run_fragment_syncer`（syncer.py:1161-1557）主循环只有 `fragment_quorum_wait + no_progress_timeout`，没有 full 路径的 `all_expected_learners_stopped → terminal drain → input_exhausted` 分支（syncer.py:1642-1662 仅在 full 循环中）。fragment learner 全部到达 local horizon 停止后，syncer 会空等满 `no_progress_timeout_seconds`（正式配置 3600s）——这正是 plan 01 在 full 上花大力气修掉的 "A run 4872s" 问题在 fragment 上的原样复刻。plan 01 只声明 fragment resume 出范围，terminal drain 未被显式排除，属于范围描述与实现的缝隙。
@@ -103,6 +105,8 @@ def lr_lambda(step):
 `fs_diloco/storage/maintenance.py:140` 每次 `run_maintenance`（即每次 merge 后）调用 `_archived_terminal_paths(paths.update_history_jsonl)`，逐行读取**整个**归档 JSONL 来重建 terminal payload 路径集合。归档文件随历史线性增长（每 merge 约 +8 行），因此第 N 次 merge 的 maintenance 成本 ~O(N)，累计 O(N²)。这直接违反 plan 01 自己的不变量（"active discovery 和单次操作成本不依赖历史 update 数"）。BND-10/11 的 1000-cycle 测试只断言了 SQLite 行数与 page 数，没有覆盖 maintenance 的文件扫描成本，所以这条从测试矩阵漏了出去。当前 5000-step 规模（约 400 行）无感知，但长运行/更频繁 merge 下会变成结构性退化。
 
 **建议**：terminal path 集合不需要从归档反推——`archive_and_prune` 已经在返回值里带出本轮 `terminal_paths`（maintenance.py:58），历史部分只需在 GC 时对"文件已不存在"幂等跳过即可；或维护一个小型 `gc_pending` 表/游标，记录已归档但尚未删除 tensor 的路径，删除后清除。同时给 BND 系列补一条"maintenance 扫描行数/耗时不随 cycle 增长"的断言。
+
+**并发健壮性补充（2026-07-17）**：S5 tiny 验证触发 maintenance 枚举 learner 原子写临时文件后、`stat` 前文件已 rename 的 TOCTOU。commit `a0eebcc` 让该路径把并发消失视为正常，并增加确定性回归；这不修复本条 O(history) 复杂度，B5 性能工作仍未完成。
 
 ### B6（中）current-only GC 竞态只修了 prediction 路径
 
@@ -175,6 +179,8 @@ learner.py:1556-1589（inner poll 内）与 1657-1716（cycle 末等待）是同
 ### S5（低）配置分组与校验位置
 
 `resolve_config`（config.py:248-355）承担全部跨字段校验，策略专属参数（prediction timeout、post-publish wait、rebase 开关）平铺在 `LearnerSection`。随策略数量增长建议按策略分组（如 `learner.rebase.*` / `learner.prediction.*`），校验挪到各自策略类的 `validate(config)`。低优先级，可与 S1 同批做。
+
+**完成状态（2026-07-17）**：commit `c53f14d` 将唯一真正策略专属的 timeout 迁入 `learner.prediction.reconcile_timeout_seconds`，未创建空 rebase 节；common post-publish wait/poll 保持平铺。resolve 经策略类型表调用 replace/rebase/predict 的 class-level `validate`，原内联策略校验已删除；非当前策略的 prediction timeout 约束不会误触发。
 
 其余为正面确认：`commit_full_merge` 的事务校验（predecessor、selected 状态、重复 learner、future base、staleness 边界，sqlite_store.py:243-407）与 `insert_update_metadata` 的 frontier 去重 + latest-wins supersession（492-593）实现干净、边界完整；`atomic_io` 的 temp+rename+fsync 与 payload-first/metadata-last 协议一致；crash matrix failpoint 的注入位置（publish_global，syncer.py:185-237）与 plan 六阶段一一对应。
 

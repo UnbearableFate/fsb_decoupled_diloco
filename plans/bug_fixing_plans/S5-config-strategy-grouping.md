@@ -2,7 +2,7 @@
 
 ## 1. 元信息
 
-- 来源：review S5（低）+ B3（中，死字段）。现状：策略专属参数平铺在 `LearnerSection`（config.py:139-145：`post_publish_latest_wait_seconds`、`post_publish_latest_poll_seconds`、`prediction_reconcile_timeout_seconds`）；全部跨字段校验集中在 `resolve_config`（config.py:248-355）；三个字段已确认无消费方：`inner_optimizer.reset_on_global_update`（:118）、`sync.upload_mode`（:66）、`liveness.quorum_policy`（:92）。
+- 来源：review S5（低）+ B3（中，死字段）。开工状态：prediction timeout 平铺在 `LearnerSection`；S1 已为三种策略类建立 `validate`，但 `resolve_config` 仍保留一份重复的策略校验且尚未调用类校验；三个字段已确认无消费方：`inner_optimizer.reset_on_global_update`、`sync.upload_mode`、`liveness.quorum_policy`。
 - 性质：**含不兼容配置变更**（旧键 fail-closed 拒绝，无自动迁移）。代码行为不变——只有配置面变化。
 - 影响文件：`fs_diloco/core/config.py`、策略类模块（S1 交付）、`fs_diloco/runtime/learner.py`、`configs/*.yaml` 全量、配置文档与相应测试。
 - 前置依赖：**S1 完成**（校验去处是策略类）。其中 L1（死字段删除）无依赖，可提前单独执行（对应 review R0 的 B3 条目；若已完成则跳过 L1）。
@@ -30,7 +30,7 @@
 | --- | --- | --- | --- |
 | `global_adoption_strategy` | learner | 不动 | 工厂（非法名拒绝，S1 已建） |
 | `prediction_reconcile_timeout_seconds` | learner | `learner.prediction.reconcile_timeout_seconds` | predict 策略 `validate`（>0 等） |
-| `post_publish_latest_wait_seconds` / `_poll_seconds` | learner | **留在 `learner.*`**：现实现的 common post-publish 路径在 replace/rebase/predict 三者均消费 | `resolve_config`（策略无关） |
+| `post_publish_latest_wait_seconds` / `_poll_seconds` | learner | **留在 `learner.*`**：策略基类的 common post-publish 路径被 replace/rebase/predict 三者消费 | `resolve_config`（策略无关） |
 | `poll_latest_during_inner_steps`、`adopt_global_after_upload` | learner | 不动（策略无关开关） | `resolve_config` |
 | `inner_optimizer.reset_on_global_update` | inner_optimizer | **删除**（死字段，B3） | — |
 | `sync.upload_mode` | sync | **删除**（死字段，B3） | — |
@@ -43,7 +43,7 @@
 | Loop | SPECIFY/RED | IMPLEMENT/GREEN | HARDEN、CHECK、PERSIST |
 | --- | --- | --- | --- |
 | L0 现状盘点 | 确认未知键现行为；逐字段 grep 消费方，产出 §4 归属清单终稿；盘点 `resolve_config` 现有校验并按"策略专属/全局"分类 | 无实现 | 清单入 progress.md；基线 commit 记录 |
-| L1 死字段删除（可独立提前） | CFG-01 先 RED：三字段出现在 YAML → 期望拒绝 | 删除 dataclass 字段；清理 in-repo YAML 中的出现；（如需）未知键拒绝机制 | 全量 pytest；`grep -rn "reset_on_global_update\|upload_mode\|quorum_policy"` 仅余历史文档 |
+| L1 死字段删除（可独立提前） | CFG-01 先 RED：三字段出现在 YAML → 期望拒绝 | 删除 dataclass 字段；清理 in-repo YAML 中的出现；现有未知键拒绝机制增加 path-aware removed-key 诊断 | 全量 pytest；三个名称仅允许出现在 removed-key 映射、拒绝测试、计划/历史报告，不得留在 dataclass 或 YAML |
 | L2 分组与旧键拒绝 | CFG-02/03 先 RED：旧扁平 prediction timeout 拒绝且提示新键；新键默认值与类型正确 | 新增 `learner.prediction` 子节并迁移 timeout；不创建空 `learner.rebase` | CFG-05 参数化测试覆盖全部 in-repo YAML |
 | L3 校验挂接策略类 | CFG-04 先 RED：策略专属反例（如 timeout ≤0）经由策略 `validate` 拒绝 | 策略类 `validate(config)` 落地；`resolve_config` 中对应校验迁出并在启动路径调用 | 校验总集不减少：L0 校验分类清单逐条对账（每条要么留在 resolve_config，要么在某策略 validate，不允许丢失） |
 | L4 配置迁移与管线 | — | `configs/*.yaml` 全量迁移 | 三策略 tiny run 各一次正常完成；全量 pytest；文档同步 |

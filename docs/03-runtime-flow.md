@@ -12,7 +12,7 @@
 2. CLI 参数覆盖:`--run-id`、`--shared-root`、`--num-learners`;
 3. `run_id` 缺省时取 `$RUN_ID` 环境变量或 `时间戳_run.name`;
 4. `shared_root` 缺省为 `<cwd>/runs/fs_diloco/<run_id>`;
-5. `num_learners` 覆盖时同步收紧 `quorum_min/max`;fragment 配置合法性校验。
+5. `num_learners` 覆盖时同步收紧 `quorum_min/max`;通用配置校验后按 `global_adoption_strategy` 调用对应策略类 `validate`。旧/未知键 fail-closed。
 
 ### 1.2 syncer 初始化(全量模式,`initialize_run`)
 

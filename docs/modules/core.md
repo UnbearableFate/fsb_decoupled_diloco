@@ -1,6 +1,6 @@
 # 模块参考:fs_diloco/core
 
-配置与共享常量。包内最底层,不依赖其他子包。
+配置与共享常量。常量是包内最底层；配置解析在完成通用校验后延迟调用 torch-free adoption 策略校验器。
 
 ## core/constants.py — 共享常量
 
@@ -25,12 +25,12 @@
 
 ### 配置 dataclass
 
-`Config` 由 14 个节组成:`run / init / model / data / sync / liveness / training / inner_optimizer / outer_optimizer / io / learner / fragments / failure_sim / wandb`(每节字段与语义见 [06-configuration.md](../06-configuration.md))。
+`Config` 由 15 个顶层节组成:`run / init / model / data / sync / syncer / liveness / training / inner_optimizer / outer_optimizer / io / learner / fragments / failure_sim / wandb`;`learner` 内含 `prediction` 子节(每节字段与语义见 [06-configuration.md](../06-configuration.md))。
 
 ### 函数
 
 - **`_coerce_scalar(value, target_type)`**(私有)— 按类型注解做轻量转换:list→tuple(如 betas)、Optional 解包;其余原样返回。
-- **`_from_dict(cls, data)`**(私有)— 递归把 dict 构造成 dataclass;**遇到未知键抛 `ValueError`**(拼写保护);嵌套节递归处理。
+- **`_from_dict(cls, data, path=())`**(私有)— 递归把 dict 构造成 dataclass;**遇到未知键抛 `ValueError`**(拼写保护)。已移除键给出完整 dotted path；旧 prediction timeout 额外指出新路径。
 - **`config_to_dict(config) -> dict`** — `dataclasses.asdict` 全量导出(用于写快照、W&B config、SQLite run_state)。
 - **`load_config(path=None) -> Config`** — 读 YAML(可为 None/空文件 → 全默认值);顶层必须是 mapping。
 - **`_default_run_id(name)`**(私有)— `strftime("%Y%m%d_%H%M%S") + "_" + name`。
@@ -38,6 +38,7 @@
   1. CLI 覆盖 run_id/shared_root;
   2. run_id 缺省:`$RUN_ID` 或时间戳;shared_root 缺省:`<project_root|cwd>/runs/fs_diloco/<run_id>`;
   3. `num_learners` 覆盖时把 `quorum_min/max` 收紧到不超过 learner 数;
-  4. fragment 合法性校验(`num_fragments>=1`、`fragments_per_update==1`、schedule/strategy 白名单);
-  5. `training.block_size = data.block_size`(数据侧为准)。
+  4. 通用 fragment/completion/grace/wait 合法性校验;
+  5. 延迟调用 `validate_global_adoption_strategy`:replace no-op，rebase/predict 各自校验所需组合，prediction timeout 只对 predict 生效;
+  6. `training.block_size = data.block_size`(数据侧为准)。
 - **`write_resolved_config(config, path)`** — 原子写解析后配置的 YAML 快照(`control/run_config.resolved.yaml`)。

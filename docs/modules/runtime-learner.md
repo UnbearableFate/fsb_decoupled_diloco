@@ -66,7 +66,7 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
 - **`ReplaceGlobalAdoptionStrategy` / `RebaseGlobalAdoptionStrategy` / `PredictGlobalAdoptionStrategy`** — 分别封装直接覆盖、发布点 local-delta rebase、prediction/reconcile 的私有 reference、token 和 update-id 状态。
 - **钩子顺序** — 每个 cycle 依次为 `on_local_tokens` → 可选 `on_newer_latest` → `on_stop` 或 `on_cycle_end` → `before_publish` → `on_after_publish`。
 - **`StrategyAction` / `AdoptionOutcome`** — 把新版本、latest metadata、token 计数与 preserve/reset 决策返回 runner；`global_adopted`、`inner_training_state_preserved`、`inner_optimizer_reset` 只由 learner 的统一收尾函数发出。
-- **`make_global_adoption_strategy(config)`** — 唯一策略工厂；非法策略名启动即拒绝。策略状态只存在于进程内，不写入磁盘或 DB。
+- **`validate_global_adoption_strategy(config)` / `make_global_adoption_strategy(config)`** — 配置解析经同一策略类型表调用当前策略的 `validate`，运行期再由唯一工厂构造状态机；非法策略名启动即拒绝。prediction 专属超时位于 `learner.prediction.reconcile_timeout_seconds`。策略状态只存在于进程内，不写入磁盘或 DB。
 
 ---
 

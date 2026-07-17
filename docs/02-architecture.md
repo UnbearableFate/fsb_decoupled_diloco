@@ -21,7 +21,7 @@
 4. **`control/latest.json` 是 learner 轮询的唯一全局指针**。learner 不扫描权重目录、不读数据库。
 5. **心跳 JSON 只是存活提示**,不参与正确性(丢心跳最多导致 liveness 误判,不会丢更新)。
 6. **SQLite 是共享目录中的持久提交记录**:`control/syncer_metadata.sqlite3`,使用 rollback journal(`journal_mode=DELETE`)、`synchronous=FULL`、60 秒 busy timeout。只有 syncer 改业务表,但不同计算节点可以重开并恢复同一 run;不使用 WAL、节点本地副本或 DB dump。
-7. **learner 采用"整体覆盖"语义**:采纳新全局版本时,把整个模型参数替换为全局权重,并**重置内层优化器与调度器**(`inner_optimizer.reset_on_global_update`,当前实现固定重置)。
+7. **learner 的 global adoption 由单一策略状态机决定**:`replace`/直接 adoption 整体覆盖并重置内层 optimizer/scheduler；rebase/prediction reconcile 在合成尚未发布的本地差值后保留内层训练状态。不存在与此并行的配置布尔开关。
 8. **外层优化器是显式扁平向量实现**(`modeling/outer_optim.py`),不复用 `torch.optim`,以便把优化器状态精确序列化成 safetensors 并跨 resume 保持一致。
 
 ## 3. 参数的扁平向量表示

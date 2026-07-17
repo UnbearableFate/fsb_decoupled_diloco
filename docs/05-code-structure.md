@@ -49,14 +49,14 @@ fsb_decoupled_diloco/
 
 ## 2. 分层与依赖方向
 
-依赖严格单向,自下而上:
+主要运行时依赖自下而上:
 
 ```
 core  ←  storage  ←  protocol / modeling / observability  ←  runtime  ←  (入口 shim)
                                                           ←  tools
 ```
 
-- `core` 不 import 包内任何东西(`config.py` 仅延迟 import `storage.atomic_io` 用于写快照);
+- `core/config.py` 在 resolve 尾部延迟 import 无 torch 依赖的 `runtime/adoption.py`，只为经唯一策略类型表调用当前策略的 class-level `validate`;写快照时另延迟 import `storage.atomic_io`。这是配置扩展点的显式反向依赖，adoption 模块不得因此 import config 或 learner runner;
 - `protocol/merge.py`、`fragment_scheduler.py`、`outer_optim.py` 是**纯函数**模块,不碰文件系统,单测友好;
 - 只有 `runtime/` 同时了解"共享文件系统协议"和"SQLite 状态机";
 - `tools/analysis.py` 故意只用标准库 + 少量 protocol 纯函数,可在无 GPU/torch 环境运行(`eval_lm_harness.py` 的 torch 依赖也是函数内延迟 import)。

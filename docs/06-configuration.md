@@ -46,7 +46,6 @@
 | 字段 | 默认 | 说明 |
 |---|---|---|
 | `num_learners` | 8 | learner 数;决定合法 learner_id 集与数据分片数 |
-| `upload_mode` | `params` | ⚠ 仅此一种,未消费 |
 | `quorum_min` / `quorum_max` | 4 / 8 | 每次合并的 update 数下限/上限(每 learner 至多 1 份) |
 | `max_staleness_versions` | 2 | staleness 窗口;超过即丢弃 |
 | `staleness_lambda` | 0.25 | 加权公式中的 λ |
@@ -87,7 +86,6 @@ syncer:
 | `stale_after_seconds` | 120.0 | 心跳超龄 → stale |
 | `dead_after_seconds` | 300.0 | 心跳超龄 → dead |
 | `no_progress_timeout_seconds` | 600.0 | syncer 无合并进展的停机超时;learner 收尾等待也用它 |
-| `quorum_policy` | `fixed` | ⚠ 未消费 |
 
 ## training — learner 内层训练
 
@@ -112,7 +110,6 @@ syncer:
 | `lr` / `betas` / `eps` / `weight_decay` | 5e-5 / (0.9,0.95) / 1e-8 / 0.1 | AdamW 超参 |
 | `scheduler` | `cosine` | `none` / warmup+`cosine`(cosine 需 `max_local_steps`) |
 | `warmup_steps` | 100 | 线性 warmup 步数 |
-| `reset_on_global_update` | `true` | ⚠ 未消费——当前实现**总是**在采纳新版本时重置内层优化器 |
 
 ## outer_optimizer(syncer)
 
@@ -141,6 +138,11 @@ checkpoint/update 保留数量不再是配置项。syncer 的 maintenance 按权
 | `poll_latest_during_inner_steps` | `false` | 区间中途也轮询/采纳新版本 |
 | `adopt_global_after_upload` | `true` | 每次上传后轮询/采纳(fragment 模式会等待一小段时间) |
 | `global_adoption_strategy` | `replace` | full learner 的采纳方式:`replace` 直接替换本地权重;`rebase_post_publish_delta` 仅在发布后的第一次检查没有新版时保留按 `syncer.compute_dtype` 构造的发布点,随后将尚未发布的本地差值合成到首个新 global 并立即释放 reference。prediction/reconcile 优先使用 learner GPU，OOM 风险时回退 CPU。后者不支持 fragment |
+| `post_publish_latest_wait_seconds` | 0.0 | 三种 full 策略共用的发布后等待时长；0 表示只做即时检查 |
+| `post_publish_latest_poll_seconds` | 0.2 | 发布后等待期间的轮询间隔，必须大于 0 |
+| `prediction.reconcile_timeout_seconds` | 60.0 | 仅 prediction 策略使用的 reconcile 等待上限，必须大于 0 |
+
+配置解析对未知键 fail-closed。`sync.upload_mode`、`liveness.quorum_policy`、`inner_optimizer.reset_on_global_update` 已作为未消费字段删除；再次出现会明确报“字段已移除”。旧的平铺键 `learner.prediction_reconcile_timeout_seconds` 同样拒绝，错误会指向 `learner.prediction.reconcile_timeout_seconds`，不提供静默别名或自动迁移。
 
 5000-step full 配置启用 `poll_latest_during_inner_steps=true` 和
 `global_adoption_strategy=rebase_post_publish_delta`:发布后仍只无阻塞检查一次 latest;若没有新版,
