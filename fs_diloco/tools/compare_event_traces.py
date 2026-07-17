@@ -147,7 +147,9 @@ BUILTIN_PROFILES: Mapping[str, TraceProfile] = {
     ),
 }
 
-_RANDOM_ID_SUFFIX = re.compile(r"^(?P<prefix>.+_\d{8})_[0-9a-fA-F]{8,}$")
+_RANDOM_ID_SUFFIX = re.compile(
+    r"^(?P<prefix>.+_\d{8}(?:_f\d{3})?)_[0-9a-fA-F]{8,}$"
+)
 
 
 def _string_list(value: Any, *, field_name: str) -> tuple[str, ...]:

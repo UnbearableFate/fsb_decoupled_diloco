@@ -9,6 +9,7 @@ import os
 import socket
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -835,6 +836,87 @@ def adopt_fragment_updates(
     )
 
 
+@dataclass(frozen=True)
+class FragmentAdoptionResult:
+    global_merge_event: int
+    fragment_versions: dict[int, int]
+    tokens_since_fragment_load: dict[int, int]
+    fragment_adopt_count: int
+    last_adopted_fragments: list[int]
+    optimizer: Any
+    scheduler: Any
+
+
+def apply_fragment_adoption(
+    *,
+    model: torch.nn.Module,
+    latest: dict[str, Any],
+    param_index: dict[str, Any],
+    fragment_index: dict[str, Any],
+    last_loaded_fragment_versions: dict[int, int],
+    tokens_since_fragment_load: dict[int, int],
+    fragment_adopt_count: int,
+    last_adopted_fragments: list[int],
+    optimizer: Any,
+    scheduler: Any,
+    device: torch.device,
+    config: Config,
+    logger: JsonlLogger,
+    event_type: str,
+    reset_tokens: bool,
+    reset_optimizer: bool,
+    include_fragment_versions: bool,
+    adopt_fn: Callable[..., tuple[int, dict[int, int], list[int]]] = adopt_fragment_updates,
+    rebuild_inner_state_fn: Callable[..., tuple[Any, Any]] = (
+        build_inner_optimizer_and_scheduler
+    ),
+) -> FragmentAdoptionResult:
+    """Apply one fragment latest snapshot with call-site-specific legacy semantics."""
+
+    global_merge_event, fragment_versions, changed = adopt_fn(
+        model=model,
+        latest=latest,
+        param_index=param_index,
+        fragment_index=fragment_index,
+        last_loaded_fragment_versions=last_loaded_fragment_versions,
+        device=device,
+    )
+    next_tokens = dict(tokens_since_fragment_load)
+    next_count = fragment_adopt_count
+    next_last_adopted = last_adopted_fragments
+    next_optimizer = optimizer
+    next_scheduler = scheduler
+    if changed:
+        next_count += len(changed)
+        next_last_adopted = changed
+        if reset_tokens:
+            for fragment_id in changed:
+                next_tokens[fragment_id] = 0
+        if reset_optimizer and config.fragments.reset_inner_optimizer_on_fragment_adopt:
+            next_optimizer, next_scheduler = rebuild_inner_state_fn(model, config)
+            logger.event(
+                "inner_optimizer_reset",
+                version=global_merge_event,
+                fragments=changed,
+            )
+        event_fields: dict[str, Any] = {
+            "global_merge_event": global_merge_event,
+            "fragments": changed,
+        }
+        if include_fragment_versions:
+            event_fields["fragment_versions"] = fragment_versions
+        logger.event(event_type, **event_fields)
+    return FragmentAdoptionResult(
+        global_merge_event=global_merge_event,
+        fragment_versions=fragment_versions,
+        tokens_since_fragment_load=next_tokens,
+        fragment_adopt_count=next_count,
+        last_adopted_fragments=next_last_adopted,
+        optimizer=next_optimizer,
+        scheduler=next_scheduler,
+    )
+
+
 def write_update(
     *,
     paths: RunPaths,
@@ -1026,6 +1108,48 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
     last_update_id: str | None = None
     had_error = False
 
+    def handle_fragment_latest(
+        latest_payload: dict[str, Any],
+        *,
+        event_type: str,
+        reset_tokens: bool,
+        reset_optimizer: bool,
+        include_fragment_versions: bool,
+    ) -> None:
+        nonlocal fragment_adopt_count
+        nonlocal last_adopted_fragments
+        nonlocal last_loaded_fragment_versions
+        nonlocal last_loaded_global_merge_event
+        nonlocal optimizer
+        nonlocal scheduler
+        nonlocal tokens_since_fragment_load
+        result = apply_fragment_adoption(
+            model=model,
+            latest=latest_payload,
+            param_index=param_index,
+            fragment_index=fragment_index,
+            last_loaded_fragment_versions=last_loaded_fragment_versions,
+            tokens_since_fragment_load=tokens_since_fragment_load,
+            fragment_adopt_count=fragment_adopt_count,
+            last_adopted_fragments=last_adopted_fragments,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            device=device,
+            config=config,
+            logger=logger,
+            event_type=event_type,
+            reset_tokens=reset_tokens,
+            reset_optimizer=reset_optimizer,
+            include_fragment_versions=include_fragment_versions,
+        )
+        last_loaded_global_merge_event = result.global_merge_event
+        last_loaded_fragment_versions = result.fragment_versions
+        tokens_since_fragment_load = result.tokens_since_fragment_load
+        fragment_adopt_count = result.fragment_adopt_count
+        last_adopted_fragments = result.last_adopted_fragments
+        optimizer = result.optimizer
+        scheduler = result.scheduler
+
     try:
         while not stop_requested(paths, local_step, config):
             resource_monitor.begin_cycle()
@@ -1096,38 +1220,13 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                         paths, last_loaded_global_merge_event
                     )
                     if maybe_latest is not None:
-                        (
-                            last_loaded_global_merge_event,
-                            last_loaded_fragment_versions,
-                            changed,
-                        ) = adopt_fragment_updates(
-                            model=model,
-                            latest=maybe_latest,
-                            param_index=param_index,
-                            fragment_index=fragment_index,
-                            last_loaded_fragment_versions=last_loaded_fragment_versions,
-                            device=device,
+                        handle_fragment_latest(
+                            maybe_latest,
+                            event_type="fragments_adopted",
+                            reset_tokens=True,
+                            reset_optimizer=True,
+                            include_fragment_versions=True,
                         )
-                        if changed:
-                            fragment_adopt_count += len(changed)
-                            last_adopted_fragments = changed
-                            for fragment_id in changed:
-                                tokens_since_fragment_load[fragment_id] = 0
-                            if config.fragments.reset_inner_optimizer_on_fragment_adopt:
-                                optimizer, scheduler = build_inner_optimizer_and_scheduler(
-                                    model, config
-                                )
-                                logger.event(
-                                    "inner_optimizer_reset",
-                                    version=last_loaded_global_merge_event,
-                                    fragments=changed,
-                                )
-                            logger.event(
-                                "fragments_adopted",
-                                global_merge_event=last_loaded_global_merge_event,
-                                fragments=changed,
-                                fragment_versions=last_loaded_fragment_versions,
-                            )
 
             if not losses:
                 continue
@@ -1270,38 +1369,13 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                     ),
                 )
                 if maybe_latest is not None:
-                    (
-                        last_loaded_global_merge_event,
-                        last_loaded_fragment_versions,
-                        changed,
-                    ) = adopt_fragment_updates(
-                        model=model,
-                        latest=maybe_latest,
-                        param_index=param_index,
-                        fragment_index=fragment_index,
-                        last_loaded_fragment_versions=last_loaded_fragment_versions,
-                        device=device,
+                    handle_fragment_latest(
+                        maybe_latest,
+                        event_type="fragments_adopted",
+                        reset_tokens=True,
+                        reset_optimizer=True,
+                        include_fragment_versions=True,
                     )
-                    if changed:
-                        fragment_adopt_count += len(changed)
-                        last_adopted_fragments = changed
-                        for changed_fragment_id in changed:
-                            tokens_since_fragment_load[changed_fragment_id] = 0
-                        if config.fragments.reset_inner_optimizer_on_fragment_adopt:
-                            optimizer, scheduler = build_inner_optimizer_and_scheduler(
-                                model, config
-                            )
-                            logger.event(
-                                "inner_optimizer_reset",
-                                version=last_loaded_global_merge_event,
-                                fragments=changed,
-                            )
-                        logger.event(
-                            "fragments_adopted",
-                            global_merge_event=last_loaded_global_merge_event,
-                            fragments=changed,
-                            fragment_versions=last_loaded_fragment_versions,
-                        )
             maybe_crash(config.failure_sim)
     except Exception:
         had_error = True
@@ -1331,52 +1405,24 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                         paths, last_loaded_global_merge_event
                     )
                     if maybe_latest is not None:
-                        (
-                            last_loaded_global_merge_event,
-                            last_loaded_fragment_versions,
-                            changed,
-                        ) = adopt_fragment_updates(
-                            model=model,
-                            latest=maybe_latest,
-                            param_index=param_index,
-                            fragment_index=fragment_index,
-                            last_loaded_fragment_versions=last_loaded_fragment_versions,
-                            device=device,
+                        handle_fragment_latest(
+                            maybe_latest,
+                            event_type="final_wait_fragments_adopted",
+                            reset_tokens=True,
+                            reset_optimizer=False,
+                            include_fragment_versions=False,
                         )
-                        if changed:
-                            fragment_adopt_count += len(changed)
-                            last_adopted_fragments = changed
-                            for changed_fragment_id in changed:
-                                tokens_since_fragment_load[changed_fragment_id] = 0
-                            logger.event(
-                                "final_wait_fragments_adopted",
-                                global_merge_event=last_loaded_global_merge_event,
-                                fragments=changed,
-                            )
                         continue
                     time.sleep(config.sync.stop_file_poll_seconds)
             maybe_latest = safe_read_json(paths.latest_json)
             if maybe_latest and maybe_latest.get("latest_kind") == "fragment":
-                (
-                    last_loaded_global_merge_event,
-                    last_loaded_fragment_versions,
-                    changed,
-                ) = adopt_fragment_updates(
-                    model=model,
-                    latest=maybe_latest,
-                    param_index=param_index,
-                    fragment_index=fragment_index,
-                    last_loaded_fragment_versions=last_loaded_fragment_versions,
-                    device=device,
+                handle_fragment_latest(
+                    maybe_latest,
+                    event_type="final_fragments_adopted",
+                    reset_tokens=False,
+                    reset_optimizer=False,
+                    include_fragment_versions=False,
                 )
-                if changed:
-                    fragment_adopt_count += len(changed)
-                    last_adopted_fragments = changed
-                    logger.event(
-                        "final_fragments_adopted",
-                        global_merge_event=last_loaded_global_merge_event,
-                        fragments=changed,
-                    )
         except Exception as exc:
             logger.event("final_fragment_adoption_failed", error=repr(exc))
         if paths.stop_json.exists():

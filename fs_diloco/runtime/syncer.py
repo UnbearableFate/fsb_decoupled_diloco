@@ -8,6 +8,8 @@ import os
 import signal
 import socket
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -722,13 +724,77 @@ def maybe_shorten_grace_deadline(
     return min(deadline, now_monotonic + eta_seconds), eta_seconds
 
 
+@dataclass(frozen=True)
+class UpdateProposalSource:
+    """Parameterize full/fragment proposal discovery without changing events."""
+
+    context_fields: dict[str, int]
+    missing_files_event: str
+    eligible_updates_fn: Callable[[SQLiteStore], list[dict[str, Any]]]
+    drop_updates_fn: Callable[[SQLiteStore, list[str], str], Any]
+
+    def eligible_updates(self, store: SQLiteStore) -> list[dict[str, Any]]:
+        return self.eligible_updates_fn(store)
+
+    def drop_updates(
+        self,
+        store: SQLiteStore,
+        update_ids: list[str],
+        reason: str,
+    ) -> None:
+        self.drop_updates_fn(store, update_ids, reason)
+
+
+def full_update_proposal_source(
+    *,
+    current_version: int,
+    max_staleness_versions: int,
+) -> UpdateProposalSource:
+    return UpdateProposalSource(
+        context_fields={"version": current_version},
+        missing_files_event="updates_dropped_missing_files",
+        eligible_updates_fn=lambda store: store.eligible_updates(
+            current_version,
+            max_staleness_versions,
+        ),
+        drop_updates_fn=lambda store, update_ids, reason: store.drop_updates(
+            update_ids,
+            reason,
+        ),
+    )
+
+
+def fragment_update_proposal_source(
+    *,
+    fragment_id: int,
+    current_fragment_version: int,
+    max_staleness_versions: int,
+) -> UpdateProposalSource:
+    return UpdateProposalSource(
+        context_fields={
+            "fragment_id": fragment_id,
+            "fragment_version": current_fragment_version,
+        },
+        missing_files_event="fragment_updates_dropped_missing_files",
+        eligible_updates_fn=lambda store: store.eligible_fragment_updates(
+            fragment_id=fragment_id,
+            current_fragment_version=current_fragment_version,
+            max_staleness_versions=max_staleness_versions,
+        ),
+        drop_updates_fn=lambda store, update_ids, reason: store.drop_fragment_updates(
+            update_ids,
+            reason,
+        ),
+    )
+
+
 def collect_with_grace_window(
     store: SQLiteStore,
     paths: RunPaths,
     config: Config,
     logger: JsonlLogger,
     *,
-    current_version: int,
+    source: UpdateProposalSource,
 ) -> list[dict[str, Any]]:
     started_at = time.monotonic()
     initial_seconds = configured_grace_seconds(config)
@@ -738,12 +804,12 @@ def collect_with_grace_window(
         "grace_window_started",
         mode=config.sync.grace_window.mode,
         initial_seconds=initial_seconds,
-        version=current_version,
+        **source.context_fields,
     )
     selected: list[dict[str, Any]] = []
     while True:
-        eligible = store.eligible_updates(current_version, config.sync.max_staleness_versions)
-        eligible = drop_missing_update_files(store, eligible, logger)
+        eligible = source.eligible_updates(store)
+        eligible = drop_missing_update_files(store, eligible, logger, source=source)
         selected = select_one_per_learner(
             eligible,
             policy=config.sync.selection_policy,
@@ -762,10 +828,10 @@ def collect_with_grace_window(
             deadline_source = "fastest_upload_eta"
             logger.event(
                 "grace_window_shortened",
-                version=current_version,
                 selected=len(selected),
                 fastest_next_upload_eta_seconds=eta_seconds,
                 remaining_seconds=max(0.0, deadline - now_monotonic),
+                **source.context_fields,
             )
         if len(selected) >= config.sync.quorum_max:
             deadline_source = "quorum_max"
@@ -776,10 +842,10 @@ def collect_with_grace_window(
         sync_liveness_and_metadata(store, paths, config, logger)
     logger.event(
         "grace_window_completed",
-        version=current_version,
         selected=len(selected),
         elapsed_seconds=time.monotonic() - started_at,
         deadline_source=deadline_source,
+        **source.context_fields,
     )
     return selected
 
@@ -788,98 +854,15 @@ def drop_missing_update_files(
     store: SQLiteStore,
     updates: list[dict[str, Any]],
     logger: JsonlLogger,
-) -> list[dict[str, Any]]:
-    missing = [row["update_id"] for row in updates if not Path(row["file_path"]).exists()]
-    if missing:
-        store.drop_updates(missing, "missing_file")
-        logger.event("updates_dropped_missing_files", count=len(missing), update_ids=missing)
-    missing_ids = set(missing)
-    return [row for row in updates if row["update_id"] not in missing_ids]
-
-
-def drop_missing_fragment_update_files(
-    store: SQLiteStore,
-    updates: list[dict[str, Any]],
-    logger: JsonlLogger,
-) -> list[dict[str, Any]]:
-    missing = [row["update_id"] for row in updates if not Path(row["file_path"]).exists()]
-    if missing:
-        store.drop_fragment_updates(missing, "missing_file")
-        logger.event(
-            "fragment_updates_dropped_missing_files", count=len(missing), update_ids=missing
-        )
-    missing_ids = set(missing)
-    return [row for row in updates if row["update_id"] not in missing_ids]
-
-
-def collect_fragment_with_grace_window(
-    store: SQLiteStore,
-    paths: RunPaths,
-    config: Config,
-    logger: JsonlLogger,
     *,
-    fragment_id: int,
-    current_fragment_version: int,
+    source: UpdateProposalSource,
 ) -> list[dict[str, Any]]:
-    started_at = time.monotonic()
-    initial_seconds = configured_grace_seconds(config)
-    deadline = started_at + initial_seconds
-    deadline_source = "initial"
-    logger.event(
-        "grace_window_started",
-        mode=config.sync.grace_window.mode,
-        initial_seconds=initial_seconds,
-        fragment_id=fragment_id,
-        fragment_version=current_fragment_version,
-    )
-    selected: list[dict[str, Any]] = []
-    while True:
-        eligible = store.eligible_fragment_updates(
-            fragment_id=fragment_id,
-            current_fragment_version=current_fragment_version,
-            max_staleness_versions=config.sync.max_staleness_versions,
-        )
-        eligible = drop_missing_fragment_update_files(store, eligible, logger)
-        selected = select_one_per_learner(
-            eligible,
-            policy=config.sync.selection_policy,
-            quorum_max=config.sync.quorum_max,
-        )
-        now_monotonic = time.monotonic()
-        shortened_deadline, eta_seconds = maybe_shorten_grace_deadline(
-            deadline=deadline,
-            selected=selected,
-            config=config,
-            now_monotonic=now_monotonic,
-            now_wall=time.time(),
-        )
-        if shortened_deadline < deadline:
-            deadline = shortened_deadline
-            deadline_source = "fastest_upload_eta"
-            logger.event(
-                "grace_window_shortened",
-                fragment_id=fragment_id,
-                fragment_version=current_fragment_version,
-                selected=len(selected),
-                fastest_next_upload_eta_seconds=eta_seconds,
-                remaining_seconds=max(0.0, deadline - now_monotonic),
-            )
-        if len(selected) >= config.sync.quorum_max:
-            deadline_source = "quorum_max"
-            break
-        if now_monotonic >= deadline:
-            break
-        time.sleep(min(config.sync.scan_interval_seconds, max(0.0, deadline - time.monotonic())))
-        sync_liveness_and_metadata(store, paths, config, logger)
-    logger.event(
-        "grace_window_completed",
-        fragment_id=fragment_id,
-        fragment_version=current_fragment_version,
-        selected=len(selected),
-        elapsed_seconds=time.monotonic() - started_at,
-        deadline_source=deadline_source,
-    )
-    return selected
+    missing = [row["update_id"] for row in updates if not Path(row["file_path"]).exists()]
+    if missing:
+        source.drop_updates(store, missing, "missing_file")
+        logger.event(source.missing_files_event, count=len(missing), update_ids=missing)
+    missing_ids = set(missing)
+    return [row for row in updates if row["update_id"] not in missing_ids]
 
 
 def all_expected_learners_stopped(store: SQLiteStore, config: Config) -> bool:
@@ -903,8 +886,12 @@ def select_terminal_drain_updates(
     if not all_expected_learners_stopped(store, config):
         return []
     store.drop_ineligible_updates(current_version, config.sync.max_staleness_versions)
-    pending = store.eligible_updates(current_version, config.sync.max_staleness_versions)
-    pending = drop_missing_update_files(store, pending, logger)
+    source = full_update_proposal_source(
+        current_version=current_version,
+        max_staleness_versions=config.sync.max_staleness_versions,
+    )
+    pending = source.eligible_updates(store)
+    pending = drop_missing_update_files(store, pending, logger, source=source)
     selected = select_one_per_learner(
         pending,
         policy=config.sync.selection_policy,
@@ -1206,13 +1193,19 @@ def run_fragment_syncer(
                 schedule=config.fragments.schedule,
             )
             current_fragment_version = int(fragment_versions[target_fragment])
-            sync_liveness_and_metadata(store, paths, config, logger)
-            eligible = store.eligible_fragment_updates(
+            proposal_source = fragment_update_proposal_source(
                 fragment_id=target_fragment,
                 current_fragment_version=current_fragment_version,
                 max_staleness_versions=config.sync.max_staleness_versions,
             )
-            eligible = drop_missing_fragment_update_files(store, eligible, logger)
+            sync_liveness_and_metadata(store, paths, config, logger)
+            eligible = proposal_source.eligible_updates(store)
+            eligible = drop_missing_update_files(
+                store,
+                eligible,
+                logger,
+                source=proposal_source,
+            )
             one_per_learner = select_one_per_learner(
                 eligible,
                 policy=config.sync.selection_policy,
@@ -1241,13 +1234,12 @@ def run_fragment_syncer(
                 time.sleep(config.sync.scan_interval_seconds)
                 continue
 
-            selected = collect_fragment_with_grace_window(
+            selected = collect_with_grace_window(
                 store,
                 paths,
                 config,
                 logger,
-                fragment_id=target_fragment,
-                current_fragment_version=current_fragment_version,
+                source=proposal_source,
             )
             if len(selected) < config.sync.quorum_min:
                 logger.event(
@@ -1663,8 +1655,17 @@ def run_syncer(config: Config) -> None:
                 terminal_drain = len(selected) < config.sync.quorum_min
             else:
                 terminal_drain = False
-            eligible = store.eligible_updates(version, config.sync.max_staleness_versions)
-            eligible = drop_missing_update_files(store, eligible, logger)
+            proposal_source = full_update_proposal_source(
+                current_version=version,
+                max_staleness_versions=config.sync.max_staleness_versions,
+            )
+            eligible = proposal_source.eligible_updates(store)
+            eligible = drop_missing_update_files(
+                store,
+                eligible,
+                logger,
+                source=proposal_source,
+            )
             one_per_learner = select_one_per_learner(
                 eligible,
                 policy=config.sync.selection_policy,
@@ -1693,7 +1694,7 @@ def run_syncer(config: Config) -> None:
                         paths,
                         config,
                         logger,
-                        current_version=version,
+                        source=proposal_source,
                     )
                     if len(selected) < config.sync.quorum_min:
                         continue

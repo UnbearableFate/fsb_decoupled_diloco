@@ -1,5 +1,7 @@
 import time
 
+import pytest
+
 from fs_diloco.core.config import resolve_config
 from fs_diloco.core.constants import FORMAT_VERSION
 from fs_diloco.observability.logging_utils import JsonlLogger
@@ -157,6 +159,39 @@ def test_terminal_drain_requires_stopped_and_keeps_strict_eligibility(tmp_path):
     assert select_terminal_drain_updates(
         store, paths, config, logger, current_version=3
     ) == []
+    store.close()
+
+
+@pytest.mark.parametrize(
+    ("rows", "expected"),
+    [
+        ([], False),
+        ([('learner_000', 'stopped')], False),
+        ([('learner_000', 'stopped'), ('learner_001', 'active')], False),
+        ([('learner_000', 'stopped'), ('learner_001', 'dead')], False),
+        ([('learner_000', 'stopped'), ('learner_001', 'stopped')], True),
+        (
+            [
+                ('learner_000', 'stopped'),
+                ('learner_001', 'stopped'),
+                ('learner_999', 'stopped'),
+            ],
+            False,
+        ),
+    ],
+)
+def test_all_expected_learners_stopped_requires_exact_expected_set(tmp_path, rows, expected):
+    config = resolve_config(
+        "configs/fs_diloco_tiny_local.yaml",
+        run_id="stopped_set",
+        shared_root=str(tmp_path),
+        num_learners=2,
+    )
+    store = SQLiteStore(tmp_path / "db.sqlite3")
+    for learner_id, status in rows:
+        store.upsert_learner(learner_id, status=status)
+
+    assert all_expected_learners_stopped(store, config) is expected
     store.close()
 
 

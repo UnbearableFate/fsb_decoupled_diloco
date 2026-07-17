@@ -60,6 +60,26 @@ def test_equivalent_traces_ignore_runtime_identity_fields(tmp_path):
     assert result.actors == ("learner_000",)
 
 
+def test_equivalent_fragment_update_ids_ignore_random_suffix(tmp_path):
+    for side, suffix in (("left", "aaaaaaaaaaaa"), ("right", "bbbbbbbbbbbb")):
+        _write_events(
+            tmp_path / side / "logs" / "learner_000.jsonl",
+            [
+                {
+                    "actor": "learner_000",
+                    "event_type": "fragment_update_written",
+                    "update_id": f"learner_000_00000002_f003_{suffix}",
+                    "fragment_id": 3,
+                    "local_step": 2,
+                }
+            ],
+        )
+
+    result = compare_traces(tmp_path / "left", tmp_path / "right", load_profile("default"))
+
+    assert result.equivalent
+
+
 @pytest.mark.parametrize(
     ("right_events", "expected_index"),
     [
