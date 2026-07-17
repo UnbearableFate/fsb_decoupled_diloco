@@ -54,6 +54,12 @@ from ..storage.tensor_codec import (
     load_outer_state,
     save_update_vector,
 )
+from .adoption import (
+    AdoptionContext,
+    PublishResult,
+    StrategyAction,
+    make_global_adoption_strategy,
+)
 from .failure_sim import maybe_crash, maybe_sleep_jitter, should_skip_upload
 
 
@@ -84,47 +90,6 @@ class LearnerComputePlacement:
             f"{prefix}_cuda_reserve_bytes": self.cuda_reserve_bytes,
             f"{prefix}_fallback_reason": self.fallback_reason,
         }
-
-
-@dataclass(frozen=True)
-class PredictionState:
-    """Ephemeral state carried while training on a predicted global snapshot."""
-
-    reference_flat: torch.Tensor | None = None
-    carried_tokens: int = 0
-    update_id: str | None = None
-    base_version: int | None = None
-
-    @property
-    def active(self) -> bool:
-        return self.reference_flat is not None
-
-    def require_active(self) -> PredictionState:
-        complete = (
-            self.reference_flat is not None
-            and self.update_id is not None
-            and self.base_version is not None
-            and self.carried_tokens >= 0
-        )
-        if not complete:
-            raise RuntimeError("predicted-global state is incomplete")
-        return self
-
-    def add_tokens(self, tokens: int) -> PredictionState:
-        self.require_active()
-        return PredictionState(
-            reference_flat=self.reference_flat,
-            carried_tokens=self.carried_tokens + int(tokens),
-            update_id=self.update_id,
-            base_version=self.base_version,
-        )
-
-
-@dataclass(frozen=True)
-class PredictionReconcileResult:
-    version: int
-    tokens_since_global_load: int
-    state: PredictionState
 
 
 def learner_compute_dtype(config: Config) -> torch.dtype:
@@ -548,48 +513,6 @@ def rebase_local_delta_onto_global(
     load_flat_into_model(model, rebased_flat, param_index)
     model.to(device)
     return int(latest["version"]), delta_norm, placement.log_fields("reconcile")
-
-
-def reconcile_prediction(
-    *,
-    model: torch.nn.Module,
-    latest: dict[str, Any],
-    param_index: dict[str, Any],
-    device: torch.device,
-    config: Config,
-    logger: JsonlLogger,
-    state: PredictionState,
-    previous_version: int,
-    waited_seconds: float | None = None,
-) -> PredictionReconcileResult:
-    """Rebase post-prediction progress and clear the explicit prediction state."""
-
-    active = state.require_active()
-    version, delta_norm, reconcile_compute_stats = rebase_local_delta_onto_global(
-        model=model,
-        latest=latest,
-        param_index=param_index,
-        device=device,
-        reference_flat=active.reference_flat,
-        config=config,
-    )
-    event_fields: dict[str, Any] = {
-        "previous_version": previous_version,
-        "version": version,
-        "prediction_base_version": active.base_version,
-        "prediction_update_id": active.update_id,
-        "carried_delta_tokens": active.carried_tokens,
-        "post_prediction_delta_norm": delta_norm,
-    }
-    if waited_seconds is not None:
-        event_fields["reconcile_waited_seconds"] = waited_seconds
-    event_fields.update(reconcile_compute_stats)
-    logger.event("global_prediction_reconciled", **event_fields)
-    return PredictionReconcileResult(
-        version=version,
-        tokens_since_global_load=active.carried_tokens,
-        state=PredictionState(),
-    )
 
 
 def snapshot_model_for_reconcile(
@@ -1483,6 +1406,74 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
         )
 
 
+def build_adoption_context(
+    *,
+    model: torch.nn.Module,
+    paths: RunPaths,
+    param_index: dict[str, Any],
+    device: torch.device,
+    config: Config,
+    logger: JsonlLogger,
+    last_loaded_global_version: int,
+    last_loaded_latest: dict[str, Any],
+    tokens_since_global_load: int,
+) -> AdoptionContext:
+    return AdoptionContext(
+        model=model,
+        paths=paths,
+        param_index=param_index,
+        device=device,
+        config=config,
+        logger=logger,
+        last_loaded_global_version=last_loaded_global_version,
+        last_loaded_latest=last_loaded_latest,
+        tokens_since_global_load=tokens_since_global_load,
+        read_latest_if_newer_fn=read_latest_if_newer,
+        wait_for_latest_if_newer_fn=wait_for_latest_if_newer,
+        adopt_global_fn=adopt_global,
+        rebase_local_delta_fn=rebase_local_delta_onto_global,
+        snapshot_model_fn=snapshot_model_for_reconcile,
+        prepare_prediction_fn=prepare_prediction_or_find_newer_latest,
+    )
+
+
+def finalize_strategy_action(
+    action: StrategyAction,
+    *,
+    model: torch.nn.Module,
+    config: Config,
+    logger: JsonlLogger,
+    current_version: int,
+    optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.LRScheduler | None,
+) -> tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LRScheduler | None]:
+    outcome = action.adoption
+    if outcome is not None:
+        logger.event("global_adopted", version=outcome.version)
+        if outcome.preserve_inner_state:
+            logger.event(
+                "inner_training_state_preserved",
+                version=outcome.version,
+                reason=outcome.reason,
+                optimizer_state_preserved=True,
+                scheduler_state_preserved=True,
+                **inner_training_state_metrics(optimizer, scheduler),
+            )
+            return optimizer, scheduler
+        optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
+        logger.event("inner_optimizer_reset", version=outcome.version)
+        return optimizer, scheduler
+    if action.reset_optimizer_reason is not None:
+        optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
+        logger.event(
+            "inner_optimizer_reset",
+            version=current_version,
+            reason=action.reset_optimizer_reason,
+            **inner_training_state_metrics(optimizer, scheduler),
+        )
+    return optimizer, scheduler
+
+
 def run_learner(config: Config, learner_id: str) -> None:
     if config.fragments.enabled:
         run_fragment_learner(config, learner_id)
@@ -1518,12 +1509,7 @@ def run_learner(config: Config, learner_id: str) -> None:
     )
     last_loaded_latest = latest
     optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
-    rebase_enabled = config.learner.global_adoption_strategy == "rebase_post_publish_delta"
-    prediction_enabled = config.learner.global_adoption_strategy == "predict_post_publish_global"
-    rebase_reference_flat: torch.Tensor | None = None
-    carried_delta_tokens = 0
-    last_published_anchor_update_id: str | None = None
-    prediction_state = PredictionState()
+    adoption_strategy = make_global_adoption_strategy(config)
     logger.event("loaded_global", version=last_loaded_global_version)
     logger.event("inner_optimizer_reset", version=last_loaded_global_version)
     write_heartbeat(
@@ -1549,6 +1535,41 @@ def run_learner(config: Config, learner_id: str) -> None:
     tokens_since_global_load = 0
     last_heartbeat = time.monotonic()
     last_update_id: str | None = None
+
+    def current_adoption_context() -> AdoptionContext:
+        return build_adoption_context(
+            model=model,
+            paths=paths,
+            param_index=param_index,
+            device=device,
+            config=config,
+            logger=logger,
+            last_loaded_global_version=last_loaded_global_version,
+            last_loaded_latest=last_loaded_latest,
+            tokens_since_global_load=tokens_since_global_load,
+        )
+
+    def apply_strategy_action(action: StrategyAction) -> None:
+        nonlocal last_loaded_global_version
+        nonlocal last_loaded_latest
+        nonlocal optimizer
+        nonlocal scheduler
+        nonlocal tokens_since_global_load
+        optimizer, scheduler = finalize_strategy_action(
+            action,
+            model=model,
+            config=config,
+            logger=logger,
+            current_version=last_loaded_global_version,
+            optimizer=optimizer,
+            scheduler=scheduler,
+        )
+        if action.adoption is not None:
+            last_loaded_global_version = action.adoption.version
+            last_loaded_latest = action.adoption.latest
+            tokens_since_global_load = action.adoption.tokens_since_global_load
+        elif action.tokens_since_global_load is not None:
+            tokens_since_global_load = action.tokens_since_global_load
 
     try:
         while not stop_requested(paths, local_step, config):
@@ -1588,10 +1609,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                 interval_tokens += step_tokens
                 interval_examples += step_examples
                 tokens_since_global_load += step_tokens
-                if rebase_reference_flat is not None:
-                    carried_delta_tokens += step_tokens
-                if prediction_state.active:
-                    prediction_state = prediction_state.add_tokens(step_tokens)
+                adoption_strategy.on_local_tokens(step_tokens)
                 losses.append(loss)
                 if local_step % max(1, config.training.log_every_steps) == 0:
                     logger.event(
@@ -1615,147 +1633,23 @@ def run_learner(config: Config, learner_id: str) -> None:
                     )
                     logger.event("heartbeat_written", local_step=local_step)
                     last_heartbeat = time.monotonic()
-                should_poll_during_inner_step = config.learner.poll_latest_during_inner_steps and (
-                    (not rebase_enabled and not prediction_enabled)
-                    or rebase_reference_flat is not None
-                    or prediction_state.active
-                )
-                if should_poll_during_inner_step:
+                if adoption_strategy.wants_inner_poll(config):
                     maybe_latest = read_latest_if_newer(paths, last_loaded_global_version)
                     if maybe_latest is not None:
-                        previous_version = last_loaded_global_version
-                        preserve_inner_training_state_reason: str | None = None
-                        if prediction_enabled:
-                            reconcile_result = reconcile_prediction(
-                                model=model,
-                                latest=maybe_latest,
-                                param_index=param_index,
-                                device=device,
-                                config=config,
-                                logger=logger,
-                                state=prediction_state,
-                                previous_version=previous_version,
-                            )
-                            last_loaded_global_version = reconcile_result.version
-                            last_loaded_latest = maybe_latest
-                            tokens_since_global_load = (
-                                reconcile_result.tokens_since_global_load
-                            )
-                            prediction_state = reconcile_result.state
-                            preserve_inner_training_state_reason = "global_prediction_reconciled"
-                        elif rebase_enabled:
-                            if rebase_reference_flat is None:
-                                raise RuntimeError("local-delta rebase reference is unavailable")
-                            anchor_update_id = last_published_anchor_update_id
-                            (
-                                last_loaded_global_version,
-                                delta_norm,
-                                reconcile_compute_stats,
-                            ) = rebase_local_delta_onto_global(
-                                model=model,
-                                latest=maybe_latest,
-                                param_index=param_index,
-                                device=device,
-                                reference_flat=rebase_reference_flat,
-                                config=config,
-                            )
-                            last_loaded_latest = maybe_latest
-                            tokens_since_global_load = carried_delta_tokens
-                            logger.event(
-                                "global_rebased",
-                                previous_version=previous_version,
-                                version=last_loaded_global_version,
-                                anchor_update_id=anchor_update_id,
-                                carried_delta_tokens=carried_delta_tokens,
-                                local_delta_norm=delta_norm,
-                                **reconcile_compute_stats,
-                            )
-                            rebase_reference_flat = None
-                            carried_delta_tokens = 0
-                            last_published_anchor_update_id = None
-                            preserve_inner_training_state_reason = "global_rebased"
-                        else:
-                            last_loaded_global_version = adopt_global(
-                                model=model,
-                                latest=maybe_latest,
-                                param_index=param_index,
-                                device=device,
-                            )
-                            last_loaded_latest = maybe_latest
-                            tokens_since_global_load = 0
+                        action = adoption_strategy.on_newer_latest(
+                            current_adoption_context(),
+                            maybe_latest,
+                        )
+                        apply_strategy_action(action)
                         base_global_version = last_loaded_global_version
-                        logger.event("global_adopted", version=last_loaded_global_version)
-                        if preserve_inner_training_state_reason is not None:
-                            logger.event(
-                                "inner_training_state_preserved",
-                                version=last_loaded_global_version,
-                                reason=preserve_inner_training_state_reason,
-                                optimizer_state_preserved=True,
-                                scheduler_state_preserved=True,
-                                **inner_training_state_metrics(optimizer, scheduler),
-                            )
-                        else:
-                            optimizer, scheduler = build_inner_optimizer_and_scheduler(
-                                model, config
-                            )
-                            logger.event(
-                                "inner_optimizer_reset", version=last_loaded_global_version
-                            )
 
-            if prediction_state.active and paths.stop_json.exists():
-                active_prediction = prediction_state.require_active()
-                logger.event(
-                    "global_prediction_abandoned_on_stop",
-                    prediction_base_version=active_prediction.base_version,
-                    prediction_update_id=active_prediction.update_id,
-                    carried_delta_tokens=active_prediction.carried_tokens,
-                )
+            adoption_ctx = current_adoption_context()
+            if paths.stop_json.exists() and adoption_strategy.on_stop(adoption_ctx):
                 continue
-            if prediction_state.active:
-                active_prediction = prediction_state.require_active()
-                logger.event(
-                    "global_prediction_reconcile_wait_started",
-                    current_version=last_loaded_global_version,
-                    prediction_base_version=active_prediction.base_version,
-                    prediction_update_id=active_prediction.update_id,
-                    timeout_seconds=config.learner.prediction_reconcile_timeout_seconds,
-                )
-                maybe_latest, reconcile_waited_seconds = wait_for_latest_if_newer(
-                    paths,
-                    last_loaded_global_version,
-                    wait_seconds=config.learner.prediction_reconcile_timeout_seconds,
-                    poll_seconds=config.learner.post_publish_latest_poll_seconds,
-                )
-                if maybe_latest is None:
-                    raise TimeoutError(
-                        "timed out waiting to reconcile predicted global before publication"
-                    )
-                previous_version = last_loaded_global_version
-                reconcile_result = reconcile_prediction(
-                    model=model,
-                    latest=maybe_latest,
-                    param_index=param_index,
-                    device=device,
-                    config=config,
-                    logger=logger,
-                    state=prediction_state,
-                    previous_version=previous_version,
-                    waited_seconds=reconcile_waited_seconds,
-                )
-                last_loaded_global_version = reconcile_result.version
-                last_loaded_latest = maybe_latest
-                tokens_since_global_load = reconcile_result.tokens_since_global_load
-                prediction_state = reconcile_result.state
+            cycle_end_action = adoption_strategy.on_cycle_end(adoption_ctx)
+            if cycle_end_action.adoption is not None:
+                apply_strategy_action(cycle_end_action)
                 base_global_version = last_loaded_global_version
-                logger.event("global_adopted", version=last_loaded_global_version)
-                logger.event(
-                    "inner_training_state_preserved",
-                    version=last_loaded_global_version,
-                    reason="global_prediction_reconciled",
-                    optimizer_state_preserved=True,
-                    scheduler_state_preserved=True,
-                    **inner_training_state_metrics(optimizer, scheduler),
-                )
 
             if not losses:
                 continue
@@ -1768,12 +1662,7 @@ def run_learner(config: Config, learner_id: str) -> None:
 
             write_start = time.monotonic()
             upload_dtype = dtype_from_name(config.io.tensor_dtype)
-            if rebase_enabled:
-                rebase_reference_flat = None
-                carried_delta_tokens = 0
-                last_published_anchor_update_id = None
-            if prediction_enabled and prediction_state.active:
-                raise RuntimeError("cannot publish a proposal while training on predicted global")
+            adoption_strategy.before_publish(current_adoption_context())
             flat = flatten_trainable_params(
                 model,
                 param_index,
@@ -1860,131 +1749,14 @@ def run_learner(config: Config, learner_id: str) -> None:
             del flat
 
             if config.learner.adopt_global_after_upload:
-                maybe_latest = read_latest_if_newer(paths, last_loaded_global_version)
-                logger.event(
-                    "latest_polled",
-                    current_version=last_loaded_global_version,
-                    found_version=maybe_latest.get("version") if maybe_latest else None,
-                )
-                if maybe_latest is None and config.learner.post_publish_latest_wait_seconds > 0.0:
-                    logger.event(
-                        "post_publish_latest_wait_started",
-                        current_version=last_loaded_global_version,
-                        update_id=update_id,
-                        wait_seconds=config.learner.post_publish_latest_wait_seconds,
-                        poll_seconds=config.learner.post_publish_latest_poll_seconds,
-                    )
-                    maybe_latest, waited_seconds = wait_for_latest_if_newer(
-                        paths,
-                        last_loaded_global_version,
-                        wait_seconds=config.learner.post_publish_latest_wait_seconds,
-                        poll_seconds=config.learner.post_publish_latest_poll_seconds,
-                    )
-                    logger.event(
-                        "post_publish_latest_wait_finished",
-                        current_version=last_loaded_global_version,
-                        found_version=maybe_latest.get("version") if maybe_latest else None,
-                        update_id=update_id,
-                        waited_seconds=waited_seconds,
-                    )
-                prepared_prediction_reference: torch.Tensor | None = None
-                prepared_prediction_stats: dict[str, Any] | None = None
-                prediction_preparation_recovery: dict[str, Any] | None = None
-                if maybe_latest is None and prediction_enabled:
-                    if int(last_loaded_latest["version"]) != last_loaded_global_version:
-                        raise RuntimeError("cached latest metadata does not match learner base")
-                    (
-                        prepared_prediction_reference,
-                        prepared_prediction_stats,
-                        maybe_latest,
-                        prediction_preparation_recovery,
-                    ) = prepare_prediction_or_find_newer_latest(
-                        paths=paths,
-                        model=model,
-                        cached_latest=last_loaded_latest,
-                        param_index=param_index,
-                        device=device,
-                        config=config,
-                        local_tokens=tokens_since_global_load,
-                    )
-                    if prediction_preparation_recovery is not None:
-                        if maybe_latest is None:
-                            raise RuntimeError(
-                                "prediction preparation recovery did not return newer latest"
-                            )
-                        logger.event(
-                            "global_prediction_preparation_recovered",
-                            update_id=update_id,
-                            found_version=int(maybe_latest["version"]),
-                            **prediction_preparation_recovery,
-                        )
-                if maybe_latest is not None:
-                    previous_version = last_loaded_global_version
-                    last_loaded_global_version = adopt_global(
-                        model=model,
-                        latest=maybe_latest,
-                        param_index=param_index,
-                        device=device,
-                    )
-                    last_loaded_latest = maybe_latest
-                    tokens_since_global_load = 0
-                    if rebase_enabled or prediction_enabled:
-                        logger.event(
-                            "global_adopted_after_publish",
-                            previous_version=previous_version,
-                            version=last_loaded_global_version,
-                            update_id=update_id,
-                        )
-                    optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
-                    logger.event("global_adopted", version=last_loaded_global_version)
-                    logger.event("inner_optimizer_reset", version=last_loaded_global_version)
-                elif prediction_enabled:
-                    if prepared_prediction_reference is None or prepared_prediction_stats is None:
-                        raise RuntimeError("prediction preparation did not return a snapshot")
-                    prediction_state = PredictionState(
-                        reference_flat=prepared_prediction_reference,
-                        carried_tokens=0,
-                        update_id=update_id,
-                        base_version=last_loaded_global_version,
-                    )
-                    prediction_stats = prepared_prediction_stats
-                    tokens_since_global_load = 0
-                    optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
-                    logger.event(
-                        "global_prediction_started",
-                        update_id=update_id,
-                        reference_bytes=int(
-                            prepared_prediction_reference.numel()
-                            * prepared_prediction_reference.element_size()
-                        ),
-                        **prediction_stats,
-                    )
-                    logger.event(
-                        "inner_optimizer_reset",
-                        version=last_loaded_global_version,
-                        reason="global_prediction_started",
-                        **inner_training_state_metrics(optimizer, scheduler),
-                    )
-                elif rebase_enabled:
-                    rebase_reference_flat, reference_compute_stats = (
-                        snapshot_model_for_reconcile(
-                            model=model,
-                            param_index=param_index,
-                            device=device,
-                            config=config,
-                        )
-                    )
-                    carried_delta_tokens = 0
-                    last_published_anchor_update_id = update_id
-                    logger.event(
-                        "local_rebase_anchor_saved",
+                post_publish_action = adoption_strategy.on_after_publish(
+                    current_adoption_context(),
+                    PublishResult(
                         update_id=update_id,
                         base_global_version=base_global_version,
-                        anchor_bytes=int(
-                            rebase_reference_flat.numel() * rebase_reference_flat.element_size()
-                        ),
-                        **reference_compute_stats,
-                    )
+                    ),
+                )
+                apply_strategy_action(post_publish_action)
             maybe_crash(config.failure_sim)
     except Exception:
         logger.exception("error", local_step=local_step, global_version=last_loaded_global_version)

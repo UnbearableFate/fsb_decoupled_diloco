@@ -12,15 +12,14 @@ from fs_diloco.modeling.param_index import (
     load_flat_into_model,
     save_param_index,
 )
+from fs_diloco.runtime.adoption import AdoptionContext, PredictionState, reconcile_prediction
 from fs_diloco.runtime import learner as learner_runtime
 from fs_diloco.runtime.learner import (
-    PredictionState,
     adopt_global,
     choose_learner_compute_placement,
     prepare_prediction_or_find_newer_latest,
     predict_next_global_weight,
     rebase_local_delta_onto_global,
-    reconcile_prediction,
     wait_for_latest_if_newer,
 )
 from fs_diloco.storage.atomic_io import atomic_write_json
@@ -136,9 +135,7 @@ def test_rebase_rejects_reference_with_wrong_size(tmp_path):
 
 
 @pytest.mark.parametrize("waited_seconds", [None, 0.25])
-def test_prediction_reconcile_helper_clears_state_and_preserves_event_shape(
-    monkeypatch, waited_seconds
-):
+def test_prediction_reconcile_helper_clears_state_and_preserves_event_shape(waited_seconds):
     reference = torch.arange(4, dtype=torch.float32)
     state = PredictionState(
         reference_flat=reference,
@@ -152,10 +149,21 @@ def test_prediction_reconcile_helper_clears_state_and_preserves_event_shape(
         def event(self, event_type, **payload):
             events.append((event_type, payload))
 
-    monkeypatch.setattr(
-        learner_runtime,
-        "rebase_local_delta_onto_global",
-        lambda **_kwargs: (
+    config = resolve_config("configs/fs_diloco_tiny_predict_local.yaml")
+    ctx = AdoptionContext(
+        model=object(),
+        paths=RunPaths("unused"),
+        param_index={"total_numel": 4},
+        device=torch.device("cpu"),
+        config=config,
+        logger=RecordingLogger(),
+        last_loaded_global_version=3,
+        last_loaded_latest={"version": 3},
+        tokens_since_global_load=0,
+        read_latest_if_newer_fn=lambda *_args: None,
+        wait_for_latest_if_newer_fn=lambda *_args, **_kwargs: (None, 0.0),
+        adopt_global_fn=lambda **_kwargs: 4,
+        rebase_local_delta_fn=lambda **_kwargs: (
             4,
             1.5,
             {
@@ -163,15 +171,13 @@ def test_prediction_reconcile_helper_clears_state_and_preserves_event_shape(
                 "reconcile_compute_device": "cpu",
             },
         ),
+        snapshot_model_fn=lambda **_kwargs: (reference, {}),
+        prepare_prediction_fn=lambda **_kwargs: (None, None, None, None),
     )
 
     result = reconcile_prediction(
-        model=object(),
+        ctx=ctx,
         latest={"version": 4, "weight_path": "unused"},
-        param_index={"total_numel": 4},
-        device=torch.device("cpu"),
-        config=resolve_config("configs/fs_diloco_tiny_predict_local.yaml"),
-        logger=RecordingLogger(),
         state=state,
         previous_version=3,
         waited_seconds=waited_seconds,
@@ -412,6 +418,24 @@ def test_rebase_reconciliation_preserves_optimizer_and_scheduler_state(tmp_path,
     assert preserved[0]["optimizer_state_entries"] > 0
     assert preserved[0]["scheduler_last_epoch"] == 3
     assert preserved[0]["optimizer_lrs"] == [0.0]
+    strategy_event_types = [
+        event["event_type"]
+        for event in events
+        if event["event_type"]
+        in {
+            "local_rebase_anchor_saved",
+            "global_rebased",
+            "global_adopted",
+            "inner_training_state_preserved",
+        }
+    ]
+    assert strategy_event_types == [
+        "local_rebase_anchor_saved",
+        "global_rebased",
+        "global_adopted",
+        "inner_training_state_preserved",
+        "local_rebase_anchor_saved",
+    ]
 
 
 def test_post_publish_wait_polls_until_newer_latest(tmp_path, monkeypatch):
