@@ -19,7 +19,7 @@
 1. grace-window 收集与缺文件降级在 syncer.py 中各只有**一份**参数化实现；`collect_fragment_with_grace_window`、`drop_missing_fragment_update_files` 标识符删除（LDU-06 静态检查）。
 2. 复核并加固现有 `all_expected_learners_stopped` 共享判定（当前代码已与 full/fragment 无关）；full 循环行为不变，fragment 主循环仍不接线（显式非目标，见 §3）。
 3. learner 侧 fragment adoption 四个调用语境收敛为单一函数（LDU-03）。
-4. full 与 fragment 各一个 tiny run 的归一化轨迹与基线等价（LDU-04/05）。
+4. full 与 fragment 各一个 tiny run 的确定性 publication 投影与基线等价，受控测试覆盖被异步调度影响的 selection/adoption 细节（LDU-04/05）。
 5. 全量 pytest 通过；一次 2 节点 fragment debug 冒烟通过（§7）。
 
 ## 3. 范围与非目标
@@ -78,7 +78,7 @@ progress.md 每条记录必须列出覆盖的 LDU ID（P8）。
 ## 7. 验证阶梯
 
 1. **登录节点**：lint、`git diff --check`、LDU-06 grep。
-2. **1 节点 compute**：LDU 单元测试 → 全量 pytest → tiny full/fragment 可重复投影与终态不变量对照。
+2. **1 节点 compute**：LDU 单元测试 → 全量 pytest → tiny full/fragment 可重复 publication 投影与终态不变量对照。generic whole-run profile 含 latest-wins selection 时点，不得未经同代码重复性证明直接作硬门禁。
 3. **2 节点 compute**（建议保留）：`run_2node_fragment_debug.pbs` 一次冒烟——收集循环与跨节点提案可见性直接相关，这是本目录唯一建议 2 节点验证的计划。检查项：committed merge 数、DB/latest 一致、无 error 事件。
 4. 9 节点：不需要。
 
@@ -86,7 +86,7 @@ progress.md 每条记录必须列出覆盖的 LDU ID（P8）。
 
 - 报告目录：`reports/imp_plans/bug_fixing/S3/`，规则按 [plans/AGENTS.md](../AGENTS.md)。
 - L0 的 diff 差异清单是本计划的关键 SPECIFY 产物：后续每个 LDU 测试都应能回指清单中的一行；清单中标注"疑似无意分歧"的条目必须在完成前逐条关闭（保持/立案）。
-- tiny run 与 2 节点冒烟对 run 目录执行 `check_plan01_invariants.py`，维持 PASS。
+- full tiny run 执行 `check_plan01_invariants.py`；该脚本只验证 full 的 `global_versions`/全量 checkpoint 布局，不能用于 fragment。fragment tiny 与 2 节点冒烟改用 `fs_diloco.analysis assert-fragment-smoke` 并核对 fragment DB/latest/summary 一致性、无 error/no-progress 事件。
 
 ## 9. 停止与升级规则
 
@@ -94,4 +94,4 @@ progress.md 每条记录必须列出覆盖的 LDU ID（P8）。
 
 ## 10. 文档同步
 
-- 完成后在 review 报告 B4 条目处标注："S3 已交付共享 input-closed 谓词，B4 剩余工作 = fragment 循环接线 + drain 语义测试"，并把 B4 立为独立小计划（一页即可，语义变更性质，含 1-hour no_progress 场景的 RED 复现）。
+- 完成后在 review 报告 B4 条目处标注："S3 已交付共享 input-closed 谓词，B4 剩余工作 = fragment 循环接线 + drain 语义测试"，并把 B4 立为独立小计划（一页即可，语义变更性质，含 1-hour no_progress 场景的 RED 复现）。后续计划见 [B4-fragment-terminal-drain.md](../followups/B4-fragment-terminal-drain.md)。

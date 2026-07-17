@@ -71,7 +71,7 @@ core  ←  storage  ←  protocol / modeling / observability  ←  runtime  ← 
 | 共享文件读写 | `write_heartbeat`, `wait_for_json`, `read_latest_if_newer`, `read_fragment_latest_if_newer`, `wait_for_fragment_latest_if_newer` |
 | 停止判定 | `stop_requested`（full/fragment 共用） |
 | 训练组件 | `build_inner_optimizer_and_scheduler`, `maybe_autocast`, `train_one_step` |
-| 全局权重采纳 | `adopt_global`(全量)/ `load_fragment_latest_into_model`, `adopt_fragment_updates`(分片) |
+| 全局权重采纳 | `adopt_global`(全量)/ `load_fragment_latest_into_model`, `adopt_fragment_updates`, `apply_fragment_adoption`(分片) |
 | full 采纳策略 | `GlobalAdoptionStrategy` 及 replace/rebase/predict 实现、`make_global_adoption_strategy` |
 | update 提交 | `write_update` / `write_fragment_update` |
 | 主循环 | `run_learner`(全量)/ `run_fragment_learner`(分片);`run_learner` 按配置分派 |
@@ -84,7 +84,7 @@ core  ←  storage  ←  protocol / modeling / observability  ←  runtime  ← 
 | 发布 | `latest_payload`, `publish_global`(全量);`fragment_latest_payload`, `should_materialize_fragment_full`, `publish_fragment_latest`(分片);`publish_stop` |
 | 初始化/恢复 | `initialize_run`, `initialize_fragment_run`, `resume_run`(DB-first) |
 | 摄取 | `validate_update_metadata`, `ingest_update_metadata`, `sync_liveness_and_metadata` |
-| 选择 | `collect_with_grace_window` / `collect_fragment_with_grace_window`, `drop_missing_update_files` / `drop_missing_fragment_update_files`, `finite_local_training_complete`, `select_terminal_drain_updates` |
+| 选择 | `UpdateProposalSource`(full/fragment 参数对象),共享 `collect_with_grace_window` 与 `drop_missing_update_files`,`all_expected_learners_stopped`,`select_terminal_drain_updates` |
 | 观测 | `init_wandb_run`, `_fragment_staleness_stats`, `wait_for_learner_shutdown`, `write_training_summary` |
 | 主循环 | `run_syncer`(全量,含分派)/ `run_fragment_syncer`(分片) |
 

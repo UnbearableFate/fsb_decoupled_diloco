@@ -96,6 +96,8 @@ def lr_lambda(step):
 
 **建议**：把 input-closed 判定与 terminal drain 从 full 循环提炼为共享函数后接入 fragment 循环；或在 plan 中显式记录"fragment terminal drain 属于下一轮"，避免下次 fragment 5000-step 实验踩一小时空等。
 
+**前置重构状态（2026-07-17）**：commit `777e913` 已证明并保留共享 `all_expected_learners_stopped` 的 exact-set 语义，同时把 full/fragment grace 收集与缺文件降级收敛为 `UpdateProposalSource` 参数化骨架。fragment 主循环按 S3 的行为保持边界仍未接入 input-closed。B4 剩余工作只有接线、terminal drain 选择/提交语义与对应 RED/管线测试，规格见 `plans/followups/B4-fragment-terminal-drain.md`。
+
 ### B5（中）maintenance 热路径 O(history)
 
 `fs_diloco/storage/maintenance.py:140` 每次 `run_maintenance`（即每次 merge 后）调用 `_archived_terminal_paths(paths.update_history_jsonl)`，逐行读取**整个**归档 JSONL 来重建 terminal payload 路径集合。归档文件随历史线性增长（每 merge 约 +8 行），因此第 N 次 merge 的 maintenance 成本 ~O(N)，累计 O(N²)。这直接违反 plan 01 自己的不变量（"active discovery 和单次操作成本不依赖历史 update 数"）。BND-10/11 的 1000-cycle 测试只断言了 SQLite 行数与 page 数，没有覆盖 maintenance 的文件扫描成本，所以这条从测试矩阵漏了出去。当前 5000-step 规模（约 400 行）无感知，但长运行/更频繁 merge 下会变成结构性退化。
@@ -161,6 +163,8 @@ learner.py:1556-1589（inner poll 内）与 1657-1716（cycle 末等待）是同
 - learner 侧 `run_fragment_learner` 内 fragment adoption 块出现三次（inner poll 1096-1132、upload 后 1263-1306、final wait 1332-1381）。
 
 后果之一就是 B4：terminal drain 修在 full 循环里，fragment 循环没有同步获得。**建议**：至少把"quorum 收集 + 缺文件降级"与"input-closed 判定"参数化共享；fragment adoption 块提炼为单个函数。
+
+**完成状态（2026-07-17）**：commit `777e913` 增加 `UpdateProposalSource`，full/fragment 共享唯一 grace-window 与缺文件降级实现；四个 fragment adoption 语境共用 `apply_fragment_adoption`，并以显式参数保留 token、optimizer reset 和事件字段差异。`all_expected_learners_stopped` 保持共享 exact-set 实现，fragment terminal-drain 接线仍属于 B4 后续语义变更。
 
 ### S4（低）`stop_requested`/`fragment_stop_requested` 应合并
 

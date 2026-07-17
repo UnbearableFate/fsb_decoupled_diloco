@@ -38,10 +38,11 @@ syncer 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.md
 
 ## 选择
 
-- **`drop_missing_update_files(store, updates, logger) -> list`** / **`drop_missing_fragment_update_files(...)`** — 过滤掉张量文件已消失的行(库中标 `dropped(missing_file)`),返回存活子集。
+- **`UpdateProposalSource` / `full_update_proposal_source(...)` / `fragment_update_proposal_source(...)`** — 参数化 full/fragment 的候选枚举、staleness 键、缺文件降级动作、事件名与上下文字段；两种磁盘协议保持各自原有事件 payload。
+- **`drop_missing_update_files(store, updates, logger, *, source) -> list`** — 共享过滤骨架；张量文件消失时经 source 在对应表中标 `dropped(missing_file)`，发 full 或 fragment 原事件并返回存活子集。
 - **`configured_grace_seconds(config)`** — fixed 模式返回 `min(fixed_seconds,max_seconds)`,adaptive 模式返回 `min(initial_seconds,max_seconds)`。
 - **`fastest_next_upload_eta_seconds(updates, *, inner_steps, now)`** — 用各已选 update 的 `committed_at + local_cycle_step_time_seconds_mean × inner_steps` 估计下一上传时间,返回最快剩余秒数;序列化与版本采纳开销不计入,自然形成保守余量。
-- **`collect_with_grace_window(store, paths, config, logger, *, current_version) -> list`** — 宽限窗口收集:循环【查合格 → 滤丢失 → 每 learner 选一】。adaptive 模式每轮用最快上传 ETA 向前收紧 deadline,不允许后续估计把窗口延长;凑满 `quorum_max` 或 deadline 耗尽即结束,并记录 started/shortened/completed 事件。fragment 版逻辑相同、按片过滤。
+- **`collect_with_grace_window(store, paths, config, logger, *, source) -> list`** — full/fragment 共用的宽限窗口骨架:循环【source 查合格 → 共享缺文件过滤 → 每 learner 选一】。adaptive 模式每轮用最快上传 ETA 向前收紧 deadline,不允许后续估计把窗口延长;凑满 `quorum_max` 或 deadline 耗尽即结束,并按 source 保留原 started/shortened/completed 上下文字段。
 - **`all_expected_learners_stopped(store, config) -> bool`** — 只有全部预期 learner 都存在且最终状态明确为 `stopped` 才证明输入闭合;dead/step 达标不够。
 - **`select_terminal_drain_updates(...)`** — 输入闭合后的全量末端排空:仍执行严格 future/staleness 准入与 missing-file 检查,按 `oldest_pending` 每 learner 选一,允许低于 quorum;无合法 proposal 时由主循环以 `input_exhausted` 停止。
 

@@ -40,7 +40,8 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
 - **`snapshot_model_for_reconcile(...)`** — 按相同 placement/dtype 策略建立 local-delta reference，避免固定 CPU FP32 快照。
 - **`predict_next_global_weight(...)`** — 在选定 placement 上加载 global/outer、构造 token-weighted delta 并执行真实 outer Nesterov step；返回的 reference 保留计算 dtype/device 供后续 reconcile 使用，日志包含 placement 与 OOM fallback 证据。
 - **`load_fragment_latest_into_model(*, model, latest, param_index, fragment_index, device) -> (global_merge_event, {fragment_id: version})`** — 启动期:加载 latest 中**所有**片、materialize 成完整向量后整体写回。
-- **`adopt_fragment_updates(*, model, latest, param_index, fragment_index, last_loaded_fragment_versions, device) -> (event, versions, changed)`** — 运行期增量采纳:flatten 当前模型 → 只加载版本更新的片并 scatter → 有变化才写回模型;返回变化片列表(调用方据此清零对应 token 计数、按配置重置优化器)。
+- **`adopt_fragment_updates(*, model, latest, param_index, fragment_index, last_loaded_fragment_versions, device) -> (event, versions, changed)`** — 运行期增量采纳:flatten 当前模型 → 只加载版本更新的片并 scatter → 有变化才写回模型。
+- **`apply_fragment_adoption(...) -> FragmentAdoptionResult`** — 四个 fragment 采纳语境的统一收尾；调用点显式指定事件名、是否清零对应 token、是否允许按配置重置 optimizer/scheduler、是否附带完整片版本。inner poll/upload 后、final wait、最终 latest 的既有差异由参数表达，不再复制状态转换块。
 
 ### update 提交
 
