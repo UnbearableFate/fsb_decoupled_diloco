@@ -9,6 +9,7 @@ import os
 import socket
 import time
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +55,119 @@ from ..storage.tensor_codec import (
     save_update_vector,
 )
 from .failure_sim import maybe_crash, maybe_sleep_jitter, should_skip_upload
+
+
+PREDICTION_WORKING_VECTOR_COUNT = 14
+RECONCILE_WORKING_VECTOR_COUNT = 5
+REFERENCE_WORKING_VECTOR_COUNT = 3
+CUDA_COMPUTE_MIN_RESERVE_BYTES = 1 << 30
+CUDA_COMPUTE_RESERVE_FRACTION = 0.05
+
+
+@dataclass(frozen=True)
+class LearnerComputePlacement:
+    device: torch.device
+    dtype: torch.dtype
+    estimated_working_bytes: int
+    cuda_free_bytes: int | None = None
+    cuda_total_bytes: int | None = None
+    cuda_reserve_bytes: int | None = None
+    fallback_reason: str | None = None
+
+    def log_fields(self, prefix: str) -> dict[str, Any]:
+        return {
+            f"{prefix}_compute_device": str(self.device),
+            f"{prefix}_compute_dtype": str(self.dtype).removeprefix("torch."),
+            f"{prefix}_estimated_working_bytes": self.estimated_working_bytes,
+            f"{prefix}_cuda_free_bytes": self.cuda_free_bytes,
+            f"{prefix}_cuda_total_bytes": self.cuda_total_bytes,
+            f"{prefix}_cuda_reserve_bytes": self.cuda_reserve_bytes,
+            f"{prefix}_fallback_reason": self.fallback_reason,
+        }
+
+
+def learner_compute_dtype(config: Config) -> torch.dtype:
+    """Use the syncer's configured arithmetic dtype for learner reconciliation."""
+
+    return dtype_from_name(config.syncer.compute_dtype)
+
+
+def choose_learner_compute_placement(
+    *,
+    preferred_device: torch.device | str,
+    dtype: torch.dtype,
+    total_numel: int,
+    working_vector_count: int,
+) -> LearnerComputePlacement:
+    """Prefer CUDA unless the estimated temporary footprint risks OOM."""
+
+    requested = torch.device(preferred_device)
+    element_size = torch.empty((), dtype=dtype).element_size()
+    estimated_bytes = max(0, int(total_numel)) * element_size * int(working_vector_count)
+    if requested.type != "cuda":
+        return LearnerComputePlacement(
+            device=torch.device("cpu"),
+            dtype=dtype,
+            estimated_working_bytes=estimated_bytes,
+            fallback_reason="learner_device_not_cuda",
+        )
+    if not torch.cuda.is_available():
+        return LearnerComputePlacement(
+            device=torch.device("cpu"),
+            dtype=dtype,
+            estimated_working_bytes=estimated_bytes,
+            fallback_reason="cuda_unavailable",
+        )
+
+    try:
+        free_bytes, total_bytes = torch.cuda.mem_get_info(requested)
+    except (RuntimeError, ValueError):
+        return LearnerComputePlacement(
+            device=torch.device("cpu"),
+            dtype=dtype,
+            estimated_working_bytes=estimated_bytes,
+            fallback_reason="cuda_memory_query_failed",
+        )
+
+    reserve_bytes = max(
+        CUDA_COMPUTE_MIN_RESERVE_BYTES,
+        int(total_bytes * CUDA_COMPUTE_RESERVE_FRACTION),
+    )
+    usable_bytes = max(0, int(free_bytes) - reserve_bytes)
+    if estimated_bytes > usable_bytes:
+        return LearnerComputePlacement(
+            device=torch.device("cpu"),
+            dtype=dtype,
+            estimated_working_bytes=estimated_bytes,
+            cuda_free_bytes=int(free_bytes),
+            cuda_total_bytes=int(total_bytes),
+            cuda_reserve_bytes=reserve_bytes,
+            fallback_reason="estimated_cuda_oom_risk",
+        )
+    return LearnerComputePlacement(
+        device=requested,
+        dtype=dtype,
+        estimated_working_bytes=estimated_bytes,
+        cuda_free_bytes=int(free_bytes),
+        cuda_total_bytes=int(total_bytes),
+        cuda_reserve_bytes=reserve_bytes,
+    )
+
+
+def cpu_fallback_placement(
+    placement: LearnerComputePlacement,
+    *,
+    reason: str,
+) -> LearnerComputePlacement:
+    return LearnerComputePlacement(
+        device=torch.device("cpu"),
+        dtype=placement.dtype,
+        estimated_working_bytes=placement.estimated_working_bytes,
+        cuda_free_bytes=placement.cuda_free_bytes,
+        cuda_total_bytes=placement.cuda_total_bytes,
+        cuda_reserve_bytes=placement.cuda_reserve_bytes,
+        fallback_reason=reason,
+    )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -337,88 +451,137 @@ def rebase_local_delta_onto_global(
     param_index: dict[str, Any],
     device: torch.device,
     reference_flat: torch.Tensor,
-) -> tuple[int, float]:
+    config: Config,
+) -> tuple[int, float, dict[str, Any]]:
     """Move unsubmitted local progress onto a newer full global checkpoint.
 
-    ``reference_flat`` is the CPU FP32 parameter snapshot whose contribution is
-    treated as already handed to the syncer.  The learner keeps only
-    ``current_local - reference_flat`` and composes it onto the new global.  The
-    CPU reference is needed only until this composition succeeds; the caller
-    discards it immediately afterwards.
+    The reference and arithmetic use ``syncer.compute_dtype``.  CUDA is
+    preferred; a conservative memory estimate or a real CUDA OOM falls back to
+    CPU without changing the configured dtype.
     """
 
     expected_numel = int(param_index["total_numel"])
-    reference = reference_flat.detach().to(device="cpu", dtype=torch.float32)
-    if int(reference.numel()) != expected_numel:
+    if int(reference_flat.numel()) != expected_numel:
         raise ValueError(
-            f"rebase reference has {reference.numel()} values, expected {expected_numel}"
+            f"rebase reference has {reference_flat.numel()} values, expected {expected_numel}"
+        )
+    placement = choose_learner_compute_placement(
+        preferred_device=device,
+        dtype=learner_compute_dtype(config),
+        total_numel=expected_numel,
+        working_vector_count=RECONCILE_WORKING_VECTOR_COUNT,
+    )
+
+    def compute_rebased(
+        selected: LearnerComputePlacement,
+    ) -> tuple[torch.Tensor, float]:
+        reference = reference_flat.detach().to(
+            device=selected.device,
+            dtype=selected.dtype,
+        )
+        local_delta = flatten_trainable_params(
+            model,
+            param_index,
+            dtype=selected.dtype,
+            device=selected.device,
+        )
+        global_flat = load_global_weights_flat(
+            latest["weight_path"],
+            param_index,
+            device=selected.device,
+            dtype=selected.dtype,
+        )
+        if int(global_flat.numel()) != expected_numel:
+            raise ValueError(
+                f"new global has {global_flat.numel()} values, expected {expected_numel}"
+            )
+
+        local_delta.sub_(reference)
+        delta_norm = float(
+            torch.linalg.vector_norm(local_delta, ord=2, dtype=torch.float32).item()
+        )
+        local_delta.add_(global_flat)
+        return local_delta, delta_norm
+
+    try:
+        rebased_flat, delta_norm = compute_rebased(placement)
+    except torch.OutOfMemoryError:
+        if placement.device.type != "cuda":
+            raise
+        placement = cpu_fallback_placement(placement, reason="cuda_oom")
+        torch.cuda.empty_cache()
+        rebased_flat, delta_norm = compute_rebased(placement)
+
+    load_flat_into_model(model, rebased_flat, param_index)
+    model.to(device)
+    return int(latest["version"]), delta_norm, placement.log_fields("reconcile")
+
+
+def snapshot_model_for_reconcile(
+    *,
+    model: torch.nn.Module,
+    param_index: dict[str, Any],
+    device: torch.device,
+    config: Config,
+) -> tuple[torch.Tensor, dict[str, Any]]:
+    """Snapshot a publication anchor using the configured compute placement."""
+
+    placement = choose_learner_compute_placement(
+        preferred_device=device,
+        dtype=learner_compute_dtype(config),
+        total_numel=int(param_index["total_numel"]),
+        working_vector_count=REFERENCE_WORKING_VECTOR_COUNT,
+    )
+
+    def snapshot(selected: LearnerComputePlacement) -> torch.Tensor:
+        return flatten_trainable_params(
+            model,
+            param_index,
+            dtype=selected.dtype,
+            device=selected.device,
         )
 
-    local_delta = flatten_trainable_params(
-        model,
-        param_index,
-        dtype=torch.float32,
-        device="cpu",
-    )
-    global_flat = (
-        load_global_weights_flat(latest["weight_path"], param_index)
-        .detach()
-        .to(device="cpu", dtype=torch.float32)
-        .contiguous()
-    )
-    if int(global_flat.numel()) != expected_numel:
-        raise ValueError(f"new global has {global_flat.numel()} values, expected {expected_numel}")
-
-    local_delta.sub_(reference)
-    delta_norm = float(torch.linalg.vector_norm(local_delta, ord=2).item())
-    local_delta.add_(global_flat)
-    load_flat_into_model(model, local_delta, param_index)
-    model.to(device)
-    return int(latest["version"]), delta_norm
+    try:
+        reference = snapshot(placement)
+    except torch.OutOfMemoryError:
+        if placement.device.type != "cuda":
+            raise
+        placement = cpu_fallback_placement(placement, reason="cuda_oom")
+        torch.cuda.empty_cache()
+        reference = snapshot(placement)
+    return reference, placement.log_fields("reference")
 
 
-def predict_next_global_weight(
+def _predict_next_global_weight_on_placement(
     *,
     model: torch.nn.Module,
     latest: dict[str, Any],
     param_index: dict[str, Any],
-    device: torch.device,
     config: Config,
     local_tokens: int,
-) -> tuple[torch.Tensor, dict[str, float | int | bool]]:
-    """Predict one full outer step from one local proposal and historical momentum.
-
-    The outer momentum is a gradient-space state, so it is first converted to a
-    displacement proxy.  The predicted aggregate displacement is then passed
-    through the real outer optimizer instead of being added directly to the
-    model parameters.
-    """
-
-    if config.outer_optimizer.name.lower() != "nesterov":
-        raise ValueError("global prediction currently requires outer nesterov")
-    if config.outer_optimizer.weight_decay != 0.0:
-        raise ValueError("global prediction currently requires outer weight_decay=0")
-    local_tokens = int(local_tokens)
-    if local_tokens <= 0:
-        raise ValueError("global prediction requires positive local_tokens")
-
+    placement: LearnerComputePlacement,
+) -> tuple[torch.Tensor, dict[str, Any]]:
     expected_numel = int(param_index["total_numel"])
     local_flat = flatten_trainable_params(
         model,
         param_index,
-        dtype=torch.float32,
-        device="cpu",
+        dtype=placement.dtype,
+        device=placement.device,
     )
-    global_flat = (
-        load_global_weights_flat(latest["weight_path"], param_index)
-        .detach()
-        .to(device="cpu", dtype=torch.float32)
-        .contiguous()
+    global_flat = load_global_weights_flat(
+        latest["weight_path"],
+        param_index,
+        device=placement.device,
+        dtype=placement.dtype,
     )
-    outer_theta, outer_state = load_outer_state(latest["optim_path"], device="cpu")
-    outer_theta = outer_theta.detach().to(dtype=torch.float32).contiguous()
+    outer_theta, outer_state = load_outer_state(
+        latest["optim_path"],
+        device=placement.device,
+        dtype=placement.dtype,
+    )
     if any(
-        int(tensor.numel()) != expected_numel for tensor in (local_flat, global_flat, outer_theta)
+        int(tensor.numel()) != expected_numel
+        for tensor in (local_flat, global_flat, outer_theta)
     ):
         raise ValueError("prediction inputs do not match the parameter index")
     if not torch.equal(global_flat, outer_theta):
@@ -426,7 +589,6 @@ def predict_next_global_weight(
     momentum = outer_state.get("momentum")
     if momentum is None or int(momentum.numel()) != expected_numel:
         raise ValueError("outer checkpoint does not contain compatible momentum")
-    momentum = momentum.detach().to(device="cpu", dtype=torch.float32).contiguous()
 
     previous_total_update_tokens = int(latest.get("total_update_tokens", 0) or 0)
     bootstrapped_total_tokens = previous_total_update_tokens <= 0
@@ -449,14 +611,20 @@ def predict_next_global_weight(
         outer_state,
         config.outer_optimizer,
     )
-    predicted_flat = predicted_flat.detach().to(device="cpu", dtype=torch.float32).contiguous()
+    predicted_flat = predicted_flat.detach().contiguous()
     prediction_delta_norm = float(
-        torch.linalg.vector_norm(predicted_flat - global_flat, ord=2).item()
+        torch.linalg.vector_norm(
+            predicted_flat - global_flat,
+            ord=2,
+            dtype=torch.float32,
+        ).item()
     )
-    local_delta_norm = float(torch.linalg.vector_norm(local_delta, ord=2).item())
-    historical_delta_norm = float(torch.linalg.vector_norm(historical_delta, ord=2).item())
-    load_flat_into_model(model, predicted_flat, param_index)
-    model.to(device)
+    local_delta_norm = float(
+        torch.linalg.vector_norm(local_delta, ord=2, dtype=torch.float32).item()
+    )
+    historical_delta_norm = float(
+        torch.linalg.vector_norm(historical_delta, ord=2, dtype=torch.float32).item()
+    )
     return predicted_flat, {
         "base_version": int(latest["version"]),
         "predicted_version": int(latest["version"]) + 1,
@@ -471,6 +639,66 @@ def predict_next_global_weight(
     }
 
 
+def predict_next_global_weight(
+    *,
+    model: torch.nn.Module,
+    latest: dict[str, Any],
+    param_index: dict[str, Any],
+    device: torch.device,
+    config: Config,
+    local_tokens: int,
+) -> tuple[torch.Tensor, dict[str, Any]]:
+    """Predict one full outer step from one local proposal and historical momentum.
+
+    The outer momentum is a gradient-space state, so it is first converted to a
+    displacement proxy.  The predicted aggregate displacement is then passed
+    through the real outer optimizer instead of being added directly to the
+    model parameters.
+    """
+
+    if config.outer_optimizer.name.lower() != "nesterov":
+        raise ValueError("global prediction currently requires outer nesterov")
+    if config.outer_optimizer.weight_decay != 0.0:
+        raise ValueError("global prediction currently requires outer weight_decay=0")
+    local_tokens = int(local_tokens)
+    if local_tokens <= 0:
+        raise ValueError("global prediction requires positive local_tokens")
+
+    placement = choose_learner_compute_placement(
+        preferred_device=device,
+        dtype=learner_compute_dtype(config),
+        total_numel=int(param_index["total_numel"]),
+        working_vector_count=PREDICTION_WORKING_VECTOR_COUNT,
+    )
+    try:
+        predicted_flat, stats = _predict_next_global_weight_on_placement(
+            model=model,
+            latest=latest,
+            param_index=param_index,
+            config=config,
+            local_tokens=local_tokens,
+            placement=placement,
+        )
+    except torch.OutOfMemoryError:
+        if placement.device.type != "cuda":
+            raise
+        placement = cpu_fallback_placement(placement, reason="cuda_oom")
+        torch.cuda.empty_cache()
+        predicted_flat, stats = _predict_next_global_weight_on_placement(
+            model=model,
+            latest=latest,
+            param_index=param_index,
+            config=config,
+            local_tokens=local_tokens,
+            placement=placement,
+        )
+
+    load_flat_into_model(model, predicted_flat, param_index)
+    model.to(device)
+    stats.update(placement.log_fields("prediction"))
+    return predicted_flat, stats
+
+
 def prepare_prediction_or_find_newer_latest(
     *,
     paths: RunPaths,
@@ -482,7 +710,7 @@ def prepare_prediction_or_find_newer_latest(
     local_tokens: int,
 ) -> tuple[
     torch.Tensor | None,
-    dict[str, float | int | bool] | None,
+    dict[str, Any] | None,
     dict[str, Any] | None,
     dict[str, Any] | None,
 ]:
@@ -1196,6 +1424,7 @@ def run_learner(config: Config, learner_id: str) -> None:
         run_id=config.run.run_id,
         learner_id=learner_id,
         device=str(device),
+        reconcile_compute_dtype=config.syncer.compute_dtype,
         hostname=socket.gethostname(),
     )
     model, tokenizer = load_causal_lm_and_tokenizer(config.model)
@@ -1329,12 +1558,17 @@ def run_learner(config: Config, learner_id: str) -> None:
                                 raise RuntimeError("predicted-global reference is unavailable")
                             reconciled_update_id = prediction_update_id
                             reconciled_base_version = prediction_base_version
-                            last_loaded_global_version, delta_norm = rebase_local_delta_onto_global(
+                            (
+                                last_loaded_global_version,
+                                delta_norm,
+                                reconcile_compute_stats,
+                            ) = rebase_local_delta_onto_global(
                                 model=model,
                                 latest=maybe_latest,
                                 param_index=param_index,
                                 device=device,
                                 reference_flat=prediction_reference_flat,
+                                config=config,
                             )
                             last_loaded_latest = maybe_latest
                             tokens_since_global_load = prediction_carried_tokens
@@ -1346,6 +1580,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                                 prediction_update_id=reconciled_update_id,
                                 carried_delta_tokens=prediction_carried_tokens,
                                 post_prediction_delta_norm=delta_norm,
+                                **reconcile_compute_stats,
                             )
                             prediction_reference_flat = None
                             prediction_carried_tokens = 0
@@ -1356,12 +1591,17 @@ def run_learner(config: Config, learner_id: str) -> None:
                             if rebase_reference_flat is None:
                                 raise RuntimeError("local-delta rebase reference is unavailable")
                             anchor_update_id = last_published_anchor_update_id
-                            last_loaded_global_version, delta_norm = rebase_local_delta_onto_global(
+                            (
+                                last_loaded_global_version,
+                                delta_norm,
+                                reconcile_compute_stats,
+                            ) = rebase_local_delta_onto_global(
                                 model=model,
                                 latest=maybe_latest,
                                 param_index=param_index,
                                 device=device,
                                 reference_flat=rebase_reference_flat,
+                                config=config,
                             )
                             last_loaded_latest = maybe_latest
                             tokens_since_global_load = carried_delta_tokens
@@ -1372,6 +1612,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                                 anchor_update_id=anchor_update_id,
                                 carried_delta_tokens=carried_delta_tokens,
                                 local_delta_norm=delta_norm,
+                                **reconcile_compute_stats,
                             )
                             rebase_reference_flat = None
                             carried_delta_tokens = 0
@@ -1434,12 +1675,17 @@ def run_learner(config: Config, learner_id: str) -> None:
                 previous_version = last_loaded_global_version
                 reconciled_update_id = prediction_update_id
                 reconciled_base_version = prediction_base_version
-                last_loaded_global_version, delta_norm = rebase_local_delta_onto_global(
+                (
+                    last_loaded_global_version,
+                    delta_norm,
+                    reconcile_compute_stats,
+                ) = rebase_local_delta_onto_global(
                     model=model,
                     latest=maybe_latest,
                     param_index=param_index,
                     device=device,
                     reference_flat=prediction_reference_flat,
+                    config=config,
                 )
                 last_loaded_latest = maybe_latest
                 tokens_since_global_load = prediction_carried_tokens
@@ -1452,6 +1698,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                     carried_delta_tokens=prediction_carried_tokens,
                     post_prediction_delta_norm=delta_norm,
                     reconcile_waited_seconds=reconcile_waited_seconds,
+                    **reconcile_compute_stats,
                 )
                 prediction_reference_flat = None
                 prediction_carried_tokens = 0
@@ -1599,7 +1846,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                         waited_seconds=waited_seconds,
                     )
                 prepared_prediction_reference: torch.Tensor | None = None
-                prepared_prediction_stats: dict[str, float | int | bool] | None = None
+                prepared_prediction_stats: dict[str, Any] | None = None
                 prediction_preparation_recovery: dict[str, Any] | None = None
                 if maybe_latest is None and prediction_enabled:
                     if int(last_loaded_latest["version"]) != last_loaded_global_version:
@@ -1675,11 +1922,13 @@ def run_learner(config: Config, learner_id: str) -> None:
                         **inner_training_state_metrics(optimizer, scheduler),
                     )
                 elif rebase_enabled:
-                    rebase_reference_flat = flatten_trainable_params(
-                        model,
-                        param_index,
-                        dtype=torch.float32,
-                        device="cpu",
+                    rebase_reference_flat, reference_compute_stats = (
+                        snapshot_model_for_reconcile(
+                            model=model,
+                            param_index=param_index,
+                            device=device,
+                            config=config,
+                        )
                     )
                     carried_delta_tokens = 0
                     last_published_anchor_update_id = update_id
@@ -1690,6 +1939,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                         anchor_bytes=int(
                             rebase_reference_flat.numel() * rebase_reference_flat.element_size()
                         ),
+                        **reference_compute_stats,
                     )
             maybe_crash(config.failure_sim)
     except Exception:

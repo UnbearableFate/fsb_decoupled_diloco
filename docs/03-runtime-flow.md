@@ -58,7 +58,7 @@ while not stop_requested():                     # 默认:本地上限或 stop;gl
       按 log_every_steps 记 JSONL;按 heartbeat_interval 写心跳
       可选:poll_latest_during_inner_steps=true 时每个 optimizer.step() 后无阻塞轮询新版
            replace:整体替换本地权重
-           rebase_post_publish_delta:仅当 CPU reference 尚在等待新版时轮询;
+           rebase_post_publish_delta:仅当 reconcile reference 尚在等待新版时轮询;
                                      发现后 local ← global_new + (local - reference),随即释放 reference
   # —— 上传阶段 ——
   failure_sim:可选随机睡眠;可选跳过上传;可选崩溃(exit 97)
@@ -69,8 +69,9 @@ while not stop_requested():                     # 默认:本地上限或 stop;gl
   # —— 采纳阶段 ——
   if learner.adopt_global_after_upload:
       读 latest.json
-      若已有新版:直接采纳,不构造 CPU FP32 reference
-      若无新版且使用 local-delta rebase:才从当前模型构造并保留 CPU FP32 reference
+      若已有新版:直接采纳,不构造 reconcile reference
+      若无新版且使用 local-delta rebase:才按 syncer.compute_dtype 从当前模型构造 reference;
+          默认保留在 learner GPU,估算有 OOM 风险或实际 CUDA OOM 时回退 CPU
       采纳后重建内层优化器/调度器
 finally:
   写 status=stopped 的最终心跳,记 process_exit
@@ -80,7 +81,7 @@ finally:
 
 - 上传的是**参数本身**而非差值;伪梯度由 syncer 计算。
 - `base_global_version` 初始取区间开始时已加载的版本;显式开启区间中途采纳后,会更新为本次上传实际基于的最新 global。
-- local-delta rebase 仅在发布后的第一次 latest 检查未发现新版时保留 `x_local,t`;发现首个新版并完成 `global_new+(local-x_local,t)` 后立即释放,直到下一次发布才可能重新建立。
+- local-delta rebase 仅在发布后的第一次 latest 检查未发现新版时保留 `x_local,t`;发现首个新版并完成 `global_new+(local-x_local,t)` 后立即释放,直到下一次发布才可能重新建立。prediction、reference 和 reconcile 算术统一使用 `syncer.compute_dtype`,默认在 learner GPU 上执行；CUDA 安全余量不足或实际 OOM 时保持 dtype 回退 CPU,并把 placement、估算字节数和 fallback reason 写入 learner JSONL。
 - learner 不自行删除 proposal;payload 生命周期由 syncer 根据 DB/指针引用统一回收。
 - 心跳、日志、指标全部只追加/原子覆盖,不依赖任何锁。
 - `completion_mode=global_only` 到达 `max_local_steps` 时记录 `local_step_horizon_reached`,但继续执行完整训练/上传循环,直到 syncer 达到全局目标并发布 `stop.json`。

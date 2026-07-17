@@ -65,7 +65,7 @@
 | 字段 | 默认 | 说明 |
 |---|---|---|
 | `device` | `auto` | `auto` 自动选择可用 CUDA、否则 CPU；也可显式设为 `cpu` 或 `cuda`。显式 `cuda` 但 CUDA 不可用时启动失败 |
-| `compute_dtype` | `float32` | syncer 内存中的全局参数、learner update、加权聚合和外层优化器浮点状态 dtype；支持 `float32`/`fp32` 与 `bfloat16`/`bf16` |
+| `compute_dtype` | `float32` | syncer 的全局参数、update 聚合和外层优化状态 dtype；也控制 full learner 的 prediction/reconcile 算术与 reference dtype。支持 `float32`/`fp32` 与 `bfloat16`/`bf16` |
 | `publish_dtype` | `float32` | syncer 发布的 global/fragment 权重和外层优化器浮点状态落盘 dtype；支持同上。`step` 等整数状态保持整数 |
 
 例如在 GPU 上用 BF16 合并并发布 BF16 checkpoint：
@@ -77,7 +77,7 @@ syncer:
   publish_dtype: bfloat16
 ```
 
-`compute_dtype` 与 `publish_dtype` 可以独立配置。每次发布前，syncer 先按 `publish_dtype` 量化权重和浮点优化器状态，再转换回 `compute_dtype` 作为下一轮内存状态，因此 learner 可见 checkpoint、持续运行和 resume 使用同一个权威数值边界。恢复 full run 时，checkpoint 中的浮点状态会转换到当前配置的 `compute_dtype` 后继续计算；fragment 模式仍不支持恢复。
+`compute_dtype` 与 `publish_dtype` 可以独立配置。每次发布前，syncer 先按 `publish_dtype` 量化权重和浮点优化器状态，再转换回 `compute_dtype` 作为下一轮内存状态，因此 learner 可见 checkpoint、持续运行和 resume 使用同一个权威数值边界。full learner 的 prediction/reconcile 默认在 learner CUDA 设备上按 `compute_dtype` 执行；若按参数量和临时向量数估算会侵占 CUDA 安全余量，或实际触发 CUDA OOM，则保持相同 dtype 回退 CPU。恢复 full run 时，checkpoint 中的浮点状态会转换到当前配置的 `compute_dtype` 后继续计算；fragment 模式仍不支持恢复。
 
 ## liveness
 
@@ -140,7 +140,7 @@ checkpoint/update 保留数量不再是配置项。syncer 的 maintenance 按权
 |---|---|---|
 | `poll_latest_during_inner_steps` | `false` | 区间中途也轮询/采纳新版本 |
 | `adopt_global_after_upload` | `true` | 每次上传后轮询/采纳(fragment 模式会等待一小段时间) |
-| `global_adoption_strategy` | `replace` | full learner 的采纳方式:`replace` 直接替换本地权重;`rebase_post_publish_delta` 仅在发布后的第一次检查没有新版时保留 CPU FP32 发布点,随后将尚未发布的本地差值合成到首个新 global 并立即释放 reference。后者不支持 fragment |
+| `global_adoption_strategy` | `replace` | full learner 的采纳方式:`replace` 直接替换本地权重;`rebase_post_publish_delta` 仅在发布后的第一次检查没有新版时保留按 `syncer.compute_dtype` 构造的发布点,随后将尚未发布的本地差值合成到首个新 global 并立即释放 reference。prediction/reconcile 优先使用 learner GPU，OOM 风险时回退 CPU。后者不支持 fragment |
 
 5000-step full 配置启用 `poll_latest_during_inner_steps=true` 和
 `global_adoption_strategy=rebase_post_publish_delta`:发布后仍只无阻塞检查一次 latest;若没有新版,

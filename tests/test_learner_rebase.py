@@ -15,6 +15,7 @@ from fs_diloco.modeling.param_index import (
 from fs_diloco.runtime import learner as learner_runtime
 from fs_diloco.runtime.learner import (
     adopt_global,
+    choose_learner_compute_placement,
     prepare_prediction_or_find_newer_latest,
     predict_next_global_weight,
     rebase_local_delta_onto_global,
@@ -62,6 +63,7 @@ def test_adopt_global_loads_bfloat16_checkpoint_without_fp32_flattening(
 
 
 def test_rebase_preserves_only_progress_after_each_published_reference(tmp_path):
+    config = resolve_config("configs/fs_diloco_tiny_local.yaml")
     model = TinyCausalLM(vocab_size=16, hidden_size=8)
     index = build_param_index(model, model_name_or_path="synthetic-tiny")
     initial = flatten_trainable_params(model, index)
@@ -71,12 +73,13 @@ def test_rebase_preserves_only_progress_after_each_published_reference(tmp_path)
     global_v1 = initial - 0.25
     global_v1_path = tmp_path / "global_v1.safetensors"
     save_global_weights(global_v1_path, global_v1, index)
-    version, delta_norm = rebase_local_delta_onto_global(
+    version, delta_norm, compute_stats = rebase_local_delta_onto_global(
         model=model,
         latest={"version": 1, "weight_path": str(global_v1_path)},
         param_index=index,
         device=torch.device("cpu"),
         reference_flat=initial,
+        config=config,
     )
 
     assert version == 1
@@ -84,6 +87,8 @@ def test_rebase_preserves_only_progress_after_each_published_reference(tmp_path)
     assert delta_norm == pytest.approx(
         torch.linalg.vector_norm(first_delta).item(), rel=1.0e-5, abs=1.0e-8
     )
+    assert compute_stats["reconcile_compute_dtype"] == "float32"
+    assert compute_stats["reconcile_compute_device"] == "cpu"
 
     published_reference = flatten_trainable_params(model, index)
     second_delta = torch.full_like(first_delta, 2.0e-4)
@@ -91,12 +96,13 @@ def test_rebase_preserves_only_progress_after_each_published_reference(tmp_path)
     global_v2 = initial + 0.5
     global_v2_path = tmp_path / "global_v2.safetensors"
     save_global_weights(global_v2_path, global_v2, index)
-    version, _ = rebase_local_delta_onto_global(
+    version, _, _compute_stats = rebase_local_delta_onto_global(
         model=model,
         latest={"version": 2, "weight_path": str(global_v2_path)},
         param_index=index,
         device=torch.device("cpu"),
         reference_flat=published_reference,
+        config=config,
     )
 
     assert version == 2
@@ -109,6 +115,7 @@ def test_rebase_preserves_only_progress_after_each_published_reference(tmp_path)
 
 
 def test_rebase_rejects_reference_with_wrong_size(tmp_path):
+    config = resolve_config("configs/fs_diloco_tiny_local.yaml")
     model = TinyCausalLM(vocab_size=16, hidden_size=8)
     index = build_param_index(model, model_name_or_path="synthetic-tiny")
     flat = flatten_trainable_params(model, index)
@@ -122,7 +129,42 @@ def test_rebase_rejects_reference_with_wrong_size(tmp_path):
             param_index=index,
             device=torch.device("cpu"),
             reference_flat=flat[:-1],
+            config=config,
         )
+
+
+def test_reconcile_uses_configured_bfloat16_compute_dtype(tmp_path):
+    config = resolve_config("configs/fs_diloco_tiny_syncer_bf16_gpu.yaml")
+    model = TinyCausalLM(vocab_size=16, hidden_size=8).to(dtype=torch.bfloat16)
+    index = build_param_index(model, model_name_or_path="synthetic-tiny")
+    reference = flatten_trainable_params(model, index, dtype=torch.bfloat16)
+    local_delta = torch.full_like(reference, 0.125)
+    load_flat_into_model(model, reference + local_delta, index)
+    realized_local = flatten_trainable_params(model, index, dtype=torch.bfloat16)
+    realized_delta = realized_local - reference
+    new_global = reference - 0.25
+    weight_path = tmp_path / "global_bf16.safetensors"
+    save_global_weights(weight_path, new_global, index, dtype=torch.bfloat16)
+
+    version, delta_norm, compute_stats = rebase_local_delta_onto_global(
+        model=model,
+        latest={"version": 3, "weight_path": str(weight_path)},
+        param_index=index,
+        device=torch.device("cpu"),
+        reference_flat=reference,
+        config=config,
+    )
+
+    assert version == 3
+    assert compute_stats["reconcile_compute_dtype"] == "bfloat16"
+    assert compute_stats["reconcile_compute_device"] == "cpu"
+    assert delta_norm == pytest.approx(
+        torch.linalg.vector_norm(realized_delta, ord=2, dtype=torch.float32).item()
+    )
+    assert torch.equal(
+        flatten_trainable_params(model, index, dtype=torch.bfloat16),
+        new_global + realized_delta,
+    )
 
 
 def test_rebase_reconciliation_preserves_optimizer_and_scheduler_state(tmp_path, monkeypatch):
@@ -380,6 +422,110 @@ def test_prediction_preparation_keeps_snapshot_when_latest_is_unchanged(tmp_path
     assert recovery is None
 
 
+def test_compute_placement_prefers_cuda_when_estimate_fits(monkeypatch):
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(
+        torch.cuda,
+        "mem_get_info",
+        lambda _device: (20 << 30, 24 << 30),
+    )
+
+    placement = choose_learner_compute_placement(
+        preferred_device=torch.device("cuda"),
+        dtype=torch.bfloat16,
+        total_numel=1_000_000,
+        working_vector_count=14,
+    )
+
+    assert placement.device.type == "cuda"
+    assert placement.dtype == torch.bfloat16
+    assert placement.fallback_reason is None
+
+
+def test_compute_placement_falls_back_for_estimated_cuda_oom(monkeypatch):
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(
+        torch.cuda,
+        "mem_get_info",
+        lambda _device: (2 << 30, 24 << 30),
+    )
+
+    placement = choose_learner_compute_placement(
+        preferred_device=torch.device("cuda"),
+        dtype=torch.float32,
+        total_numel=100_000_000,
+        working_vector_count=14,
+    )
+
+    assert placement.device.type == "cpu"
+    assert placement.dtype == torch.float32
+    assert placement.fallback_reason == "estimated_cuda_oom_risk"
+
+
+def test_prediction_retries_on_cpu_after_cuda_oom(tmp_path, monkeypatch):
+    config = resolve_config("configs/fs_diloco_tiny_local.yaml")
+    model = TinyCausalLM(vocab_size=16, hidden_size=8)
+    index = build_param_index(model, model_name_or_path="synthetic-tiny")
+    global_flat = flatten_trainable_params(model, index)
+    outer_state = {
+        "step": torch.tensor(0),
+        "momentum": torch.zeros_like(global_flat),
+    }
+    weight_path = tmp_path / "global.safetensors"
+    outer_path = tmp_path / "outer.safetensors"
+    save_global_weights(weight_path, global_flat, index)
+    save_outer_state(outer_path, global_flat, outer_state)
+    load_flat_into_model(model, global_flat + 0.1, index)
+
+    cuda_placement = learner_runtime.LearnerComputePlacement(
+        device=torch.device("cuda"),
+        dtype=torch.float32,
+        estimated_working_bytes=1024,
+        cuda_free_bytes=4096,
+        cuda_total_bytes=8192,
+        cuda_reserve_bytes=1024,
+    )
+    monkeypatch.setattr(
+        learner_runtime,
+        "choose_learner_compute_placement",
+        lambda **_kwargs: cuda_placement,
+    )
+    original_attempt = learner_runtime._predict_next_global_weight_on_placement
+    attempted_devices = []
+
+    def fail_cuda_then_compute_cpu(**kwargs):
+        attempted_devices.append(kwargs["placement"].device.type)
+        if kwargs["placement"].device.type == "cuda":
+            raise torch.OutOfMemoryError("injected CUDA OOM")
+        return original_attempt(**kwargs)
+
+    monkeypatch.setattr(
+        learner_runtime,
+        "_predict_next_global_weight_on_placement",
+        fail_cuda_then_compute_cpu,
+    )
+    monkeypatch.setattr(torch.cuda, "empty_cache", lambda: None)
+
+    predicted, stats = predict_next_global_weight(
+        model=model,
+        latest={
+            "version": 0,
+            "weight_path": str(weight_path),
+            "optim_path": str(outer_path),
+            "total_update_tokens": 0,
+        },
+        param_index=index,
+        device=torch.device("cpu"),
+        config=config,
+        local_tokens=32,
+    )
+
+    assert predicted.device.type == "cpu"
+    assert attempted_devices == ["cuda", "cpu"]
+    assert stats["prediction_fallback_reason"] == "cuda_oom"
+    assert stats["prediction_compute_device"] == "cpu"
+
+
 def test_predict_next_global_uses_token_weighted_delta_and_outer_step(tmp_path):
     config = resolve_config("configs/fs_diloco_tiny_local.yaml", num_learners=2)
     config.learner.global_adoption_strategy = "predict_post_publish_global"
@@ -425,6 +571,47 @@ def test_predict_next_global_uses_token_weighted_delta_and_outer_step(tmp_path):
     assert stats["local_weight"] == pytest.approx(0.25)
     assert stats["estimated_total_tokens"] == 100
     assert stats["bootstrapped_total_tokens"] is False
+
+
+def test_predict_next_global_uses_configured_bfloat16_compute_dtype(tmp_path):
+    config = resolve_config("configs/fs_diloco_tiny_syncer_bf16_gpu.yaml")
+    model = TinyCausalLM(vocab_size=16, hidden_size=8).to(dtype=torch.bfloat16)
+    index = build_param_index(model, model_name_or_path="synthetic-tiny")
+    global_flat = flatten_trainable_params(model, index, dtype=torch.bfloat16)
+    local_delta = torch.full_like(global_flat, 0.125)
+    load_flat_into_model(model, global_flat + local_delta, index)
+    momentum = torch.full_like(global_flat, 0.25)
+    outer_state = {"step": torch.tensor(3), "momentum": momentum}
+    weight_path = tmp_path / "global_bf16.safetensors"
+    outer_path = tmp_path / "outer_bf16.safetensors"
+    save_global_weights(weight_path, global_flat, index, dtype=torch.bfloat16)
+    save_outer_state(
+        outer_path,
+        global_flat,
+        outer_state,
+        dtype=torch.bfloat16,
+    )
+
+    predicted, stats = predict_next_global_weight(
+        model=model,
+        latest={
+            "version": 4,
+            "weight_path": str(weight_path),
+            "optim_path": str(outer_path),
+            "total_update_tokens": 100,
+        },
+        param_index=index,
+        device=torch.device("cpu"),
+        config=config,
+        local_tokens=25,
+    )
+
+    assert predicted.dtype == torch.bfloat16
+    assert predicted.device.type == "cpu"
+    assert stats["prediction_compute_dtype"] == "bfloat16"
+    assert stats["prediction_compute_device"] == "cpu"
+    assert stats["prediction_fallback_reason"] == "learner_device_not_cuda"
+    assert {param.dtype for param in model.parameters()} == {torch.bfloat16}
 
 
 def test_predict_next_global_bootstraps_zero_token_initial_checkpoint(tmp_path):

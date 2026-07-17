@@ -35,7 +35,10 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
 ### 全局权重采纳
 
 - **`adopt_global(*, model, latest, param_index, device) -> int`** — 全量模式:加载 `latest["weight_path"]` 为扁平向量 → 整体写回模型 → 返回新版本号。调用方随后负责重建内层优化器并清零 `tokens_since_global_load`。
-- **`rebase_local_delta_onto_global(*, model, latest, param_index, device, reference_flat) -> (version, delta_norm)`** — full 实验模式:在 CPU FP32 中计算 `current_local-reference`,加到新版 global 后写回模型。调用方随后立即释放 reference、保留 carried token 计数并重建 optimizer/scheduler。
+- **`choose_learner_compute_placement(...)`** — 按参数量、`syncer.compute_dtype`、临时向量数和 CUDA 当前 free/total memory 估算 prediction/reconcile 工作集；预留至少 1 GiB 且不少于设备容量 5%，可安全容纳时选 learner CUDA，否则选 CPU 并返回 fallback reason。
+- **`rebase_local_delta_onto_global(*, model, latest, param_index, device, reference_flat, config) -> (version, delta_norm, compute_stats)`** — full 实验模式:按 `syncer.compute_dtype` 计算 `current_local-reference`,加到新版 global 后写回模型。优先在 learner GPU 执行，估算有 OOM 风险或实际 CUDA OOM 时保持 dtype 回退 CPU；调用方随后立即释放 reference 并保留 carried token 计数。
+- **`snapshot_model_for_reconcile(...)`** — 按相同 placement/dtype 策略建立 local-delta reference，避免固定 CPU FP32 快照。
+- **`predict_next_global_weight(...)`** — 在选定 placement 上加载 global/outer、构造 token-weighted delta 并执行真实 outer Nesterov step；返回的 reference 保留计算 dtype/device 供后续 reconcile 使用，日志包含 placement 与 OOM fallback 证据。
 - **`load_fragment_latest_into_model(*, model, latest, param_index, fragment_index, device) -> (global_merge_event, {fragment_id: version})`** — 启动期:加载 latest 中**所有**片、materialize 成完整向量后整体写回。
 - **`adopt_fragment_updates(*, model, latest, param_index, fragment_index, last_loaded_fragment_versions, device) -> (event, versions, changed)`** — 运行期增量采纳:flatten 当前模型 → 只加载版本更新的片并 scatter → 有变化才写回模型;返回变化片列表(调用方据此清零对应 token 计数、按配置重置优化器)。
 

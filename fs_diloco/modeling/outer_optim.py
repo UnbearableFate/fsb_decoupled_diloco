@@ -138,9 +138,10 @@ def state_from_tensors(
     for key, value in tensors.items():
         if key == "theta":
             continue
-        target = value.detach().to(device=device)
-        if dtype is not None and target.is_floating_point():
-            target = target.to(dtype=dtype)
+        target = value.detach().to(
+            device=device,
+            dtype=dtype if dtype is not None and value.is_floating_point() else value.dtype,
+        )
         state[key] = target
     if "step" not in state:
         state["step"] = torch.tensor(0, dtype=torch.int64, device=device)
