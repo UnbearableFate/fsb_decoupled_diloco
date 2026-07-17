@@ -14,6 +14,18 @@
 
 顺序依据：S2 先交付所有后续计划共享的等价性基础设施并降低 S1 风险；随后 S4 以该工具验证未改动的 full 路径并尽早修复确认 bug；S5 依赖 S1 的策略类存在。S3 与 S1 互相独立，但报告与 run 对照应分开。
 
+## 实施状态（2026-07-17）
+
+| 计划 | 状态 | 主要实现 commit | 验证记录 commit |
+| --- | --- | --- | --- |
+| S2 | 完成 | `19414a1` | `19414a1` |
+| S4 | 完成 | `dab45e8` | `67b6da2` |
+| S1 | 完成 | `4ce7262`, `f2c6961` | `1fedd4a` |
+| S3 | 完成 | `777e913` | `77edc08` |
+| S5 | 完成 | `c53f14d`（另含验证中发现的 maintenance race 修复 `a0eebcc`） | `04cf478` |
+
+各计划的 RED/GREEN、tiny run、Checker 与失败诊断见 `reports/imp_plans/bug_fixing/<Sx>/`。S3 明确不修复的 B4 terminal-drain 语义变更已拆到 `plans/followups/B4-fragment-terminal-drain.md`，不属于本索引五项的未完成工作。
+
 ## 统一约束
 
 - **记录规则**以 [plans/AGENTS.md](../AGENTS.md) 为准；经验文档为背景参考；冲突时 AGENTS.md 优先。
