@@ -1,5 +1,6 @@
 import json
 import time
+from pathlib import Path
 
 from fs_diloco.storage.maintenance import collect_runtime_artifacts, run_maintenance
 from fs_diloco.storage.paths import RunPaths, prepare_run_dirs
@@ -128,4 +129,27 @@ def test_unpublished_payload_grace_and_temp_cleanup(tmp_path):
         "deleted_artifacts": 2,
     }
     assert not orphan.exists() and not tmp.exists()
+    store.close()
+
+
+def test_temp_cleanup_tolerates_atomic_writer_renaming_after_glob(tmp_path, monkeypatch):
+    paths, store = _initialized_state(tmp_path)
+    tmp = paths.update_payload_dir("learner_000") / ".concurrent.tmp"
+    tmp.write_text("in flight", encoding="utf-8")
+    original_stat = Path.stat
+
+    def stat_after_concurrent_rename(path, *args, **kwargs):
+        if path == tmp:
+            path.unlink()
+            raise FileNotFoundError(path)
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", stat_after_concurrent_rename)
+
+    assert collect_runtime_artifacts(
+        store,
+        paths,
+        orphan_grace_seconds=60.0,
+        now=time.time(),
+    ) == 0
     store.close()

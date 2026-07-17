@@ -177,7 +177,12 @@ def collect_runtime_artifacts(
                 deleted += 1
     for root in (paths.updates_payloads,):
         for tmp in root.glob("**/.*.tmp"):
-            if now - tmp.stat().st_mtime >= orphan_grace_seconds and _unlink(tmp):
+            try:
+                mtime = tmp.stat().st_mtime
+            except FileNotFoundError:
+                # An atomic writer may rename the temp between glob and stat.
+                continue
+            if now - mtime >= orphan_grace_seconds and _unlink(tmp):
                 deleted += 1
     return deleted
 
