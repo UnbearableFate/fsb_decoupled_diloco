@@ -5,7 +5,7 @@
 - 来源：review S4（低）+ B1（高，确认 bug）。两者根因相同：`stop_requested`（learner.py:324-334）与 `fragment_stop_requested`（learner.py:337-342）分开维护，导致 fragment 路径在 `local_or_global` + `max_local_steps` 组合下从不检查 `stop.json`。
 - 性质：**语义变更**（fragment 路径的 B1 行为被修正），其余路径行为保持。
 - 影响文件：`fs_diloco/runtime/learner.py`、`tests/test_learner_completion.py`。
-- 前置依赖：无。规模：最小（预计单文件 <40 行净改动）。
+- 前置依赖：S2 的轨迹工具（用于 full 路径对照）。规模：最小（预计单文件 <40 行净改动）。
 
 ## 2. 目标与完成谓词
 
@@ -43,7 +43,7 @@
 
 | Loop | SPECIFY/RED | IMPLEMENT/GREEN | HARDEN、CHECK、PERSIST |
 | --- | --- | --- | --- |
-| L1 真值表测试先行 | 按 §4 真值表为两个现存函数写全组合参数化测试；STP-03（B1 场景）对 `fragment_stop_requested` 断言"应停止"，在当前代码上确认 RED | 不改实现，只提交测试与 RED 证据 | RED 输出存入 artifacts；failures.md 不记（预期失败）；progress.md 记录 STP-01–06 中现 PASS/RED 分布 |
+| L1 真值表测试先行 | 按 §4 真值表写统一谓词的全组合参数化测试；另以临时回归断言对现 `fragment_stop_requested` 验证 STP-03 在当前代码上 RED | 不改实现，只保存 RED 证据；临时断言在 L2 改为调用统一谓词 | RED 输出存入 artifacts；failures.md 不记（预期失败）；progress.md 记录 STP-01–06 中现 PASS/RED 分布 |
 | L2 谓词合并 | — | 删除 `fragment_stop_requested`，fragment 主循环全部调用点改为 `stop_requested` | STP-01–STP-06 全 GREEN；`grep` 静态检查通过；全量 pytest |
 | L3 管线级验证 | 设计 STP-07 场景：tiny fragment 配置 + 较大 `max_local_steps`，令 syncer 的 global 目标先达成 | 如现有 tiny fragment 配置不满足场景，新增一份最小配置变体 | 在 compute 节点跑通 STP-07；核对 learner 日志 stop 事件、`control/summary.json` 与最终心跳；证据入 artifacts |
 
@@ -64,7 +64,7 @@ progress.md 每条记录必须列出本轮覆盖的 STP ID（P8）。
 ## 7. 验证阶梯
 
 1. **登录节点**：`git diff --check`、lint、STP-06 的 grep 静态检查。不运行 pytest。
-2. **1 节点 compute**：`pytest tests/test_learner_completion.py` → 全量 pytest → STP-07 管线冒烟（`scripts/local/run_tiny_2proc_smoke.sh` 的 fragment 配置变体）。
+2. **1 节点 compute**：`pytest tests/test_learner_completion.py` → 全量 pytest → STP-07 管线冒烟（现有 `configs/fs_diloco_tiny_fragment_local.yaml` 已满足“global target 先于 local horizon”；仅当前提改变时才新增配置变体）。
 3. 不需要 2 节点与 9 节点。下一次 9 节点 fragment 实验运行在修复后 commit 上时，在 run_analysis 中注明（见 §3 对照污染警告）。
 
 ## 8. 报告、证据与 Checker

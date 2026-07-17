@@ -7,6 +7,12 @@ PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 CONFIG="${CONFIG:-$PROJECT_ROOT/configs/fs_diloco_tiny_local.yaml}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_tiny_local}"
 SHARED_ROOT="${SHARED_ROOT:-$PROJECT_ROOT/runs/fs_diloco/$RUN_ID}"
+NUM_LEARNERS="${NUM_LEARNERS:-2}"
+
+if ! [[ "$NUM_LEARNERS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "NUM_LEARNERS must be a positive integer: $NUM_LEARNERS" >&2
+  exit 2
+fi
 
 cd "$PROJECT_ROOT"
 mkdir -p "$SHARED_ROOT" "$PROJECT_ROOT/logs"
@@ -17,29 +23,28 @@ mkdir -p "$LOG_ROOT"
   --config "$CONFIG" \
   --run-id "$RUN_ID" \
   --shared-root "$SHARED_ROOT" \
+  --num-learners "$NUM_LEARNERS" \
   > "$LOG_ROOT/syncer.log" 2>&1 &
 syncer_pid=$!
 
 sleep 1
 
-"$PYTHON_BIN" -m fs_diloco.learner \
-  --config "$CONFIG" \
-  --run-id "$RUN_ID" \
-  --shared-root "$SHARED_ROOT" \
-  --learner-id learner_000 \
-  > "$LOG_ROOT/learner_000.log" 2>&1 &
-learner0_pid=$!
+learner_pids=()
+for ((learner_index = 0; learner_index < NUM_LEARNERS; learner_index++)); do
+  printf -v learner_id 'learner_%03d' "$learner_index"
+  "$PYTHON_BIN" -m fs_diloco.learner \
+    --config "$CONFIG" \
+    --run-id "$RUN_ID" \
+    --shared-root "$SHARED_ROOT" \
+    --num-learners "$NUM_LEARNERS" \
+    --learner-id "$learner_id" \
+    > "$LOG_ROOT/$learner_id.log" 2>&1 &
+  learner_pids+=("$!")
+done
 
-"$PYTHON_BIN" -m fs_diloco.learner \
-  --config "$CONFIG" \
-  --run-id "$RUN_ID" \
-  --shared-root "$SHARED_ROOT" \
-  --learner-id learner_001 \
-  > "$LOG_ROOT/learner_001.log" 2>&1 &
-learner1_pid=$!
-
-wait "$learner0_pid"
-wait "$learner1_pid"
+for learner_pid in "${learner_pids[@]}"; do
+  wait "$learner_pid"
+done
 wait "$syncer_pid"
 
 "$PYTHON_BIN" -m fs_diloco.analysis "$SHARED_ROOT" --json > "$LOG_ROOT/summary.json"

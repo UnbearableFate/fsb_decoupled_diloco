@@ -86,6 +86,47 @@ class LearnerComputePlacement:
         }
 
 
+@dataclass(frozen=True)
+class PredictionState:
+    """Ephemeral state carried while training on a predicted global snapshot."""
+
+    reference_flat: torch.Tensor | None = None
+    carried_tokens: int = 0
+    update_id: str | None = None
+    base_version: int | None = None
+
+    @property
+    def active(self) -> bool:
+        return self.reference_flat is not None
+
+    def require_active(self) -> PredictionState:
+        complete = (
+            self.reference_flat is not None
+            and self.update_id is not None
+            and self.base_version is not None
+            and self.carried_tokens >= 0
+        )
+        if not complete:
+            raise RuntimeError("predicted-global state is incomplete")
+        return self
+
+    def add_tokens(self, tokens: int) -> PredictionState:
+        self.require_active()
+        return PredictionState(
+            reference_flat=self.reference_flat,
+            carried_tokens=self.carried_tokens + int(tokens),
+            update_id=self.update_id,
+            base_version=self.base_version,
+        )
+
+
+@dataclass(frozen=True)
+class PredictionReconcileResult:
+    version: int
+    tokens_since_global_load: int
+    state: PredictionState
+
+
 def learner_compute_dtype(config: Config) -> torch.dtype:
     """Use the syncer's configured arithmetic dtype for learner reconciliation."""
 
@@ -515,6 +556,48 @@ def rebase_local_delta_onto_global(
     load_flat_into_model(model, rebased_flat, param_index)
     model.to(device)
     return int(latest["version"]), delta_norm, placement.log_fields("reconcile")
+
+
+def reconcile_prediction(
+    *,
+    model: torch.nn.Module,
+    latest: dict[str, Any],
+    param_index: dict[str, Any],
+    device: torch.device,
+    config: Config,
+    logger: JsonlLogger,
+    state: PredictionState,
+    previous_version: int,
+    waited_seconds: float | None = None,
+) -> PredictionReconcileResult:
+    """Rebase post-prediction progress and clear the explicit prediction state."""
+
+    active = state.require_active()
+    version, delta_norm, reconcile_compute_stats = rebase_local_delta_onto_global(
+        model=model,
+        latest=latest,
+        param_index=param_index,
+        device=device,
+        reference_flat=active.reference_flat,
+        config=config,
+    )
+    event_fields: dict[str, Any] = {
+        "previous_version": previous_version,
+        "version": version,
+        "prediction_base_version": active.base_version,
+        "prediction_update_id": active.update_id,
+        "carried_delta_tokens": active.carried_tokens,
+        "post_prediction_delta_norm": delta_norm,
+    }
+    if waited_seconds is not None:
+        event_fields["reconcile_waited_seconds"] = waited_seconds
+    event_fields.update(reconcile_compute_stats)
+    logger.event("global_prediction_reconciled", **event_fields)
+    return PredictionReconcileResult(
+        version=version,
+        tokens_since_global_load=active.carried_tokens,
+        state=PredictionState(),
+    )
 
 
 def snapshot_model_for_reconcile(
@@ -1448,10 +1531,7 @@ def run_learner(config: Config, learner_id: str) -> None:
     rebase_reference_flat: torch.Tensor | None = None
     carried_delta_tokens = 0
     last_published_anchor_update_id: str | None = None
-    prediction_reference_flat: torch.Tensor | None = None
-    prediction_carried_tokens = 0
-    prediction_update_id: str | None = None
-    prediction_base_version: int | None = None
+    prediction_state = PredictionState()
     logger.event("loaded_global", version=last_loaded_global_version)
     logger.event("inner_optimizer_reset", version=last_loaded_global_version)
     write_heartbeat(
@@ -1518,8 +1598,8 @@ def run_learner(config: Config, learner_id: str) -> None:
                 tokens_since_global_load += step_tokens
                 if rebase_reference_flat is not None:
                     carried_delta_tokens += step_tokens
-                if prediction_reference_flat is not None:
-                    prediction_carried_tokens += step_tokens
+                if prediction_state.active:
+                    prediction_state = prediction_state.add_tokens(step_tokens)
                 losses.append(loss)
                 if local_step % max(1, config.training.log_every_steps) == 0:
                     logger.event(
@@ -1546,7 +1626,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                 should_poll_during_inner_step = config.learner.poll_latest_during_inner_steps and (
                     (not rebase_enabled and not prediction_enabled)
                     or rebase_reference_flat is not None
-                    or prediction_reference_flat is not None
+                    or prediction_state.active
                 )
                 if should_poll_during_inner_step:
                     maybe_latest = read_latest_if_newer(paths, last_loaded_global_version)
@@ -1554,38 +1634,22 @@ def run_learner(config: Config, learner_id: str) -> None:
                         previous_version = last_loaded_global_version
                         preserve_inner_training_state_reason: str | None = None
                         if prediction_enabled:
-                            if prediction_reference_flat is None:
-                                raise RuntimeError("predicted-global reference is unavailable")
-                            reconciled_update_id = prediction_update_id
-                            reconciled_base_version = prediction_base_version
-                            (
-                                last_loaded_global_version,
-                                delta_norm,
-                                reconcile_compute_stats,
-                            ) = rebase_local_delta_onto_global(
+                            reconcile_result = reconcile_prediction(
                                 model=model,
                                 latest=maybe_latest,
                                 param_index=param_index,
                                 device=device,
-                                reference_flat=prediction_reference_flat,
                                 config=config,
-                            )
-                            last_loaded_latest = maybe_latest
-                            tokens_since_global_load = prediction_carried_tokens
-                            logger.event(
-                                "global_prediction_reconciled",
+                                logger=logger,
+                                state=prediction_state,
                                 previous_version=previous_version,
-                                version=last_loaded_global_version,
-                                prediction_base_version=reconciled_base_version,
-                                prediction_update_id=reconciled_update_id,
-                                carried_delta_tokens=prediction_carried_tokens,
-                                post_prediction_delta_norm=delta_norm,
-                                **reconcile_compute_stats,
                             )
-                            prediction_reference_flat = None
-                            prediction_carried_tokens = 0
-                            prediction_update_id = None
-                            prediction_base_version = None
+                            last_loaded_global_version = reconcile_result.version
+                            last_loaded_latest = maybe_latest
+                            tokens_since_global_load = (
+                                reconcile_result.tokens_since_global_load
+                            )
+                            prediction_state = reconcile_result.state
                             preserve_inner_training_state_reason = "global_prediction_reconciled"
                         elif rebase_enabled:
                             if rebase_reference_flat is None:
@@ -1646,20 +1710,22 @@ def run_learner(config: Config, learner_id: str) -> None:
                                 "inner_optimizer_reset", version=last_loaded_global_version
                             )
 
-            if prediction_reference_flat is not None and paths.stop_json.exists():
+            if prediction_state.active and paths.stop_json.exists():
+                active_prediction = prediction_state.require_active()
                 logger.event(
                     "global_prediction_abandoned_on_stop",
-                    prediction_base_version=prediction_base_version,
-                    prediction_update_id=prediction_update_id,
-                    carried_delta_tokens=prediction_carried_tokens,
+                    prediction_base_version=active_prediction.base_version,
+                    prediction_update_id=active_prediction.update_id,
+                    carried_delta_tokens=active_prediction.carried_tokens,
                 )
                 continue
-            if prediction_reference_flat is not None:
+            if prediction_state.active:
+                active_prediction = prediction_state.require_active()
                 logger.event(
                     "global_prediction_reconcile_wait_started",
                     current_version=last_loaded_global_version,
-                    prediction_base_version=prediction_base_version,
-                    prediction_update_id=prediction_update_id,
+                    prediction_base_version=active_prediction.base_version,
+                    prediction_update_id=active_prediction.update_id,
                     timeout_seconds=config.learner.prediction_reconcile_timeout_seconds,
                 )
                 maybe_latest, reconcile_waited_seconds = wait_for_latest_if_newer(
@@ -1673,37 +1739,21 @@ def run_learner(config: Config, learner_id: str) -> None:
                         "timed out waiting to reconcile predicted global before publication"
                     )
                 previous_version = last_loaded_global_version
-                reconciled_update_id = prediction_update_id
-                reconciled_base_version = prediction_base_version
-                (
-                    last_loaded_global_version,
-                    delta_norm,
-                    reconcile_compute_stats,
-                ) = rebase_local_delta_onto_global(
+                reconcile_result = reconcile_prediction(
                     model=model,
                     latest=maybe_latest,
                     param_index=param_index,
                     device=device,
-                    reference_flat=prediction_reference_flat,
                     config=config,
-                )
-                last_loaded_latest = maybe_latest
-                tokens_since_global_load = prediction_carried_tokens
-                logger.event(
-                    "global_prediction_reconciled",
+                    logger=logger,
+                    state=prediction_state,
                     previous_version=previous_version,
-                    version=last_loaded_global_version,
-                    prediction_base_version=reconciled_base_version,
-                    prediction_update_id=reconciled_update_id,
-                    carried_delta_tokens=prediction_carried_tokens,
-                    post_prediction_delta_norm=delta_norm,
-                    reconcile_waited_seconds=reconcile_waited_seconds,
-                    **reconcile_compute_stats,
+                    waited_seconds=reconcile_waited_seconds,
                 )
-                prediction_reference_flat = None
-                prediction_carried_tokens = 0
-                prediction_update_id = None
-                prediction_base_version = None
+                last_loaded_global_version = reconcile_result.version
+                last_loaded_latest = maybe_latest
+                tokens_since_global_load = reconcile_result.tokens_since_global_load
+                prediction_state = reconcile_result.state
                 base_global_version = last_loaded_global_version
                 logger.event("global_adopted", version=last_loaded_global_version)
                 logger.event(
@@ -1730,7 +1780,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                 rebase_reference_flat = None
                 carried_delta_tokens = 0
                 last_published_anchor_update_id = None
-            if prediction_enabled and prediction_reference_flat is not None:
+            if prediction_enabled and prediction_state.active:
                 raise RuntimeError("cannot publish a proposal while training on predicted global")
             flat = flatten_trainable_params(
                 model,
@@ -1899,19 +1949,21 @@ def run_learner(config: Config, learner_id: str) -> None:
                 elif prediction_enabled:
                     if prepared_prediction_reference is None or prepared_prediction_stats is None:
                         raise RuntimeError("prediction preparation did not return a snapshot")
-                    prediction_reference_flat = prepared_prediction_reference
+                    prediction_state = PredictionState(
+                        reference_flat=prepared_prediction_reference,
+                        carried_tokens=0,
+                        update_id=update_id,
+                        base_version=last_loaded_global_version,
+                    )
                     prediction_stats = prepared_prediction_stats
-                    prediction_carried_tokens = 0
-                    prediction_update_id = update_id
-                    prediction_base_version = last_loaded_global_version
                     tokens_since_global_load = 0
                     optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
                     logger.event(
                         "global_prediction_started",
                         update_id=update_id,
                         reference_bytes=int(
-                            prediction_reference_flat.numel()
-                            * prediction_reference_flat.element_size()
+                            prepared_prediction_reference.numel()
+                            * prepared_prediction_reference.element_size()
                         ),
                         **prediction_stats,
                     )

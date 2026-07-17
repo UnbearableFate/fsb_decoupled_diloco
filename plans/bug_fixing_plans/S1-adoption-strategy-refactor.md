@@ -5,7 +5,7 @@
 - 来源：review S1（中）——本目录回报最大的一项。`run_learner`（learner.py:1411-1970，约 560 行）内联 replace / rebase / prediction 三种 global adoption 策略：`rebase_reference_flat`、`carried_delta_tokens`、`last_published_anchor_update_id`、`prediction_reference_flat`、`prediction_carried_tokens`、`prediction_update_id`、`prediction_base_version` 七个平行状态变量加 `rebase_enabled`/`prediction_enabled` 两个布尔开关，靠 if/elif 链维持互斥；每新增一种策略需在 ≥4 处插分支。
 - 性质：**行为保持重构**。事件名、事件字段、磁盘协议、DB schema、配置语义一律不变。
 - 影响文件：`fs_diloco/runtime/learner.py`；新增策略模块（建议 `fs_diloco/runtime/adoption.py`）与其测试；可能新增一份 tiny rebase 配置。
-- 前置依赖：S2 已交付（轨迹等价工具 + reconcile helper 已是可迁移的纯函数）。建议 S4 先行合入，避免与其 learner.py 改动冲突。
+- 前置依赖：S2 已交付（轨迹等价工具 + reconcile helper 已是可迁移的显式状态函数）。建议 S4 先行合入，避免与其 learner.py 改动冲突。
 
 ## 2. 目标与完成谓词
 
@@ -27,7 +27,7 @@
 
 - **范围内**：`run_learner`（full 模式）的三策略状态与分支迁移；统一事件收尾；策略工厂。
 - **非目标**：
-  - fragment learner 主循环（S3 计划处理其重复块；若 S3 先完成，其提炼出的 adoption 函数在本轮之后再统一到策略类，作为显式 follow-up）；
+  - fragment learner 主循环（S3 计划处理其重复块；fragment adoption 与 full global strategy 语义不同，不纳入本策略类）；
   - B6 GC 竞态重试推广——策略类共享单一 payload 加载入口，为 B6 预留缝，但不实现；
   - B2/Q1 scheduler 语义、S5 配置分组、任何新策略。
 - 兼容性：无配置变化；策略名与现 `learner.global_adoption_strategy` 取值一一对应。
@@ -49,15 +49,22 @@ class GlobalAdoptionStrategy:
     def on_cycle_end(self, ctx) -> AdoptionOutcome | None: ...
     # 现 cycle 末等待（1657-1716）：predict 的 reconcile-wait + 超时；其余策略为 no-op。
 
-    def on_after_publish(self, ctx, publish_result) -> None: ...
+    def before_publish(self, ctx) -> None: ...
+    # rebase 清除已被本次 proposal 覆盖的旧 anchor；predict 断言 reconcile 已完成。
+
+    def on_after_publish(self, ctx, publish_result) -> StrategyAction: ...
     # 现 publish 后分支（1820-1943）：建立 rebase anchor / prediction reference。
+
+    def on_local_tokens(self, tokens: int) -> None: ...
+    # reference 存在时累计 carried tokens；runner 不读取策略私有字段。
 
     def on_stop(self, ctx) -> None: ...
     # 现 abandon-on-stop（1649-1656）。
 ```
 
-- `AdoptionOutcome` 携带：新 global version、`preserve_inner_state: bool`、`reason`、事件附加字段。**统一收尾**由 runner 完成：发 `global_adopted`；按 `preserve_inner_state` 发 `inner_training_state_preserved`（带 `inner_training_state_metrics`）或重建 optimizer/scheduler 并发 `inner_optimizer_reset`。
-- 现 publish 前防御检查（1729-1734）改为策略对象内部不变量（断言自身状态一致），从 run_learner 移除。
+- `AdoptionOutcome` 携带：新 global version、新 latest metadata、重置后的 `tokens_since_global_load`、`preserve_inner_state: bool`、`reason`。`StrategyAction` 可携带 adoption outcome，或携带“未 adopt 但需 reset optimizer”的原因（prediction started）；二者不得同时出现。**统一 adoption 收尾**由 runner 完成：发 `global_adopted`；按 `preserve_inner_state` 发 `inner_training_state_preserved`（带 `inner_training_state_metrics`）或重建 optimizer/scheduler 并发 `inner_optimizer_reset`。prediction-start 的 reset 也走单一 action 收尾，但不伪造 `global_adopted`。
+- `ctx` 只提供模型、I/O、logger 与当前 runner 状态所需的显式依赖；策略专属 reference/token/update-id 状态不得放回 ctx。
+- 现 publish 前防御检查（1729-1734）移入 `before_publish`，从 `run_learner` 移除；训练 token 累计统一经 `on_local_tokens`，否则无法满足 STR-08 的私有状态要求。
 - 互斥由构造保证：run_learner 只持有一个策略实例，不再有 enabled 布尔。
 
 ## 6. Loop Engineering 实施循环
@@ -108,5 +115,5 @@ progress.md 每条记录必须列出覆盖的 STR ID（P8）。
 
 ## 11. 文档同步
 
-- 策略接口的稳定语义（五个钩子的调用时机）写入模块 docstring；docs/ 如有 learner 生命周期描述则同步；
+- 策略接口各钩子的稳定语义与调用时机写入模块 docstring；docs/ 如有 learner 生命周期描述则同步；
 - 完成后在 review 报告的 R3 条目标注 commit；S5（配置分组）自此解除依赖阻塞。

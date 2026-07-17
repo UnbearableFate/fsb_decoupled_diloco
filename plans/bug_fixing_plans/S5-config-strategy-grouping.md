@@ -4,7 +4,7 @@
 
 - 来源：review S5（低）+ B3（中，死字段）。现状：策略专属参数平铺在 `LearnerSection`（config.py:139-145：`post_publish_latest_wait_seconds`、`post_publish_latest_poll_seconds`、`prediction_reconcile_timeout_seconds`）；全部跨字段校验集中在 `resolve_config`（config.py:248-355）；三个字段已确认无消费方：`inner_optimizer.reset_on_global_update`（:118）、`sync.upload_mode`（:66）、`liveness.quorum_policy`（:92）。
 - 性质：**含不兼容配置变更**（旧键 fail-closed 拒绝，无自动迁移）。代码行为不变——只有配置面变化。
-- 影响文件：`fs_diloco/core/config.py`、策略类模块（S1 交付）、`configs/*.yaml` 全量、`tests/test_config.py`。
+- 影响文件：`fs_diloco/core/config.py`、策略类模块（S1 交付）、`fs_diloco/runtime/learner.py`、`configs/*.yaml` 全量、配置文档与相应测试。
 - 前置依赖：**S1 完成**（校验去处是策略类）。其中 L1（死字段删除）无依赖，可提前单独执行（对应 review R0 的 B3 条目；若已完成则跳过 L1）。
 
 ## 2. 目标与完成谓词
@@ -12,9 +12,9 @@
 全部满足才可声明完成：
 
 1. B3 三个死字段从 dataclass 与全部 in-repo YAML 中删除；YAML 中再出现时被拒绝并给出"字段已移除"错误（CFG-01）。
-2. 策略专属字段迁入 `learner.rebase.*` / `learner.prediction.*` 子节；`learner.global_adoption_strategy` 与策略无关字段留在 `learner.*`（归属清单见 §4）。
+2. 真正的策略专属字段迁入相应子节；当前盘点只有 prediction timeout，因此迁入 `learner.prediction.*`。不得创建没有字段的 `learner.rebase` 空节；`learner.global_adoption_strategy` 与策略无关字段留在 `learner.*`（归属清单见 §4）。
 3. 旧扁平键出现时 resolve 失败，错误信息**包含新键路径**（CFG-02）。
-4. 每个策略类实现 `validate(config)`，`resolve_config` 中对应的策略专属校验迁出；非策略校验留在 `resolve_config`（CFG-04）。
+4. 每个策略类实现 `validate(config)`：replace 可为明确 no-op，rebase/predict 承担各自约束；`resolve_config` 中对应的策略专属校验迁出，非策略校验留在 `resolve_config`（CFG-04）。
 5. `configs/` 下全部 YAML 迁移完毕且逐一 resolve 成功（CFG-05，参数化测试固化为常驻回归）。
 6. 全量 pytest 通过；三种策略各一次 tiny run 正常完成（配置面变化不改行为的管线证据）。
 
@@ -30,7 +30,7 @@
 | --- | --- | --- | --- |
 | `global_adoption_strategy` | learner | 不动 | 工厂（非法名拒绝，S1 已建） |
 | `prediction_reconcile_timeout_seconds` | learner | `learner.prediction.reconcile_timeout_seconds` | predict 策略 `validate`（>0 等） |
-| `post_publish_latest_wait_seconds` / `_poll_seconds` | learner | SPECIFY 阶段判定：若仅 rebase/predict 消费 → 迁入对应子节；若 replace 路径也消费 → 留在 `learner.*` 并在 progress 记录依据 | 消费方策略 `validate` |
+| `post_publish_latest_wait_seconds` / `_poll_seconds` | learner | **留在 `learner.*`**：现实现的 common post-publish 路径在 replace/rebase/predict 三者均消费 | `resolve_config`（策略无关） |
 | `poll_latest_during_inner_steps`、`adopt_global_after_upload` | learner | 不动（策略无关开关） | `resolve_config` |
 | `inner_optimizer.reset_on_global_update` | inner_optimizer | **删除**（死字段，B3） | — |
 | `sync.upload_mode` | sync | **删除**（死字段，B3） | — |
@@ -44,7 +44,7 @@
 | --- | --- | --- | --- |
 | L0 现状盘点 | 确认未知键现行为；逐字段 grep 消费方，产出 §4 归属清单终稿；盘点 `resolve_config` 现有校验并按"策略专属/全局"分类 | 无实现 | 清单入 progress.md；基线 commit 记录 |
 | L1 死字段删除（可独立提前） | CFG-01 先 RED：三字段出现在 YAML → 期望拒绝 | 删除 dataclass 字段；清理 in-repo YAML 中的出现；（如需）未知键拒绝机制 | 全量 pytest；`grep -rn "reset_on_global_update\|upload_mode\|quorum_policy"` 仅余历史文档 |
-| L2 分组与旧键拒绝 | CFG-02/03 先 RED：旧扁平键拒绝且提示新键；新键默认值与类型正确 | 新增 `learner.rebase` / `learner.prediction` 子节；迁移字段 | CFG-05 参数化测试覆盖全部 in-repo YAML |
+| L2 分组与旧键拒绝 | CFG-02/03 先 RED：旧扁平 prediction timeout 拒绝且提示新键；新键默认值与类型正确 | 新增 `learner.prediction` 子节并迁移 timeout；不创建空 `learner.rebase` | CFG-05 参数化测试覆盖全部 in-repo YAML |
 | L3 校验挂接策略类 | CFG-04 先 RED：策略专属反例（如 timeout ≤0）经由策略 `validate` 拒绝 | 策略类 `validate(config)` 落地；`resolve_config` 中对应校验迁出并在启动路径调用 | 校验总集不减少：L0 校验分类清单逐条对账（每条要么留在 resolve_config，要么在某策略 validate，不允许丢失） |
 | L4 配置迁移与管线 | — | `configs/*.yaml` 全量迁移 | 三策略 tiny run 各一次正常完成；全量 pytest；文档同步 |
 
@@ -55,7 +55,7 @@
 | CFG-01 | 死字段拒绝 | 三个 B3 字段出现在 YAML → resolve 失败，错误含"已移除" |
 | CFG-02 | 旧扁平键拒绝 | 如 `learner.prediction_reconcile_timeout_seconds` → 失败且错误含 `learner.prediction.reconcile_timeout_seconds` |
 | CFG-03 | 新键解析 | 新子节字段默认值、类型、覆盖优先级正确 |
-| CFG-04 | 策略校验反例 | 每策略至少一个非法组合被其 `validate` 拒绝；非本策略运行时不触发该校验 |
+| CFG-04 | 策略校验反例 | rebase/predict 的非法组合被各自 `validate` 拒绝；replace 的 `validate` 明确 no-op；非当前策略的约束不触发 |
 | CFG-05 | 全配置回归 | `configs/` 下每个 YAML resolve 成功（参数化，常驻） |
 | CFG-06 | 校验对账 | L0 校验分类清单中每条在新代码中有归属（测试或人工对账表，入 artifacts） |
 

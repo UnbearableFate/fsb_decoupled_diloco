@@ -14,11 +14,13 @@ from fs_diloco.modeling.param_index import (
 )
 from fs_diloco.runtime import learner as learner_runtime
 from fs_diloco.runtime.learner import (
+    PredictionState,
     adopt_global,
     choose_learner_compute_placement,
     prepare_prediction_or_find_newer_latest,
     predict_next_global_weight,
     rebase_local_delta_onto_global,
+    reconcile_prediction,
     wait_for_latest_if_newer,
 )
 from fs_diloco.storage.atomic_io import atomic_write_json
@@ -131,6 +133,168 @@ def test_rebase_rejects_reference_with_wrong_size(tmp_path):
             reference_flat=flat[:-1],
             config=config,
         )
+
+
+@pytest.mark.parametrize("waited_seconds", [None, 0.25])
+def test_prediction_reconcile_helper_clears_state_and_preserves_event_shape(
+    monkeypatch, waited_seconds
+):
+    reference = torch.arange(4, dtype=torch.float32)
+    state = PredictionState(
+        reference_flat=reference,
+        carried_tokens=96,
+        update_id="learner_000_00000002_deadbeef",
+        base_version=3,
+    )
+    events = []
+
+    class RecordingLogger:
+        def event(self, event_type, **payload):
+            events.append((event_type, payload))
+
+    monkeypatch.setattr(
+        learner_runtime,
+        "rebase_local_delta_onto_global",
+        lambda **_kwargs: (
+            4,
+            1.5,
+            {
+                "reconcile_compute_dtype": "float32",
+                "reconcile_compute_device": "cpu",
+            },
+        ),
+    )
+
+    result = reconcile_prediction(
+        model=object(),
+        latest={"version": 4, "weight_path": "unused"},
+        param_index={"total_numel": 4},
+        device=torch.device("cpu"),
+        config=resolve_config("configs/fs_diloco_tiny_predict_local.yaml"),
+        logger=RecordingLogger(),
+        state=state,
+        previous_version=3,
+        waited_seconds=waited_seconds,
+    )
+
+    assert result.version == 4
+    assert result.tokens_since_global_load == 96
+    assert result.state == PredictionState()
+    assert events[0][0] == "global_prediction_reconciled"
+    payload = events[0][1]
+    assert payload["previous_version"] == 3
+    assert payload["version"] == 4
+    assert payload["prediction_base_version"] == 3
+    assert payload["prediction_update_id"] == state.update_id
+    assert payload["carried_delta_tokens"] == 96
+    assert payload["post_prediction_delta_norm"] == 1.5
+    if waited_seconds is None:
+        assert "reconcile_waited_seconds" not in payload
+    else:
+        assert payload["reconcile_waited_seconds"] == waited_seconds
+
+
+def test_prediction_state_rejects_partial_active_state():
+    state = PredictionState(update_id="orphan")
+
+    with pytest.raises(RuntimeError, match="incomplete"):
+        state.require_active()
+
+
+def _prepare_prediction_run(tmp_path):
+    run_root = tmp_path / "run"
+    config = resolve_config(
+        "configs/fs_diloco_tiny_predict_local.yaml",
+        run_id="prediction-state-test",
+        shared_root=str(run_root),
+        num_learners=1,
+    )
+    config.training.inner_steps = 2
+    config.training.max_local_steps = 4
+    paths = RunPaths(run_root)
+    prepare_run_dirs(paths, 1)
+    torch.manual_seed(config.training.seed)
+    initial_model = TinyCausalLM(
+        vocab_size=config.model.synthetic_vocab_size,
+        hidden_size=config.model.synthetic_hidden_size,
+    )
+    param_index = build_param_index(initial_model, model_name_or_path="synthetic-tiny")
+    initial_flat = flatten_trainable_params(initial_model, param_index)
+    weight_path = paths.weights / "global_v000000.safetensors"
+    save_global_weights(weight_path, initial_flat, param_index)
+    save_param_index(param_index, paths.param_index_json)
+    atomic_write_json(paths.latest_json, {"version": 0, "weight_path": str(weight_path)})
+    return config, paths
+
+
+def _mock_prediction_snapshot(**kwargs):
+    reference = flatten_trainable_params(kwargs["model"], kwargs["param_index"])
+    return reference, {"prediction_compute_device": "cpu"}, None, None
+
+
+def test_prediction_reconcile_timeout_does_not_emit_partial_reconcile(tmp_path, monkeypatch):
+    config, paths = _prepare_prediction_run(tmp_path)
+    monkeypatch.setattr(learner_runtime, "choose_device", lambda: torch.device("cpu"))
+    monkeypatch.setattr(learner_runtime, "read_latest_if_newer", lambda *_args: None)
+    monkeypatch.setattr(
+        learner_runtime,
+        "prepare_prediction_or_find_newer_latest",
+        _mock_prediction_snapshot,
+    )
+    monkeypatch.setattr(
+        learner_runtime,
+        "wait_for_latest_if_newer",
+        lambda *_args, **_kwargs: (None, 5.0),
+    )
+
+    with pytest.raises(TimeoutError, match="timed out waiting to reconcile"):
+        learner_runtime.run_learner(config, "learner_000")
+
+    events = [
+        json.loads(line) for line in (paths.logs / "learner_000.jsonl").read_text().splitlines()
+    ]
+    event_types = [event["event_type"] for event in events]
+    assert "global_prediction_started" in event_types
+    assert "global_prediction_reconcile_wait_started" in event_types
+    assert "global_prediction_reconciled" not in event_types
+
+
+def test_prediction_is_abandoned_when_stop_arrives_during_inner_steps(tmp_path, monkeypatch):
+    config, paths = _prepare_prediction_run(tmp_path)
+    monkeypatch.setattr(learner_runtime, "choose_device", lambda: torch.device("cpu"))
+    monkeypatch.setattr(learner_runtime, "read_latest_if_newer", lambda *_args: None)
+    monkeypatch.setattr(
+        learner_runtime,
+        "prepare_prediction_or_find_newer_latest",
+        _mock_prediction_snapshot,
+    )
+    original_train_one_step = learner_runtime.train_one_step
+    calls = 0
+
+    def stop_during_second_cycle(*args, **kwargs):
+        nonlocal calls
+        result = original_train_one_step(*args, **kwargs)
+        calls += 1
+        if calls == 3:
+            atomic_write_json(paths.stop_json, {"reason": "injected_stop"})
+        return result
+
+    monkeypatch.setattr(learner_runtime, "train_one_step", stop_during_second_cycle)
+
+    learner_runtime.run_learner(config, "learner_000")
+
+    events = [
+        json.loads(line) for line in (paths.logs / "learner_000.jsonl").read_text().splitlines()
+    ]
+    abandoned = [
+        event
+        for event in events
+        if event["event_type"] == "global_prediction_abandoned_on_stop"
+    ]
+    assert len(abandoned) == 1
+    assert abandoned[0]["prediction_base_version"] == 0
+    assert abandoned[0]["carried_delta_tokens"] > 0
+    assert not any(event["event_type"] == "global_prediction_reconciled" for event in events)
 
 
 def test_reconcile_uses_configured_bfloat16_compute_dtype(tmp_path):
