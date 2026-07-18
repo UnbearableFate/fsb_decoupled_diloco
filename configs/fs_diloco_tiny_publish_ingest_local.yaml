@@ -1,7 +1,7 @@
 run:
   name: fs_diloco_tiny_publish_ingest_local
   run_id: null
-  shared_root: null
+  shared_root: /work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/{run_id}
   log_level: INFO
 
 model:

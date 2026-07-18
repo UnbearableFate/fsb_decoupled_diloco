@@ -3,12 +3,13 @@ set -eEuo pipefail
 trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
 
 PROJECT_ROOT="${PROJECT_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
+PRIMARY_WORKTREE_ROOT="${PRIMARY_WORKTREE_ROOT:-/work/xg24i002/x10041/fsb_decoupled_diloco}"
 TRAIN_SCRIPT="${1:-$PROJECT_ROOT/scripts/miyabi/run_9node_gpt2_wikitext2_5000steps.pbs}"
 EVAL_SCRIPT="${EVAL_SCRIPT:-$PROJECT_ROOT/scripts/miyabi/run_1node_validation_eval.pbs}"
 QSUB_BIN="${QSUB_BIN:-qsub}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_fs_diloco_train_eval}"
-SHARED_ROOT="${SHARED_ROOT:-$PROJECT_ROOT/runs/fs_diloco/$RUN_ID}"
+SHARED_ROOT="${SHARED_ROOT:-$PRIMARY_WORKTREE_ROOT/runs/fs_diloco/$RUN_ID}"
 CONFIG="${CONFIG:-}"
 CACHE_ROOT="${CACHE_ROOT:-$PROJECT_ROOT/.cache/fs_diloco}"
 WANDB_MODE="${WANDB_MODE:-offline}"
@@ -22,7 +23,7 @@ if [[ "$RUN_ID" == *","* || "$SHARED_ROOT" == *","* || "$PROJECT_ROOT" == *","* 
   exit 2
 fi
 
-TRAIN_ENV="PROJECT_ROOT=$PROJECT_ROOT,PYTHON_BIN=$PYTHON_BIN,RUN_ID=$RUN_ID,SHARED_ROOT=$SHARED_ROOT,CACHE_ROOT=$CACHE_ROOT,WANDB_MODE=$WANDB_MODE"
+TRAIN_ENV="PROJECT_ROOT=$PROJECT_ROOT,PRIMARY_WORKTREE_ROOT=$PRIMARY_WORKTREE_ROOT,PYTHON_BIN=$PYTHON_BIN,RUN_ID=$RUN_ID,SHARED_ROOT=$SHARED_ROOT,CACHE_ROOT=$CACHE_ROOT,WANDB_MODE=$WANDB_MODE"
 if [[ -n "$CONFIG" ]]; then
   TRAIN_ENV+=",CONFIG=$CONFIG"
 fi

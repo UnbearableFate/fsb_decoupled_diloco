@@ -36,7 +36,7 @@
 - **`_default_run_id(name)`**(私有)— `strftime("%Y%m%d_%H%M%S") + "_" + name`。
 - **`resolve_config(path, *, run_id, shared_root, num_learners, project_root) -> Config`** — 加载 + 运行时补全:
   1. CLI 覆盖 run_id/shared_root;
-  2. run_id 缺省:`$RUN_ID` 或时间戳;shared_root 缺省:`<project_root|cwd>/runs/fs_diloco/<run_id>`;
+  2. run_id 缺省:`$RUN_ID` 或时间戳；非空 shared_root 中的 `{run_id}` 替换为最终 run ID；仅当 shared_root 为空时才回退 `<project_root|cwd>/runs/fs_diloco/<run_id>`；
   3. `num_learners` 覆盖时把 `quorum_min/max` 收紧到不超过 learner 数;
   4. 通用 fragment/completion/grace/wait 合法性校验;
   5. 延迟调用 `validate_global_adoption_strategy`:replace no-op，rebase/predict 各自校验所需组合，prediction timeout 只对 predict 生效;

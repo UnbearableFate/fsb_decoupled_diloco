@@ -6,6 +6,10 @@ from fs_diloco.core.config import config_to_dict, load_config, resolve_config
 
 
 CONFIG_PATHS = sorted(Path("configs").glob("*.yaml"))
+REPOSITORY_CONFIG_PATHS = sorted(Path("configs").rglob("*.yaml"))
+PRIMARY_RUNS_ROOT = Path(
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco"
+)
 
 
 def test_config_defaults_and_cli_overrides(tmp_path):
@@ -24,6 +28,25 @@ def test_config_defaults_and_cli_overrides(tmp_path):
     assert config.syncer.device == "auto"
     assert config.syncer.compute_dtype == "float32"
     assert config.syncer.publish_dtype == "float32"
+
+
+@pytest.mark.parametrize("path", REPOSITORY_CONFIG_PATHS)
+def test_repository_configs_use_primary_worktree_run_root(path):
+    loaded = load_config(path)
+    assert loaded.run.shared_root == str(PRIMARY_RUNS_ROOT / "{run_id}")
+
+    resolved = resolve_config(path, run_id="path_check")
+    assert resolved.run.shared_root == str(PRIMARY_RUNS_ROOT / "path_check")
+
+
+def test_shared_root_template_is_expanded_in_cli_override(tmp_path):
+    override = tmp_path / "literal_{run_id}"
+    config = resolve_config(
+        "configs/fs_diloco_tiny_local.yaml",
+        run_id="cli_override",
+        shared_root=str(override),
+    )
+    assert config.run.shared_root == str(tmp_path / "literal_cli_override")
 
 
 def test_experiment_overrides_are_explicit_in_resolved_config(tmp_path):

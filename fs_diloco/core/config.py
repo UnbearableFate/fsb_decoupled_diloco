@@ -381,6 +381,10 @@ def resolve_config(
     if config.run.shared_root is None:
         root = Path(project_root or os.getcwd())
         config.run.shared_root = str(root / DEFAULT_RUNS_DIR / config.run.run_id)
+    else:
+        config.run.shared_root = config.run.shared_root.replace(
+            "{run_id}", config.run.run_id
+        )
     if num_learners is not None:
         config.sync.num_learners = int(num_learners)
         config.sync.quorum_max = min(config.sync.quorum_max, config.sync.num_learners)

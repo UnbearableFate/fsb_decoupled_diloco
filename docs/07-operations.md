@@ -24,6 +24,11 @@ python -m compileall -q fs_diloco
 
 ## 2. 手动启动(任意机器)
 
+仓库内配置和训练/评测启动脚本默认把 run 与独立 launcher 日志集中写到主工作树
+`/work/xg24i002/x10041/fsb_decoupled_diloco/{runs,logs}`。从其他 worktree
+启动时仍使用该绝对根目录；如确需隔离，可显式传入 `--shared-root`、`SHARED_ROOT`
+或 `PRIMARY_WORKTREE_ROOT` 覆盖。
+
 ```bash
 # 终端 1:syncer(先启动,它负责初始化 run 并发布 v0)
 python -m fs_diloco.syncer \

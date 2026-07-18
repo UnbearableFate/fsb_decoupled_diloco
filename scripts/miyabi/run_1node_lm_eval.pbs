@@ -11,8 +11,9 @@ set -eEuo pipefail
 trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
 
 PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PRIMARY_WORKTREE_ROOT="${PRIMARY_WORKTREE_ROOT:-/work/xg24i002/x10041/fsb_decoupled_diloco}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
-DEFAULT_CHECKPOINT="$PROJECT_ROOT/runs/fs_diloco/20260709_142811_fs_diloco_gpt2_wikitext2_8l_5000steps/weights/global_v000047.safetensors"
+DEFAULT_CHECKPOINT="$PRIMARY_WORKTREE_ROOT/runs/fs_diloco/20260709_142811_fs_diloco_gpt2_wikitext2_8l_5000steps/weights/global_v000047.safetensors"
 CHECKPOINT="${CHECKPOINT:-$DEFAULT_CHECKPOINT}"
 RUN_ROOT="${RUN_ROOT:-}"
 CONFIG="${CONFIG:-}"
@@ -51,13 +52,13 @@ esac
 TASKS="${TASKS//:/,}"
 TASKS="${TASKS// /,}"
 
-EVAL_DIR="$PROJECT_ROOT/runs/lm_eval/$EVAL_ID"
+EVAL_DIR="$PRIMARY_WORKTREE_ROOT/runs/lm_eval/$EVAL_ID"
 EXPORT_DIR="$EVAL_DIR/hf_checkpoint"
 LMEVAL_OUTPUT_DIR="$EVAL_DIR/lm_eval_output"
 MANIFEST="$EVAL_DIR/manifest.json"
 METRICS_CSV="$EVAL_DIR/metrics.csv"
 JOB_LOG="$EVAL_DIR/job.log"
-LOG_ROOT="$PROJECT_ROOT/logs/qsub_${EVAL_ID}"
+LOG_ROOT="$PRIMARY_WORKTREE_ROOT/logs/qsub_${EVAL_ID}"
 
 mkdir -p \
   "$EVAL_DIR" \

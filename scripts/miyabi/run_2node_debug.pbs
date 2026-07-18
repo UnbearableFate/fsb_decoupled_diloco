@@ -13,10 +13,11 @@ export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
 module list 2>&1 | cat
 
 PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PRIMARY_WORKTREE_ROOT="${PRIMARY_WORKTREE_ROOT:-/work/xg24i002/x10041/fsb_decoupled_diloco}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 CONFIG="${CONFIG:-$PROJECT_ROOT/configs/fs_diloco_gpt2_wikitext2_1l_debug.yaml}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_fs_diloco_2node_debug}"
-SHARED_ROOT="${SHARED_ROOT:-$PROJECT_ROOT/runs/fs_diloco/$RUN_ID}"
+SHARED_ROOT="${SHARED_ROOT:-$PRIMARY_WORKTREE_ROOT/runs/fs_diloco/$RUN_ID}"
 CACHE_ROOT="${CACHE_ROOT:-$PROJECT_ROOT/.cache/fs_diloco}"
 HF_HOME="${HF_HOME:-$CACHE_ROOT/huggingface}"
 HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-$HF_HOME/datasets}"
@@ -39,12 +40,13 @@ if [[ "$NNODES" -ne 2 ]]; then
   exit 2
 fi
 
-mkdir -p "$SHARED_ROOT" "$PROJECT_ROOT/logs" "$HF_DATASETS_CACHE" "$HF_HUB_CACHE"
-LOG_ROOT="$PROJECT_ROOT/logs/qsub_${RUN_ID}"
+mkdir -p "$SHARED_ROOT" "$PRIMARY_WORKTREE_ROOT/logs" "$HF_DATASETS_CACHE" "$HF_HUB_CACHE"
+LOG_ROOT="$PRIMARY_WORKTREE_ROOT/logs/qsub_${RUN_ID}"
 mkdir -p "$LOG_ROOT"
 
 MPI_ENV_ARGS=(
   "PROJECT_ROOT=$PROJECT_ROOT"
+  "PRIMARY_WORKTREE_ROOT=$PRIMARY_WORKTREE_ROOT"
   "PYTHON_BIN=$PYTHON_BIN"
   "CONFIG=$CONFIG"
   "RUN_ID=$RUN_ID"
@@ -90,7 +92,7 @@ mpirun \
         --run-id "$RUN_ID" \
         --shared-root "$SHARED_ROOT" \
         --num-learners "$NUM_LEARNERS" \
-        2>&1 | tee "$PROJECT_ROOT/logs/qsub_${RUN_ID}/syncer.log"
+        2>&1 | tee "$PRIMARY_WORKTREE_ROOT/logs/qsub_${RUN_ID}/syncer.log"
     else
       export CUDA_VISIBLE_DEVICES="$LEARNER_CUDA_VISIBLE_DEVICES"
       exec "$PYTHON_BIN" -m fs_diloco.learner \
@@ -99,7 +101,7 @@ mpirun \
         --shared-root "$SHARED_ROOT" \
         --learner-id learner_000 \
         --num-learners "$NUM_LEARNERS" \
-        2>&1 | tee "$PROJECT_ROOT/logs/qsub_${RUN_ID}/learner_000.log"
+        2>&1 | tee "$PRIMARY_WORKTREE_ROOT/logs/qsub_${RUN_ID}/learner_000.log"
     fi
   '
 

@@ -2,7 +2,7 @@
 
 ## 1. 共享目录布局
 
-一次 run 的 `shared_root`(默认 `runs/fs_diloco/<RUN_ID>/`)由 `storage/paths.py: RunPaths` 定义、`prepare_run_dirs()` 创建:
+一次 run 的 `shared_root`（仓库配置固定到主工作树绝对 `runs/fs_diloco/{run_id}` 模板）由 `storage/paths.py: RunPaths` 定义、`prepare_run_dirs()` 创建：
 
 ```
 <shared_root>/

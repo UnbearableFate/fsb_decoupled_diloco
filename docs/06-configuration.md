@@ -10,7 +10,7 @@
 |---|---|---|
 | `name` | `fs_diloco_gpt2_wikitext2_8l` | run 名,用于默认 run_id 后缀与 W&B group |
 | `run_id` | `null` | 缺省时取 `$RUN_ID` 或 `时间戳_name` |
-| `shared_root` | `null` | 共享目录;缺省 `<cwd>/runs/fs_diloco/<run_id>` |
+| `shared_root` | 主工作树绝对路径 `.../runs/fs_diloco/{run_id}` | 共享目录；`{run_id}` 在配置解析后替换为最终 run ID，CLI `--shared-root` 仍可显式覆盖 |
 | `log_level` | `INFO` | ⚠ 未消费(日志始终全量写 JSONL) |
 
 ## init — 初始化与恢复(syncer)

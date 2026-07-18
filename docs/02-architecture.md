@@ -9,7 +9,7 @@
 | learner | N(`sync.num_learners`) | 每进程 1 张 | `python -m fs_diloco.learner --config ... --learner-id learner_000` | 模型副本、内层 AdamW、数据分片迭代器 |
 | syncer | 1 | `syncer.device=cuda` 时 1 张；也可用 CPU | `python -m fs_diloco.syncer --config ...` | 全局参数扁平向量 θ、外层优化器状态、共享 run 内的持久 SQLite |
 
-进程间没有任何直接连接。所有协调通过共享目录 `run.shared_root`(默认 `runs/fs_diloco/<RUN_ID>`)完成。
+进程间没有任何直接连接。所有协调通过共享目录 `run.shared_root` 完成；仓库配置固定到主工作树的绝对 `runs/fs_diloco/{run_id}` 模板，避免从其他 worktree 启动时把产物写散。
 
 ## 2. 通信契约(Runtime Contract)
 

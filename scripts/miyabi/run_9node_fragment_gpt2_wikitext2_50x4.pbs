@@ -11,10 +11,11 @@ set -eEuo pipefail
 trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
 
 PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PRIMARY_WORKTREE_ROOT="${PRIMARY_WORKTREE_ROOT:-/work/xg24i002/x10041/fsb_decoupled_diloco}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 CONFIG="${CONFIG:-$PROJECT_ROOT/configs/fs_diloco_gpt2_wikitext2_8l_fragment_50x4.yaml}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_fs_diloco_gpt2_wikitext2_8l_fragment_50x4}"
-SHARED_ROOT="${SHARED_ROOT:-$PROJECT_ROOT/runs/fs_diloco/$RUN_ID}"
+SHARED_ROOT="${SHARED_ROOT:-$PRIMARY_WORKTREE_ROOT/runs/fs_diloco/$RUN_ID}"
 LOCAL_RUNTIME_DIR="${LOCAL_RUNTIME_DIR:-${TMPDIR:-/tmp}/fs_diloco/$RUN_ID}"
 CACHE_ROOT="${CACHE_ROOT:-$PROJECT_ROOT/.cache/fs_diloco}"
 HF_HOME="${HF_HOME:-$CACHE_ROOT/huggingface}"
@@ -48,13 +49,13 @@ fi
 
 mkdir -p \
   "$SHARED_ROOT" \
-  "$PROJECT_ROOT/logs" \
+  "$PRIMARY_WORKTREE_ROOT/logs" \
   "$HF_DATASETS_CACHE" \
   "$HF_HUB_CACHE" \
   "$WANDB_CACHE_DIR" \
   "$WANDB_CONFIG_DIR" \
   "$WANDB_DATA_DIR"
-LOG_ROOT="$PROJECT_ROOT/logs/qsub_${RUN_ID}"
+LOG_ROOT="$PRIMARY_WORKTREE_ROOT/logs/qsub_${RUN_ID}"
 mkdir -p "$LOG_ROOT"
 SOURCE_IDENTITY_JSON="$SHARED_ROOT/control/source_identity.json"
 SOURCE_IDENTITY_ENV="$SHARED_ROOT/control/source_identity.env"
@@ -70,6 +71,7 @@ MPI_ENV_ARGS=(
   "FS_DILOCO_SOURCE_FINGERPRINT=$FS_DILOCO_SOURCE_FINGERPRINT"
   "FS_DILOCO_REQUIRE_SOURCE_IDENTITY=$FS_DILOCO_REQUIRE_SOURCE_IDENTITY"
   "PROJECT_ROOT=$PROJECT_ROOT"
+  "PRIMARY_WORKTREE_ROOT=$PRIMARY_WORKTREE_ROOT"
   "PYTHON_BIN=$PYTHON_BIN"
   "CONFIG=$CONFIG"
   "RUN_ID=$RUN_ID"
@@ -118,7 +120,7 @@ mpirun \
         --run-id "$RUN_ID" \
         --shared-root "$SHARED_ROOT" \
         --num-learners "$NUM_LEARNERS" \
-        2>&1 | tee "$PROJECT_ROOT/logs/qsub_${RUN_ID}/syncer.log"
+        2>&1 | tee "$PRIMARY_WORKTREE_ROOT/logs/qsub_${RUN_ID}/syncer.log"
     else
       learner_num=$((rank - 1))
       learner_id=$(printf "learner_%03d" "$learner_num")
@@ -129,7 +131,7 @@ mpirun \
         --shared-root "$SHARED_ROOT" \
         --learner-id "$learner_id" \
         --num-learners "$NUM_LEARNERS" \
-        2>&1 | tee "$PROJECT_ROOT/logs/qsub_${RUN_ID}/${learner_id}.log"
+        2>&1 | tee "$PRIMARY_WORKTREE_ROOT/logs/qsub_${RUN_ID}/${learner_id}.log"
     fi
   '
 

@@ -3,10 +3,11 @@ set -eEuo pipefail
 trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
 
 PROJECT_ROOT="${PROJECT_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
+PRIMARY_WORKTREE_ROOT="${PRIMARY_WORKTREE_ROOT:-/work/xg24i002/x10041/fsb_decoupled_diloco}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 CONFIG="${CONFIG:-$PROJECT_ROOT/configs/fs_diloco_tiny_local.yaml}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_tiny_local}"
-SHARED_ROOT="${SHARED_ROOT:-$PROJECT_ROOT/runs/fs_diloco/$RUN_ID}"
+SHARED_ROOT="${SHARED_ROOT:-$PRIMARY_WORKTREE_ROOT/runs/fs_diloco/$RUN_ID}"
 NUM_LEARNERS="${NUM_LEARNERS:-2}"
 
 if ! [[ "$NUM_LEARNERS" =~ ^[1-9][0-9]*$ ]]; then
@@ -15,8 +16,8 @@ if ! [[ "$NUM_LEARNERS" =~ ^[1-9][0-9]*$ ]]; then
 fi
 
 cd "$PROJECT_ROOT"
-mkdir -p "$SHARED_ROOT" "$PROJECT_ROOT/logs"
-LOG_ROOT="$PROJECT_ROOT/logs/local_${RUN_ID}"
+mkdir -p "$SHARED_ROOT" "$PRIMARY_WORKTREE_ROOT/logs"
+LOG_ROOT="$PRIMARY_WORKTREE_ROOT/logs/local_${RUN_ID}"
 mkdir -p "$LOG_ROOT"
 
 "$PYTHON_BIN" -m fs_diloco.syncer \

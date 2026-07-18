@@ -1,7 +1,7 @@
 run:
   name: fs_diloco_gpt2_wikitext2_8l_5000steps
   run_id: null
-  shared_root: null
+  shared_root: /work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/{run_id}
   log_level: INFO
 
 init:
