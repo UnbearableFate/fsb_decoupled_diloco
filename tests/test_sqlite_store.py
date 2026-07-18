@@ -1,8 +1,9 @@
+import sqlite3
 import time
 
 import pytest
 
-from fs_diloco.storage.sqlite_store import SQLiteStore
+from fs_diloco.storage.sqlite_store import SQLiteStore, _schema_text
 
 
 def _metadata(
@@ -24,6 +25,8 @@ def _metadata(
         "inner_steps": 1,
         "tokens_this_update": 10,
         "tokens_since_global_load": 10,
+        "mid_cycle_adoption_count": 2,
+        "base_switched_at_step": 1,
         "num_examples_this_update": 1,
         "train_loss": 1.0,
         "grad_norm": None,
@@ -69,6 +72,29 @@ def test_persistent_pragmas_and_reopen(tmp_path):
     reopened.close()
 
 
+def test_connect_migrates_old_full_update_metadata_columns(tmp_path):
+    path = tmp_path / "old.sqlite3"
+    old_schema = _schema_text().replace(
+        "    mid_cycle_adoption_count INTEGER NOT NULL DEFAULT 0,\n"
+        "    base_switched_at_step INTEGER,\n",
+        "",
+        1,
+    )
+    conn = sqlite3.connect(path)
+    conn.executescript(old_schema)
+    conn.close()
+
+    store = SQLiteStore(path)
+
+    columns = {
+        row["name"]: row for row in store.conn.execute("PRAGMA table_info(updates)")
+    }
+    assert columns["mid_cycle_adoption_count"]["notnull"] == 1
+    assert columns["mid_cycle_adoption_count"]["dflt_value"] == "0"
+    assert columns["base_switched_at_step"]["notnull"] == 0
+    store.close()
+
+
 def test_fixed_pointer_latest_wins_and_frontier_survives_pruning(tmp_path):
     store = SQLiteStore(tmp_path / "db.sqlite3")
     assert store.insert_update_metadata(
@@ -83,6 +109,18 @@ def test_fixed_pointer_latest_wins_and_frontier_survives_pruning(tmp_path):
         _metadata("new", local_step_end=2), pointer_path="learner_000.json"
     ) is False
     assert store.proposal_frontiers() == {"learner_000": "new"}
+    store.close()
+
+
+def test_full_update_midcycle_adoption_metadata_is_persisted(tmp_path):
+    store = SQLiteStore(tmp_path / "db.sqlite3")
+    metadata = _metadata("midcycle")
+
+    assert store.insert_update_metadata(metadata)
+
+    row = store.get_update("midcycle")
+    assert row["mid_cycle_adoption_count"] == 2
+    assert row["base_switched_at_step"] == 1
     store.close()
 
 

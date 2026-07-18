@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+import time
 from typing import Any, Callable, ClassVar
 
 
@@ -57,6 +58,7 @@ class PredictionState:
 @dataclass(frozen=True)
 class PredictionReconcileResult:
     version: int
+    latest: dict[str, Any]
     tokens_since_global_load: int
     state: PredictionState
 
@@ -68,6 +70,7 @@ class AdoptionOutcome:
     tokens_since_global_load: int
     preserve_inner_state: bool
     reason: str
+    load_apply_seconds: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -107,6 +110,7 @@ class AdoptionContext:
         ...,
         tuple[Any | None, dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None],
     ]
+    load_or_refresh_latest_fn: Callable[..., Any] | None = None
 
     def read_newer_latest(self) -> dict[str, Any] | None:
         return self.read_latest_if_newer_fn(self.paths, self.last_loaded_global_version)
@@ -119,26 +123,62 @@ class AdoptionContext:
             poll_seconds=self.config.learner.post_publish_latest_poll_seconds,
         )
 
-    def adopt_global(self, latest: dict[str, Any]) -> int:
-        return self.adopt_global_fn(
-            model=self.model,
+    def _load_latest(self, latest: dict[str, Any], load_fn: Callable[..., Any]) -> Any:
+        if self.load_or_refresh_latest_fn is None:
+            return None, load_fn(latest)
+        result = self.load_or_refresh_latest_fn(
+            paths=self.paths,
             latest=latest,
-            param_index=self.param_index,
-            device=self.device,
+            version_field="version",
+            load_fn=load_fn,
+            wait_seconds=self.config.learner.prediction.reconcile_timeout_seconds,
+            poll_seconds=self.config.learner.post_publish_latest_poll_seconds,
         )
+        if result.retry_count:
+            self.logger.event(
+                "latest_load_recovered",
+                requested_version=int(latest["version"]),
+                loaded_version=int(result.latest["version"]),
+                retry_count=result.retry_count,
+                waited_seconds=result.waited_seconds,
+                missing_path=result.missing_path,
+            )
+        return result.latest, result.value
+
+    def adopt_global(self, latest: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        loaded_latest, version = self._load_latest(
+            latest,
+            lambda candidate: self.adopt_global_fn(
+                model=self.model,
+                latest=candidate,
+                param_index=self.param_index,
+                device=self.device,
+            ),
+        )
+        return int(version), latest if loaded_latest is None else loaded_latest
 
     def rebase_local_delta(
         self,
         latest: dict[str, Any],
         reference_flat: Any,
-    ) -> tuple[int, float, dict[str, Any]]:
-        return self.rebase_local_delta_fn(
-            model=self.model,
-            latest=latest,
-            param_index=self.param_index,
-            device=self.device,
-            reference_flat=reference_flat,
-            config=self.config,
+    ) -> tuple[int, float, dict[str, Any], dict[str, Any]]:
+        loaded_latest, value = self._load_latest(
+            latest,
+            lambda candidate: self.rebase_local_delta_fn(
+                model=self.model,
+                latest=candidate,
+                param_index=self.param_index,
+                device=self.device,
+                reference_flat=reference_flat,
+                config=self.config,
+            ),
+        )
+        version, delta_norm, stats = value
+        return (
+            int(version),
+            float(delta_norm),
+            stats,
+            latest if loaded_latest is None else loaded_latest,
         )
 
     def snapshot_model(self) -> tuple[Any, dict[str, Any]]:
@@ -174,7 +214,7 @@ def reconcile_prediction(
     """Rebase post-prediction progress and clear the explicit prediction state."""
 
     active = state.require_active()
-    version, delta_norm, reconcile_compute_stats = ctx.rebase_local_delta(
+    version, delta_norm, reconcile_compute_stats, loaded_latest = ctx.rebase_local_delta(
         latest,
         active.reference_flat,
     )
@@ -192,6 +232,7 @@ def reconcile_prediction(
     ctx.logger.event("global_prediction_reconciled", **event_fields)
     return PredictionReconcileResult(
         version=version,
+        latest=loaded_latest,
         tokens_since_global_load=active.carried_tokens,
         state=PredictionState(),
     )
@@ -272,7 +313,9 @@ class GlobalAdoptionStrategy(ABC):
         update_id: str | None = None,
     ) -> StrategyAction:
         previous_version = ctx.last_loaded_global_version
-        version = ctx.adopt_global(latest)
+        adoption_start = time.monotonic()
+        version, loaded_latest = ctx.adopt_global(latest)
+        load_apply_seconds = time.monotonic() - adoption_start
         if update_id is not None and self.name != ReplaceGlobalAdoptionStrategy.name:
             ctx.logger.event(
                 "global_adopted_after_publish",
@@ -283,10 +326,11 @@ class GlobalAdoptionStrategy(ABC):
         return StrategyAction(
             adoption=AdoptionOutcome(
                 version=version,
-                latest=latest,
+                latest=loaded_latest,
                 tokens_since_global_load=0,
                 preserve_inner_state=False,
                 reason="global_adopted",
+                load_apply_seconds=load_apply_seconds,
             )
         )
 
@@ -354,10 +398,12 @@ class RebaseGlobalAdoptionStrategy(GlobalAdoptionStrategy):
         if self._reference_flat is None:
             raise RuntimeError("local-delta rebase reference is unavailable")
         previous_version = ctx.last_loaded_global_version
-        version, delta_norm, reconcile_compute_stats = ctx.rebase_local_delta(
+        adoption_start = time.monotonic()
+        version, delta_norm, reconcile_compute_stats, loaded_latest = ctx.rebase_local_delta(
             latest,
             self._reference_flat,
         )
+        load_apply_seconds = time.monotonic() - adoption_start
         ctx.logger.event(
             "global_rebased",
             previous_version=previous_version,
@@ -372,10 +418,11 @@ class RebaseGlobalAdoptionStrategy(GlobalAdoptionStrategy):
         return StrategyAction(
             adoption=AdoptionOutcome(
                 version=version,
-                latest=latest,
+                latest=loaded_latest,
                 tokens_since_global_load=carried_tokens,
                 preserve_inner_state=True,
                 reason="global_rebased",
+                load_apply_seconds=load_apply_seconds,
             )
         )
 
@@ -448,20 +495,23 @@ class PredictGlobalAdoptionStrategy(GlobalAdoptionStrategy):
         ctx: AdoptionContext,
         latest: dict[str, Any],
     ) -> StrategyAction:
+        adoption_start = time.monotonic()
         result = reconcile_prediction(
             ctx=ctx,
             latest=latest,
             state=self._state,
             previous_version=ctx.last_loaded_global_version,
         )
+        load_apply_seconds = time.monotonic() - adoption_start
         self._state = result.state
         return StrategyAction(
             adoption=AdoptionOutcome(
                 version=result.version,
-                latest=latest,
+                latest=result.latest,
                 tokens_since_global_load=result.tokens_since_global_load,
                 preserve_inner_state=True,
                 reason="global_prediction_reconciled",
+                load_apply_seconds=load_apply_seconds,
             )
         )
 
@@ -481,6 +531,7 @@ class PredictGlobalAdoptionStrategy(GlobalAdoptionStrategy):
         )
         if maybe_latest is None:
             raise TimeoutError("timed out waiting to reconcile predicted global before publication")
+        adoption_start = time.monotonic()
         result = reconcile_prediction(
             ctx=ctx,
             latest=maybe_latest,
@@ -488,14 +539,16 @@ class PredictGlobalAdoptionStrategy(GlobalAdoptionStrategy):
             previous_version=ctx.last_loaded_global_version,
             waited_seconds=waited_seconds,
         )
+        load_apply_seconds = time.monotonic() - adoption_start
         self._state = result.state
         return StrategyAction(
             adoption=AdoptionOutcome(
                 version=result.version,
-                latest=maybe_latest,
+                latest=result.latest,
                 tokens_since_global_load=result.tokens_since_global_load,
                 preserve_inner_state=True,
                 reason="global_prediction_reconciled",
+                load_apply_seconds=load_apply_seconds,
             )
         )
 

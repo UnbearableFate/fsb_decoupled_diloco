@@ -14,8 +14,8 @@ JSONL 事件日志、CSV 指标、learner 资源采样与 W&B 遥测。观测组
 ## observability/metrics.py — CSV 指标
 
 - **`append_csv_row(path, row, fieldnames=None)`** — 追加一行;文件不存在或为空时先写表头;`extrasaction="ignore"` 忽略多余键。非原子(单写者追加,可接受)。
-- **`SYNCER_METRIC_FIELDS`** — `syncer_metrics.csv` 字段:timestamp、version、global_merge_event、fragment_id/fragment_version、selected_count、total_update_tokens、read/fragment_read/aggregation/fragment_aggregation/outer_step/publish/materialize_full 各段秒数、fragment staleness min/mean/max、stale_updates_dropped、global_interval_seconds,以及本次被选 updates 的 learner 资源指标平均值。
-- **`LEARNER_METRIC_FIELDS`** — `learner_metrics.csv` 字段:timestamp、learner_id、local_step、global_version、global_merge_event、fragment_id、base_fragment_version、train_loss、tokens、tokens_per_sec、update_write_seconds、param_norm、fragment_norm、last_loaded_fragment_versions_json、fragment_adopt_count、phase,以及全训练/上一个 local cycle 的资源峰值和 cycle 平均 step 时间。
+- **`SYNCER_METRIC_FIELDS`** — `syncer_metrics.csv` 字段:timestamp、version、global_merge_event、fragment_id/fragment_version、selected_count、total_update_tokens、read/fragment_read/aggregation/fragment_aggregation/outer_step/publish/materialize_full 各段秒数；full publish 另含 weight/outer worker 时长、并发 checkpoint walltime、dtype/bytes、I/O 等待期 metadata/heartbeat 摄取计数与量化 round-trip 误差；fragment 含 `materialized_this_event/materialized_bytes`；interval 另以单调时钟给出 `discovery_seconds/idle_seconds/grace_seconds/merge_seconds/interval_residual_seconds/quorum_trigger`，并保留 read/publish/maintenance 独立分量；staleness 同时记录未加权 min/mean/max、effective-weight mean、fresh effective-weight mass 与 count JSON；其余为丢弃数与 selected learners 资源指标平均值。
+- **`LEARNER_METRIC_FIELDS`** — `learner_metrics.csv` 字段:timestamp、learner_id、local_step、global_version、global_merge_event、fragment_id、base_fragment_version、train_loss、tokens、tokens_per_sec、update_write_seconds、`local_cycle_elapsed_seconds`、param_norm、fragment_norm、last_loaded_fragment_versions_json、fragment_adopt_count、phase,以及全训练/上一个 local cycle 的资源峰值和 cycle 平均 step 时间。
 - **`UPDATE_MANIFEST_FIELDS`** — `update_manifest.csv` 字段:每份 update 的 id/kind/base 版本/步区间/token 数/`tensor_dtype`/文件指针/sha256。
 
 ## observability/resource_monitor.py — learner 资源采样
@@ -38,3 +38,9 @@ JSONL 事件日志、CSV 指标、learner 资源采样与 W&B 遥测。观测组
 - **`wandb_is_disabled(config) -> bool`** — `$WANDB_DISABLED` 或 `wandb.enabled=false`。
 
 W&B 的初始化在 `runtime/syncer.py: init_wandb_run()`:import 失败、init 失败都记日志并返回 None,训练照常;`syncer/version` 被定义为全局 step 轴。退出时 summary 还会写入完整训练时间和全体 learner 的训练期 CPU/GPU 峰值聚合。
+
+`global_adopted` 与 fragment 对应 adoption 事件把停顿拆为
+`adoption_load_apply_seconds`、`adoption_optimizer_reset_seconds` 与两者之和
+`adoption_pause_seconds`；等待未来 latest 的时间由独立 wait 事件记录，不计入 pause。
+analysis 按 learner 汇总次数/总和/均值，并用已完成 CSV cycle 的
+`local_cycle_elapsed_seconds` 之和作分母；旧 run 缺字段时标为 `unavailable`。

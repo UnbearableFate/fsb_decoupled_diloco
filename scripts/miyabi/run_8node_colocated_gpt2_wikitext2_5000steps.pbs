@@ -1,0 +1,237 @@
+#!/bin/bash
+#PBS -N fsdiloco_gpt2_5k_8n
+#PBS -q regular-g
+#PBS -W group_list=xg24i002
+#PBS -l select=8:mpiprocs=1
+#PBS -l walltime=02:00:00
+#PBS -j oe
+#PBS -m ae
+
+set -eEuo pipefail
+trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+module list 2>&1 | cat
+
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+CONFIG="${CONFIG:-$PROJECT_ROOT/configs/fs_diloco_gpt2_wikitext2_8l_5000steps.yaml}"
+RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_fs_diloco_gpt2_8l_5k_colocated}"
+SHARED_ROOT="${SHARED_ROOT:-$PROJECT_ROOT/runs/fs_diloco/$RUN_ID}"
+LOCAL_RUNTIME_DIR="${LOCAL_RUNTIME_DIR:-${TMPDIR:-/tmp}/fs_diloco/$RUN_ID}"
+CACHE_ROOT="${CACHE_ROOT:-$PROJECT_ROOT/.cache/fs_diloco}"
+HF_HOME="${HF_HOME:-$CACHE_ROOT/huggingface}"
+HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-$HF_HOME/datasets}"
+HF_HUB_CACHE="${HF_HUB_CACHE:-$HF_HOME/hub}"
+WANDB_MODE="${WANDB_MODE:-online}"
+WANDB_CACHE_DIR="${WANDB_CACHE_DIR:-$LOCAL_RUNTIME_DIR/wandb/cache}"
+WANDB_CONFIG_DIR="${WANDB_CONFIG_DIR:-$LOCAL_RUNTIME_DIR/wandb/config}"
+WANDB_DATA_DIR="${WANDB_DATA_DIR:-$LOCAL_RUNTIME_DIR/wandb/data}"
+LEARNER_CUDA_VISIBLE_DEVICES="${LEARNER_CUDA_VISIBLE_DEVICES:-0}"
+NUM_LEARNERS=8
+TRAINING_SEED="${TRAINING_SEED:-}"
+SYNC_SCAN_INTERVAL_SECONDS="${SYNC_SCAN_INTERVAL_SECONDS:-}"
+INGEST_DURING_PUBLISH="${INGEST_DURING_PUBLISH:-}"
+SYNCER_PUBLISH_DTYPE="${SYNCER_PUBLISH_DTYPE:-}"
+STALENESS_LAMBDA="${STALENESS_LAMBDA:-}"
+MAX_STALENESS_VERSIONS="${MAX_STALENESS_VERSIONS:-}"
+GLOBAL_ADOPTION_STRATEGY="${GLOBAL_ADOPTION_STRATEGY:-}"
+CAPTURE_TERMINAL_PREDECESSOR_FOR_EVAL="${CAPTURE_TERMINAL_PREDECESSOR_FOR_EVAL:-}"
+COMPLETION_MODE="${COMPLETION_MODE:-}"
+SYNCER_OMP_NUM_THREADS="${SYNCER_OMP_NUM_THREADS:-8}"
+LEARNER_OMP_NUM_THREADS="${LEARNER_OMP_NUM_THREADS:-8}"
+TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
+
+: "${PBS_NODEFILE:?PBS_NODEFILE is not set}"
+cd "$PROJECT_ROOT"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  echo "Python executable not found or not executable: $PYTHON_BIN" >&2
+  exit 2
+fi
+
+mapfile -t HOSTS < <(sort -u "$PBS_NODEFILE")
+NNODES="${#HOSTS[@]}"
+if [[ "$NNODES" -ne 8 ]]; then
+  echo "Expected 8 unique nodes, got $NNODES" >&2
+  printf '%s\n' "${HOSTS[@]}" >&2
+  exit 2
+fi
+
+mkdir -p \
+  "$SHARED_ROOT" \
+  "$PROJECT_ROOT/logs" \
+  "$HF_DATASETS_CACHE" \
+  "$HF_HUB_CACHE" \
+  "$WANDB_CACHE_DIR" \
+  "$WANDB_CONFIG_DIR" \
+  "$WANDB_DATA_DIR"
+LOG_ROOT="$PROJECT_ROOT/logs/qsub_${RUN_ID}"
+mkdir -p "$LOG_ROOT"
+SOURCE_IDENTITY_JSON="$SHARED_ROOT/control/source_identity.json"
+SOURCE_IDENTITY_ENV="$SHARED_ROOT/control/source_identity.env"
+"$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/capture_source_identity.py" \
+  --project-root "$PROJECT_ROOT" \
+  --output-json "$SOURCE_IDENTITY_JSON" \
+  --output-env "$SOURCE_IDENTITY_ENV" | tee "$LOG_ROOT/source_identity.log"
+source "$SOURCE_IDENTITY_ENV"
+
+MPI_ENV_ARGS=(
+  "FS_DILOCO_GIT_COMMIT=$FS_DILOCO_GIT_COMMIT"
+  "FS_DILOCO_GIT_DIRTY=$FS_DILOCO_GIT_DIRTY"
+  "FS_DILOCO_SOURCE_FINGERPRINT=$FS_DILOCO_SOURCE_FINGERPRINT"
+  "FS_DILOCO_REQUIRE_SOURCE_IDENTITY=$FS_DILOCO_REQUIRE_SOURCE_IDENTITY"
+  "PROJECT_ROOT=$PROJECT_ROOT"
+  "PYTHON_BIN=$PYTHON_BIN"
+  "CONFIG=$CONFIG"
+  "RUN_ID=$RUN_ID"
+  "SHARED_ROOT=$SHARED_ROOT"
+  "LOCAL_RUNTIME_DIR=$LOCAL_RUNTIME_DIR"
+  "CACHE_ROOT=$CACHE_ROOT"
+  "HF_HOME=$HF_HOME"
+  "HF_DATASETS_CACHE=$HF_DATASETS_CACHE"
+  "HF_HUB_CACHE=$HF_HUB_CACHE"
+  "WANDB_MODE=$WANDB_MODE"
+  "WANDB_CACHE_DIR=$WANDB_CACHE_DIR"
+  "WANDB_CONFIG_DIR=$WANDB_CONFIG_DIR"
+  "WANDB_DATA_DIR=$WANDB_DATA_DIR"
+  "LEARNER_CUDA_VISIBLE_DEVICES=$LEARNER_CUDA_VISIBLE_DEVICES"
+  "NUM_LEARNERS=$NUM_LEARNERS"
+  "TRAINING_SEED=$TRAINING_SEED"
+  "SYNC_SCAN_INTERVAL_SECONDS=$SYNC_SCAN_INTERVAL_SECONDS"
+  "INGEST_DURING_PUBLISH=$INGEST_DURING_PUBLISH"
+  "SYNCER_PUBLISH_DTYPE=$SYNCER_PUBLISH_DTYPE"
+  "STALENESS_LAMBDA=$STALENESS_LAMBDA"
+  "MAX_STALENESS_VERSIONS=$MAX_STALENESS_VERSIONS"
+  "GLOBAL_ADOPTION_STRATEGY=$GLOBAL_ADOPTION_STRATEGY"
+  "CAPTURE_TERMINAL_PREDECESSOR_FOR_EVAL=$CAPTURE_TERMINAL_PREDECESSOR_FOR_EVAL"
+  "COMPLETION_MODE=$COMPLETION_MODE"
+  "SYNCER_OMP_NUM_THREADS=$SYNCER_OMP_NUM_THREADS"
+  "LEARNER_OMP_NUM_THREADS=$LEARNER_OMP_NUM_THREADS"
+  "TOKENIZERS_PARALLELISM=$TOKENIZERS_PARALLELISM"
+)
+
+echo "RUN_ID=$RUN_ID"
+echo "SOURCE_FINGERPRINT=$FS_DILOCO_SOURCE_FINGERPRINT"
+echo "CONFIG=$CONFIG"
+echo "SHARED_ROOT=$SHARED_ROOT"
+echo "TRAINING_SEED=${TRAINING_SEED:-<config>}"
+echo "SYNC_SCAN_INTERVAL_SECONDS=${SYNC_SCAN_INTERVAL_SECONDS:-<config>}"
+echo "INGEST_DURING_PUBLISH=${INGEST_DURING_PUBLISH:-<config>}"
+echo "SYNCER_PUBLISH_DTYPE=${SYNCER_PUBLISH_DTYPE:-<config>}"
+echo "STALENESS_LAMBDA=${STALENESS_LAMBDA:-<config>}"
+echo "MAX_STALENESS_VERSIONS=${MAX_STALENESS_VERSIONS:-<config>}"
+echo "GLOBAL_ADOPTION_STRATEGY=${GLOBAL_ADOPTION_STRATEGY:-<config>}"
+echo "CAPTURE_TERMINAL_PREDECESSOR_FOR_EVAL=${CAPTURE_TERMINAL_PREDECESSOR_FOR_EVAL:-<config>}"
+echo "COMPLETION_MODE=${COMPLETION_MODE:-<config>}"
+echo "DEPLOYMENT=8-node: rank0 CPU syncer + GPU learner_000"
+printf 'HOST %s\n' "${HOSTS[@]}"
+
+mpirun \
+  --mca mpi_abort_print_stack 1 \
+  --report-bindings \
+  --bind-to none \
+  -np "$NNODES" \
+  /usr/bin/env "${MPI_ENV_ARGS[@]}" \
+  bash -lc '
+    set -eEuo pipefail
+    rank="${OMPI_COMM_WORLD_RANK:?missing OMPI_COMM_WORLD_RANK}"
+    host="$(hostname)"
+    config_args=()
+    if [[ -n "$TRAINING_SEED" ]]; then
+      config_args+=(--training-seed "$TRAINING_SEED")
+    fi
+    if [[ -n "$SYNC_SCAN_INTERVAL_SECONDS" ]]; then
+      config_args+=(--scan-interval-seconds "$SYNC_SCAN_INTERVAL_SECONDS")
+    fi
+    if [[ -n "$SYNCER_PUBLISH_DTYPE" ]]; then
+      config_args+=(--syncer-publish-dtype "$SYNCER_PUBLISH_DTYPE")
+    fi
+    if [[ -n "$STALENESS_LAMBDA" ]]; then
+      config_args+=(--staleness-lambda "$STALENESS_LAMBDA")
+    fi
+    if [[ -n "$MAX_STALENESS_VERSIONS" ]]; then
+      config_args+=(--max-staleness-versions "$MAX_STALENESS_VERSIONS")
+    fi
+    if [[ -n "$GLOBAL_ADOPTION_STRATEGY" ]]; then
+      config_args+=(--global-adoption-strategy "$GLOBAL_ADOPTION_STRATEGY")
+    fi
+    if [[ -n "$COMPLETION_MODE" ]]; then
+      config_args+=(--completion-mode "$COMPLETION_MODE")
+    fi
+    case "${INGEST_DURING_PUBLISH,,}" in
+      "") ;;
+      1|true|yes|on) config_args+=(--ingest-during-publish) ;;
+      0|false|no|off) config_args+=(--no-ingest-during-publish) ;;
+      *) echo "Invalid INGEST_DURING_PUBLISH=$INGEST_DURING_PUBLISH" >&2; exit 2 ;;
+    esac
+    case "${CAPTURE_TERMINAL_PREDECESSOR_FOR_EVAL,,}" in
+      "") ;;
+      1|true|yes|on) config_args+=(--capture-terminal-predecessor-for-eval) ;;
+      0|false|no|off) config_args+=(--no-capture-terminal-predecessor-for-eval) ;;
+      *) echo "Invalid CAPTURE_TERMINAL_PREDECESSOR_FOR_EVAL=$CAPTURE_TERMINAL_PREDECESSOR_FOR_EVAL" >&2; exit 2 ;;
+    esac
+    echo "[launcher] rank=${rank} host=${host}"
+    if [[ "$rank" -eq 0 ]]; then
+      CUDA_VISIBLE_DEVICES="" OMP_NUM_THREADS="$SYNCER_OMP_NUM_THREADS" \
+        "$PYTHON_BIN" -m fs_diloco.syncer \
+          --config "$CONFIG" \
+          --run-id "$RUN_ID" \
+          --shared-root "$SHARED_ROOT" \
+          --num-learners "$NUM_LEARNERS" \
+          --syncer-device cpu \
+          "${config_args[@]}" \
+          > >(tee "$PROJECT_ROOT/logs/qsub_${RUN_ID}/syncer.log") 2>&1 &
+      syncer_pid=$!
+      CUDA_VISIBLE_DEVICES="$LEARNER_CUDA_VISIBLE_DEVICES" \
+        OMP_NUM_THREADS="$LEARNER_OMP_NUM_THREADS" \
+        "$PYTHON_BIN" -m fs_diloco.learner \
+          --config "$CONFIG" \
+          --run-id "$RUN_ID" \
+          --shared-root "$SHARED_ROOT" \
+          --learner-id learner_000 \
+          --num-learners "$NUM_LEARNERS" \
+          "${config_args[@]}" \
+          > >(tee "$PROJECT_ROOT/logs/qsub_${RUN_ID}/learner_000.log") 2>&1 &
+      learner_pid=$!
+      cleanup() {
+        kill "$syncer_pid" "$learner_pid" 2>/dev/null || true
+      }
+      trap cleanup EXIT INT TERM
+      set +e
+      wait -n -p finished_pid "$syncer_pid" "$learner_pid"
+      first_status=$?
+      set -e
+      if [[ "$finished_pid" -eq "$syncer_pid" ]]; then
+        remaining_pid="$learner_pid"
+      else
+        remaining_pid="$syncer_pid"
+      fi
+      if [[ "$first_status" -ne 0 ]]; then
+        kill "$remaining_pid" 2>/dev/null || true
+        wait "$remaining_pid" 2>/dev/null || true
+        exit "$first_status"
+      fi
+      set +e
+      wait "$remaining_pid"
+      remaining_status=$?
+      set -e
+      if [[ "$remaining_status" -ne 0 ]]; then
+        exit "$remaining_status"
+      fi
+      trap - EXIT INT TERM
+      exit 0
+    fi
+
+    learner_id=$(printf "learner_%03d" "$rank")
+    export CUDA_VISIBLE_DEVICES="$LEARNER_CUDA_VISIBLE_DEVICES"
+    export OMP_NUM_THREADS="$LEARNER_OMP_NUM_THREADS"
+    exec "$PYTHON_BIN" -m fs_diloco.learner \
+      --config "$CONFIG" \
+      --run-id "$RUN_ID" \
+      --shared-root "$SHARED_ROOT" \
+      --learner-id "$learner_id" \
+      --num-learners "$NUM_LEARNERS" \
+      "${config_args[@]}" \
+      > >(tee "$PROJECT_ROOT/logs/qsub_${RUN_ID}/${learner_id}.log") 2>&1
+  '
+
+"$PYTHON_BIN" -m fs_diloco.analysis "$SHARED_ROOT" --json | tee "$LOG_ROOT/summary.json"

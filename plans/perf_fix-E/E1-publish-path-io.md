@@ -4,13 +4,13 @@
 
 - 来源：review E1（中）。每次 merge，syncer 串行同步写 `global_vN` + `outer_vN` 各约 498MB FP32（`publish_dtype` 默认 float32，config.py:83），完成后才提交 DB、切 latest（`publish_global`，syncer.py:167-238）。learner 上传已 BF16 减半，发布侧仍是每 merge ~1GB 串行写，是 run_analysis 认定的端到端主耗时之一。
 - 性质：L1 为**受控实验**（BF16 publish 已实现，只欠对照数据）；L2 为**行为保持优化**（并行写）；报告中的选项 3（outer 延迟发布）为**显式非目标**。
-- 影响文件：`fs_diloco/runtime/syncer.py`、metrics、PBS/配置。
+- 影响文件：`fs_diloco/runtime/syncer.py`、metrics、PBS/配置、发布 failpoint 测试。
 - 关联：BF16 publish 的质量门禁由 [quality_fix-Q/Q6](../quality_fix-Q/Q6-bf16-publish-quality-guard.md) 定义——**没有 validation 对照，BF16 不得成为默认**。
 
 ## 2. 目标与完成谓词
 
 1. telemetry：`publish_global` 拆分出 `publish_weight_seconds`、`publish_outer_seconds`、`publish_dtype` 字段（PIO-01）；
-2. BF16 publish 对照完成：同 commit、单变量（仅 publish_dtype）、其余配置与基线一致的成对 9 节点 run，产出发布耗时对比 + Q6 要求的 validation 对比，结论写入 run_analysis（PIO-02）;
+2. BF16 publish 对照完成：同 source fingerprint、单变量（仅 publish_dtype）、≥3 seeds 的成对 9 节点 run，产出发布耗时对比 + Q6 要求的 validation 对比，结论写入 run_analysis（PIO-02）；现有 `*_bf16all_*` 同时改变 compute dtype/device，明确不得充当该单变量对照;
 3. 并行写落地且正确性不降级：两文件并发写、**均完成后**才进入 DB 提交；crash matrix 在并发语义下全组合复验（PIO-03/04）；
 4. 全量 pytest；tiny run 上 Checker PASS。
 
@@ -24,16 +24,16 @@
 
 | Loop | SPECIFY/RED | IMPLEMENT/GREEN | HARDEN、CHECK、PERSIST |
 | --- | --- | --- | --- |
-| L0 telemetry | 字段名/边界/写入位置冻结（P5） | 发布耗时拆分字段 | tiny run 中字段可见；基线 9 节点 run 的发布耗时留档（可复用既有 run 日志推算，注明口径差异） |
-| L1 BF16 对照 | 成对实验设计冻结：`fs_diloco_gpt2_wikitext2_8l_5000steps_predict_bf16all_cuda.yaml` 与其 FP32 等价配置 diff 审查（仅 dtype 差异，P6） | 无代码 | 成对 run + Q6 validation 对照；结论与 commit 写入 run_analysis |
-| L2 并行写 | PIO-03 先 RED：注入两文件完成顺序的全部交错（含单侧失败），断言 DB 提交只在双完成后发生 | weight/outer 双线程写 | crash matrix（PIO-04）在"weight 完成 outer 未完成"等新中间态下复验：恢复只到事务前/后；tiny run 轨迹等价 |
+| L0 telemetry | 字段名/边界/写入位置冻结（P5） | `publish_weight_seconds`、`publish_outer_seconds`、`publish_checkpoint_seconds`、dtype/bytes 与 Q6 round-trip L2/L∞/relative-L2 | tiny run 中字段可见；旧日志只能作为总 publish 参考，不反推不存在的分段 |
+| L1 BF16 对照 | 从同一 FP32-compute/device 基线生成仅 `syncer.publish_dtype` 不同的配置；resolved diff、fingerprint、3 seeds 冻结 | 无代码 | 成对 run + Q6 validation 对照；结论与源码身份写入 run_analysis |
+| L2 并行写 | PIO-03 先 RED：注入两文件完成顺序的全部交错（含单侧失败），断言 DB 提交只在双 future 成功后发生 | 两个 I/O worker；主线程收集两个 future 后才做唯一 DB transaction/latest | crash matrix 在单侧完成/失败等中间态复验：恢复只到事务前/后；worker 禁止写 DB/latest |
 | L3 收尾 | — | — | 全量 pytest；发布耗时改善数据（并行写预期省约一半发布墙钟）入报告 |
 
 ## 5. 测试矩阵与通过条件
 
 | ID | 测试 | 通过条件 |
 | --- | --- | --- |
-| PIO-01 | telemetry | 两个耗时字段 + dtype 字段出现在 metrics/事件中，数值合理（≈文件大小/带宽） |
+| PIO-01 | telemetry | weight/outer 各自 worker 时长、并发 checkpoint walltime、dtype/bytes、round-trip 误差字段出现在 metrics/事件中；`checkpoint_walltime ≤ max(worker)+调度残差` |
 | PIO-02 | BF16 成对 run | resolved config diff 仅 dtype；发布耗时、端到端、validation（Q6）三组数据齐备 |
 | PIO-03 | 并发完成序 | 任意交错下 DB 提交前两文件均完整；单侧失败 → 无 DB 提交、可重试或干净失败 |
 | PIO-04 | crash matrix 复验 | 六阶段 failpoint 在并行语义下全部满足"事务前/事务后"二态恢复 |
@@ -43,7 +43,7 @@
 
 1. 登录节点：静态检查。
 2. 1 节点：pytest（含 crash matrix 单测）→ tiny run。
-3. 9 节点：仅 L1 对照实验（G7 冻结配置；G8 阶段交接；不取消 in-flight）。
+3. 9 节点：L1 publish dtype 与 L3 serial/parallel 对照；每组 ≥3 seeds，同 fingerprint、单变量（G7/G8）。
 
 ## 7. 报告、证据与升级规则
 

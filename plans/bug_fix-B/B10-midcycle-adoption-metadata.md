@@ -9,10 +9,11 @@
 
 ## 2. 规格
 
-- learner 在每个 upload interval 内维护计数：`mid_cycle_adoption_count`（本 interval 内 inner-poll adoption 次数）与 `base_switched_at_step`（最近一次切换时的 interval 内相对 step）；
-- proposal 发布时写入 meta.json 两个新字段；interval 结束清零；
+- learner 在每个 upload interval 内维护计数：`mid_cycle_adoption_count`（本 interval 内 inner-poll adoption 次数）与 `base_switched_at_step`（最近一次切换前已完成的 interval 内 step 数，1-based；若第 N 个 step 后切换则为 N）；每次 adoption 只计一次，不按版本跨度计数；
+- proposal 发布时写入 pointer metadata 两个新字段；下一 interval 开始时清零；
 - 无 mid-cycle adoption 时字段为 `0`/`null`（字段恒在，便于分析侧无条件读取）；
-- **SPECIFY 必查项**：`insert_update_metadata`（sqlite_store.py:492-593）对 meta 字段是白名单入库还是透传——若白名单，决定是否加列。默认决策：**不加 DB 列**，字段只存在于 meta.json 与归档 JSONL（归档行来自 meta 透传则自动携带；若不透传，则记录"仅 meta.json 可查"并在分析脚本侧读文件）——保持计划零 schema 变更；该决策若与归档实现冲突，在 progress 记录并重议；
+- **存储盘点结论与修正**：full proposal 的所谓 meta.json 实际是会被下一次发布覆盖的 `updates/latest/learner_*.json` pointer；`insert_update_metadata` 又使用列白名单，归档 JSONL 来自 DB 行而非原始 meta 透传。因此“只写 meta、零 schema”无法提供持久可解释性。必须给 `updates` 表新增两个可空/默认兼容列，并在幂等 schema migration、ingest、归档行中透传；fragment 表不加列（本计划明确排除 fragment/rebase/predict）。旧 run 缺列由现有 connect-time migration 补齐；
+- 计数器在**每个 cycle/interval 开始时重置**，而非只在成功 publish 后清零；这样 upload skip/crash-simulation 的下一 interval 不会继承无 proposal 的旧计数。发布函数收到该 interval 的显式快照，发布后 adoption 不计入已经结束的 interval；
 - 语义澄清写入 docs：staleness 加权把 proposal 视为"整个 interval 基于 base_global_version 训练"，mid-cycle adoption 时这是近似；新字段量化近似程度，**不**改变加权本身。若未来实验启用 replace+poll 组合并需要精确加权，那是新的协议设计（显式非目标）。
 
 ## 3. 目标与完成谓词
@@ -39,7 +40,7 @@
 
 | ID | 测试 | 通过条件 |
 | --- | --- | --- |
-| MCA-01 | 字段语义 | interval 内 N 次 adoption → count=N、step 为最近一次；发布后清零 |
+| MCA-01 | 字段语义 | interval 内 N 次 adoption → count=N、step 为最近一次；下一 interval 开始时清零（upload skip 同样不泄漏） |
 | MCA-02 | 缺省值 | 无 adoption → count=0、step=null，字段恒在 |
 | MCA-03 | 无回归 | 不启用 poll 的 tiny run 轨迹与基线等价（新增 meta 字段在 profile 中显式声明） |
 | MCA-04 | 启用组合集成 | replace+poll tiny run：meta 字段与事件日志计数一致 |

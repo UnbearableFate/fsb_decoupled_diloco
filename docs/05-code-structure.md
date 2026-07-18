@@ -4,7 +4,7 @@
 
 ```
 fsb_decoupled_diloco/
-├── fs_diloco/                     # Python 包(约 6300 行)
+├── fs_diloco/                     # Python 包
 │   ├── core/                      # 最底层:配置与常量,不依赖其他子包
 │   │   ├── config.py              #   YAML → dataclass 配置,resolve/校验/序列化
 │   │   └── constants.py           #   格式版本、状态常量、文件名模板、learner id 编解码
@@ -31,12 +31,17 @@ fsb_decoupled_diloco/
 │   │   ├── metrics.py             #   CSV 追加与三张表的字段清单
 │   │   └── wandb_logging.py       #   W&B 命名/标签/config/选中更新统计
 │   ├── runtime/                   # 进程实现(组装以上全部)
+│   │   ├── adoption.py            #   full learner 的 replace/rebase/predict 策略状态机
 │   │   ├── learner.py             #   learner 主循环(全量 + fragment 两套)
 │   │   ├── syncer.py              #   syncer 主循环(全量 + fragment 两套)、初始化/恢复/发布
 │   │   └── failure_sim.py         #   故障注入:随机睡眠/跳过上传/崩溃
 │   ├── tools/                     # 离线工具
 │   │   ├── analysis.py            #   run 摘要与断言(读共享目录 + 持久 DB/archive,不依赖 torch)
-│   │   └── eval_lm_harness.py     #   checkpoint 解析/导出为 HF 目录/lm-eval 结果转 CSV
+│   │   ├── compare_event_traces.py #  profile-driven actor 事件轨迹比较
+│   │   ├── eval_lm_harness.py     #   checkpoint 解析/导出为 HF 目录/lm-eval 结果转 CSV
+│   │   ├── run_metrics_csv.py     #   多 run 系统/质量指标矩阵导出
+│   │   ├── validation_eval.py     #   resolved-config validation loss/ppl 与身份校验
+│   │   └── publish_quality_gate.py #  FP32/BF16 paired quality/trend 三态门禁
 │   ├── cli.py                     # python -m fs_diloco.cli {syncer|learner|inspect}
 │   └── {learner,syncer,analysis,eval_lm_harness}.py   # 兼容入口(转发到 runtime/tools)
 ├── configs/                       # YAML 配置(gpt2+wikitext2 全量/分片、tiny 冒烟)
@@ -76,7 +81,7 @@ core  ←  storage  ←  protocol / modeling / observability  ←  runtime  ← 
 | update 提交 | `write_update` / `write_fragment_update` |
 | 主循环 | `run_learner`(全量)/ `run_fragment_learner`(分片);`run_learner` 按配置分派 |
 
-### `runtime/syncer.py`(约 1340 行)
+### `runtime/syncer.py`
 
 | 区块 | 函数 |
 |---|---|
@@ -84,7 +89,7 @@ core  ←  storage  ←  protocol / modeling / observability  ←  runtime  ← 
 | 发布 | `latest_payload`, `publish_global`(全量);`fragment_latest_payload`, `should_materialize_fragment_full`, `publish_fragment_latest`(分片);`publish_stop` |
 | 初始化/恢复 | `initialize_run`, `initialize_fragment_run`, `resume_run`(DB-first) |
 | 摄取 | `validate_update_metadata`, `ingest_update_metadata`, `sync_liveness_and_metadata` |
-| 选择 | `UpdateProposalSource`(full/fragment 参数对象),共享 `collect_with_grace_window` 与 `drop_missing_update_files`,`all_expected_learners_stopped`,`select_terminal_drain_updates` |
+| 选择 | `UpdateProposalSource`(full/fragment 参数对象),共享 `collect_with_grace_window`、`drop_missing_update_files`、`all_expected_learners_stopped` 与 terminal selector；full/fragment 分别由 `select_terminal_drain_updates` / `select_terminal_drain_fragment_updates` 接入严格准入 |
 | 观测 | `init_wandb_run`, `_fragment_staleness_stats`, `wait_for_learner_shutdown`, `write_training_summary` |
 | 主循环 | `run_syncer`(全量,含分派)/ `run_fragment_syncer`(分片) |
 
@@ -96,6 +101,9 @@ core  ←  storage  ←  protocol / modeling / observability  ←  runtime  ← 
 | `python -m fs_diloco.syncer` | `runtime/syncer.py: main` |
 | `python -m fs_diloco.analysis` | `tools/analysis.py: main`(`summary` / `assert-fragment-smoke` / `assert-fragment-5000` 子命令) |
 | `python -m fs_diloco.eval_lm_harness` | `tools/eval_lm_harness.py: main`(`resolve-checkpoint` / `export-checkpoint` / `results-to-csv`) |
+| `fs-diloco-export-run-metrics` | `tools/run_metrics_csv.py: main` |
+| `fs-diloco-validation-eval` | `tools/validation_eval.py: main` |
+| `fs-diloco-publish-quality-gate` | `tools/publish_quality_gate.py: main` |
 | `python -m fs_diloco.cli {syncer,learner,inspect}` | 便捷分发器 |
 
 ## 5. 测试布局

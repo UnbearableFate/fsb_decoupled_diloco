@@ -69,7 +69,7 @@ def ingest_heartbeats(
             tokens_per_sec=payload.get("tokens_per_sec"),
             last_heartbeat_path=str(path),
             status=status,
-            status_reason=payload.get("phase"),
+            status_reason=payload.get("status_reason") or payload.get("phase"),
         )
         count += 1
     return count

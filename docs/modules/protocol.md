@@ -9,6 +9,7 @@
 - **`staleness(current_version, base_global_version) -> int`** — `max(0, current − base)`。
 - **`raw_update_weight(tokens, staleness_versions, staleness_lambda) -> float`** — `tokens / (1 + λ·staleness)`。
 - **`normalized_update_weights(updates, *, current_version, staleness_lambda) -> dict[update_id, float]`** — 对选中集合计算原始权重并归一化(和为 1);总权重非正时抛 `ValueError`(如全部 tokens=0)。
+- full proposal 的加权仍假设整个 upload interval 基于行内单一 `base_global_version`；replace + inner poll 的混合 base 由 `mid_cycle_adoption_count/base_switched_at_step` 标注为可观测近似，不改变本模块计算。
 - **`normalized_fragment_update_weights(updates, *, current_fragment_version, staleness_lambda)`** — 同上,staleness 以 `base_fragment_version` 计。
 - **`select_one_per_learner(updates, *, policy, quorum_max) -> list`** — 每 learner 至多留一份:
   - `most_recent_per_learner`:取 `(local_step_end, committed_at)` 最大者,结果按 `(learner_id, local_step_end)` 排序;

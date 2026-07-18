@@ -41,11 +41,29 @@ CSV_COLUMNS = [
     "local_steps_mean",
     "local_steps_by_learner_json",
     "complete_training_time_seconds",
+    "source_fingerprint",
+    "training_seed",
+    "sync_scan_interval_seconds",
+    "ingest_during_publish",
     "merge_count",
     "selected_per_merge_min",
     "selected_per_merge_max",
     "selected_per_merge_mean",
     "selected_count_distribution_json",
+    "global_interval_seconds_mean",
+    "global_interval_seconds_p50",
+    "global_interval_seconds_p95",
+    "quorum_detection_seconds_mean",
+    "quorum_detection_seconds_p95",
+    "quorum_max_trigger_count",
+    "quorum_max_trigger_ratio",
+    "quorum_trigger_distribution_json",
+    "publish_ingest_passes_total",
+    "publish_ingested_updates_total",
+    "interval_residual_ratio_mean",
+    "syncer_merge_compute_seconds_p95",
+    "syncer_duty_cycle_percent",
+    "estimated_idle_gpu_node_hours",
     "applied_staleness_0",
     "applied_staleness_1",
     "applied_staleness_2",
@@ -128,6 +146,18 @@ def _as_float(value: Any, default: float | None = None) -> float | None:
 
 def _mean(values: list[float | int]) -> float | None:
     return sum(values) / len(values) if values else None
+
+
+def _percentile(values: list[float], quantile: float) -> float | None:
+    finite = sorted(value for value in values if math.isfinite(value))
+    if not finite:
+        return None
+    position = (len(finite) - 1) * quantile
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    if lower == upper:
+        return finite[lower]
+    return finite[lower] + (finite[upper] - finite[lower]) * (position - lower)
 
 
 def _json_cell(value: Any) -> str:
@@ -397,6 +427,39 @@ def extract_run_metrics(run_path: str | Path) -> dict[str, Any]:
         value for row in syncer_rows if (value := _as_int(row.get("selected_count"))) is not None
     ]
     selected_distribution = Counter(selected_counts)
+    interval_values: list[float] = []
+    quorum_detection_values: list[float] = []
+    merge_compute_values: list[float] = []
+    residual_ratios: list[float] = []
+    quorum_triggers: Counter[str] = Counter()
+    publish_ingest_passes = 0
+    publish_ingested_updates = 0
+    syncer_active_total = 0.0
+    for metric in syncer_rows:
+        interval = _as_float(metric.get("global_interval_seconds"))
+        if interval is not None and interval >= 0.0:
+            interval_values.append(interval)
+        discovery = _as_float(metric.get("discovery_seconds"), 0.0)
+        idle = _as_float(metric.get("idle_seconds"), 0.0)
+        if discovery is not None and idle is not None:
+            quorum_detection_values.append(discovery + idle)
+        read = _as_float(metric.get("read_seconds"), 0.0)
+        aggregation = _as_float(metric.get("aggregation_seconds"), 0.0)
+        outer = _as_float(metric.get("outer_step_seconds"), 0.0)
+        publish = _as_float(metric.get("publish_seconds"), 0.0)
+        if None not in (read, aggregation, outer, publish):
+            merge_compute = float(read) + float(aggregation) + float(outer)
+            merge_compute_values.append(merge_compute)
+            syncer_active_total += merge_compute + float(publish)
+        residual = _as_float(metric.get("interval_residual_seconds"))
+        if residual is not None and interval is not None and interval > 0.0:
+            residual_ratios.append(residual / interval)
+        trigger = str(metric.get("quorum_trigger") or "unknown")
+        quorum_triggers[trigger] += 1
+        publish_ingest_passes += int(_as_int(metric.get("publish_ingest_passes"), 0) or 0)
+        publish_ingested_updates += int(
+            _as_int(metric.get("publish_ingested_updates"), 0) or 0
+        )
 
     produced = len(produced_ids)
     applied = len(applied_ids)
@@ -409,6 +472,7 @@ def extract_run_metrics(run_path: str | Path) -> dict[str, Any]:
     if final_version is None:
         final_version = latest.get("global_merge_event", latest.get("version"))
     run_id = summary.get("run_id") or latest.get("run_id") or stop.get("run_id") or root.name
+    source_identity = _read_json(root / "control" / "source_identity.json")
 
     grace_mode = _nested(config, "sync", "grace_window", {})
     if not isinstance(grace_mode, dict):
@@ -420,6 +484,12 @@ def extract_run_metrics(run_path: str | Path) -> dict[str, Any]:
         else grace_mode.get("initial_seconds")
     )
     syncer_config = config.get("syncer") if isinstance(config.get("syncer"), dict) else {}
+    complete_seconds = _as_float(summary.get("complete_training_time_seconds"))
+    syncer_duty_cycle = (
+        min(1.0, syncer_active_total / complete_seconds)
+        if complete_seconds is not None and complete_seconds > 0.0
+        else None
+    )
 
     stale_drop_names = {"stale", "too_stale", "obsolete"}
     future_drop_names = {"future_base_version", "future_fragment_version"}
@@ -456,12 +526,41 @@ def extract_run_metrics(run_path: str | Path) -> dict[str, Any]:
         "local_steps_mean": _mean(local_values),
         "local_steps_by_learner_json": _json_cell(local_steps),
         "complete_training_time_seconds": summary.get("complete_training_time_seconds"),
+        "source_fingerprint": source_identity.get("source_fingerprint")
+        or _nested(config, "run", "source_fingerprint"),
+        "training_seed": _nested(config, "training", "seed"),
+        "sync_scan_interval_seconds": _nested(config, "sync", "scan_interval_seconds"),
+        "ingest_during_publish": _nested(config, "sync", "ingest_during_publish", False),
         "merge_count": len(syncer_rows),
         "selected_per_merge_min": min(selected_counts) if selected_counts else None,
         "selected_per_merge_max": max(selected_counts) if selected_counts else None,
         "selected_per_merge_mean": _mean(selected_counts),
         "selected_count_distribution_json": _json_cell(
             {str(key): value for key, value in sorted(selected_distribution.items())}
+        ),
+        "global_interval_seconds_mean": _mean(interval_values),
+        "global_interval_seconds_p50": _percentile(interval_values, 0.50),
+        "global_interval_seconds_p95": _percentile(interval_values, 0.95),
+        "quorum_detection_seconds_mean": _mean(quorum_detection_values),
+        "quorum_detection_seconds_p95": _percentile(quorum_detection_values, 0.95),
+        "quorum_max_trigger_count": quorum_triggers.get("quorum_max", 0),
+        "quorum_max_trigger_ratio": (
+            quorum_triggers.get("quorum_max", 0) / len(syncer_rows)
+            if syncer_rows
+            else None
+        ),
+        "quorum_trigger_distribution_json": _json_cell(dict(sorted(quorum_triggers.items()))),
+        "publish_ingest_passes_total": publish_ingest_passes,
+        "publish_ingested_updates_total": publish_ingested_updates,
+        "interval_residual_ratio_mean": _mean(residual_ratios),
+        "syncer_merge_compute_seconds_p95": _percentile(merge_compute_values, 0.95),
+        "syncer_duty_cycle_percent": (
+            syncer_duty_cycle * 100.0 if syncer_duty_cycle is not None else None
+        ),
+        "estimated_idle_gpu_node_hours": (
+            complete_seconds / 3600.0 * (1.0 - syncer_duty_cycle)
+            if complete_seconds is not None and syncer_duty_cycle is not None
+            else None
         ),
         "applied_staleness_0": staleness_counts.get(0, 0),
         "applied_staleness_1": staleness_counts.get(1, 0),

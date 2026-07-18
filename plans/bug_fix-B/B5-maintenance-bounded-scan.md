@@ -20,7 +20,7 @@
 
 在 SQLite 增加 `gc_pending` 表（列：`file_path` 主键、`archived_at`）：
 
-- `archive_and_prune` 在**同一事务**内：写入归档 JSONL 前后按现有顺序不变，`delete_archived_rows` 的同一事务中把本轮 terminal 路径插入 `gc_pending`（幂等 upsert）；
+- `archive_and_prune` 仍先 fsync 归档 JSONL；随后在**同一个 SQLite 事务**中把本轮 terminal 路径幂等写入 `gc_pending` 并删除 active DB 行。JSONL 文件写入不可能与 SQLite 原子提交，计划不宣称跨文件/DB 原子性；DB 提交失败时下一轮可能重复追加归档行的既有边界保持不变，本计划只保证 `gc_pending` 与 active-row 删除同成同败；
 - `collect_runtime_artifacts` 的 terminal 集合 = `gc_pending` 全表（行数 = 尚未删除成功的文件数，正常为 0–本轮增量）∪ `extra_terminal_paths`；
 - 文件删除成功（或已不存在）后，同轮删除对应 `gc_pending` 行；
 - 不再读取 `update_history_jsonl`；`_archived_terminal_paths` 删除。
@@ -31,8 +31,8 @@
 
 1. `_archived_terminal_paths` 与对 `update_history_jsonl` 的任何运行时读取从 maintenance 路径消失（MNT-05 静态检查；归档 JSONL 降级为纯 append-only 研究证据）；
 2. GC 决策等价：现有 retention/GC 测试全数通过，crash 注入用例（MNT-03）证明"归档后删除前崩溃"的 payload 在恢复后仍被删除；
-3. 有界性断言落地：1000-cycle 测试新增"maintenance 单轮扫描行数与耗时不随 cycle 增长"（MNT-04）；
-4. telemetry：`maintenance` 事件/metrics 增加 `gc_pending_rows`、`maintenance_scan_seconds` 字段（先于断言实现，P5）；
+3. 有界性断言落地：1000-cycle 测试新增"maintenance 单轮扫描行数不随 history 增长"的确定性断言（MNT-04）；耗时曲线仅作诊断证据，不作为易受负载噪声影响的硬断言；
+4. telemetry：`maintenance` 事件/metrics 增加清理后的 `gc_pending_rows`、本轮实际读取的 `maintenance_scanned_rows`、`maintenance_scan_seconds` 字段（先于断言实现，P5）；
 5. 全量 pytest 通过；tiny run 上 `check_plan01_invariants.py` PASS。
 
 ## 5. Loop Engineering 实施循环
@@ -43,7 +43,7 @@
 | L1 telemetry 先行 | 字段名、采样边界、写入位置（metrics CSV/JSONL）先定 | `gc_pending_rows`（暂为归档集合大小）与 `maintenance_scan_seconds` 上报 | 字段在 tiny run 输出中可见 |
 | L2 gc_pending 表 | MNT-01/02 先 RED：插入与清除的事务性、幂等 upsert、重启后可见 | 建表；`archive_and_prune` 事务内插入；删除成功后清行 | schema 变更走既有 store 初始化路径；DB-03 类重开测试复跑 |
 | L3 切换 GC 数据源 | MNT-03 先 RED：注入"归档提交后、unlink 前"崩溃 → 恢复后该 payload 仍被删除、gc_pending 清空 | terminal 集合改读 gc_pending；删除 `_archived_terminal_paths` | 全部 retention/GC/终态测试通过；MNT-05 静态检查 |
-| L4 有界性断言 | MNT-04 先 RED（在旧实现上应 FAIL 或标记 xfail 证明断言有效） | — | 1000-cycle 下 `gc_pending_rows` 有上界、`maintenance_scan_seconds` 无线性趋势；对照 L0 曲线写结论 |
+| L4 有界性断言 | MNT-04 先 RED：通过可注入的归档读取探针/扫描行计数证明旧实现随 history 增长 | — | 1000-cycle 下每轮扫描行数与 `gc_pending_rows` 有上界；`maintenance_scan_seconds` 对照 L0 只写诊断结论 |
 
 ## 6. 测试矩阵与通过条件
 
@@ -52,7 +52,7 @@
 | MNT-01 | gc_pending 事务性 | 插入与 `delete_archived_rows` 同事务：事务内注入异常 → 两者均未发生 |
 | MNT-02 | 幂等与重启 | 重复归档同一路径不产生重复行；重开 DB 后 pending 行可见 |
 | MNT-03 | crash 恢复 | "归档后、删除前"崩溃 → 下一轮 maintenance 删除该文件并清除 pending 行 |
-| MNT-04 | 有界性 | 1000-cycle：单轮扫描行数与耗时不随 cycle 增长；gc_pending 行数有上界 |
+| MNT-04 | 有界性 | 1000-cycle：单轮扫描行数不随 cycle 增长；gc_pending 行数有上界；耗时趋势只作非门禁诊断 |
 | MNT-05 | 静态检查 | `_archived_terminal_paths` 出现 0 次；maintenance 运行路径无 `update_history_jsonl` 读取 |
 
 progress.md 每条记录必须列出覆盖的 MNT ID（P8）。

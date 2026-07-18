@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 FORMAT_VERSION = 1
-PROTOCOL_VERSION = 2
+PROTOCOL_VERSION = 3
 DEFAULT_RUNS_DIR = "runs/fs_diloco"
 LEARNER_ID_PREFIX = "learner_"
 

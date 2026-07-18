@@ -201,8 +201,16 @@ def test_fragment_adoption_helper_preserves_all_four_call_contexts(
     logger = RecordingLogger()
     old_optimizer = object()
     old_scheduler = object()
-    new_optimizer = object()
-    new_scheduler = object()
+
+    class FakeOptimizer:
+        state = {}
+        param_groups = [{"lr": 0.25}]
+
+    class FakeScheduler:
+        last_epoch = 6
+
+    new_optimizer = FakeOptimizer()
+    new_scheduler = FakeScheduler()
 
     def adopt_fn(**kwargs):
         versions = dict(kwargs["last_loaded_fragment_versions"])
@@ -228,8 +236,9 @@ def test_fragment_adoption_helper_preserves_all_four_call_contexts(
         reset_tokens=reset_tokens,
         reset_optimizer=reset_optimizer,
         include_fragment_versions=include_fragment_versions,
+        completed_local_steps=6,
         adopt_fn=adopt_fn,
-        rebuild_inner_state_fn=lambda *_args: (new_optimizer, new_scheduler),
+        rebuild_inner_state_fn=lambda *_args, **_kwargs: (new_optimizer, new_scheduler),
     )
 
     assert result.global_merge_event == 7

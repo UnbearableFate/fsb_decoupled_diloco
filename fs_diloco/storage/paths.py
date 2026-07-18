@@ -63,6 +63,11 @@ class RunPaths:
         return self.shared_root / "metrics"
 
     @property
+    def eval_checkpoints(self) -> Path:
+        """Non-authoritative checkpoints retained only for offline evaluation."""
+        return self.shared_root / "eval_checkpoints"
+
+    @property
     def latest_json(self) -> Path:
         return self.control / "latest.json"
 
@@ -104,6 +109,9 @@ class RunPaths:
 
     def update_pointer_path(self, learner_id: str) -> Path:
         return self.updates_latest / f"{learner_id}.json"
+
+    def fragment_update_pointer_path(self, learner_id: str, fragment_id: int) -> Path:
+        return self.updates_latest / f"{learner_id}_f{int(fragment_id):03d}.json"
 
     def update_payload_dir(self, learner_id: str) -> Path:
         return self.updates_payloads / learner_id

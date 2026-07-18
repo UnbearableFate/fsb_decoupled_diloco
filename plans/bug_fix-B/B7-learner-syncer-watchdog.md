@@ -11,10 +11,10 @@
 
 **信号定义**——learner 视角"syncer 活着"的证据，任一发生即刷新 watchdog（记 monotonic 时间）：
 
-- `latest.json`（或 fragment latest）版本号前进（learner 在现有 poll 点本来就读它，零额外 I/O）；
+- `latest.json`（或 fragment latest）版本号前进（通常复用现有 poll 结果；只有 deadline 首次到达时额外读一次固定 latest pointer 作触发前确认，避免“syncer 已前进但当前策略尚未 poll”的误报）；
 - stop.json 出现（直接走正常停止，不经 watchdog）。
 
-**触发条件**：自上次信号起经过 `threshold` 秒且 stop.json 不存在。`threshold` 默认取 `liveness.no_progress_timeout_seconds`（与 syncer 自保对称；正式配置 3600s，误报概率极低——merge 间隔为分钟级）。SPECIFY 阶段决定是否新增独立字段 `liveness.syncer_unresponsive_timeout_seconds`（默认 null → 沿用 no_progress 值），倾向新增以便测试用小值。
+**触发条件**：自上次信号起经过 `threshold` 秒且 stop.json 不存在。新增 `liveness.syncer_unresponsive_timeout_seconds: float | None = None`；null 时沿用 `liveness.no_progress_timeout_seconds`，显式值必须 >0。独立字段是确定规格而非留给实施阶段的可选决策，以便测试小阈值且不改变 syncer 自保阈值。
 
 **触发动作**（有序退出，不是 crash）：
 
@@ -24,13 +24,14 @@
 
 **边界**：
 
-- watchdog 自首次成功 adoption 后启动；启动前的等待由现有 `wait_for_json(paths.latest_json)` 超时管辖（learner.py:1437），不重复计时；
+- watchdog 自首次成功 latest 加载后启动；启动前的等待由现有 `wait_for_json(paths.latest_json, timeout_seconds=1800)` 管辖，不重复计时；
 - 训练结束阶段（learner 已进入自己的停止流程）不触发；
 - fragment learner 同样接入（信号源为 fragment latest 指针），两个主循环共用同一 watchdog 实现——若 S3/S1 已重构，接入点按其结构调整并在 progress 记录。
+- 当前 learner 没有固定“poll 周期”：watchdog 在每个 optimizer step 后以及现有 latest/stop 检查点判定；deadline 到达时先重读一次 latest 再决定。因此退出上界是 `threshold + 一次最长本地 step/现有等待点延迟`，集成测试使用短 step 场景验证；不得把它错误写成 `threshold + scan_interval`。若未来需要与单步时长无关的严格秒级上界，应另行引入定时线程/中断机制。
 
 ## 3. 目标与完成谓词
 
-1. syncer 死亡场景下 learner 在 `threshold + 一个 poll 周期` 内退出，产生 §2 的三项动作（SWD-02/03）;
+1. syncer 死亡场景下 learner 在 `threshold + 一个测试场景本地 step` 内退出，产生 §2 的三项动作（SWD-02/03）;
 2. 正常 run（tiny full + tiny fragment）事件轨迹除新增 watchdog 初始化事件外与基线等价——正常路径无行为变化（SWD-04）；
 3. `latest.json` 持续前进但间隔接近阈值时不误触发（SWD-05）；
 4. 全量 pytest 通过。
@@ -57,7 +58,7 @@
 | ID | 测试 | 通过条件 |
 | --- | --- | --- |
 | SWD-01 | watchdog 单元 | 注入时钟下：信号刷新重置计时；超阈值且无 stop.json → 触发；stop.json 存在 → 永不触发 |
-| SWD-02 | syncer 静默集成 | kill syncer 后 learner 在阈值 + 一个 poll 周期内退出，exit code 0 |
+| SWD-02 | syncer 静默集成 | kill syncer 后 learner 在阈值 + 一个实测本地 step 延迟内退出，exit code 0 |
 | SWD-03 | 退出证据 | `syncer_unresponsive` 事件字段完整；最终心跳 stopped 且 reason 正确 |
 | SWD-04 | 正常路径无回归 | tiny full/fragment run 轨迹与基线等价（允许新增的初始化事件在 profile 中显式列出） |
 | SWD-05 | 抗误报 | latest 以略小于阈值的间隔前进 → 不触发 |

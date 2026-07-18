@@ -184,6 +184,33 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--shared-root")
     parser.add_argument("--learner-id", required=True)
     parser.add_argument("--num-learners", type=int)
+    parser.add_argument("--training-seed", type=int)
+    parser.add_argument("--scan-interval-seconds", type=float)
+    parser.add_argument("--syncer-device", choices=("auto", "cpu", "cuda"))
+    parser.add_argument("--syncer-publish-dtype", choices=("float32", "bfloat16"))
+    parser.add_argument("--staleness-lambda", type=float)
+    parser.add_argument("--max-staleness-versions", type=int)
+    parser.add_argument(
+        "--global-adoption-strategy",
+        choices=("replace", "rebase_post_publish_delta", "predict_post_publish_global"),
+    )
+    parser.add_argument("--completion-mode", choices=("local_or_global", "global_only"))
+    parser.add_argument(
+        "--parallel-checkpoint-writes",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
+    parser.add_argument("--materialize-full-every-events", type=int)
+    parser.add_argument(
+        "--ingest-during-publish",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
+    parser.add_argument(
+        "--capture-terminal-predecessor-for-eval",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
     return parser.parse_args(argv)
 
 
@@ -202,6 +229,9 @@ def write_heartbeat(
     last_loaded_fragment_versions: dict[int, int] | None = None,
     last_adopted_fragments: list[int] | None = None,
     resource_metrics: dict[str, float | int] | None = None,
+    learning_rate: float | None = None,
+    scheduler_total_steps: int | None = None,
+    status_reason: str | None = None,
 ) -> None:
     payload = {
         "format_version": FORMAT_VERSION,
@@ -216,7 +246,11 @@ def write_heartbeat(
         "last_local_step": last_local_step,
         "last_update_id": last_update_id,
         "tokens_per_sec": tokens_per_sec,
+        "learning_rate": learning_rate,
+        "scheduler_total_steps": scheduler_total_steps,
     }
+    if status_reason is not None:
+        payload["status_reason"] = status_reason
     if last_loaded_global_merge_event is not None:
         payload["last_loaded_global_merge_event"] = last_loaded_global_merge_event
     if last_loaded_fragment_versions is not None:
@@ -328,6 +362,124 @@ def wait_for_fragment_latest_if_newer(
     return None
 
 
+@dataclass(frozen=True)
+class LatestLoadResult:
+    value: Any
+    latest: dict[str, Any]
+    retry_count: int
+    waited_seconds: float
+    missing_path: str | None
+
+
+def _wait_for_latest_payload_if_newer(
+    paths: RunPaths,
+    current_version: int,
+    *,
+    version_field: str,
+    latest_kind: str | None,
+    wait_seconds: float,
+    poll_seconds: float,
+) -> tuple[dict[str, Any] | None, float]:
+    if version_field == "version" and latest_kind is None:
+        return wait_for_latest_if_newer(
+            paths,
+            current_version,
+            wait_seconds=wait_seconds,
+            poll_seconds=poll_seconds,
+        )
+    wait_seconds = max(0.0, float(wait_seconds))
+    poll_seconds = float(poll_seconds)
+    if poll_seconds <= 0.0:
+        raise ValueError("poll_seconds must be > 0")
+    started = time.monotonic()
+    deadline = started + wait_seconds
+    while True:
+        payload = safe_read_json(paths.latest_json)
+        if (
+            payload is not None
+            and (latest_kind is None or payload.get("latest_kind") == latest_kind)
+            and version_field in payload
+            and int(payload[version_field]) > int(current_version)
+        ):
+            return payload, time.monotonic() - started
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.0 or paths.stop_json.exists():
+            return None, time.monotonic() - started
+        time.sleep(min(poll_seconds, remaining))
+
+
+def load_or_refresh_latest(
+    *,
+    paths: RunPaths,
+    latest: dict[str, Any],
+    version_field: str,
+    load_fn: Callable[[dict[str, Any]], Any],
+    wait_seconds: float,
+    poll_seconds: float,
+    latest_kind: str | None = None,
+) -> LatestLoadResult:
+    """Load one latest snapshot, retrying the whole callback after GC races."""
+
+    wait_seconds = max(0.0, float(wait_seconds))
+    poll_seconds = float(poll_seconds)
+    if poll_seconds <= 0.0:
+        raise ValueError("poll_seconds must be > 0")
+    current_latest = latest
+    retry_count = 0
+    waited_seconds = 0.0
+    first_missing: FileNotFoundError | None = None
+    missing_path: str | None = None
+    retry_deadline: float | None = None
+    while True:
+        try:
+            value = load_fn(current_latest)
+            return LatestLoadResult(
+                value=value,
+                latest=current_latest,
+                retry_count=retry_count,
+                waited_seconds=waited_seconds,
+                missing_path=missing_path,
+            )
+        except FileNotFoundError as exc:
+            if first_missing is None:
+                first_missing = exc
+                missing_path = getattr(exc, "filename", None) or str(exc)
+                retry_deadline = time.monotonic() + wait_seconds
+            assert retry_deadline is not None
+            remaining = max(0.0, retry_deadline - time.monotonic())
+            current_version = int(current_latest[version_field])
+            newer_latest, waited = _wait_for_latest_payload_if_newer(
+                paths,
+                current_version,
+                version_field=version_field,
+                latest_kind=latest_kind,
+                wait_seconds=remaining,
+                poll_seconds=poll_seconds,
+            )
+            waited_seconds += waited
+            if (
+                newer_latest is None
+                or int(newer_latest.get(version_field, -1)) <= current_version
+            ):
+                first_missing.add_note(
+                    "latest load retries exhausted: "
+                    f"retry_count={retry_count}, waited_seconds={waited_seconds:.6f}, "
+                    f"last_version={current_version}"
+                )
+                if exc is first_missing:
+                    raise
+                raise first_missing from exc
+            current_latest = newer_latest
+            retry_count += 1
+
+
+def _latest_load_retry_kwargs(config: Config) -> dict[str, float]:
+    return {
+        "wait_seconds": float(config.learner.prediction.reconcile_timeout_seconds),
+        "poll_seconds": float(config.learner.post_publish_latest_poll_seconds),
+    }
+
+
 def stop_requested(paths: RunPaths, local_step: int, config: Config) -> bool:
     if paths.stop_json.exists():
         return True
@@ -341,9 +493,102 @@ def stop_requested(paths: RunPaths, local_step: int, config: Config) -> bool:
     return False
 
 
+@dataclass
+class SyncerProgressWatchdog:
+    """Track strictly newer latest versions on a monotonic learner clock."""
+
+    timeout_seconds: float
+    last_observed_version: int
+    last_signal_monotonic: float
+    last_signal_wall: float
+
+    @classmethod
+    def start(
+        cls,
+        *,
+        timeout_seconds: float,
+        initial_version: int,
+        now_monotonic: float | None = None,
+        now_wall: float | None = None,
+    ) -> SyncerProgressWatchdog:
+        timeout_seconds = float(timeout_seconds)
+        if timeout_seconds <= 0.0:
+            raise ValueError("watchdog timeout_seconds must be > 0")
+        return cls(
+            timeout_seconds=timeout_seconds,
+            last_observed_version=int(initial_version),
+            last_signal_monotonic=(
+                time.monotonic() if now_monotonic is None else float(now_monotonic)
+            ),
+            last_signal_wall=time.time() if now_wall is None else float(now_wall),
+        )
+
+    def observe(
+        self,
+        version: int,
+        *,
+        now_monotonic: float | None = None,
+        now_wall: float | None = None,
+    ) -> bool:
+        version = int(version)
+        if version <= self.last_observed_version:
+            return False
+        self.last_observed_version = version
+        self.last_signal_monotonic = (
+            time.monotonic() if now_monotonic is None else float(now_monotonic)
+        )
+        self.last_signal_wall = time.time() if now_wall is None else float(now_wall)
+        return True
+
+    def seconds_since_signal(self, *, now_monotonic: float | None = None) -> float:
+        now = time.monotonic() if now_monotonic is None else float(now_monotonic)
+        return max(0.0, now - self.last_signal_monotonic)
+
+    def deadline_reached(self, *, now_monotonic: float | None = None) -> bool:
+        return self.seconds_since_signal(now_monotonic=now_monotonic) >= self.timeout_seconds
+
+
+def syncer_watchdog_timeout_seconds(config: Config) -> float:
+    configured = config.liveness.syncer_unresponsive_timeout_seconds
+    return float(
+        config.liveness.no_progress_timeout_seconds
+        if configured is None
+        else configured
+    )
+
+
+def confirm_syncer_unresponsive(
+    watchdog: SyncerProgressWatchdog,
+    paths: RunPaths,
+    *,
+    version_field: str,
+    now_monotonic: float | None = None,
+    now_wall: float | None = None,
+) -> bool:
+    """Confirm a reached deadline against stop/latest before self-stopping."""
+
+    now_monotonic = (
+        time.monotonic() if now_monotonic is None else float(now_monotonic)
+    )
+    if not watchdog.deadline_reached(now_monotonic=now_monotonic):
+        return False
+    if paths.stop_json.exists():
+        return False
+    latest = safe_read_json(paths.latest_json)
+    if latest is not None and version_field in latest:
+        watchdog.observe(
+            int(latest[version_field]),
+            now_monotonic=now_monotonic,
+            now_wall=now_wall,
+        )
+    return watchdog.deadline_reached(now_monotonic=now_monotonic)
+
+
 def build_inner_optimizer_and_scheduler(
     model: torch.nn.Module,
     config: Config,
+    *,
+    completed_local_steps: int,
 ) -> tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LRScheduler | None]:
     name = config.inner_optimizer.name.lower()
     if name != "adamw":
@@ -357,16 +602,57 @@ def build_inner_optimizer_and_scheduler(
     )
     if config.inner_optimizer.scheduler == "none":
         return optimizer, None
+    completed_local_steps = int(completed_local_steps)
+    if completed_local_steps < 0:
+        raise ValueError("completed_local_steps must be >= 0")
+    for group in optimizer.param_groups:
+        group["initial_lr"] = config.inner_optimizer.lr
+    scheduler = torch.optim.lr_scheduler.LambdaLR(
+        optimizer,
+        lr_lambda=lambda step: inner_lr_multiplier(config, step),
+        # LambdaLR performs its initial step during construction. Starting from
+        # N-1 therefore leaves it at the phase for N completed optimizer steps.
+        last_epoch=completed_local_steps - 1,
+    )
+    return optimizer, scheduler
 
-    def lr_lambda(step: int) -> float:
-        if config.inner_optimizer.warmup_steps and step < config.inner_optimizer.warmup_steps:
-            return max(1e-8, float(step + 1) / float(config.inner_optimizer.warmup_steps))
-        if config.inner_optimizer.scheduler == "cosine" and config.training.max_local_steps:
-            progress = min(1.0, step / max(1, config.training.max_local_steps))
-            return 0.5 * (1.0 + math.cos(math.pi * progress))
+
+def inner_lr_multiplier(config: Config, completed_local_steps: int) -> float:
+    """Return the LR multiplier for the next cumulative local optimizer step."""
+
+    completed_local_steps = int(completed_local_steps)
+    if completed_local_steps < 0:
+        raise ValueError("completed_local_steps must be >= 0")
+    if config.inner_optimizer.scheduler == "none":
         return 1.0
+    if config.inner_optimizer.scheduler != "cosine":
+        raise ValueError(
+            f"unsupported inner optimizer scheduler: {config.inner_optimizer.scheduler}"
+        )
+    warmup_steps = int(config.inner_optimizer.warmup_steps)
+    if warmup_steps > 0 and completed_local_steps < warmup_steps:
+        return float(completed_local_steps + 1) / float(warmup_steps)
+    total_steps = config.inner_optimizer.scheduler_total_steps
+    if total_steps is None or int(total_steps) <= warmup_steps:
+        raise ValueError(
+            "cosine scheduler requires scheduler_total_steps greater than warmup_steps"
+        )
+    progress = min(
+        1.0,
+        max(
+            0.0,
+            float(completed_local_steps - warmup_steps)
+            / float(int(total_steps) - warmup_steps),
+        ),
+    )
+    cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
+    return max(float(config.inner_optimizer.min_lr_ratio), cosine)
 
-    return optimizer, torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+
+def current_inner_learning_rate(optimizer: torch.optim.Optimizer) -> float:
+    """Return the first param-group LR used by the next optimizer step."""
+
+    return float(optimizer.param_groups[0]["lr"])
 
 
 def inner_training_state_metrics(
@@ -736,35 +1022,35 @@ def prepare_prediction_or_find_newer_latest(
             },
         )
 
-    try:
-        reference_flat, stats = predict_next_global_weight(
+    load_result = load_or_refresh_latest(
+        paths=paths,
+        latest=cached_latest,
+        version_field="version",
+        load_fn=lambda candidate: predict_next_global_weight(
             model=model,
-            latest=cached_latest,
+            latest=candidate,
             param_index=param_index,
             device=device,
             config=config,
             local_tokens=local_tokens,
-        )
-    except FileNotFoundError as exc:
-        newer_latest, waited_seconds = wait_for_latest_if_newer(
-            paths,
-            base_version,
-            wait_seconds=config.learner.prediction.reconcile_timeout_seconds,
-            poll_seconds=config.learner.post_publish_latest_poll_seconds,
-        )
-        if newer_latest is None:
-            raise
+        ),
+        **_latest_load_retry_kwargs(config),
+    )
+    loaded_latest = load_result.latest
+    if int(loaded_latest["version"]) != base_version:
         return (
             None,
             None,
-            newer_latest,
+            loaded_latest,
             {
                 "reason": "cached_checkpoint_collected",
                 "cached_version": base_version,
-                "missing_path": getattr(exc, "filename", None) or str(exc),
-                "waited_seconds": waited_seconds,
+                "missing_path": load_result.missing_path,
+                "waited_seconds": load_result.waited_seconds,
             },
         )
+
+    reference_flat, stats = load_result.value
 
     newer_latest = read_latest_if_newer(paths, base_version)
     if newer_latest is not None:
@@ -788,21 +1074,42 @@ def load_fragment_latest_into_model(
     param_index: dict[str, Any],
     fragment_index: dict[str, Any],
     device: torch.device,
+    paths: RunPaths | None = None,
+    config: Config | None = None,
 ) -> tuple[int, dict[int, int]]:
-    fragments = latest.get("fragments") or {}
-    fragment_tensors = {
-        int(fragment_id): load_fragment_weight(info["weight_path"])
-        for fragment_id, info in fragments.items()
-    }
-    flat = materialize_full_from_fragments(
-        fragment_tensors,
-        fragment_index,
-        int(param_index["total_numel"]),
-    )
+    def load_snapshot(candidate: dict[str, Any]) -> tuple[torch.Tensor, dict[int, int], int]:
+        fragments = candidate.get("fragments") or {}
+        fragment_tensors = {
+            int(fragment_id): load_fragment_weight(info["weight_path"])
+            for fragment_id, info in fragments.items()
+        }
+        flat = materialize_full_from_fragments(
+            fragment_tensors,
+            fragment_index,
+            int(param_index["total_numel"]),
+        )
+        versions = {
+            int(fragment_id): int(info["version"])
+            for fragment_id, info in fragments.items()
+        }
+        event = int(candidate.get("global_merge_event", candidate.get("version", 0)))
+        return flat, versions, event
+
+    if paths is not None and config is not None:
+        result = load_or_refresh_latest(
+            paths=paths,
+            latest=latest,
+            version_field="global_merge_event",
+            latest_kind="fragment",
+            load_fn=load_snapshot,
+            **_latest_load_retry_kwargs(config),
+        )
+        flat, versions, event = result.value
+    else:
+        flat, versions, event = load_snapshot(latest)
     load_flat_into_model(model, flat, param_index)
     model.to(device)
-    versions = {int(fragment_id): int(info["version"]) for fragment_id, info in fragments.items()}
-    return int(latest.get("global_merge_event", latest.get("version", 0))), versions
+    return event, versions
 
 
 def adopt_fragment_updates(
@@ -813,24 +1120,51 @@ def adopt_fragment_updates(
     fragment_index: dict[str, Any],
     last_loaded_fragment_versions: dict[int, int],
     device: torch.device,
+    paths: RunPaths | None = None,
+    config: Config | None = None,
 ) -> tuple[int, dict[int, int], list[int]]:
-    fragments = latest.get("fragments") or {}
-    changed: list[int] = []
-    flat = flatten_trainable_params(model, param_index, dtype=torch.float32)
-    for fragment_id_text, info in sorted(fragments.items(), key=lambda item: int(item[0])):
-        fragment_id = int(fragment_id_text)
-        version = int(info["version"])
-        if version <= int(last_loaded_fragment_versions.get(fragment_id, -1)):
-            continue
-        fragment_tensor = load_fragment_weight(info["weight_path"])
-        flat = scatter_fragment(flat, fragment_index, fragment_id, fragment_tensor)
-        last_loaded_fragment_versions[fragment_id] = version
-        changed.append(fragment_id)
+    initial_versions = dict(last_loaded_fragment_versions)
+
+    def load_snapshot(
+        candidate: dict[str, Any],
+    ) -> tuple[torch.Tensor, dict[int, int], list[int], int]:
+        fragments = candidate.get("fragments") or {}
+        changed: list[int] = []
+        versions = dict(initial_versions)
+        flat = flatten_trainable_params(model, param_index, dtype=torch.float32)
+        for fragment_id_text, info in sorted(
+            fragments.items(), key=lambda item: int(item[0])
+        ):
+            fragment_id = int(fragment_id_text)
+            version = int(info["version"])
+            if version <= int(initial_versions.get(fragment_id, -1)):
+                continue
+            fragment_tensor = load_fragment_weight(info["weight_path"])
+            flat = scatter_fragment(flat, fragment_index, fragment_id, fragment_tensor)
+            versions[fragment_id] = version
+            changed.append(fragment_id)
+        event = int(candidate.get("global_merge_event", candidate.get("version", 0)))
+        return flat, versions, changed, event
+
+    if paths is not None and config is not None:
+        result = load_or_refresh_latest(
+            paths=paths,
+            latest=latest,
+            version_field="global_merge_event",
+            latest_kind="fragment",
+            load_fn=load_snapshot,
+            **_latest_load_retry_kwargs(config),
+        )
+        flat, versions, changed, event = result.value
+    else:
+        flat, versions, changed, event = load_snapshot(latest)
     if changed:
         load_flat_into_model(model, flat, param_index)
         model.to(device)
+    last_loaded_fragment_versions.clear()
+    last_loaded_fragment_versions.update(versions)
     return (
-        int(latest.get("global_merge_event", latest.get("version", 0))),
+        event,
         last_loaded_fragment_versions,
         changed,
     )
@@ -866,6 +1200,8 @@ def apply_fragment_adoption(
     reset_tokens: bool,
     reset_optimizer: bool,
     include_fragment_versions: bool,
+    completed_local_steps: int,
+    paths: RunPaths | None = None,
     adopt_fn: Callable[..., tuple[int, dict[int, int], list[int]]] = adopt_fragment_updates,
     rebuild_inner_state_fn: Callable[..., tuple[Any, Any]] = (
         build_inner_optimizer_and_scheduler
@@ -873,6 +1209,7 @@ def apply_fragment_adoption(
 ) -> FragmentAdoptionResult:
     """Apply one fragment latest snapshot with call-site-specific legacy semantics."""
 
+    adoption_start = time.monotonic()
     global_merge_event, fragment_versions, changed = adopt_fn(
         model=model,
         latest=latest,
@@ -880,12 +1217,16 @@ def apply_fragment_adoption(
         fragment_index=fragment_index,
         last_loaded_fragment_versions=last_loaded_fragment_versions,
         device=device,
+        paths=paths,
+        config=config,
     )
+    adoption_load_apply_seconds = time.monotonic() - adoption_start
     next_tokens = dict(tokens_since_fragment_load)
     next_count = fragment_adopt_count
     next_last_adopted = last_adopted_fragments
     next_optimizer = optimizer
     next_scheduler = scheduler
+    adoption_optimizer_reset_seconds = 0.0
     if changed:
         next_count += len(changed)
         next_last_adopted = changed
@@ -893,15 +1234,27 @@ def apply_fragment_adoption(
             for fragment_id in changed:
                 next_tokens[fragment_id] = 0
         if reset_optimizer and config.fragments.reset_inner_optimizer_on_fragment_adopt:
-            next_optimizer, next_scheduler = rebuild_inner_state_fn(model, config)
+            reset_start = time.monotonic()
+            next_optimizer, next_scheduler = rebuild_inner_state_fn(
+                model,
+                config,
+                completed_local_steps=completed_local_steps,
+            )
+            adoption_optimizer_reset_seconds = time.monotonic() - reset_start
             logger.event(
                 "inner_optimizer_reset",
                 version=global_merge_event,
                 fragments=changed,
+                **inner_training_state_metrics(next_optimizer, next_scheduler),
             )
         event_fields: dict[str, Any] = {
             "global_merge_event": global_merge_event,
             "fragments": changed,
+            "adoption_load_apply_seconds": adoption_load_apply_seconds,
+            "adoption_optimizer_reset_seconds": adoption_optimizer_reset_seconds,
+            "adoption_pause_seconds": (
+                adoption_load_apply_seconds + adoption_optimizer_reset_seconds
+            ),
         }
         if include_fragment_versions:
             event_fields["fragment_versions"] = fragment_versions
@@ -934,7 +1287,20 @@ def write_update(
     param_norm: float,
     flat: torch.Tensor,
     resource_metrics: dict[str, float | int],
+    mid_cycle_adoption_count: int,
+    base_switched_at_step: int | None,
 ) -> tuple[str, Path, Path, dict[str, Any]]:
+    mid_cycle_adoption_count = int(mid_cycle_adoption_count)
+    if mid_cycle_adoption_count < 0:
+        raise ValueError("mid_cycle_adoption_count must be >= 0")
+    if mid_cycle_adoption_count == 0 and base_switched_at_step is not None:
+        raise ValueError("base_switched_at_step requires a mid-cycle adoption")
+    if mid_cycle_adoption_count > 0:
+        if base_switched_at_step is None:
+            raise ValueError("mid-cycle adoption requires base_switched_at_step")
+        base_switched_at_step = int(base_switched_at_step)
+        if not 1 <= base_switched_at_step <= int(inner_steps):
+            raise ValueError("base_switched_at_step must be within the upload interval")
     update_uuid = uuid.uuid4().hex[:12]
     update_id = f"{learner_id}_{local_step:08d}_{update_uuid}"
     update_dir = paths.update_payload_dir(learner_id)
@@ -956,6 +1322,8 @@ def write_update(
         "inner_steps": inner_steps,
         "tokens_this_update": tokens_this_update,
         "tokens_since_global_load": tokens_since_global_load,
+        "mid_cycle_adoption_count": mid_cycle_adoption_count,
+        "base_switched_at_step": base_switched_at_step,
         "num_examples_this_update": num_examples,
         "train_loss": train_loss,
         "grad_norm": grad_norm,
@@ -971,6 +1339,31 @@ def write_update(
     metadata.update(resource_metrics)
     atomic_write_json(meta_path, metadata)
     return update_id, tensor_path, meta_path, metadata
+
+
+@dataclass
+class MidCycleAdoptionTracker:
+    """Describe successful replace adoptions within one upload interval."""
+
+    adoption_count: int = 0
+    base_switched_at_step: int | None = None
+
+    def reset(self) -> None:
+        self.adoption_count = 0
+        self.base_switched_at_step = None
+
+    def record(self, *, completed_interval_steps: int) -> None:
+        completed_interval_steps = int(completed_interval_steps)
+        if completed_interval_steps < 1:
+            raise ValueError("completed_interval_steps must be >= 1")
+        self.adoption_count += 1
+        self.base_switched_at_step = completed_interval_steps
+
+    def metadata(self) -> dict[str, int | None]:
+        return {
+            "mid_cycle_adoption_count": self.adoption_count,
+            "base_switched_at_step": self.base_switched_at_step,
+        }
 
 
 def write_fragment_update(
@@ -998,7 +1391,7 @@ def write_fragment_update(
     update_id = f"{learner_id}_{local_step:08d}_f{fragment_id:03d}_{update_uuid}"
     update_dir = paths.updates_pending / learner_id
     tensor_path = update_dir / f"update_{update_uuid}_fragment_{fragment_id:03d}.params.safetensors"
-    meta_path = update_dir / f"update_{update_uuid}_fragment_{fragment_id:03d}.meta.json"
+    meta_path = paths.fragment_update_pointer_path(learner_id, fragment_id)
     created_at = time.time()
     save_fragment_update(tensor_path, fragment_tensor, dtype_from_name(config.io.tensor_dtype))
     digest = sha256_file(tensor_path) if config.io.compute_sha256 else None
@@ -1069,8 +1462,18 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
         param_index=param_index,
         fragment_index=fragment_index,
         device=device,
+        paths=paths,
+        config=config,
     )
-    optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
+    syncer_watchdog = SyncerProgressWatchdog.start(
+        timeout_seconds=syncer_watchdog_timeout_seconds(config),
+        initial_version=last_loaded_global_merge_event,
+    )
+    optimizer, scheduler = build_inner_optimizer_and_scheduler(
+        model,
+        config,
+        completed_local_steps=0,
+    )
     tokens_since_fragment_load = {fragment_id: 0 for fragment_id in last_loaded_fragment_versions}
     local_update_index = 0
     fragment_adopt_count = 0
@@ -1080,7 +1483,16 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
         global_merge_event=last_loaded_global_merge_event,
         fragment_versions=last_loaded_fragment_versions,
     )
-    logger.event("inner_optimizer_reset", version=last_loaded_global_merge_event)
+    logger.event(
+        "inner_optimizer_reset",
+        version=last_loaded_global_merge_event,
+        **inner_training_state_metrics(optimizer, scheduler),
+    )
+    logger.event(
+        "syncer_watchdog_started",
+        timeout_seconds=syncer_watchdog.timeout_seconds,
+        global_merge_event=last_loaded_global_merge_event,
+    )
     write_heartbeat(
         paths=paths,
         config=config,
@@ -1093,6 +1505,8 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
         last_adopted_fragments=last_adopted_fragments,
         last_local_step=0,
         last_update_id=None,
+        learning_rate=current_inner_learning_rate(optimizer),
+        scheduler_total_steps=config.inner_optimizer.scheduler_total_steps,
     )
 
     batch_iter = build_batch_iterator(
@@ -1107,6 +1521,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
     last_heartbeat = time.monotonic()
     last_update_id: str | None = None
     had_error = False
+    watchdog_stop_reason: str | None = None
 
     def handle_fragment_latest(
         latest_payload: dict[str, Any],
@@ -1141,7 +1556,10 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
             reset_tokens=reset_tokens,
             reset_optimizer=reset_optimizer,
             include_fragment_versions=include_fragment_versions,
+            completed_local_steps=local_step,
+            paths=paths,
         )
+        syncer_watchdog.observe(result.global_merge_event)
         last_loaded_global_merge_event = result.global_merge_event
         last_loaded_fragment_versions = result.fragment_versions
         tokens_since_fragment_load = result.tokens_since_fragment_load
@@ -1160,10 +1578,12 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
             interval_tokens = 0
             interval_examples = 0
             grad_norm: float | None = None
+            last_step_learning_rate: float | None = None
 
             for _ in range(config.training.inner_steps):
                 if stop_requested(paths, local_step, config):
                     break
+                last_step_learning_rate = current_inner_learning_rate(optimizer)
                 step_start = time.monotonic()
                 loss, step_tokens, step_examples, grad_norm = train_one_step(
                     model,
@@ -1196,6 +1616,9 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                         local_step=local_step,
                         train_loss=loss,
                         global_merge_event=last_loaded_global_merge_event,
+                        learning_rate=last_step_learning_rate,
+                        scheduler_completed_steps=local_step - 1,
+                        scheduler_total_steps=config.inner_optimizer.scheduler_total_steps,
                     )
                 if time.monotonic() - last_heartbeat >= config.liveness.heartbeat_interval_seconds:
                     elapsed = max(1e-6, time.monotonic() - interval_start_time)
@@ -1212,6 +1635,8 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                         last_local_step=local_step,
                         last_update_id=last_update_id,
                         tokens_per_sec=interval_tokens / elapsed,
+                        learning_rate=current_inner_learning_rate(optimizer),
+                        scheduler_total_steps=config.inner_optimizer.scheduler_total_steps,
                     )
                     logger.event("heartbeat_written", local_step=local_step)
                     last_heartbeat = time.monotonic()
@@ -1227,6 +1652,26 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                             reset_optimizer=True,
                             include_fragment_versions=True,
                         )
+                if confirm_syncer_unresponsive(
+                    syncer_watchdog,
+                    paths,
+                    version_field="global_merge_event",
+                ):
+                    watchdog_stop_reason = "syncer_unresponsive"
+                    logger.event(
+                        "syncer_unresponsive",
+                        timeout_seconds=syncer_watchdog.timeout_seconds,
+                        seconds_since_signal=syncer_watchdog.seconds_since_signal(),
+                        last_signal_at=syncer_watchdog.last_signal_wall,
+                        last_observed_global_merge_event=(
+                            syncer_watchdog.last_observed_version
+                        ),
+                        local_step=local_step,
+                    )
+                    break
+
+            if watchdog_stop_reason is not None:
+                break
 
             if not losses:
                 continue
@@ -1292,6 +1737,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                 local_step=local_step,
                 train_loss=mean_loss,
                 tokens=interval_tokens,
+                local_cycle_elapsed_seconds=elapsed,
             )
             append_csv_row(
                 paths.metrics / "learner_metrics.csv",
@@ -1307,6 +1753,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                     "tokens": interval_tokens,
                     "tokens_per_sec": tokens_per_sec,
                     "update_write_seconds": write_seconds,
+                    "local_cycle_elapsed_seconds": elapsed,
                     "param_norm": param_norm,
                     "fragment_norm": fragment_norm,
                     "last_loaded_fragment_versions_json": json.dumps(
@@ -1314,6 +1761,8 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                         sort_keys=True,
                     ),
                     "fragment_adopt_count": fragment_adopt_count,
+                    "learning_rate": last_step_learning_rate,
+                    "scheduler_total_steps": config.inner_optimizer.scheduler_total_steps,
                     "phase": "fragment_update_written",
                     **cycle_resources,
                 },
@@ -1354,6 +1803,8 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                 last_update_id=last_update_id,
                 tokens_per_sec=tokens_per_sec,
                 resource_metrics=cycle_resources,
+                learning_rate=current_inner_learning_rate(optimizer),
+                scheduler_total_steps=config.inner_optimizer.scheduler_total_steps,
             )
             logger.event("heartbeat_written", local_step=local_step)
 
@@ -1388,7 +1839,11 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
         training_resources = finite_resource_metrics(resource_monitor.training_snapshot())
         try:
             target_event = config.sync.stop_after_outer_steps
-            if not had_error and target_event is not None:
+            if (
+                not had_error
+                and watchdog_stop_reason is None
+                and target_event is not None
+            ):
                 deadline = time.monotonic() + config.liveness.no_progress_timeout_seconds
                 while (
                     last_loaded_global_merge_event < int(target_event)
@@ -1414,7 +1869,11 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                         )
                         continue
                     time.sleep(config.sync.stop_file_poll_seconds)
-            maybe_latest = safe_read_json(paths.latest_json)
+            maybe_latest = (
+                safe_read_json(paths.latest_json)
+                if watchdog_stop_reason is None
+                else None
+            )
             if maybe_latest and maybe_latest.get("latest_kind") == "fragment":
                 handle_fragment_latest(
                     maybe_latest,
@@ -1441,6 +1900,9 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
             last_local_step=local_step,
             last_update_id=last_update_id,
             resource_metrics=training_resources,
+            learning_rate=current_inner_learning_rate(optimizer),
+            scheduler_total_steps=config.inner_optimizer.scheduler_total_steps,
+            status_reason=watchdog_stop_reason,
         )
         logger.event(
             "process_exit",
@@ -1448,6 +1910,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
             global_version=last_loaded_global_merge_event,
             fragment_versions=last_loaded_fragment_versions,
             fragment_adopt_count=fragment_adopt_count,
+            status_reason=watchdog_stop_reason,
             **training_resources,
         )
 
@@ -1480,6 +1943,7 @@ def build_adoption_context(
         rebase_local_delta_fn=rebase_local_delta_onto_global,
         snapshot_model_fn=snapshot_model_for_reconcile,
         prepare_prediction_fn=prepare_prediction_or_find_newer_latest,
+        load_or_refresh_latest_fn=load_or_refresh_latest,
     )
 
 
@@ -1492,10 +1956,26 @@ def finalize_strategy_action(
     current_version: int,
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler.LRScheduler | None,
+    completed_local_steps: int,
 ) -> tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LRScheduler | None]:
     outcome = action.adoption
     if outcome is not None:
-        logger.event("global_adopted", version=outcome.version)
+        optimizer_reset_seconds = 0.0
+        if not outcome.preserve_inner_state:
+            reset_start = time.monotonic()
+            optimizer, scheduler = build_inner_optimizer_and_scheduler(
+                model,
+                config,
+                completed_local_steps=completed_local_steps,
+            )
+            optimizer_reset_seconds = time.monotonic() - reset_start
+        logger.event(
+            "global_adopted",
+            version=outcome.version,
+            adoption_load_apply_seconds=outcome.load_apply_seconds,
+            adoption_optimizer_reset_seconds=optimizer_reset_seconds,
+            adoption_pause_seconds=outcome.load_apply_seconds + optimizer_reset_seconds,
+        )
         if outcome.preserve_inner_state:
             logger.event(
                 "inner_training_state_preserved",
@@ -1506,11 +1986,18 @@ def finalize_strategy_action(
                 **inner_training_state_metrics(optimizer, scheduler),
             )
             return optimizer, scheduler
-        optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
-        logger.event("inner_optimizer_reset", version=outcome.version)
+        logger.event(
+            "inner_optimizer_reset",
+            version=outcome.version,
+            **inner_training_state_metrics(optimizer, scheduler),
+        )
         return optimizer, scheduler
     if action.reset_optimizer_reason is not None:
-        optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
+        optimizer, scheduler = build_inner_optimizer_and_scheduler(
+            model,
+            config,
+            completed_local_steps=completed_local_steps,
+        )
         logger.event(
             "inner_optimizer_reset",
             version=current_version,
@@ -1546,18 +2033,43 @@ def run_learner(config: Config, learner_id: str) -> None:
     param_index = load_param_index(paths.param_index_json)
     current_index = build_param_index(model, model_name_or_path=config.model.name_or_path)
     validate_compatible_index(current_index, param_index)
-    latest = wait_for_json(paths.latest_json)
-    last_loaded_global_version = adopt_global(
-        model=model,
-        latest=latest,
-        param_index=param_index,
-        device=device,
+    initial_latest = wait_for_json(paths.latest_json)
+    initial_load = load_or_refresh_latest(
+        paths=paths,
+        latest=initial_latest,
+        version_field="version",
+        load_fn=lambda candidate: adopt_global(
+            model=model,
+            latest=candidate,
+            param_index=param_index,
+            device=device,
+        ),
+        **_latest_load_retry_kwargs(config),
+    )
+    last_loaded_global_version = int(initial_load.value)
+    latest = initial_load.latest
+    syncer_watchdog = SyncerProgressWatchdog.start(
+        timeout_seconds=syncer_watchdog_timeout_seconds(config),
+        initial_version=last_loaded_global_version,
     )
     last_loaded_latest = latest
-    optimizer, scheduler = build_inner_optimizer_and_scheduler(model, config)
+    optimizer, scheduler = build_inner_optimizer_and_scheduler(
+        model,
+        config,
+        completed_local_steps=0,
+    )
     adoption_strategy = make_global_adoption_strategy(config)
     logger.event("loaded_global", version=last_loaded_global_version)
-    logger.event("inner_optimizer_reset", version=last_loaded_global_version)
+    logger.event(
+        "inner_optimizer_reset",
+        version=last_loaded_global_version,
+        **inner_training_state_metrics(optimizer, scheduler),
+    )
+    logger.event(
+        "syncer_watchdog_started",
+        timeout_seconds=syncer_watchdog.timeout_seconds,
+        global_version=last_loaded_global_version,
+    )
     write_heartbeat(
         paths=paths,
         config=config,
@@ -1567,6 +2079,8 @@ def run_learner(config: Config, learner_id: str) -> None:
         last_loaded_global_version=last_loaded_global_version,
         last_local_step=0,
         last_update_id=None,
+        learning_rate=current_inner_learning_rate(optimizer),
+        scheduler_total_steps=config.inner_optimizer.scheduler_total_steps,
     )
 
     batch_iter = build_batch_iterator(
@@ -1581,6 +2095,8 @@ def run_learner(config: Config, learner_id: str) -> None:
     tokens_since_global_load = 0
     last_heartbeat = time.monotonic()
     last_update_id: str | None = None
+    watchdog_stop_reason: str | None = None
+    mid_cycle_adoptions = MidCycleAdoptionTracker()
 
     def current_adoption_context() -> AdoptionContext:
         return build_adoption_context(
@@ -1609,8 +2125,10 @@ def run_learner(config: Config, learner_id: str) -> None:
             current_version=last_loaded_global_version,
             optimizer=optimizer,
             scheduler=scheduler,
+            completed_local_steps=local_step,
         )
         if action.adoption is not None:
+            syncer_watchdog.observe(action.adoption.version)
             last_loaded_global_version = action.adoption.version
             last_loaded_latest = action.adoption.latest
             tokens_since_global_load = action.adoption.tokens_since_global_load
@@ -1619,6 +2137,7 @@ def run_learner(config: Config, learner_id: str) -> None:
 
     try:
         while not stop_requested(paths, local_step, config):
+            mid_cycle_adoptions.reset()
             resource_monitor.begin_cycle()
             interval_start_time = time.monotonic()
             interval_start_step = local_step
@@ -1627,10 +2146,12 @@ def run_learner(config: Config, learner_id: str) -> None:
             interval_tokens = 0
             interval_examples = 0
             grad_norm: float | None = None
+            last_step_learning_rate: float | None = None
 
             for _ in range(config.training.inner_steps):
                 if stop_requested(paths, local_step, config):
                     break
+                last_step_learning_rate = current_inner_learning_rate(optimizer)
                 step_start = time.monotonic()
                 loss, step_tokens, step_examples, grad_norm = train_one_step(
                     model,
@@ -1663,6 +2184,9 @@ def run_learner(config: Config, learner_id: str) -> None:
                         local_step=local_step,
                         train_loss=loss,
                         global_version=last_loaded_global_version,
+                        learning_rate=last_step_learning_rate,
+                        scheduler_completed_steps=local_step - 1,
+                        scheduler_total_steps=config.inner_optimizer.scheduler_total_steps,
                     )
                 if time.monotonic() - last_heartbeat >= config.liveness.heartbeat_interval_seconds:
                     elapsed = max(1e-6, time.monotonic() - interval_start_time)
@@ -1676,6 +2200,8 @@ def run_learner(config: Config, learner_id: str) -> None:
                         last_local_step=local_step,
                         last_update_id=last_update_id,
                         tokens_per_sec=interval_tokens / elapsed,
+                        learning_rate=current_inner_learning_rate(optimizer),
+                        scheduler_total_steps=config.inner_optimizer.scheduler_total_steps,
                     )
                     logger.event("heartbeat_written", local_step=local_step)
                     last_heartbeat = time.monotonic()
@@ -1687,7 +2213,42 @@ def run_learner(config: Config, learner_id: str) -> None:
                             maybe_latest,
                         )
                         apply_strategy_action(action)
+                        if (
+                            action.adoption is not None
+                            and config.learner.global_adoption_strategy == "replace"
+                        ):
+                            interval_step = local_step - interval_start_step
+                            mid_cycle_adoptions.record(
+                                completed_interval_steps=interval_step,
+                            )
+                            logger.event(
+                                "mid_cycle_global_adopted",
+                                version=action.adoption.version,
+                                local_step=local_step,
+                                interval_step=interval_step,
+                                mid_cycle_adoption_count=(
+                                    mid_cycle_adoptions.adoption_count
+                                ),
+                            )
                         base_global_version = last_loaded_global_version
+                if confirm_syncer_unresponsive(
+                    syncer_watchdog,
+                    paths,
+                    version_field="version",
+                ):
+                    watchdog_stop_reason = "syncer_unresponsive"
+                    logger.event(
+                        "syncer_unresponsive",
+                        timeout_seconds=syncer_watchdog.timeout_seconds,
+                        seconds_since_signal=syncer_watchdog.seconds_since_signal(),
+                        last_signal_at=syncer_watchdog.last_signal_wall,
+                        last_observed_global_version=syncer_watchdog.last_observed_version,
+                        local_step=local_step,
+                    )
+                    break
+
+            if watchdog_stop_reason is not None:
+                break
 
             adoption_ctx = current_adoption_context()
             if paths.stop_json.exists() and adoption_strategy.on_stop(adoption_ctx):
@@ -1732,6 +2293,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                 param_norm=param_norm,
                 flat=flat,
                 resource_metrics=cycle_resources,
+                **mid_cycle_adoptions.metadata(),
             )
             write_seconds = time.monotonic() - write_start
             last_update_id = update_id
@@ -1744,6 +2306,8 @@ def run_learner(config: Config, learner_id: str) -> None:
                 local_step=local_step,
                 train_loss=mean_loss,
                 tokens=interval_tokens,
+                local_cycle_elapsed_seconds=elapsed,
+                **mid_cycle_adoptions.metadata(),
             )
             append_csv_row(
                 paths.metrics / "learner_metrics.csv",
@@ -1756,7 +2320,10 @@ def run_learner(config: Config, learner_id: str) -> None:
                     "tokens": interval_tokens,
                     "tokens_per_sec": tokens_per_sec,
                     "update_write_seconds": write_seconds,
+                    "local_cycle_elapsed_seconds": elapsed,
                     "param_norm": param_norm,
+                    "learning_rate": last_step_learning_rate,
+                    "scheduler_total_steps": config.inner_optimizer.scheduler_total_steps,
                     "phase": "update_written",
                     **cycle_resources,
                 },
@@ -1790,6 +2357,8 @@ def run_learner(config: Config, learner_id: str) -> None:
                 last_update_id=last_update_id,
                 tokens_per_sec=tokens_per_sec,
                 resource_metrics=cycle_resources,
+                learning_rate=current_inner_learning_rate(optimizer),
+                scheduler_total_steps=config.inner_optimizer.scheduler_total_steps,
             )
             logger.event("heartbeat_written", local_step=local_step)
             del flat
@@ -1823,11 +2392,15 @@ def run_learner(config: Config, learner_id: str) -> None:
             last_local_step=local_step,
             last_update_id=last_update_id,
             resource_metrics=training_resources,
+            learning_rate=current_inner_learning_rate(optimizer),
+            scheduler_total_steps=config.inner_optimizer.scheduler_total_steps,
+            status_reason=watchdog_stop_reason,
         )
         logger.event(
             "process_exit",
             local_step=local_step,
             global_version=last_loaded_global_version,
+            status_reason=watchdog_stop_reason,
             **training_resources,
         )
 
@@ -1839,6 +2412,20 @@ def main(argv: list[str] | None = None) -> None:
         run_id=args.run_id,
         shared_root=args.shared_root,
         num_learners=args.num_learners,
+        training_seed=args.training_seed,
+        scan_interval_seconds=args.scan_interval_seconds,
+        ingest_during_publish=args.ingest_during_publish,
+        syncer_device=args.syncer_device,
+        syncer_publish_dtype=args.syncer_publish_dtype,
+        staleness_lambda=args.staleness_lambda,
+        max_staleness_versions=args.max_staleness_versions,
+        global_adoption_strategy=args.global_adoption_strategy,
+        capture_terminal_predecessor_for_eval=(
+            args.capture_terminal_predecessor_for_eval
+        ),
+        completion_mode=args.completion_mode,
+        parallel_checkpoint_writes=args.parallel_checkpoint_writes,
+        materialize_full_every_events=args.materialize_full_every_events,
     )
     run_learner(config, args.learner_id)
 

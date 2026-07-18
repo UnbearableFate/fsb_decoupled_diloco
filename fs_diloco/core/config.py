@@ -31,6 +31,9 @@ class RunSection:
     run_id: str | None = None
     shared_root: str | None = None
     log_level: str = "INFO"
+    git_commit: str | None = None
+    git_dirty: bool | None = None
+    source_fingerprint: str | None = None
 
 
 @dataclass
@@ -58,6 +61,7 @@ class DataSection:
     num_proc: int = 4
     cache_dir: str | None = None
     streaming: bool = False
+    shuffle_blocks: bool = True
     synthetic_num_batches: int = 128
 
 
@@ -78,6 +82,8 @@ class SyncSection:
     staleness_lambda: float = 0.25
     selection_policy: str = "most_recent_per_learner"
     scan_interval_seconds: float = 2.0
+    ingest_during_publish: bool = False
+    capture_terminal_predecessor_for_eval: bool = False
     grace_window: GraceWindowSection = field(default_factory=GraceWindowSection)
     stop_after_outer_steps: int | None = 20
     stop_after_global_tokens: int | None = None
@@ -89,6 +95,7 @@ class SyncerSection:
     device: str = "auto"
     compute_dtype: str = "float32"
     publish_dtype: str = "float32"
+    parallel_checkpoint_writes: bool = True
 
 
 @dataclass
@@ -97,6 +104,8 @@ class LivenessSection:
     stale_after_seconds: float = 120.0
     dead_after_seconds: float = 300.0
     no_progress_timeout_seconds: float = 600.0
+    syncer_unresponsive_timeout_seconds: float | None = None
+    learner_shutdown_timeout_seconds: float | None = None
 
 
 @dataclass
@@ -120,8 +129,10 @@ class InnerOptimizerSection:
     betas: tuple[float, float] = (0.9, 0.95)
     eps: float = 1.0e-8
     weight_decay: float = 0.1
-    scheduler: str = "cosine"
+    scheduler: str = "none"
     warmup_steps: int = 100
+    scheduler_total_steps: int | None = None
+    min_lr_ratio: float = 0.1
 
 
 @dataclass
@@ -273,8 +284,56 @@ def load_config(path: str | Path | None = None) -> Config:
     return _from_dict(Config, data)
 
 
+def load_resolved_config_snapshot(path: str | Path) -> Config:
+    """Load a historical resolved snapshot while migrating only known removed keys."""
+    with Path(path).open("r", encoding="utf-8") as handle:
+        loaded = yaml.safe_load(handle) or {}
+    if not isinstance(loaded, dict):
+        raise ValueError(f"config {path} must contain a mapping")
+
+    def pop_dotted(payload: dict[str, Any], dotted: str) -> tuple[bool, Any]:
+        parts = dotted.split(".")
+        current: Any = payload
+        for part in parts[:-1]:
+            if not isinstance(current, dict) or part not in current:
+                return False, None
+            current = current[part]
+        if not isinstance(current, dict) or parts[-1] not in current:
+            return False, None
+        return True, current.pop(parts[-1])
+
+    def set_dotted_if_missing(payload: dict[str, Any], dotted: str, value: Any) -> None:
+        parts = dotted.split(".")
+        current = payload
+        for part in parts[:-1]:
+            child = current.get(part)
+            if not isinstance(child, dict):
+                child = {}
+                current[part] = child
+            current = child
+        current.setdefault(parts[-1], value)
+
+    for removed, replacement in REMOVED_CONFIG_KEYS.items():
+        present, value = pop_dotted(loaded, removed)
+        if present and replacement is not None:
+            set_dotted_if_missing(loaded, replacement, value)
+    return _from_dict(Config, loaded)
+
+
 def _default_run_id(name: str) -> str:
     return time.strftime("%Y%m%d_%H%M%S") + f"_{name}"
+
+
+def _environment_flag(name: str, *, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean flag")
 
 
 def resolve_config(
@@ -283,9 +342,36 @@ def resolve_config(
     run_id: str | None = None,
     shared_root: str | None = None,
     num_learners: int | None = None,
+    training_seed: int | None = None,
+    scan_interval_seconds: float | None = None,
+    ingest_during_publish: bool | None = None,
+    syncer_device: str | None = None,
+    syncer_publish_dtype: str | None = None,
+    staleness_lambda: float | None = None,
+    max_staleness_versions: int | None = None,
+    global_adoption_strategy: str | None = None,
+    capture_terminal_predecessor_for_eval: bool | None = None,
+    completion_mode: str | None = None,
+    parallel_checkpoint_writes: bool | None = None,
+    materialize_full_every_events: int | None = None,
     project_root: str | Path | None = None,
 ) -> Config:
     config = load_config(path)
+    git_commit = os.environ.get("FS_DILOCO_GIT_COMMIT")
+    source_fingerprint = os.environ.get("FS_DILOCO_SOURCE_FINGERPRINT")
+    if git_commit:
+        config.run.git_commit = git_commit
+    if "FS_DILOCO_GIT_DIRTY" in os.environ:
+        config.run.git_dirty = _environment_flag("FS_DILOCO_GIT_DIRTY")
+    if source_fingerprint:
+        config.run.source_fingerprint = source_fingerprint
+    if _environment_flag("FS_DILOCO_REQUIRE_SOURCE_IDENTITY") and (
+        not config.run.git_commit or not config.run.source_fingerprint
+    ):
+        raise ValueError(
+            "formal run requires source identity: set FS_DILOCO_GIT_COMMIT and "
+            "FS_DILOCO_SOURCE_FINGERPRINT"
+        )
     if run_id is not None:
         config.run.run_id = run_id
     if config.run.run_id is None:
@@ -299,6 +385,40 @@ def resolve_config(
         config.sync.num_learners = int(num_learners)
         config.sync.quorum_max = min(config.sync.quorum_max, config.sync.num_learners)
         config.sync.quorum_min = min(config.sync.quorum_min, config.sync.num_learners)
+    if training_seed is not None:
+        config.training.seed = int(training_seed)
+    if scan_interval_seconds is not None:
+        config.sync.scan_interval_seconds = float(scan_interval_seconds)
+    if ingest_during_publish is not None:
+        config.sync.ingest_during_publish = bool(ingest_during_publish)
+    if syncer_device is not None:
+        config.syncer.device = str(syncer_device)
+    if syncer_publish_dtype is not None:
+        config.syncer.publish_dtype = str(syncer_publish_dtype)
+    if staleness_lambda is not None:
+        config.sync.staleness_lambda = float(staleness_lambda)
+    if max_staleness_versions is not None:
+        config.sync.max_staleness_versions = int(max_staleness_versions)
+    if global_adoption_strategy is not None:
+        config.learner.global_adoption_strategy = str(global_adoption_strategy)
+    if capture_terminal_predecessor_for_eval is not None:
+        config.sync.capture_terminal_predecessor_for_eval = bool(
+            capture_terminal_predecessor_for_eval
+        )
+    if completion_mode is not None:
+        config.training.completion_mode = str(completion_mode)
+    if parallel_checkpoint_writes is not None:
+        config.syncer.parallel_checkpoint_writes = bool(parallel_checkpoint_writes)
+    if materialize_full_every_events is not None:
+        config.fragments.materialize_full_every_events = int(
+            materialize_full_every_events
+        )
+    if config.sync.scan_interval_seconds <= 0.0:
+        raise ValueError("sync.scan_interval_seconds must be > 0")
+    if config.sync.staleness_lambda < 0.0:
+        raise ValueError("sync.staleness_lambda must be >= 0")
+    if config.sync.max_staleness_versions < 0:
+        raise ValueError("sync.max_staleness_versions must be >= 0")
     config.syncer.device = config.syncer.device.lower()
     if config.syncer.device not in {"auto", "cpu", "cuda"}:
         raise ValueError(f"unsupported syncer.device: {config.syncer.device}")
@@ -332,6 +452,43 @@ def resolve_config(
         raise ValueError(
             "training.completion_mode=global_only requires a configured global stop target"
         )
+    if (
+        config.liveness.syncer_unresponsive_timeout_seconds is not None
+        and config.liveness.syncer_unresponsive_timeout_seconds <= 0.0
+    ):
+        raise ValueError(
+            "liveness.syncer_unresponsive_timeout_seconds must be > 0 when set"
+        )
+    if (
+        config.liveness.learner_shutdown_timeout_seconds is not None
+        and config.liveness.learner_shutdown_timeout_seconds <= 0.0
+    ):
+        raise ValueError(
+            "liveness.learner_shutdown_timeout_seconds must be > 0 when set"
+        )
+    config.inner_optimizer.scheduler = config.inner_optimizer.scheduler.lower()
+    if config.inner_optimizer.scheduler not in {"none", "cosine"}:
+        raise ValueError(
+            "unsupported inner_optimizer.scheduler: "
+            f"{config.inner_optimizer.scheduler}"
+        )
+    if config.inner_optimizer.warmup_steps < 0:
+        raise ValueError("inner_optimizer.warmup_steps must be >= 0")
+    if not 0.0 < float(config.inner_optimizer.min_lr_ratio) <= 1.0:
+        raise ValueError("inner_optimizer.min_lr_ratio must be > 0 and <= 1")
+    scheduler_total_steps = config.inner_optimizer.scheduler_total_steps
+    if config.inner_optimizer.scheduler == "cosine":
+        if scheduler_total_steps is None:
+            raise ValueError(
+                "inner_optimizer.scheduler_total_steps is required for cosine"
+            )
+        if int(scheduler_total_steps) <= config.inner_optimizer.warmup_steps:
+            raise ValueError(
+                "inner_optimizer.scheduler_total_steps must be greater than "
+                "inner_optimizer.warmup_steps for cosine"
+            )
+    elif scheduler_total_steps is not None and int(scheduler_total_steps) <= 0:
+        raise ValueError("inner_optimizer.scheduler_total_steps must be > 0 when set")
     if config.fragments.enabled:
         if config.fragments.num_fragments < 1:
             raise ValueError("fragments.num_fragments must be >= 1")
@@ -341,6 +498,13 @@ def resolve_config(
             raise ValueError(f"unsupported fragments.schedule: {config.fragments.schedule}")
         if config.fragments.strategy not in {"full", "balanced_tensor"}:
             raise ValueError(f"unsupported fragments.strategy: {config.fragments.strategy}")
+        if (
+            config.fragments.materialize_full_every_events is None
+            or int(config.fragments.materialize_full_every_events) <= 0
+        ):
+            raise ValueError(
+                "fragments.materialize_full_every_events must be a positive integer"
+            )
         if config.learner.global_adoption_strategy != "replace":
             raise ValueError(
                 "learner.global_adoption_strategy is only supported by the full learner"

@@ -51,6 +51,7 @@ training:
   gradient_accumulation_steps: 8
   block_size: 1024
   max_local_steps: 5000
+  completion_mode: global_only
   precision: bf16
   seed: 1337
   log_every_steps: 50
@@ -64,6 +65,8 @@ inner_optimizer:
   weight_decay: 0.1
   scheduler: cosine
   warmup_steps: 100
+  scheduler_total_steps: 5000
+  min_lr_ratio: 0.1
 
 outer_optimizer:
   name: nesterov

@@ -1,8 +1,15 @@
 import json
+import sqlite3
 import time
 from pathlib import Path
 
-from fs_diloco.storage.maintenance import collect_runtime_artifacts, run_maintenance
+import pytest
+
+from fs_diloco.storage.maintenance import (
+    archive_and_prune,
+    collect_runtime_artifacts,
+    run_maintenance,
+)
 from fs_diloco.storage.paths import RunPaths, prepare_run_dirs
 from fs_diloco.storage.sqlite_store import SQLiteStore
 
@@ -83,11 +90,18 @@ def test_archive_prune_and_reference_driven_current_only_gc(tmp_path):
         scan_interval_seconds=0.1,
     )
 
-    assert result == {
+    assert {key: result[key] for key in (
+        "archived_updates",
+        "archived_versions",
+        "deleted_artifacts",
+    )} == {
         "archived_updates": 1,
         "archived_versions": 1,
         "deleted_artifacts": 4,
     }
+    assert result["gc_pending_rows"] == 0
+    assert result["maintenance_scanned_rows"] == 1
+    assert result["maintenance_scan_seconds"] >= 0.0
     assert sorted(path.name for path in paths.weights.glob("*.safetensors")) == [
         "global_v000001.safetensors"
     ]
@@ -117,17 +131,24 @@ def test_unpublished_payload_grace_and_temp_cleanup(tmp_path):
     ) == 0
     assert orphan.exists() and tmp.exists()
 
-    assert run_maintenance(
+    result = run_maintenance(
         store,
         paths,
         heartbeat_interval_seconds=30.0,
         scan_interval_seconds=1.0,
         input_closed=True,
-    ) == {
+    )
+    assert {key: result[key] for key in (
+        "archived_updates",
+        "archived_versions",
+        "deleted_artifacts",
+    )} == {
         "archived_updates": 0,
         "archived_versions": 0,
         "deleted_artifacts": 2,
     }
+    assert result["gc_pending_rows"] == 0
+    assert result["maintenance_scanned_rows"] == 0
     assert not orphan.exists() and not tmp.exists()
     store.close()
 
@@ -153,3 +174,59 @@ def test_temp_cleanup_tolerates_atomic_writer_renaming_after_glob(tmp_path, monk
         now=time.time(),
     ) == 0
     store.close()
+
+
+def test_gc_pending_insert_rolls_back_with_archived_row_delete(tmp_path):
+    paths, store = _initialized_state(tmp_path)
+    payload = paths.update_payload_dir("learner_000") / "rollback.params.safetensors"
+    payload.write_text("proposal", encoding="utf-8")
+    metadata = _metadata("rollback", payload)
+    store.insert_update_metadata(metadata)
+    store.drop_updates(["rollback"], "test_terminal")
+    update_rows = store.terminal_update_rows()
+    store.conn.execute(
+        """
+        CREATE TRIGGER abort_archived_update_delete
+        BEFORE DELETE ON updates
+        BEGIN
+          SELECT RAISE(ABORT, 'injected delete failure');
+        END
+        """
+    )
+    store.conn.commit()
+
+    with pytest.raises(sqlite3.IntegrityError, match="injected delete failure"):
+        store.delete_archived_rows(update_rows=update_rows, version_rows=[])
+
+    assert store.get_update("rollback") is not None
+    assert store.gc_pending_count() == 0
+    store.close()
+
+
+def test_gc_pending_is_idempotent_persistent_and_recovers_archive_unlink_crash(tmp_path):
+    paths, store = _initialized_state(tmp_path)
+    payload = paths.update_payload_dir("learner_000") / "recover.params.safetensors"
+    payload.write_text("proposal", encoding="utf-8")
+    metadata = _metadata("recover", payload)
+    store.insert_update_metadata(metadata)
+    store.drop_updates(["recover"], "test_terminal")
+    update_rows = store.terminal_update_rows()
+
+    archived = archive_and_prune(store, paths)
+    assert archived["updates"] == 1
+    assert payload.exists()
+    assert store.gc_pending_count() == 1
+    store.delete_archived_rows(update_rows=update_rows, version_rows=[])
+    assert store.gc_pending_count() == 1
+    store.close()
+
+    reopened = SQLiteStore(paths.sqlite_db)
+    assert reopened.gc_pending_paths() == {payload.resolve(strict=False)}
+    assert collect_runtime_artifacts(
+        reopened,
+        paths,
+        orphan_grace_seconds=3600.0,
+    ) == 1
+    assert not payload.exists()
+    assert reopened.gc_pending_count() == 0
+    reopened.close()

@@ -11,7 +11,7 @@
 
 1. 成本入账：run_analysis 的时间/资源账本增加"syncer 节点 GPU 空置成本"条目（节点小时 × duty cycle 实测），基于既有 run 数据先补一行（SNC-01）；
 2. CPU syncer 实测：1 节点上 `syncer.device=cpu` 的 merge+publish 耗时与 GPU 基线对比（tiny 与 124M 两个规模），数据入报告（SNC-02）；
-3. 部署决策产出：若 CPU merge 耗时增幅不侵入 grace 窗口（定量判据：`merge_seconds_cpu < 现 interval 的 X%`，X 在 SPECIFY 冻结），产出 8 节点 PBS 变体（syncer 与一个 learner 同节点或 CPU 节点）并冒烟（SNC-03）；否则记录负结论与阈值，计划即完成；
+3. 部署决策产出：判据冻结为 124M、8-vector 的 `read+aggregation+outer_step` CPU p95 < 既有 20 秒 interval 的 20%（4 秒），且共置后 3-seed 完整训练时间中位数不比同 fingerprint 9 节点基线劣化 >10%。满足则产出 8 节点共置 PBS 变体并冒烟/对照（SNC-03）；否则记录负结论，计划完成；
 4. 决策与数据写入 run_analysis 与 00 §4.7。
 
 ## 3. 范围与非目标
@@ -24,8 +24,8 @@
 | Loop | SPECIFY/RED | IMPLEMENT/GREEN | HARDEN、CHECK、PERSIST |
 | --- | --- | --- | --- |
 | L0 账本 | 口径冻结：duty cycle 定义（merge+publish 活跃时间/墙钟） | 无代码 | 用既有 run 日志补一行账（SNC-01） |
-| L1 CPU 实测 | 判据 X 冻结 | 无或极小代码（device=cpu 路径确认可用） | 1 节点两规模对比（SNC-02） |
-| L2 部署变体 | 8 节点变体的资源声明与判据核对 | PBS 变体脚本（`bash -n` 先行） | 变体冒烟：committed merges、DB/latest 一致、interval 无回退（SNC-03） |
+| L1 CPU 实测 | 上述 4 秒判据冻结；发布 I/O 与计算分开，不把相同共享 FS 写入误算为 CPU merge | benchmark/现有 device=cpu 路径 | 1 节点 tiny + GPT-2 8-vector CPU/GPU p50/p95（SNC-02） |
+| L2 部署变体 | 8 节点：rank0 同时运行 CPU syncer + GPU learner_000，其余七 rank 各一 learner；退出码/信号/日志双进程闭合 | PBS 变体脚本（`bash -n` + literal group） | 先短冒烟，再与 9 节点新基线做同 fingerprint/3-seed 对照（SNC-03） |
 
 ## 5. 测试矩阵与通过条件
 
@@ -33,7 +33,7 @@
 | --- | --- | --- |
 | SNC-01 | 账本 | 账本含空置成本行，口径可复算 |
 | SNC-02 | CPU 对比 | 两规模 merge+publish 耗时数据齐备；判据结论明确 |
-| SNC-03 | 变体冒烟 | 8 节点变体一次成功 run：正确性检查全过、interval 不劣于 9 节点基线 |
+| SNC-03 | 变体 | 短冒烟正确性全过；3-seed 3 条均成功，完整训练时间中位数劣化 ≤10%，否则明确否决默认部署 |
 
 ## 6. 验证阶梯
 

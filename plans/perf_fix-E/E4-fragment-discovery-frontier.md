@@ -9,11 +9,12 @@
 
 ## 2. 设计规格
 
-对齐 full 模式的既有机制（不发明新协议）：
+审计确认 fragment 不能使用“每 learner 单 pointer”：round-robin 下不同 fragment 的 proposal 会等待各自目标轮，单 pointer 会让新 fragment 覆盖尚未消费的其他 fragment，改变 ingestion/利用率。冻结为每 `(learner_id, fragment_id)` 一份 pointer：
 
-- learner fragment 发布改写固定 pointer（`updates/latest/learner_XXX[_fragN].json`，命名在 SPECIFY 冻结：每 learner 单 pointer 携带 fragment 字段，或每 (learner, fragment) 一 pointer——以 full 模式语义与 fragment 调度粒度最自然对齐者为准，决策依据记 progress）；
-- syncer 端 fragment frontier 去重：已见 `(learner, update_id)` 不重复读 meta.json（latest-wins 与 supersession 语义沿用 full 的 DB 机制，`insert_update_metadata` 已支持 fragment 行则复用）；
-- glob 兜底仅保留在 resume/修复路径（若 plan 01 的 full 模式有此先例则对齐，无则不留）。
+- pointer 路径固定为 `updates/latest/learner_XXX_fNNN.json`，总数上界 `num_learners × num_fragments`；先写不可变 tensor，再原子替换 pointer；payload 目录不再写独立 fragment meta；
+- 新增持久 `fragment_proposal_frontiers`，主键 `(learner_id, fragment_id)`，记录最后观察的 update/pointer；`insert_fragment_update_metadata(..., pointer_path=...)` 在一个事务内完成重放短路、同 pair 旧 pending supersede、插入新行和 frontier 推进；selected 行不被覆盖；
+- syncer 每轮只枚举配置推导的固定 pointer 路径，frontier update_id 相同时可在 JSON 解析前用轻量 pointer stat/signature 缓存短路；进程重启后至少需读一次 JSON 与 DB frontier 核对；
+- 不保留 payload glob 作为第二权威/兜底。旧 run resume 与新协议不兼容，identity/protocol version fail closed；迁移仅补 schema，不假装发现旧 meta。
 
 ## 3. 目标与完成谓词
 
@@ -26,7 +27,7 @@
 
 | Loop | SPECIFY/RED | IMPLEMENT/GREEN | HARDEN、CHECK、PERSIST |
 | --- | --- | --- | --- |
-| L0 语义冻结 | pointer 命名/粒度决策；frontier 键定义；与 full 机制 diff 清单 | 无实现 | 决策与依据入 progress.md |
+| L0 语义冻结 | 上述 per-pair pointer、frontier transaction、旧 run fail-closed 与 GC live-set 冻结 | 无实现 | 决策与依据入 progress.md |
 | L1 learner 发布侧 | pointer 重放/latest-wins 测试先 RED（对齐 full 的既有测试模式） | 固定 pointer 发布 | 单元全绿 |
 | L2 syncer 摄取侧 | FDX-01/02 先 RED：重复扫描计数断言 | frontier 短路 + pointer 枚举 | FDX-03 轨迹等价；全量 pytest |
 | L3 有界性 | FDX-04 先 RED | — | 长循环断言通过；证据归档 |
@@ -35,8 +36,8 @@
 
 | ID | 测试 | 通过条件 |
 | --- | --- | --- |
-| FDX-01 | 扫描面 | 稳态每轮枚举数 = 活跃 pointer 数（注入历史 payload 不增加枚举） |
-| FDX-02 | frontier 短路 | 已摄取 meta 不再被读（以读取计数器/mock 断言） |
+| FDX-01 | 扫描面 | 稳态每轮枚举路径数恒为 `M×K`（不存在的路径只 stat；注入历史 payload 不增加枚举） |
+| FDX-02 | frontier 短路 | 同 signature/update 不再 JSON parse；重启后一次核对不重复入库 |
 | FDX-03 | 等价 | tiny fragment run 轨迹与基线等价 |
 | FDX-04 | 有界 | 长循环中 discovery 工作量与文件扫描数有上界 |
 

@@ -44,7 +44,7 @@
 
 ### 模块级函数
 
-- **`connect(path) -> sqlite3.Connection`** — 建父目录、连接(`timeout=60s`)、`row_factory=Row`,强制 `journal_mode=DELETE`、`synchronous=FULL`、busy timeout,执行幂等 schema/资源列迁移。
+- **`connect(path) -> sqlite3.Connection`** — 建父目录、连接(`timeout=60s`)、`row_factory=Row`,强制 `journal_mode=DELETE`、`synchronous=FULL`、busy timeout,执行幂等 schema/资源列及 full mid-cycle adoption 列迁移。
 - **`row_to_dict(row) -> dict | None`** — Row → dict 便捷转换。
 
 ### class SQLiteStore
@@ -67,7 +67,8 @@
 
 全量模式 update 状态机:
 
-- **`insert_update_metadata(metadata, *, pointer_path) -> bool`** — latest-wins 摄取固定 pointer:相同 frontier 重放忽略;新的 pending proposal 终态化同 learner 旧 pending,但不覆盖 selected;同时推进 `proposal_frontiers`。
+- **`insert_update_metadata(metadata, *, pointer_path) -> bool`** — latest-wins 摄取固定 pointer:相同 frontier 重放忽略;新的 pending proposal 终态化同 learner 旧 pending,但不覆盖 selected;同时推进 `proposal_frontiers`。full 的 `mid_cycle_adoption_count/base_switched_at_step` 经显式列白名单持久化并随终态行归档，旧 metadata 缺字段按 `0/null` 兼容。
+- **`insert_fragment_update_metadata(metadata, *, pointer_path) -> bool`** — 同一事务内按 `(learner_id, fragment_id)` 做 frontier 重放短路、只终态化同 pair 的旧 pending（不覆盖 selected）、插入新行并推进 `fragment_proposal_frontiers`。
 - **`pending_updates()`** — 全部 pending,按 committed_at 升序。
 - **`eligible_updates(current_version, max_staleness_versions)`** — pending 且 staleness 在窗口内。
 - **`mark_updates_selected(update_ids, selected_by_run)`** — 条件转移 `pending → selected`(记 selected_at/selected_by_run)。
@@ -81,21 +82,23 @@
 
 归档/GC 支持:
 
-- **`active_payload_paths()` / `proposal_frontiers()` / `current_fragment_versions()`** — 计算活跃引用集合;
-- **`terminal_update_rows()` / `historical_version_rows()` / `delete_archived_rows(...)`** — 读取待归档终态/历史行并在 JSONL fsync 后按精确 identity 删除;
+- **`active_payload_paths()` / `proposal_frontiers()` / `fragment_proposal_frontiers()` / `current_fragment_versions()`** — 计算活跃引用集合;
+- **`terminal_update_rows()` / `historical_version_rows()` / `delete_archived_rows(...)`** — 读取待归档终态/历史行；JSONL fsync 后，在同一 SQLite 事务内把终态 payload path 幂等 stage 到 `gc_pending` 并按精确 identity 删除 active 行；
+- **`gc_pending_paths()` / `gc_pending_count()` / `clear_gc_pending_paths(...)`** — 以尚未完成物理删除的 payload 数为界的持久集合；archive 后、unlink 前崩溃可在下一次 maintenance 恢复；
 - **`finalize_unconsumed_updates(fragment_mode, reason)`** — 已证明输入闭合的正常停机中把剩余 pending/selected 终态化。
 
 fragment 模式(与上面逐一对应,多了 fragment 维度):
 
 - **`upsert_fragment_definition(fragment, *, strategy)`** — fragment 定义行(numel、slices JSON)。
 - **`upsert_fragment_version(...)`** — 每片每版本一行,含 global_merge_event。
-- **`insert_fragment_update_metadata(metadata)`** — 唯一约束 `(learner_id, fragment_id, local_step_end, base_fragment_version)`。
+- **`insert_fragment_update_metadata(metadata, *, pointer_path)`** — 唯一约束 `(learner_id, fragment_id, local_step_end, base_fragment_version)`；与 per-pair frontier 推进和旧 pending supersession 位于同一事务，selected 行不被覆盖。
 - **`pending_fragment_updates(*, fragment_id=None)`** / **`eligible_fragment_updates(*, fragment_id, current_fragment_version, max_staleness_versions)`**。
 - **`mark_fragment_updates_selected / mark_fragment_updates_applied / reset_fragment_selected_to_pending / drop_fragment_updates / drop_obsolete_fragment_updates / drop_superseded_fragment_updates`** — 语义同全量版;applied 时额外记录 applied_global_merge_event 与两种 staleness。
 - **`get_fragment_update(update_id)`** / **`list_fragment_versions()`** / **`current_fragment_versions()`**。
 
 ## storage/maintenance.py — 归档与引用驱动 GC
 
-- **`archive_and_prune(store, paths)`** — 把 terminal update 与非 current version 行追加到 `metrics/update_history.jsonl` / `global_version_history.jsonl`,flush+fsync 成功后才从活跃 DB 删除。崩溃重试可形成重复 archive 行,分析器按 identity 去重。
+- **`archive_and_prune(store, paths)`** — 把 terminal update 与非 current version 行追加到 `metrics/update_history.jsonl` / `global_version_history.jsonl`,flush+fsync 成功后才以 `gc_pending + active row delete` 的 SQLite 事务剪枝。崩溃重试可形成重复 archive 行,分析器按 identity 去重。
+- **`collect_runtime_artifacts(...)`** — checkpoint 按当前权威引用回收，proposal 按 active DB/pointer/`gc_pending` 回收；不读取 archive JSONL。清理成功后删除对应 pending 行。
 - **`collect_runtime_artifacts(store, paths, orphan_grace_seconds, extra_terminal_paths=...)`** — 保留 current global/fragment checkpoint、latest 引用的 materialized full、active DB payload;删除不再引用的 checkpoint、终态 payload/meta 与临时文件。未发布 proposal/orphan payload 至少等待 grace。
 - **`run_maintenance(..., input_closed=False)`** — 按顺序执行 archive → prune → GC。正常输入闭合时终态引用可零 grace 删除;其他时刻 orphan grace 为 `max(2×heartbeat interval, 2×scan interval)`。

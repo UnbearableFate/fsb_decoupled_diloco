@@ -12,7 +12,7 @@
 复用 full 的既有定义（plan 01 terminal drain 语义，经验文档 §2.2），fragment 特有部分需在 SPECIFY 阶段冻结：
 
 - **input-closed 判定**：全部预期 learner 已 stopped（最终心跳）——与 full 相同，判定与 fragment 无关；
-- **terminal drain**：input-closed 后做最后一次 fragment ingestion，随后允许低于正常 quorum 的尾部 fragment merge（是否允许、允许几轮，遵循 full 现语义的对应参数；SPECIFY 时逐项对照 full 分支列表并记录采纳/偏离）；
+- **terminal drain**：input-closed 后等待一次已配置 grace 并再次 ingestion；之后按 round-robin 的当前目标片反复 merge，每轮仍只取每 learner 一份且不超过 `quorum_max`，但允许 `1..quorum_min-1` 的尾部 merge。每次 merge 后按推进后的 global event 选择下一目标片；若该目标片无合法 proposal，则立即 `input_exhausted`，不得跳过调度目标去消费其他片，剩余 proposal 由终态化处理；
 - **终态化**：drain 后不再消费的 pending/selected fragment proposal 走既有 `finalize_unconsumed_updates(fragment_mode=True)` 路径终态化（SPECIFY 确认该函数 fragment 分支已可用，review 未标记问题）；
 - **stop reason**：与 full 一致使用 `input_exhausted`；
 - **不变量**：drain 不绕过 future/staleness 规则；终态 fragment proposal tensor 为零。
@@ -35,7 +35,7 @@
 
 | Loop | SPECIFY/RED | IMPLEMENT/GREEN | HARDEN、CHECK、PERSIST |
 | --- | --- | --- | --- |
-| L0 复现与语义冻结 | FDR-01 先 RED：tiny fragment 配置 + 全 learner 到达 horizon → 复现 syncer 空等 no_progress_timeout（缩小超时以便测试）；对照 full 分支逐项冻结 §2 语义清单 | 无实现 | 复现日志与语义清单入 artifacts/progress |
+| L0 复现与语义冻结 | FDR-01 先 RED：tiny fragment 配置 + 全 learner 到达 horizon → 复现 syncer 空等 no_progress_timeout（缩小超时以便测试）；§2 已冻结 grace、低 quorum、多轮和调度目标耗尽语义 | 无实现 | 复现日志与语义清单入 artifacts/progress |
 | L1 谓词就位 | （S3 已完成则跳过）谓词单元测试先行 | 提炼/复用 input-closed 谓词 | 谓词单元全绿；full 侧无 diff 或轨迹等价 |
 | L2 drain 接入 | FDR-02/03 先 RED：尾部 merge、迟到 pointer、future base 场景 | fragment 循环加入 input-closed 分支：最终 ingestion → drain → 终态化 → `input_exhausted` | FDR-01 GREEN；事件顺序与 full 对应分支可对照 |
 | L3 终态与集成 | FDR-04 先 RED（旧行为下终态断言失败或不可达） | 终态化与 summary/metrics 接线 | 全量 pytest；tiny fragment run + Checker；FDR-05 full 轨迹等价 |

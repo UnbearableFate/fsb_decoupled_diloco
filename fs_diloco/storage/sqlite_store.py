@@ -35,12 +35,24 @@ RESOURCE_COLUMNS = {
     "local_cycle_resource_sample_count": "INTEGER",
 }
 
+FULL_UPDATE_METADATA_COLUMNS = {
+    "mid_cycle_adoption_count": "INTEGER NOT NULL DEFAULT 0",
+    "base_switched_at_step": "INTEGER",
+}
+
 
 def _ensure_resource_columns(conn: sqlite3.Connection, table: str) -> None:
     existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
     for name, sql_type in RESOURCE_COLUMNS.items():
         if name not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}")
+
+
+def _ensure_full_update_metadata_columns(conn: sqlite3.Connection) -> None:
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(updates)").fetchall()}
+    for name, sql_type in FULL_UPDATE_METADATA_COLUMNS.items():
+        if name not in existing:
+            conn.execute(f"ALTER TABLE updates ADD COLUMN {name} {sql_type}")
 
 
 def connect(path: str | Path) -> sqlite3.Connection:
@@ -57,6 +69,7 @@ def connect(path: str | Path) -> sqlite3.Connection:
     conn.executescript(_schema_text())
     _ensure_resource_columns(conn, "updates")
     _ensure_resource_columns(conn, "fragment_updates")
+    _ensure_full_update_metadata_columns(conn)
     conn.commit()
     return conn
 
@@ -71,9 +84,24 @@ class SQLiteStore:
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
         self.conn = connect(self.path)
+        self._pointer_signatures: dict[str, tuple[int, int, int, int]] = {}
 
     def close(self) -> None:
         self.conn.close()
+
+    def pointer_signature_is_cached(
+        self,
+        path: str | Path,
+        signature: tuple[int, int, int, int],
+    ) -> bool:
+        return self._pointer_signatures.get(str(path)) == signature
+
+    def cache_pointer_signature(
+        self,
+        path: str | Path,
+        signature: tuple[int, int, int, int],
+    ) -> None:
+        self._pointer_signatures[str(path)] = signature
 
     def execute(self, sql: str, params: Iterable[Any] = ()) -> sqlite3.Cursor:
         cur = self.conn.execute(sql, tuple(params))
@@ -507,6 +535,8 @@ class SQLiteStore:
             "inner_steps": metadata["inner_steps"],
             "tokens_this_update": metadata["tokens_this_update"],
             "tokens_since_global_load": metadata["tokens_since_global_load"],
+            "mid_cycle_adoption_count": metadata.get("mid_cycle_adoption_count", 0),
+            "base_switched_at_step": metadata.get("base_switched_at_step"),
             "num_examples_this_update": metadata.get("num_examples_this_update"),
             "train_loss": metadata.get("train_loss"),
             "grad_norm": metadata.get("grad_norm"),
@@ -550,7 +580,8 @@ class SQLiteStore:
                 INSERT OR IGNORE INTO updates(
                     update_id, learner_id, hostname, base_global_version, local_step_start,
                     local_step_end, inner_steps, tokens_this_update, tokens_since_global_load,
-                    num_examples_this_update, train_loss, grad_norm, param_norm, delta_norm,
+                    mid_cycle_adoption_count, base_switched_at_step, num_examples_this_update,
+                    train_loss, grad_norm, param_norm, delta_norm,
                     training_cpu_utilization_peak_percent, training_gpu_utilization_peak_percent,
                     local_cycle_cpu_utilization_peak_percent,
                     local_cycle_gpu_utilization_peak_percent,
@@ -561,7 +592,8 @@ class SQLiteStore:
                 VALUES (
                     :update_id, :learner_id, :hostname, :base_global_version,
                     :local_step_start, :local_step_end, :inner_steps, :tokens_this_update,
-                    :tokens_since_global_load, :num_examples_this_update, :train_loss,
+                    :tokens_since_global_load, :mid_cycle_adoption_count,
+                    :base_switched_at_step, :num_examples_this_update, :train_loss,
                     :grad_norm, :param_norm, :delta_norm,
                     :training_cpu_utilization_peak_percent,
                     :training_gpu_utilization_peak_percent,
@@ -850,6 +882,19 @@ class SQLiteStore:
             ).fetchall()
         }
 
+    def fragment_proposal_frontiers(self) -> dict[tuple[str, int], str]:
+        return {
+            (str(row["learner_id"]), int(row["fragment_id"])): str(
+                row["last_observed_update_id"]
+            )
+            for row in self.conn.execute(
+                """
+                SELECT learner_id, fragment_id, last_observed_update_id
+                FROM fragment_proposal_frontiers
+                """
+            ).fetchall()
+        }
+
     def terminal_update_rows(self) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         for table, kind in (("updates", "full"), ("fragment_updates", "fragment")):
@@ -904,6 +949,19 @@ class SQLiteStore:
     ) -> None:
         self.conn.execute("BEGIN IMMEDIATE")
         try:
+            pending_paths = {
+                str(Path(str(row["file_path"])).resolve(strict=False))
+                for row in update_rows
+                if row.get("file_path")
+            }
+            self.conn.executemany(
+                """
+                INSERT INTO gc_pending(file_path, archived_at)
+                VALUES (?, ?)
+                ON CONFLICT(file_path) DO UPDATE SET archived_at=excluded.archived_at
+                """,
+                [(file_path, time.time()) for file_path in sorted(pending_paths)],
+            )
             for row in update_rows:
                 table = "fragment_updates" if row["update_kind"] == "fragment" else "updates"
                 self.conn.execute(
@@ -929,6 +987,30 @@ class SQLiteStore:
         except Exception:
             self.conn.rollback()
             raise
+
+    def gc_pending_paths(self) -> set[Path]:
+        rows = self.conn.execute("SELECT file_path FROM gc_pending").fetchall()
+        return {
+            Path(str(row["file_path"])).resolve(strict=False)
+            for row in rows
+        }
+
+    def gc_pending_count(self) -> int:
+        return int(self.conn.execute("SELECT COUNT(*) FROM gc_pending").fetchone()[0])
+
+    def clear_gc_pending_paths(self, paths: Iterable[str | Path]) -> int:
+        values = sorted(
+            {str(Path(path).resolve(strict=False)) for path in paths}
+        )
+        if not values:
+            return 0
+        before = self.conn.total_changes
+        self.conn.executemany(
+            "DELETE FROM gc_pending WHERE file_path = ?",
+            [(path,) for path in values],
+        )
+        self.conn.commit()
+        return int(self.conn.total_changes - before)
 
     def upsert_fragment_definition(self, fragment: dict[str, Any], *, strategy: str) -> None:
         self.conn.execute(
@@ -1004,7 +1086,11 @@ class SQLiteStore:
         self.conn.commit()
 
     def insert_fragment_update_metadata(
-        self, metadata: dict[str, Any], *, ingested_at: float | None = None
+        self,
+        metadata: dict[str, Any],
+        *,
+        pointer_path: str | Path | None = None,
+        ingested_at: float | None = None,
     ) -> bool:
         ingested_at = time.time() if ingested_at is None else ingested_at
         params = {
@@ -1033,36 +1119,93 @@ class SQLiteStore:
             "ingested_at": ingested_at,
             "status": UPDATE_STATUS_PENDING,
         }
-        cur = self.conn.execute(
-            """
-            INSERT OR IGNORE INTO fragment_updates(
-                update_id, learner_id, hostname, fragment_id, base_fragment_version,
-                base_global_merge_event, local_step_start, local_step_end, inner_steps,
-                tokens_this_update, tokens_since_fragment_load, num_examples_this_update,
-                train_loss, grad_norm, param_norm, fragment_norm,
-                training_cpu_utilization_peak_percent, training_gpu_utilization_peak_percent,
-                local_cycle_cpu_utilization_peak_percent, local_cycle_gpu_utilization_peak_percent,
-                local_cycle_step_time_seconds_mean, local_cycle_step_count,
-                local_cycle_resource_sample_count, file_path,
-                file_size_bytes, sha256, created_at, committed_at, ingested_at, status
+        pointer = str(pointer_path or "")
+        self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            frontier = self.conn.execute(
+                """
+                SELECT last_observed_update_id
+                FROM fragment_proposal_frontiers
+                WHERE learner_id = ? AND fragment_id = ?
+                """,
+                (metadata["learner_id"], int(metadata["fragment_id"])),
+            ).fetchone()
+            if frontier is not None and frontier["last_observed_update_id"] == metadata[
+                "update_id"
+            ]:
+                self.conn.rollback()
+                return False
+            self.conn.execute(
+                """
+                UPDATE fragment_updates
+                SET status = ?, drop_reason = ?
+                WHERE learner_id = ? AND fragment_id = ? AND status = ? AND update_id != ?
+                """,
+                (
+                    UPDATE_STATUS_DROPPED,
+                    "superseded",
+                    metadata["learner_id"],
+                    int(metadata["fragment_id"]),
+                    UPDATE_STATUS_PENDING,
+                    metadata["update_id"],
+                ),
             )
-            VALUES (
-                :update_id, :learner_id, :hostname, :fragment_id, :base_fragment_version,
-                :base_global_merge_event, :local_step_start, :local_step_end, :inner_steps,
-                :tokens_this_update, :tokens_since_fragment_load, :num_examples_this_update,
-                :train_loss, :grad_norm, :param_norm, :fragment_norm,
-                :training_cpu_utilization_peak_percent, :training_gpu_utilization_peak_percent,
-                :local_cycle_cpu_utilization_peak_percent, :local_cycle_gpu_utilization_peak_percent,
-                :local_cycle_step_time_seconds_mean, :local_cycle_step_count,
-                :local_cycle_resource_sample_count, :file_path,
-                :file_size_bytes, :sha256, :created_at, :committed_at, :ingested_at,
-                :status
+            cur = self.conn.execute(
+                """
+                INSERT OR IGNORE INTO fragment_updates(
+                    update_id, learner_id, hostname, fragment_id, base_fragment_version,
+                    base_global_merge_event, local_step_start, local_step_end, inner_steps,
+                    tokens_this_update, tokens_since_fragment_load, num_examples_this_update,
+                    train_loss, grad_norm, param_norm, fragment_norm,
+                    training_cpu_utilization_peak_percent, training_gpu_utilization_peak_percent,
+                    local_cycle_cpu_utilization_peak_percent,
+                    local_cycle_gpu_utilization_peak_percent,
+                    local_cycle_step_time_seconds_mean, local_cycle_step_count,
+                    local_cycle_resource_sample_count, file_path,
+                    file_size_bytes, sha256, created_at, committed_at, ingested_at, status
+                )
+                VALUES (
+                    :update_id, :learner_id, :hostname, :fragment_id,
+                    :base_fragment_version, :base_global_merge_event, :local_step_start,
+                    :local_step_end, :inner_steps, :tokens_this_update,
+                    :tokens_since_fragment_load, :num_examples_this_update, :train_loss,
+                    :grad_norm, :param_norm, :fragment_norm,
+                    :training_cpu_utilization_peak_percent,
+                    :training_gpu_utilization_peak_percent,
+                    :local_cycle_cpu_utilization_peak_percent,
+                    :local_cycle_gpu_utilization_peak_percent,
+                    :local_cycle_step_time_seconds_mean, :local_cycle_step_count,
+                    :local_cycle_resource_sample_count, :file_path,
+                    :file_size_bytes, :sha256, :created_at, :committed_at, :ingested_at,
+                    :status
+                )
+                """,
+                params,
             )
-            """,
-            params,
-        )
-        self.conn.commit()
-        return cur.rowcount > 0
+            self.conn.execute(
+                """
+                INSERT INTO fragment_proposal_frontiers(
+                    learner_id, fragment_id, last_observed_update_id,
+                    last_pointer_path, observed_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(learner_id, fragment_id) DO UPDATE SET
+                    last_observed_update_id=excluded.last_observed_update_id,
+                    last_pointer_path=excluded.last_pointer_path,
+                    observed_at=excluded.observed_at
+                """,
+                (
+                    metadata["learner_id"],
+                    int(metadata["fragment_id"]),
+                    metadata["update_id"],
+                    pointer,
+                    ingested_at,
+                ),
+            )
+            self.conn.commit()
+            return cur.rowcount > 0
+        except Exception:
+            self.conn.rollback()
+            raise
 
     def pending_fragment_updates(self, *, fragment_id: int | None = None) -> list[dict[str, Any]]:
         if fragment_id is None:
@@ -1234,6 +1377,36 @@ class SQLiteStore:
         )
         self.conn.commit()
         return cur.rowcount
+
+    def drop_ineligible_fragment_updates(
+        self,
+        *,
+        fragment_id: int,
+        current_fragment_version: int,
+        max_staleness_versions: int,
+    ) -> int:
+        future = self.conn.execute(
+            """
+            UPDATE fragment_updates
+            SET status = ?, drop_reason = ?
+            WHERE status = ?
+              AND fragment_id = ?
+              AND base_fragment_version > ?
+            """,
+            (
+                UPDATE_STATUS_DROPPED,
+                "future_base",
+                UPDATE_STATUS_PENDING,
+                int(fragment_id),
+                int(current_fragment_version),
+            ),
+        ).rowcount
+        stale = self.drop_obsolete_fragment_updates(
+            fragment_id=fragment_id,
+            current_fragment_version=current_fragment_version,
+            max_staleness_versions=max_staleness_versions,
+        )
+        return int(future) + int(stale)
 
     def drop_superseded_fragment_updates(
         self,

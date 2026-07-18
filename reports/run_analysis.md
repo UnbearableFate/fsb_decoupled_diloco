@@ -214,7 +214,7 @@ rebase 状态机的日志计数自洽:400 次发布后检查中,392 次保存了
 
 终态持久状态大部分正确:SQLite `integrity_check=ok`,active global 只有 v50,没有 pending/selected update、proposal payload、临时文件或 WAL,只保留 v50 weight/outer。379 份 update 中 371 份 applied;stop 发布后每个 learner 各有一份部分 cycle update 被统一终态化为 `dropped(stop_after_outer_steps)`。但发现一个终态一致性缺口:八份磁盘 heartbeat 都为 `stopped`,summary 也写 `all_learners_stopped=true`,SQLite `learners` 表却仍保留 stop 发布前的八行 `active` 状态。原因是 `wait_for_learner_shutdown()` 直接读取 heartbeat 判断停止,期间只调用 `ingest_update_metadata()`,没有把最终 heartbeat 摄取进 DB。旧 run 因 learner 先在本地 5000 步退出,主循环曾摄取 stopped heartbeat,所以没有暴露该问题。它不影响本次 v50 checkpoint。后续源码已改为 shutdown wait 每轮统一摄取 heartbeat、liveness 与 update 元数据,并且只有 SQLite 中全部预期 learner 都为 stopped 才返回成功;同时增加了 active→stopped 终态摄取回归测试。后续 H 的九节点 run 已复验这一修复:磁盘 heartbeat、summary 和 SQLite `learners` 表均为 8/8 stopped。
 
-综合结论:adaptive 10 秒 grace 与 global-only 完成语义达成了主要工程目标——v50、零活跃期 supersession、更高 proposal 利用率和更短 walltime;代价是平均 selected count 下降、版本 staleness 显著增加,且不再保证每个 learner 执行 5000 步。最终 heartbeat 摄取修复已经由后续 H 复验;下一步仍需用相同 final global version/applied tokens 做固定 validation loss/perplexity,并明确正式协议需要 `global-only` 还是“global 与所有 learner 本地 horizon 同时满足”。run root 为 `runs/fs_diloco/codex_adaptive_eta_global50_full5000_20260717_055909/`。
+综合结论:adaptive 10 秒 grace 与 global-only 完成语义达成了主要工程目标——v50、零活跃期 supersession、更高 proposal 利用率和更短 walltime;代价是平均 selected count 下降、版本 staleness 显著增加,且不再保证每个 learner 执行 5000 步。最终 heartbeat 摄取修复已经由后续 H 复验。本文后部的 Q2/Q4 同 fingerprint 三 seed validation 已补齐当时缺失的质量门禁；“global 与所有 learner 本地 horizon 同时满足”的联合完成谓词仍是独立后续方向。run root 为 `runs/fs_diloco/codex_adaptive_eta_global50_full5000_20260717_055909/`。
 
 ### Predictor GC-race 修复与 reconcile 保留状态的 5000-step 对比
 
@@ -251,7 +251,7 @@ local loss 的改善与“减少 reconcile reset”的方向一致。对齐相�
 
 GC-race 修复没有在本次实际调度中进入 recovery 分支:`global_prediction_preparation_recovered` 计数为 0。因此这次九节点结果证明修复没有引入回归、原先的 `outer_v*.safetensors` 缺失崩溃没有重现,但不能单独证明真实 current-only GC 竞态下的 bounded retry 已被动态命中;该精确分支目前由定向单元测试覆盖,后续运行应继续监控 recovery event 的 reason、等待时间和采用版本。
 
-终态一致性通过:SQLite `integrity_check=ok`,磁盘 heartbeat、summary 与 SQLite `learners` 表均为 8/8 stopped;只保留 v50 weight/outer,proposal payload、临时文件和 WAL 均为零。对照 F 的磁盘 heartbeat 虽全为 stopped,SQLite 表仍是 3 active + 5 stopped,H 因而完成了 shutdown heartbeat 摄取修复的九节点复验。综合而言,H 保持 v50 和接近满额的 contributor batch,显著减少 scheduler/optimizer reset,并伴随更低的 learner local loss;但最终模型质量仍需对两个 v50 checkpoint 做相同 validation loss/perplexity 才能判断。run root 为 `runs/fs_diloco/codex_predict_gc_retry_wait0_fixed20_global50_full5000_20260717_073011/`。
+终态一致性通过:SQLite `integrity_check=ok`,磁盘 heartbeat、summary 与 SQLite `learners` 表均为 8/8 stopped;只保留 v50 weight/outer,proposal payload、临时文件和 WAL 均为零。对照 F 的磁盘 heartbeat 虽全为 stopped,SQLite 表仍是 3 active + 5 stopped,H 因而完成了 shutdown heartbeat 摄取修复的九节点复验。综合而言,H 保持 v50 和接近满额的 contributor batch,显著减少 scheduler/optimizer reset,并伴随更低的 learner local loss。后续已完成四个存量 checkpoint validation 与 B2+Q3 后三 seed 受控矩阵；正式结果支持 replace 保持默认，不能从 H 的历史 local loss 推导 prediction 默认。run root 为 `runs/fs_diloco/codex_predict_gc_retry_wait0_fixed20_global50_full5000_20260717_073011/`。
 
 ### Rebase reconcile 保留 optimizer/scheduler 状态的 5000-step 对比
 
@@ -287,18 +287,163 @@ GC-race 修复没有在本次实际调度中进入 recovery 分支:`global_predi
 
 综合结论:目标代码路径已通过单元测试、单节点 3-global-step 冒烟和本次九节点 5000-step 实验验证;所有延迟 rebase 都保留 optimizer/scheduler 状态,只有两次发布后直接 adoption 按设计重置。单次运行同时观察到更少 supersession、更高 applied tokens、v47→v49、更短完成时间和更低的对齐 local loss,但其中系统吞吐差异受异步调度、节点和共享 FS 波动影响,质量结论还缺相同 final version 的 validation loss/perplexity 与多 seed 重复。run root 为 `runs/fs_diloco/codex_rebase_preserve_full5000_20260717_082018/`,PBS 汇总为 `fsdiloco_gpt2_5k.o2400100`,分析 JSON 为 `logs/qsub_codex_rebase_preserve_full5000_20260717_082018/summary.json`。
 
+### 事件化 ingestion 与 publish-wait 摄取的三 seed 对照
+
+九个 9 节点 v50 run 使用同一 source fingerprint 和 seeds 1337/2027/4049，按相邻单变量比较 `scan=2/no-ingest`、`scan=.2/no-ingest`、`scan=.2/publish-ingest`。所有作业均正常到达 `stop_after_outer_steps`、8/8 learners stopped 且 SQLite integrity OK。
+
+| 三 seed 均值 | scan=2 / no ingest | scan=.2 / no ingest | scan=.2 / ingest |
+|---|---:|---:|---:|
+| 完整训练时间 | 1101.633 s | **1075.273 s** | 1076.155 s |
+| global interval | 21.6515 s | **21.1251 s** | 21.1431 s |
+| quorum discovery+idle | 13.1646 s | **12.2652 s** | 12.3868 s |
+| quorum-max 触发率 | 70.00% | 61.33% | **72.67%** |
+| update 利用率 | 97.453% | 97.395% | **97.788%** |
+| publish-wait 摄取 update | 0 | 0 | 8.0/run |
+
+把 scan 从 2 秒缩短到 0.2 秒使完整时间改善 2.39%、interval 改善 2.43%、quorum 检测改善 6.83%；共享盘 8-pointer/0.2s 实测仅占单核 0.0402% CPU，因此可用于 latency-sensitive 实验。publish-wait 摄取确实命中 24 次 metadata，但相邻三 seed 完整时间反而轻微增加 0.08%，没有形成端到端收益；它只保留为 opt-in。三组 interval residual ratio 均值为 0.084%/0.283%/0.284%，遥测闭合。原始矩阵见 `reports/imp_plans/perf_fix-E/E2/artifacts/20260718-1300_e2-formal-matrix.csv`。
+
+### Syncer 第九节点资源账本与 CPU 可行性
+
+按冻结口径，syncer active time 定义为每轮 `read + aggregation + outer_step + publish`，完整训练墙钟为分母；publication 与 merge compute 仍分开报告。既有 9 节点 run H=`codex_predict_gc_retry_wait0_fixed20_global50_full5000_20260717_073011` 的 50 轮总 merge compute 为 18.345 秒、publication 为 44.946 秒，而完整训练为 1180.456 秒：第九节点 duty cycle 只有 5.362%。该作业占用 0.3279 syncer node-hours，其中按此口径估计有 0.3103 GPU node-hours处于非 syncer-active 状态。merge-compute p95 为 0.4912 秒，publication p95 为 0.9906 秒。
+
+同一 Miyabi 节点上，使用同一 GPT-2 124M authoritative vector、8 份 BF16 proposal 和 float32 syncer compute/publish 的五次设备基准显示：CPU `read+aggregation+outer` p50/p95 为 0.0914/0.2866 秒，CUDA 为 0.1771/0.1843 秒；CPU publication p50/p95 为 0.1645/0.1667 秒，CUDA 为 0.8033/0.9737 秒。CPU p95 远低于预先冻结的 4 秒门槛（20 秒参考 interval 的 20%），即使 CPU 冷读最大样本也只有 0.3345 秒。因此工程门禁允许进入“CPU syncer 与 learner_000 共置”的 8 节点实验，但在三 seed 完整训练中位数相对同 fingerprint 9 节点基线的劣化不超过 10% 之前，不改变默认部署。
+
+原始证据位于 `reports/imp_plans/perf_fix-E/E5/artifacts/20260718-0647_snc01-existing-run-ledger-pass.json`、`20260718-0710_snc02-gpt2-cpu-pass.json` 和 `20260718-0713_snc02-gpt2-gpu-pass.json`。
+
+### 专用 validation 协议对存量 checkpoint 的首批结果
+
+新的主指标严格使用各 run resolved config 的 validation split、GPT-2 tokenizer、逐文本 EOS、1024 non-overlap blocks 和 causal shift 后 predicted-token 加权；四次结果的 protocol hash 完全一致。每个 checkpoint 均评估 243 blocks / 248,589 predicted tokens，结果如下：
+
+| run / checkpoint | validation loss | ppl | learner local last-10 |
+|---|---:|---:|---:|
+| prediction F v50 | 3.094268 | 22.0711 | 3.183349 |
+| prediction H v50 | **3.066410** | **21.4647** | 3.123984 |
+| rebase-preserve v49 | 3.073351 | 21.6142 | **3.055005** |
+| replace BF16/staleness-2 v48 | 3.091229 | 22.0041 | 3.189174 |
+
+validation 与 local-loss 排序不一致：rebase-preserve 的 local last-10 比 H 低 0.06898，却在 validation 上比 H 高 0.00694。此前“local loss 最低”不能作为最终 checkpoint 质量结论，Q1/Q3 对混杂与记忆化的警告得到直接支持。H 在这四个存量点中 validation 最好，但这些 run 的训练源码身份缺失，版本、completion/grace/策略也不完全一致；因此只属于同批观察，不能据此把 prediction 设为默认。B2+Q3 后同 fingerprint、单变量、三 seed 的 PVE-04 已在后文完成，并据此保持 replace 默认。
+
+完整协议位于 `reports/imp_plans/quality_fix-Q/validation_protocol.md`；结构化比较证据为 `reports/imp_plans/quality_fix-Q/Q4/artifacts/20260718-1020_pve02-03-legacy-comparison-pass.json`。
+
+### 并行 publication 与 publish dtype 的三 seed 正式对照
+
+E1 的 serial/parallel 9 节点 50×10 对照使用同一 source fingerprint、相同 seeds
+1337/2027/4049，单变量为 `syncer.parallel_checkpoint_writes`。并行写使三 seed
+平均 publication 从 0.8412 秒降到 0.4665 秒（-44.5%），checkpoint 阶段约降低
+45.2%；完整训练时间没有一致改善，说明节点/共享盘噪声大于每 run 约十次 publication
+所节省的秒数。双文件写完后才提交 DB/latest 的事务边界、两种单侧完成顺序、单侧失败与
+六阶段 crash matrix 均保持通过，因此并行写继续作为默认。矩阵见
+`reports/imp_plans/perf_fix-E/E1/artifacts/20260718-1605_pio-formal-matrix.csv`。
+
+仅改变 `syncer.publish_dtype` 的 5000-step 三 seed 对照中，BF16 将 weight/outer
+文件字节数各减半，但平均 publication 从 0.4118 秒升到 0.6690 秒（+62.5%），平均
+完整训练时间从 1092.92 秒升到 1114.84 秒（+2.01%）。质量门禁通过：以 FP32
+validation 的样本标准差 0.001345 得到 ε=0.01，BF16 的配对平均 degradation 为
+-0.003588，最差 seed 为 -0.001483；round-trip relative-L2 的 slope CI 均为负，
+后半/前半均值比为 .351/.420/.270。因性能没有收益，BF16 publish 只作为容量型 opt-in，
+默认仍为 FP32。矩阵和门禁分别见
+`reports/imp_plans/perf_fix-E/E1/artifacts/20260718-1610_publish-dtype-formal-matrix.csv`
+与 `reports/imp_plans/quality_fix-Q/Q6/artifacts/20260718-1600_qgb03-corrected-formal-gate.json`。
+
+### Fragment 全模型物化间隔的三 seed 消融
+
+E3 在同一 source fingerprint 下比较 `materialize_full_every_events=1` 与 `10`，每档
+seeds 1337/2027/4049。间隔 10 将每 run 周期物化次数 10→1、物化字节减少 90%、平均
+物化墙钟 1.4713→0.2730 秒（-81.45%）；完整训练三 seed 均值 214.42→209.68 秒
+（-2.21%），但单 seed 时间方向不一致，所以只能把 I/O 降幅视为强因果结果，不能承诺
+固定端到端提速。生产 fragment profile 改为显式 10，debug/tiny 保持 1；所有正常终止仍
+强制物化最终 fragment state。原始矩阵见
+`reports/imp_plans/perf_fix-E/E3/artifacts/20260718-1620_mat-formal-matrix.csv`。
+
+### Syncer 8 节点共置的三 seed 决策
+
+E5 的同 fingerprint 配对结果如下；两种部署的三条作业均退出 0，CPU merge-compute p95
+全部低于预冻结的 4 秒门槛。
+
+| seed | 专用 9 节点 | 共置 8 节点 | 配对变化 |
+|---:|---:|---:|---:|
+| 1337 | 1129.74s | 1097.80s | -2.83% |
+| 2027 | 1141.98s | 1150.39s | +0.74% |
+| 4049 | 1120.80s | 1584.88s | +41.40% |
+| 中位数 | **1129.74s** | **1150.39s** | **+1.83%** |
+
+中位数满足“不劣化超过 10%”的门槛，故 8 节点 CPU-syncer/GPU-learner 共置 launcher 是
+有效的容量节省变体。seed 4049 的大离群同时伴随 learner local-step 不均与较低 selected，
+表明尾延迟风险尚未消失；默认部署因此仍为专用 9 节点。证据见
+`reports/imp_plans/perf_fix-E/E5/artifacts/20260718-1500_snc03-formal-pairs.csv`。
+
+### Staleness λ 与 fresh-only 的三 seed validation
+
+Q2 的 12 条 train/eval 全部使用 source fingerprint `sha256:122f698...`、同一 evaluator
+协议与 seeds 1337/2027/4049。
+
+| 条件 | validation loss 三 seed 均值 | 相对 λ=.25 配对均值 | applied 利用率范围 |
+|---|---:|---:|---:|
+| λ=.25 | 3.056161 | — | 97.42–97.46% |
+| λ=1 | **3.054640** | -0.001521 | 96.04–97.21% |
+| λ=4 | 3.058688 | +0.002527 | 96.29–97.68% |
+| fresh-only | 3.099213 | **+0.043052** | 61.84–78.68% |
+
+λ=1/4 的全部质量差仍在 ε=.01 内，没有证据支持修改 λ=.25 默认值；fresh-only 的三个
+seed 均恶化超过 ε，且丢弃大量旧版贡献，明确不应作为默认。seed 1337 的 per-merge
+证据显示 λ=.25/1/4 的 effective staleness mean 为 .4751/.2947/.0795，fresh effective
+weight 为 .5527/.7200/.9228，说明消融确实强烈改变了目标权重，却没有带来 validation
+改善；因此 base-relative displacement 的研究优先级上调。运行矩阵、validation 与观察性
+联动样例分别见 Q2 artifacts 的 `20260718-1605_quality-formal-matrix.csv`、
+`20260718-1625_validation-formal.json` 和
+`20260718-1630_staleness-observational-s1337.json`。
+
+### Adoption 策略的三 seed validation 决策
+
+Q4 的 rebase/prediction/replace 单变量矩阵使用同一 source 与协议：三 seed 平均 validation
+loss 分别为 3.056161、3.053650、3.051954。prediction 相对 rebase 的配对均值为
+-0.002511，replace 相对 rebase 为 -0.004207；所有单 seed 差均在 ε=.01 内，但 prediction
+均值比 replace 高 0.001696。故 prediction 在当前 horizon 质量兼容，却没有表现出超过
+replace 的优势；replace 保持默认，prediction 保持 opt-in。九条 `afterok` 独立一节点 eval
+均验证了 243 blocks、248,589 predicted tokens、有限 loss/ppl、checkpoint SHA、source
+identity 与原子 summary attachment。矩阵见
+`reports/imp_plans/quality_fix-Q/Q4/artifacts/20260718-1610_strategy-formal-matrix.csv`。
+
+### 当前 9 节点 adoption pause 基线
+
+带 E6 新字段的 9 节点 50×10 run `e1_parallel_s1337_20260718` 中，每个 learner 都记录
+10 次 adoption；平均停顿 0.3192–0.3359 秒，总停顿 3.1915–3.3587 秒，占明确记录的
+completed-cycle elapsed 1.368–1.436%。这项成本可见但并非主导，不新增性能优化优先项。
+结构化证据见
+`reports/imp_plans/perf_fix-E/E6/artifacts/20260718-1625_nine-node-adoption.json`。
+
+### Terminal partial merge 的三 seed predecessor/post 评估
+
+Q5 的修正版工作负载移除可提前获胜的 global stop target，让八个 learner 均到达 local
+step 5000 后再进入 input-closed drain。三个 9 节点 run 都以 `input_exhausted` 正常结束，
+每次 terminal merge 都是 selected=3、`quorum_min=4`，并在合并前以 hardlink 冻结且校验
+predecessor checkpoint。统一协议结果如下：
+
+| seed | 版本 | predecessor loss | terminal loss | post-pre |
+|---:|---:|---:|---:|---:|
+| 1337 | 52→53 | 3.055333 | 3.055169 | -0.000164 |
+| 2027 | 52→53 | 3.054235 | 3.054110 | -0.000125 |
+| 4049 | 51→52 | 3.052862 | 3.052162 | -0.000700 |
+
+配对均值为 -0.000330，最差 seed 仍为 -0.000125；相对预冻结 ε=.01 不仅未恶化，三条
+都略有改善。因此 terminal small-quorum merge 在当前 horizon 没有可见质量损失，Q5 按
+条件计划停止，不增加 `terminal_merge_outer_lr_scaling` 协议开关。结构化证据见
+`reports/imp_plans/quality_fix-Q/Q5/artifacts/20260718-1640_terminal-paired-quality.json`。
+
 ### 仍需进一步研究
 
-- 在当前同一代码版本上做只改变 `io.tensor_dtype` 的 FP32/BF16 对照,固定 staleness、seed、applied tokens 或 global version,并重复多个 seed;
-- 对最终 global checkpoint 运行固定 validation loss/perplexity,不要用 learner local training loss 推断最终模型质量;
 - 明确正式实验究竟以“每 learner 5000 local steps”、“达到 50 outer merges”还是两者联合为完成条件;当前 `global_only` 会在 v50 到达时停止尚未到 5000 的 learner;
-- 若必须同时保证 fresh-only 与 v50,研究 upload 后版本确认/等待或显式 round barrier;若保持异步 staleness,应系统扫描 staleness window、lambda 与质量/吞吐关系;
+- 若必须同时保证 fresh-only 与 v50，研究显式 round barrier；当前 fresh-only 三 seed validation 已否决其作为默认异步策略；
 - telemetry 应同时报告 actual local tokens、applied tokens、produced/applied/dropped updates 和 merge count,避免把 `total_seen_tokens` 误读为总训练计算量;
-- BF16 已显著降低 proposal I/O,但端到端改善很小;仍需分解 local training、quorum wait、global publication 和第九张 syncer GPU 低利用率的成本。
-- 对 replace/rebase 做固定 applied tokens 或 global version 的多 seed 对照,并对最终 global checkpoint 运行相同 validation loss/perplexity;
 - 为 rebase 增加 anchor 生命周期、proposal 最终状态、进程 RSS/内存峰值和临时向量峰值 telemetry,量化 dropped anchor 的所有权风险和 CPU 内存成本。
 - 最终 heartbeat 摄取修复已由 H 的九节点 run 复验;后续继续断言 SQLite `learners.status`、磁盘 heartbeat 与 summary 的 stopped 状态一致。
-- 对 F/H 的两个 v50 global checkpoint 运行相同 validation loss/perplexity,并做多 seed 重复,验证 reconcile 保留 optimizer/scheduler 所对应的 local-loss 改善能否转化为最终模型质量。
 - 持续监控 `global_prediction_preparation_recovered`;本次 H 未实际命中 GC-race recovery 分支,真实竞态下的等待时间和新版 adoption 仍缺少九节点动态样本。
-- 对 adaptive grace 扫描 initial window 与 staleness penalty;当前 10 秒窗口消除了 supersession,但把 staleness=1/2 比例提高到 64.15%,需要最终 checkpoint 质量评估决定吞吐/质量折中。
-- 为 rebase reconcile 的 reset/preserve 语义增加同一代码版本下的显式消融开关,固定 final global version 或 applied tokens,做多 seed 重复并评估最终 checkpoint validation loss/perplexity;当前单次对照虽有 394/400 个对齐 local-loss 点改善,仍混有异步 selection 序列和计算节点差异。
+- 进一步比较 base-relative displacement 与绝对参数平均；λ=1/4 已显著改变有效权重但没有改善 validation。
+- 在更大模型/不同共享盘负载下复验 8 节点共置；当前 GPT-2 124M 中位数通过，但存在一个 +41.4% 离群 seed。
+
+### 2026-07-17 scheduler 语义勘误
+
+B2 实施确认历史 replace 与 preserve 路径不仅改变 optimizer moments，也曾改变 LR 轨迹：scheduler
+重建会重复 warmup，preserve 则持续推进并可能在旧 `max_local_steps` horizon 后降到零。因此本文所有
+修复前 local-loss 对比都不能作为 reset/preserve 的受控质量结论。当前 worktree 已改为累计 local-step、
+独立 horizon 与正 LR 下限；修复后第一批 run 是新基线，不得与上述历史 run 直接比较。

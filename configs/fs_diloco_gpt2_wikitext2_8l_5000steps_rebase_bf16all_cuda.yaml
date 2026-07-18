@@ -1,5 +1,5 @@
 run:
-  name: fs_diloco_gpt2_wikitext2_8l_5000steps_predict
+  name: fs_diloco_gpt2_wikitext2_8l_5000steps_rebase_bf16all_cuda
   run_id: null
   shared_root: null
   log_level: INFO
@@ -65,6 +65,8 @@ inner_optimizer:
   weight_decay: 0.1
   scheduler: cosine
   warmup_steps: 100
+  scheduler_total_steps: 5000
+  min_lr_ratio: 0.1
 
 outer_optimizer:
   name: nesterov

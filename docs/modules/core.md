@@ -7,7 +7,7 @@
 | 常量 | 值 | 用途 |
 |---|---|---|
 | `FORMAT_VERSION` | `1` | 所有共享 JSON(latest/心跳/update 元数据/param index/fragment index)的协议版本;不匹配即拒收 |
-| `PROTOCOL_VERSION` | `2` | 持久 DB identity 中的协议版本;resume 必须精确匹配 |
+| `PROTOCOL_VERSION` | `3` | 持久 DB identity 中的协议版本;v3 引入 fragment per-pair pointer/frontier，resume 必须精确匹配 |
 | `DEFAULT_RUNS_DIR` | `runs/fs_diloco` | 缺省 shared_root 的父目录 |
 | `LEARNER_ID_PREFIX` | `learner_` | learner id 前缀 |
 | `UPDATE_STATUS_*` | `pending/selected/applied/dropped/failed` | update 状态机(`failed` 当前未使用) |

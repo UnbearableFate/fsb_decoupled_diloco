@@ -53,7 +53,7 @@
 
 ### 4.2 权威状态和运行成本能否保持有界
 
-真正的有界存储意味着 update 数持续增长时，权威 payload、proposal 可见面、数据库活跃状态和单次 discovery 成本不会同步线性增长。当前 full 模式已经具备每 learner 固定 proposal slot、latest-wins 摄取、活跃 DB/历史 JSONL 分离以及 current-only checkpoint/payload GC；1000-cycle 实验验证了活跃行、文件数和 DB page 使用在 warm-up 后有界。fragment checkpoint 与 payload 已纳入相同 maintenance，但 fragment proposal discovery 仍扫描 payload metadata，固定 fragment proposal surface 仍是后续方向。
+真正的有界存储意味着 update 数持续增长时，权威 payload、proposal 可见面、数据库活跃状态和单次 discovery 成本不会同步线性增长。full 模式具备每 learner 固定 proposal slot、latest-wins 摄取、活跃 DB/历史 JSONL 分离以及 current-only checkpoint/payload GC；1000-cycle 实验验证了活跃行、文件数和 DB page 使用在 warm-up 后有界。fragment 也已改为每 `(learner, fragment)` 固定 pointer、持久 frontier 和 signature 短路，发现面严格为 `N×K`；专门的 1000-cycle 实验在 M=4、K=2 下只保留 8 个 pointer/8 个 frontier，未变化 pointer 的重复 JSON 解析为 0。checkpoint、payload 与 pointer 继续由同一 reference-driven maintenance 回收。
 
 这里需要区分两类数据：运行正确性依赖的权威状态应当小而有界；实验日志和离线分析数据可以增长，但应有独立归档策略，不能反过来成为 runtime discovery 的组成部分。
 
@@ -83,7 +83,9 @@ fragment 已经证明可以降低单份 payload 和读写耗时，但当前协�
 
 当前实现允许按版本差和 token 数对参数快照加权，但它还不等同于旧设计中的完整 stale-aware 语义。旧设计强调 proposal 的真实 base identity、future-base 拒绝、有限 base history、fresh anchor，以及从旧 base 到 learner local 参数的 displacement；当前运行路径主要对绝对参数快照做加权平均。
 
-因此，近期系统与性能研究宜把 fresh-only 作为最清晰的参考语义。stale 路线可以并行做小规模数学和事件研究：恢复旧仿真数据的丢弃原因分解，补齐 base-relative displacement 的数值 oracle，比较 current-parameter averaging 与 displacement reconstruction，并观察真实异构下 stale proposal 是否出现、为何被接受或拒绝。
+2026-07-18 的同 fingerprint 三 seed 矩阵已经否决把 fresh-only 当成默认参考：它只应用 61.8–78.7% 的 proposal，validation loss 相对 λ=.25 的配对均值恶化 0.04305 nats，三个 seed 都超过预冻结 ε=.01。λ=1 与 λ=4 虽把有效 staleness 大幅压低，却没有在 validation 上显著优于 λ=.25。因此当前参考语义继续使用 `max_staleness_versions=2, staleness_lambda=.25`；fresh-only 仅保留为边界 control。
+
+这组结果提高了 base-relative displacement 的优先级：绝对参数快照在混 base 下的回拉问题不能靠单纯增大 λ 解决。下一步应补齐 displacement 数值 oracle，比较 current-parameter averaging 与 displacement reconstruction，并观察真实异构下 stale proposal 为何被接受或拒绝。
 
 如果 stale 最终仍只有很小收益，它依然可以形成有价值的负面结果：低频、fragmented、latest-wins 的系统中，主要浪费可能不是一个版本的 staleness 窗口能够回收的。若某些调度或异构区域显示稳定收益，再考虑 matched-token、from-scratch、多种子质量实验。
 
@@ -99,17 +101,19 @@ fragment 已经证明可以降低单份 payload 和读写耗时，但当前协�
 
 单 syncer 和多 syncer 也应当以容量曲线来讨论。当前数据尚不足以说明多 syncer 是主要矛盾；先观察 fragment 字节数、M、Q、read/merge/publish 时间和 duty cycle，能够更自然地判断何时值得引入静态非重叠的多 syncer ownership。
 
+当前 124M/8-vector 数据已经给出更直接的单 syncer 成本边界：既有 50-merge run 的 dedicated syncer duty cycle 为 5.362%，0.3279 node-hours 中估计 0.3103 GPU node-hours 非 active；同节点 CPU 基准的 `read+aggregation+outer` p95 为 0.2866 秒，低于预先冻结的 4 秒门槛。后续同 fingerprint 三 seed 共置实验的完整训练中位数只劣化 1.83%，通过 ≤10% 门禁；但 seed 4049 出现 +41.4% 离群。因此 8 节点“CPU syncer + GPU learner_000”是可用容量变体，低方差的 9 节点专用拓扑仍为默认。
+
 ## 5. 建议的研究主线
 
 ### 5.1 近期：建立可信的 full reference
 
-full 模式可以承担系统语义的参考路径。近期工作可以围绕有限训练的正常收尾、terminal drain、syncer/learner 独立退出、resume 后的幂等 metadata 摄取和 publication crash window 展开。与此同时，可以把正式性能配置收敛到 fresh-only 参考，减少尚未完成的 stale 语义对系统结论的干扰。
+full 模式可以承担系统语义的参考路径。有限训练正常收尾、terminal drain、syncer/learner 独立退出、resume 后幂等 metadata 摄取和 publication crash window 已形成实现与故障矩阵。正式性能配置不再收敛到 fresh-only：三 seed validation 已显示 fresh-only 明显损失质量；当前基线保持 staleness window 2、λ=.25，并把 fresh-only 作为边界 control。
 
 这一阶段也适合逐步把进程启动从单个 MPI 作业扩展到独立 PBS 作业。co-allocated launcher 可以继续作为方便、可重复的工程测试方式；独立作业实验则用于验证项目最初的动机场景和不同启动时间、单 learner 重启、syncer 重启等行为。
 
 ### 5.2 近期至中期：实现真正的有界状态
 
-full 和 fragment 可以共享一套状态分类：current authority、有限 base window、每 learner/fragment 的最新 proposal、写入中的临时对象，以及仅用于研究归档的历史记录。full 运行时已经只发现固定大小的 proposal surface，历史 metrics 和已消费 update 进入独立 JSONL 归档或回收路径；fragment 的固定 proposal surface 仍待完成。
+full 和 fragment 共享一套状态分类：current authority、有限 base window、每 learner/fragment 的最新 proposal、写入中的临时对象，以及仅用于研究归档的历史记录。full 运行时发现固定 learner pointer；fragment 已改为固定 `(learner, fragment)` pointer 与持久 frontier，不再 glob payload metadata。1000-cycle 测试保持 M×K=8 个 pointer/frontier，三 seed 9 节点 fragment 消融进一步验证了跨节点路径。
 
 长跑研究可以持续记录 live bytes、文件数、metadata scan 时间、DB 大小、GC backlog 和第 N 次 update 的各阶段延迟。目标不是单纯减少磁盘占用，而是展示运行成本不会因为历史变长而退化。
 
@@ -131,7 +135,11 @@ fragment 优化应同时保留 full 作为对照。若某次优化只减少 upda
 
 实验维度可以覆盖模型规模、learner 数、quorum、inner steps、fragment 数、上传 dtype 和人为存储延迟。重点报告完整时间账本，而不只报告峰值带宽：训练时间、snapshot、写入、proposal discovery、quorum/grace wait、读取、聚合、outer step、发布、采用和 shutdown wait。
 
-近期 BF16 结果已经说明 payload 优化不一定等价于端到端优化。后续图表应持续把 bytes/token、learner pause、syncer duty cycle、global/fragment interval 和 accepted-token efficiency 放在同一分析框架中。
+近期 BF16 结果已经说明 payload 优化不一定等价于端到端优化。publish-only BF16 将 checkpoint 字节减半，却使 publication 三 seed 均值慢 62.5%、完整时间慢 2.01%；质量门禁虽通过，仍不应成为性能默认。相反，并行 weight/outer 写把 publication 关键路径降低 44.5%，事务/crash 语义保持不变。后续图表应持续把 bytes/token、learner pause、syncer duty cycle、global/fragment interval 和 accepted-token efficiency 放在同一分析框架中。
+
+fragment 物化也已完成单变量剥离：间隔 1→10 使物化字节减少 90%、物化时间降低 81.45%，完整训练三 seed 均值改善 2.21%。生产 profile 因而显式使用 10，终态仍强制物化；这把物化 I/O 与剩余协调等待分开了。
+
+同 fingerprint 的三 seed 事件化 ingestion 对照已补齐这一时间账本：把 full sync scan 从 2 秒降到 0.2 秒，使完整时间均值从 1101.633 秒降到 1075.273 秒（-2.39%），quorum discovery+idle 均值下降 6.83%，而共享盘轮询只使用单核 0.0402% CPU。相邻开启 publish-wait metadata ingestion 后虽每 run 平均摄取 8 份 update，完整时间为 1076.155 秒，没有进一步收益。因此短 scan 可作为低成本实验参数；publish-wait ingestion 保持 opt-in，不作为默认性能主张。
 
 ### 5.5 中期至后期：形成恢复实验与长期运行证据
 
@@ -141,7 +149,7 @@ fragment 优化应同时保留 full 作为对照。若某次优化只减少 upda
 
 ### 5.6 后期：质量、stale 与一般化实验
 
-当系统路径和数据路径更加稳定后，可以把研究预算转向质量问题：fragment 数与分片策略是否改变 loss，optimizer moments 在 fragment adoption 时保留或重置有何影响，fresh-only 与 stale-aware 在 matched-token 下是否有差异。
+统一 validation evaluator、独立 `afterok` 一节点链路、checkpoint/source identity 和三 seed 协议已经落地。当前策略矩阵显示 rebase/prediction/replace 都在 ε=.01 内，replace 的均值最低，故保持默认；staleness 矩阵否决 fresh-only，但尚未回答 base-relative displacement。后续质量预算可转向 fragment 数/分片策略、optimizer moments 在 fragment adoption 时保留或重置，以及 from-scratch matched-token 一般化。
 
 stale 研究可以先做小矩阵和机制归因，再决定是否扩大到多种子。对象存储、可见性延迟扫描和多 syncer 则可以根据论文叙事与单 syncer 容量结果逐步加入。它们更适合作为主系统边界的扩展，而不是同时改动当前所有协议层。
 
@@ -206,8 +214,8 @@ runtime 需要删除历史，研究又希望保留证据。可以把两者分层
 
 ## 9. 近期可展开的工作
 
-近期最自然的一组工作是：用已经加入的 fragment timing 指标重跑 9 节点 50×10，确认 learner wait-latest、syncer quorum wait 和 shutdown wait 在真实多 learner 场景中的占比；同时基于已经完成的两次 full 5000-step run，分离 upload dtype 与 staleness 的影响。质量侧需要在当前同一代码版本上进行只改变 FP32/BF16 upload 的多 seed 对照，并对固定 global checkpoint 测量 validation loss/perplexity；系统侧需要明确 5000 local steps 与 50 outer merges 的完成语义，并研究 upload 后版本确认、round barrier 或 staleness window/lambda 对吞吐、丢弃率和质量的影响。
+截至 2026-07-18，E/Q 第一轮计划已补齐 source identity、三 seed 单变量实验、统一 validation、固定 proposal surface、并行 publication、物化剥离、staleness/策略质量矩阵和 syncer 共置成本账本。terminal partial-merge 的三 seed predecessor/post 配对也已闭合：配对均值 -0.000330，所有 seed 都远低于 ε=.01，因此按条件计划不引入 outer-LR scaling。
 
-与这两项并行，可以设计固定大小的 learner/fragment proposal 可见面和 artifact GC，把有界存储从配置意图转化为协议结构；再建立 no-communication learner 基线，使后续 full/fragment 优化都有稳定的 goodput 参照。
+下一阶段最自然的工作是 base-relative displacement 数值 oracle 与 matched-token 对照；同时明确“每 learner 5000 local steps AND 50 outer merges”的联合完成谓词。系统侧可在更大模型/更慢存储下寻找 fragment 与 8 节点共置的 crossover，并建立 no-communication learner 基线；恢复侧可从同 allocation 故障注入扩展到独立 PBS 角色启动与重启。
 
-这些工作完成后，项目会拥有一个更可靠的 full reference、一套可解释的 fragment 时间账本，以及一条能够支撑长期运行的有界状态路径。届时再决定 fragment 协调重构、完整异步 pipeline、stale 质量矩阵或多 syncer 的投入规模，会比现在直接扩展功能更容易产生清晰的研究结论。
+这些方向应继续复用现有 source fingerprint、resolved-config diff、三 seed、独立 validation 与时间账本纪律，避免重新依赖 local loss 或单次异步 walltime 作质量/性能判断。

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from fs_diloco.core.config import load_config, resolve_config
+from fs_diloco.core.config import config_to_dict, load_config, resolve_config
 
 
 CONFIG_PATHS = sorted(Path("configs").glob("*.yaml"))
@@ -24,6 +24,64 @@ def test_config_defaults_and_cli_overrides(tmp_path):
     assert config.syncer.device == "auto"
     assert config.syncer.compute_dtype == "float32"
     assert config.syncer.publish_dtype == "float32"
+
+
+def test_experiment_overrides_are_explicit_in_resolved_config(tmp_path):
+    config = resolve_config(
+        "configs/fs_diloco_gpt2_wikitext2_8l_5000steps.yaml",
+        shared_root=str(tmp_path / "run"),
+        training_seed=2027,
+        scan_interval_seconds=0.2,
+        ingest_during_publish=True,
+        syncer_device="cpu",
+        syncer_publish_dtype="bfloat16",
+        staleness_lambda=4.0,
+        max_staleness_versions=0,
+        global_adoption_strategy="predict_post_publish_global",
+        capture_terminal_predecessor_for_eval=True,
+        completion_mode="local_or_global",
+        parallel_checkpoint_writes=False,
+        materialize_full_every_events=7,
+    )
+
+    assert config.training.seed == 2027
+    assert config.sync.scan_interval_seconds == 0.2
+    assert config.sync.ingest_during_publish is True
+    assert config.syncer.device == "cpu"
+    assert config.syncer.publish_dtype == "bfloat16"
+    assert config.sync.staleness_lambda == 4.0
+    assert config.sync.max_staleness_versions == 0
+    assert config.learner.global_adoption_strategy == "predict_post_publish_global"
+    assert config.sync.capture_terminal_predecessor_for_eval is True
+    assert config.training.completion_mode == "local_or_global"
+    assert config.syncer.parallel_checkpoint_writes is False
+    assert config.fragments.materialize_full_every_events == 7
+
+
+@pytest.mark.parametrize(
+    ("keyword", "value", "message"),
+    [
+        ("staleness_lambda", -0.1, "staleness_lambda must be >= 0"),
+        ("max_staleness_versions", -1, "max_staleness_versions must be >= 0"),
+    ],
+)
+def test_staleness_experiment_overrides_reject_negative_values(keyword, value, message):
+    with pytest.raises(ValueError, match=message):
+        resolve_config("configs/fs_diloco_tiny_local.yaml", **{keyword: value})
+
+
+def test_scan_interval_must_be_positive():
+    with pytest.raises(ValueError, match="scan_interval_seconds must be > 0"):
+        resolve_config(
+            "configs/fs_diloco_tiny_local.yaml",
+            scan_interval_seconds=0.0,
+        )
+
+
+def test_default_config_uses_no_scheduler_until_a_horizon_is_explicit():
+    config = resolve_config()
+    assert config.inner_optimizer.scheduler == "none"
+    assert config.inner_optimizer.scheduler_total_steps is None
 
 
 def test_syncer_runtime_config_accepts_cpu_bfloat16_aliases(tmp_path):
@@ -144,6 +202,40 @@ training:
         resolve_config(path)
 
 
+def test_syncer_watchdog_timeout_defaults_and_validation(tmp_path):
+    config = resolve_config("configs/fs_diloco_tiny_local.yaml")
+    assert config.liveness.syncer_unresponsive_timeout_seconds is None
+
+    valid = tmp_path / "watchdog.yaml"
+    valid.write_text(
+        "liveness:\n  syncer_unresponsive_timeout_seconds: 2.5\n",
+        encoding="utf-8",
+    )
+    assert resolve_config(valid).liveness.syncer_unresponsive_timeout_seconds == 2.5
+
+    invalid = tmp_path / "bad_watchdog.yaml"
+    invalid.write_text(
+        "liveness:\n  syncer_unresponsive_timeout_seconds: 0\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="syncer_unresponsive_timeout_seconds"):
+        resolve_config(invalid)
+
+
+def test_learner_shutdown_timeout_defaults_and_validation(tmp_path):
+    config = resolve_config("configs/fs_diloco_tiny_local.yaml")
+    assert config.liveness.learner_shutdown_timeout_seconds is None
+
+    valid = tmp_path / "shutdown-valid.yaml"
+    valid.write_text("liveness:\n  learner_shutdown_timeout_seconds: 240\n", encoding="utf-8")
+    assert resolve_config(valid).liveness.learner_shutdown_timeout_seconds == 240
+
+    invalid = tmp_path / "shutdown-invalid.yaml"
+    invalid.write_text("liveness:\n  learner_shutdown_timeout_seconds: 0\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="learner_shutdown_timeout_seconds"):
+        resolve_config(invalid)
+
+
 @pytest.mark.parametrize("mode", ["unknown", "adaptive_eta"])
 def test_rejects_unsupported_grace_mode(tmp_path, mode):
     path = tmp_path / "bad_grace.yaml"
@@ -186,6 +278,30 @@ def test_predict_5000_configs_differ_only_in_post_publish_wait(path, wait_second
     assert config.learner.global_adoption_strategy == "predict_post_publish_global"
     assert config.learner.post_publish_latest_wait_seconds == wait_seconds
     assert config.learner.prediction.reconcile_timeout_seconds == 60.0
+    assert config.training.completion_mode == "global_only"
+
+
+def test_predict_5000_wait_variants_differ_only_in_wait_and_run_metadata():
+    without_wait = config_to_dict(
+        resolve_config(
+            "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_predict.yaml",
+            run_id="config_audit",
+            shared_root="/tmp/config_audit",
+        )
+    )
+    with_wait = config_to_dict(
+        resolve_config(
+            "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_wait2p5_predict.yaml",
+            run_id="config_audit",
+            shared_root="/tmp/config_audit",
+        )
+    )
+    for payload in (without_wait, with_wait):
+        payload.pop("run")
+        payload.pop("wandb")
+    with_wait["learner"]["post_publish_latest_wait_seconds"] = 0.0
+
+    assert with_wait == without_wait
 
 
 def test_predict_wait_zero_5000_config_stops_only_at_global_target():
@@ -201,12 +317,27 @@ def test_predict_wait_zero_5000_config_stops_only_at_global_target():
     assert config.learner.post_publish_latest_wait_seconds == 0.0
 
 
+def test_terminal_capture_profile_reaches_input_exhaustion_before_global_stop():
+    config = resolve_config(
+        "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_terminal_capture.yaml"
+    )
+
+    assert config.training.max_local_steps == 5000
+    assert config.training.completion_mode == "local_or_global"
+    assert config.sync.stop_after_outer_steps is None
+    assert config.sync.stop_after_global_tokens is None
+    assert config.sync.capture_terminal_predecessor_for_eval is True
+    assert config.sync.quorum_min == 4
+    assert config.sync.quorum_max == 8
+
+
 def test_fragment_rejects_full_local_delta_rebase(tmp_path):
     path = tmp_path / "fragment_rebase.yaml"
     path.write_text(
         """
 fragments:
   enabled: true
+  materialize_full_every_events: 1
 learner:
   global_adoption_strategy: rebase_post_publish_delta
 """,
@@ -328,4 +459,5 @@ learner:
 
 @pytest.mark.parametrize("path", CONFIG_PATHS, ids=lambda path: path.name)
 def test_every_repository_config_resolves(path):
-    assert resolve_config(path).run.name
+    config = resolve_config(path)
+    assert config.run.name == path.stem

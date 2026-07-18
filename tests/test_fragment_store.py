@@ -93,7 +93,7 @@ def test_fragment_supersession_is_scoped_to_same_fragment(tmp_path):
     store.insert_fragment_update_metadata(_metadata("new_f0", fragment_id=0, local_step_end=2))
     store.insert_fragment_update_metadata(_metadata("old_f1", fragment_id=1, local_step_end=1))
     selected = [store.get_fragment_update("new_f0")]
-    assert store.drop_superseded_fragment_updates(selected) == 1
+    assert store.drop_superseded_fragment_updates(selected) == 0
     assert store.get_fragment_update("old_f0")["status"] == "dropped"
     assert store.get_fragment_update("old_f1")["status"] == "pending"
     store.close()
@@ -102,7 +102,9 @@ def test_fragment_supersession_is_scoped_to_same_fragment(tmp_path):
 def test_fragment_staleness_uses_fragment_version(tmp_path):
     store = SQLiteStore(tmp_path / "db.sqlite3")
     store.insert_fragment_update_metadata(_metadata("fresh", base_version=3))
-    store.insert_fragment_update_metadata(_metadata("stale", base_version=0, local_step_end=2))
+    store.insert_fragment_update_metadata(
+        _metadata("stale", learner_id="learner_001", base_version=0, local_step_end=2)
+    )
     rows = store.eligible_fragment_updates(
         fragment_id=0, current_fragment_version=3, max_staleness_versions=2
     )
@@ -120,7 +122,9 @@ def test_fragment_staleness_uses_fragment_version(tmp_path):
 def test_fragment_shutdown_finalizes_unconsumed_updates(tmp_path):
     store = SQLiteStore(tmp_path / "db.sqlite3")
     store.insert_fragment_update_metadata(_metadata("selected", local_step_end=1))
-    store.insert_fragment_update_metadata(_metadata("pending", local_step_end=2))
+    store.insert_fragment_update_metadata(
+        _metadata("pending", learner_id="learner_001", local_step_end=2)
+    )
     store.mark_fragment_updates_selected(["selected"], "selection")
     assert store.finalize_unconsumed_updates(
         fragment_mode=True, reason="stop_after_outer_steps"

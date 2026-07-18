@@ -9,8 +9,8 @@
 
 ## 2. 目标与完成谓词
 
-1. adoption 相关事件（`global_adopted` 及 fragment 对应事件）携带 `adoption_pause_seconds`（含读文件、copy、重建三段或至少总时长；分段粒度 SPECIFY 冻结）（APT-01）；
-2. 分析侧可汇总：per-learner 每 cycle 平均停顿、占 cycle 比例进入 run 分析输出（APT-02）；
+1. adoption 相关事件（`global_adopted` 及 fragment 对应事件）携带 `adoption_load_apply_seconds`、`adoption_optimizer_reset_seconds`、`adoption_pause_seconds`；总时长覆盖 latest load/retry、模型 copy/rebase/reconcile 与同步 optimizer/scheduler rebuild，不包含为了等待未来 latest 的纯 wait（另有既有 wait telemetry）（APT-01）；
+2. `update_written`/learner CSV 增加 `local_cycle_elapsed_seconds`，分析侧按 learner 汇总 adoption count/total/mean 与 `sum(pause)/sum(completed-cycle elapsed)`；无完成 cycle 时比例为 null，禁止拿进程 walltime 猜分母（APT-02）；
 3. 基线数据留档：一次 tiny run + 引用最近 9 节点 run 估算的对照行，写入报告（APT-03）；
 4. 正常路径无回归：tiny run 轨迹与基线等价（新字段在 profile 声明）。
 
@@ -23,7 +23,7 @@
 
 | Loop | SPECIFY/RED | IMPLEMENT/GREEN | HARDEN、CHECK、PERSIST |
 | --- | --- | --- | --- |
-| L1 字段 | 分段与字段名冻结；APT-01 单元先 RED | 计时与事件字段 | tiny run 字段可见且数值合理 |
+| L1 字段 | 上述两段+总时长与 wait 排除规则冻结；APT-01 单元先 RED | action 创建阶段记录 load/apply；统一收尾计 optimizer rebuild；fragment helper 同口径 | tiny full/fragment run 字段可见且 `total≈两段之和` |
 | L2 汇总 | 汇总口径冻结 | 分析脚本加列 | APT-02/03；轨迹等价；全量 pytest |
 
 ## 5. 测试矩阵与通过条件
@@ -31,7 +31,7 @@
 | ID | 测试 | 通过条件 |
 | --- | --- | --- |
 | APT-01 | 字段 | adoption 事件含停顿时长，量级与文件大小/带宽自洽 |
-| APT-02 | 汇总 | 分析输出含 per-learner 平均停顿与 cycle 占比 |
+| APT-02 | 汇总 | 分析输出含 per-learner count/total/mean、completed cycle elapsed 与占比；字段缺失的旧 run 明确标 `unavailable` |
 | APT-03 | 基线 | 基线数据入报告，供 E1/B2 完成后对照 |
 
 ## 6. 验证阶梯

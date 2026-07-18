@@ -70,9 +70,11 @@ scripts/local/clean_run.sh --delete --keep-latest-global runs/fs_diloco
 | `run_2node_debug.pbs` / `run_2node_fragment_debug.pbs` | 2 节点 | 双节点验证 |
 | `run_9node_gpt2_wikitext2.pbs` | 9 节点 | 8 learner + 1 syncer 短跑 |
 | `run_9node_gpt2_wikitext2_5000steps.pbs` | 9 节点 | 名义 5000 本地步、global step 50 终止的正式实验;learner 超过 5000 后继续到 stop |
+| `run_8node_colocated_gpt2_wikitext2_5000steps.pbs` | 8 节点 | 实验性部署：rank0 CPU syncer + GPU learner_000，其余七节点各一 learner；双进程 fail-fast 监督。GPT-2 124M 三 seed 中位数劣化 1.83%，通过 ≤10% 门禁，但有一个 +41.4% 离群 seed，故不替代 9 节点默认 |
 | `run_9node_fragment_gpt2_wikitext2_5000steps.pbs` / `..._50x4.pbs` | 9 节点 | fragment 版实验 |
 | `run_9node_fragment_gpt2_wikitext2_50x10.pbs` / `run_9node_no_fragment_gpt2_wikitext2_50x10.pbs` | 9 节点 | 8 learner、inner steps=50、outer steps=10 的 fragment/no-fragment 对照实验 |
 | `run_1node_lm_eval.pbs` | 1 节点 | checkpoint 导出 + lm-eval |
+| `run_1node_validation_eval.pbs` | 1 节点 | 使用 run resolved config 的专用 validation loss/ppl；校验非空 token、有限指标、checkpoint/source identity 并原子附加 summary |
 
 提交与自定义(以 9 节点为例):
 
@@ -82,6 +84,17 @@ qsub scripts/miyabi/run_9node_gpt2_wikitext2_5000steps.pbs
 # HF_DATASETS_OFFLINE、HF_HUB_OFFLINE、FS_DILOCO_HF_WIKITEXT_REPO、
 # SYNCER/LEARNER_CUDA_VISIBLE_DEVICES 等(见脚本头部)
 ```
+
+该 launcher 还支持 `TRAINING_SEED`、`SYNC_SCAN_INTERVAL_SECONDS`、`INGEST_DURING_PUBLISH`、`SYNCER_PUBLISH_DTYPE`、`STALENESS_LAMBDA`、`MAX_STALENESS_VERSIONS`、`GLOBAL_ADOPTION_STRATEGY`、`CAPTURE_TERMINAL_PREDECESSOR_FOR_EVAL` 和 `COMPLETION_MODE` 的显式实验覆盖，并把同一值传播给 syncer 与全部 learner。例如：
+
+```bash
+qsub -v TRAINING_SEED=2027,SYNC_SCAN_INTERVAL_SECONDS=0.2,INGEST_DURING_PUBLISH=false \
+  scripts/miyabi/run_9node_gpt2_wikitext2_5000steps.pbs
+```
+
+正式作业在启动 rank 前捕获 source fingerprint；实际覆盖值也会写入 `run_config.resolved.yaml`，不能只依赖 qsub 命令历史。
+
+50×10 专用消融 launcher 也保留窄覆盖：full/no-fragment 脚本接受 `TRAINING_SEED` 与 `PARALLEL_CHECKPOINT_WRITES`；fragment 脚本接受 `TRAINING_SEED` 与 `MATERIALIZE_FULL_EVERY_EVENTS`。这些参数用于 E1/E3 的同 fingerprint 单变量对照，不改变长期默认配置。
 
 脚本约定:第 1 台节点跑 syncer,其余 8 台各跑一个 learner;所有角色共享 `<SHARED_ROOT>/control/syncer_metadata.sqlite3`;节点本地 `$TMPDIR` 只承载非权威 runtime/cache。HF 缓存与 W&B 目录也在脚本里统一设置。WikiText 默认映射到 `Salesforce/wikitext`;已有完整缓存时可在 `qsub -v` 中设置 `HF_DATASETS_OFFLINE=1,HF_HUB_OFFLINE=1`,避免运行期的 Hub HEAD 请求影响启动。
 
@@ -95,6 +108,12 @@ python scripts/miyabi/check_plan01_invariants.py --help # current-only/一致性
 ```
 
 Run 分析方法和实验结果统一维护在 [reports/run_analysis.md](../reports/run_analysis.md)。
+
+正式训练可使用 `submit_train_with_validation.sh` 创建 train job 与
+`depend=afterok:<train_job_id>` 的独立一节点 validation job。评估不占用 9 节点训练
+allocation 的尾部时间；训练失败时不会生成伪成功结果。结构化主结果位于
+`<run_root>/metrics/validation_eval.json`，协议见
+[`reports/imp_plans/quality_fix-Q/validation_protocol.md`](../reports/imp_plans/quality_fix-Q/validation_protocol.md)。
 
 把一个或多个 run 中用于实验对比的核心指标抽取到 CSV：
 

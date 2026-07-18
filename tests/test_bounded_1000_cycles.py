@@ -81,12 +81,15 @@ def test_thousand_cycles_keep_db_and_discovery_surface_bounded(tmp_path):
             outer_optimizer="nesterov",
             max_staleness_versions=0,
         )
-        run_maintenance(
+        maintenance = run_maintenance(
             store,
             paths,
             heartbeat_interval_seconds=1.0,
             scan_interval_seconds=0.1,
         )
+        assert maintenance["maintenance_scanned_rows"] <= learners
+        assert maintenance["gc_pending_rows"] == 0
+        assert maintenance["maintenance_scan_seconds"] >= 0.0
         if target == 100:
             page_count = store.conn.execute("PRAGMA page_count").fetchone()[0]
             freelist = store.conn.execute("PRAGMA freelist_count").fetchone()[0]
@@ -105,6 +108,7 @@ def test_thousand_cycles_keep_db_and_discovery_surface_bounded(tmp_path):
     ).fetchone()[0] == 0
     assert len(list(paths.updates_latest.glob("learner_*.json"))) == learners
     assert not list(paths.updates_payloads.glob("**/*.safetensors"))
+    assert store.gc_pending_count() == 0
 
     update_ids = _jsonl_ids(paths.update_history_jsonl, "update_id")
     version_ids = _jsonl_ids(paths.global_version_history_jsonl, "version")

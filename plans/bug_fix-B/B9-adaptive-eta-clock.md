@@ -9,16 +9,17 @@
 
 ## 2. 规格
 
-### 2.1 单一时钟源方案（进程内存，不动 schema）
+### 2.1 单一时钟源方案（进程内存，不新增 schema）
 
-- syncer 摄取循环在**首次观察到**某 update（pointer 变化被 ingest）时，记录进程内映射 `update_id → first_seen`（同时存 `time.monotonic()` 用于差值、`time.time()` 用于日志）。摄取点本就逐条处理 metadata，零额外 I/O；
+- 现 schema 已有由 syncer 写入的 `ingested_at`，所以原计划中“DB 加 ingested_at 列”的备选基于过时盘点。它仍是 wall clock，且 resume 可能换 syncer 节点，不适合作为进程内 deadline 的单调时钟。实施采用进程内 registry：syncer 在 `insert_*_update_metadata` 首次成功时记录 `update_id → (first_seen_monotonic, first_seen_wall)`；重复摄取不刷新。摄取函数增加可选 observer/registry 参数，不额外扫描文件；
 - ETA 估计改为：`first_seen + cycle_seconds - now_monotonic`（全部 syncer 单时钟）。语义差异：起点从 learner 的 commit 时刻变为 syncer 的观察时刻，两者相差一次 scan 间隔（≤ `scan_interval_seconds`，2s）——该偏移是**保守方向**（高估剩余时间→少收紧 grace），可接受并写入 docstring；
 - resume/进程重启后映射为空：缺 `first_seen` 的 update 跳过估计（与现实现对 `step_seconds is None` 的处理一致），效果是 resume 后第一轮 grace 不收紧——保守且正确；
+- registry 使用容量上限 `max(64, 4 * num_learners * max(1, num_fragments))` 的 insertion-ordered/LRU 映射；成功应用、明确 drop 的 update 主动移除，容量淘汰只会让某次估计缺失并保守地不收紧，不影响正确性；
 - **不删除** `committed_at` 字段本身（研究证据仍有价值），但所有跨节点时钟字段在 metrics/docs 中标注 `cross-node wall clock` 语义（review 建议的最低要求）。
 
 ### 2.2 否决的备选
 
-- DB 加 `ingested_at` 列：持久、可供离线分析，但引入 schema 变更与迁移问题，对一个进程内决策而言过重。离线分析的时钟标注问题由文档解决。
+- 直接用既有 DB `ingested_at`：它能持久化且适合离线分析，但仍是 wall clock；进程重启后若换节点，拿它与当前 `time.time()` 相减仍回到跨节点/时钟跳变问题。deadline 决策只使用 monotonic registry，离线分析继续保留 `committed_at`/`ingested_at` 并标注时钟域。
 
 ## 3. 目标与完成谓词
 

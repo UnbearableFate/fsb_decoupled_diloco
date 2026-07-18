@@ -26,22 +26,6 @@ def _append_jsonl_fsync(path: Path, rows: Iterable[dict[str, Any]]) -> int:
     return len(records)
 
 
-def _archived_terminal_paths(path: Path) -> set[Path]:
-    result: set[Path] = set()
-    if not path.exists():
-        return result
-    with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            file_path = row.get("file_path")
-            if file_path:
-                result.add(Path(str(file_path)).resolve(strict=False))
-    return result
-
-
 def archive_and_prune(store: SQLiteStore, paths: RunPaths) -> dict[str, Any]:
     """Fsync terminal/history records before deleting their active DB rows."""
     update_rows = store.terminal_update_rows()
@@ -75,8 +59,8 @@ def _resolved_paths(values: Iterable[str | Path]) -> set[Path]:
     return {Path(value).resolve(strict=False) for value in values}
 
 
-def _pointer_state(paths: RunPaths) -> dict[str, tuple[str, Path]]:
-    pointers: dict[str, tuple[str, Path]] = {}
+def _pointer_state(paths: RunPaths) -> dict[tuple[str, int | None], tuple[str, Path]]:
+    pointers: dict[tuple[str, int | None], tuple[str, Path]] = {}
     for pointer in sorted(paths.updates_latest.glob("learner_*.json")):
         row = safe_read_json(pointer)
         if not row:
@@ -85,7 +69,12 @@ def _pointer_state(paths: RunPaths) -> dict[str, tuple[str, Path]]:
         update_id = row.get("update_id")
         learner_id = row.get("learner_id")
         if file_path and learner_id and update_id:
-            pointers[str(learner_id)] = (
+            fragment_id = row.get("fragment_id")
+            key = (
+                str(learner_id),
+                None if fragment_id is None else int(fragment_id),
+            )
+            pointers[key] = (
                 str(update_id),
                 Path(str(file_path)).resolve(strict=False),
             )
@@ -99,6 +88,7 @@ def collect_runtime_artifacts(
     orphan_grace_seconds: float,
     extra_terminal_paths: Iterable[Path] = (),
     now: float | None = None,
+    stats: dict[str, int | float] | None = None,
 ) -> int:
     """Collect everything outside the DB/reference live set.
 
@@ -137,14 +127,21 @@ def collect_runtime_artifacts(
                 deleted += 1
 
     live_payloads = {path.resolve(strict=False) for path in store.active_payload_paths()}
-    terminal_payloads = _archived_terminal_paths(paths.update_history_jsonl)
+    terminal_payloads = store.gc_pending_paths()
+    if stats is not None:
+        stats["maintenance_scanned_rows"] = len(terminal_payloads)
     terminal_payloads.update(path.resolve(strict=False) for path in extra_terminal_paths)
     pointer_state = _pointer_state(paths)
     frontiers = store.proposal_frontiers()
+    fragment_frontiers = store.fragment_proposal_frontiers()
     consumed_pointer_payloads = {
         payload
-        for learner_id, (update_id, payload) in pointer_state.items()
-        if frontiers.get(learner_id) == update_id
+        for (learner_id, fragment_id), (update_id, payload) in pointer_state.items()
+        if (
+            frontiers.get(learner_id) == update_id
+            if fragment_id is None
+            else fragment_frontiers.get((learner_id, fragment_id)) == update_id
+        )
     }
 
     for payload in paths.updates_payloads.glob("learner_*/*.safetensors"):
@@ -184,6 +181,11 @@ def collect_runtime_artifacts(
                 continue
             if now - mtime >= orphan_grace_seconds and _unlink(tmp):
                 deleted += 1
+    store.clear_gc_pending_paths(
+        path for path in terminal_payloads if not path.exists()
+    )
+    if stats is not None:
+        stats["gc_pending_rows"] = store.gc_pending_count()
     return deleted
 
 
@@ -194,21 +196,30 @@ def run_maintenance(
     heartbeat_interval_seconds: float,
     scan_interval_seconds: float,
     input_closed: bool = False,
-) -> dict[str, int]:
+) -> dict[str, int | float]:
     archived = archive_and_prune(store, paths)
     grace = (
         0.0
         if input_closed
         else max(2.0 * heartbeat_interval_seconds, 2.0 * scan_interval_seconds)
     )
+    scan_stats: dict[str, int | float] = {}
+    scan_started = time.monotonic()
     deleted = collect_runtime_artifacts(
         store,
         paths,
         orphan_grace_seconds=grace,
         extra_terminal_paths=archived["terminal_paths"],
+        stats=scan_stats,
     )
+    maintenance_scan_seconds = time.monotonic() - scan_started
     return {
         "archived_updates": int(archived["updates"]),
         "archived_versions": int(archived["versions"]),
         "deleted_artifacts": deleted,
+        "gc_pending_rows": int(scan_stats.get("gc_pending_rows", 0)),
+        "maintenance_scanned_rows": int(
+            scan_stats.get("maintenance_scanned_rows", 0)
+        ),
+        "maintenance_scan_seconds": maintenance_scan_seconds,
     }

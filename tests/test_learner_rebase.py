@@ -349,6 +349,8 @@ def test_rebase_reconciliation_preserves_optimizer_and_scheduler_state(tmp_path,
     config.training.max_local_steps = 3
     config.inner_optimizer.scheduler = "cosine"
     config.inner_optimizer.warmup_steps = 2
+    config.inner_optimizer.scheduler_total_steps = 4
+    config.inner_optimizer.min_lr_ratio = 0.1
     config.learner.poll_latest_during_inner_steps = True
     config.learner.adopt_global_after_upload = True
     config.learner.global_adoption_strategy = "rebase_post_publish_delta"
@@ -376,8 +378,12 @@ def test_rebase_reconciliation_preserves_optimizer_and_scheduler_state(tmp_path,
     original_builder = learner_runtime.build_inner_optimizer_and_scheduler
     built_states = []
 
-    def tracked_builder(model, resolved_config):
-        state = original_builder(model, resolved_config)
+    def tracked_builder(model, resolved_config, *, completed_local_steps):
+        state = original_builder(
+            model,
+            resolved_config,
+            completed_local_steps=completed_local_steps,
+        )
         built_states.append(state)
         return state
 
@@ -417,7 +423,7 @@ def test_rebase_reconciliation_preserves_optimizer_and_scheduler_state(tmp_path,
     assert preserved[0]["scheduler_state_preserved"] is True
     assert preserved[0]["optimizer_state_entries"] > 0
     assert preserved[0]["scheduler_last_epoch"] == 3
-    assert preserved[0]["optimizer_lrs"] == [0.0]
+    assert preserved[0]["optimizer_lrs"] == pytest.approx([5.0e-4])
     strategy_event_types = [
         event["event_type"]
         for event in events
@@ -504,11 +510,18 @@ def test_prediction_preparation_recovers_collected_cached_checkpoint(tmp_path, m
         "fs_diloco.runtime.learner.read_latest_if_newer",
         lambda *_args, **_kwargs: None,
     )
+    prediction_attempts = []
+
+    def predict_with_collected_first_snapshot(**kwargs):
+        version = int(kwargs["latest"]["version"])
+        prediction_attempts.append(version)
+        if version == 24:
+            raise FileNotFoundError(2, "No such file or directory", missing_path)
+        return torch.ones(index["total_numel"]), {"base_version": version}
+
     monkeypatch.setattr(
         "fs_diloco.runtime.learner.predict_next_global_weight",
-        lambda **_kwargs: (_ for _ in ()).throw(
-            FileNotFoundError(2, "No such file or directory", missing_path)
-        ),
+        predict_with_collected_first_snapshot,
     )
     monkeypatch.setattr(
         "fs_diloco.runtime.learner.wait_for_latest_if_newer",
@@ -534,6 +547,7 @@ def test_prediction_preparation_recovers_collected_cached_checkpoint(tmp_path, m
         "missing_path": missing_path,
         "waited_seconds": 0.2,
     }
+    assert prediction_attempts == [24, 25]
 
 
 def test_prediction_preparation_prefers_latest_published_during_snapshot(tmp_path, monkeypatch):

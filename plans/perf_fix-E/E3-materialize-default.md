@@ -10,12 +10,13 @@
 ## 2. 设计决策
 
 - 沿用仓库 fail-closed 先例：`fragments.enabled=true` 时 `materialize_full_every_events` **必填正整数**，`None/≤0` 拒绝并在错误信息中说明旧缺省语义已移除（比报告给的"缺省=10"更不易误用：任何数值都应是有意选择）。resume 语义（若允许全模型 checkpoint 缺失时冷启）在 SPECIFY 阶段确认——若某些恢复路径依赖"最近物化不早于 N 事件"，校验需给出下界提示而不是任意值均可。
-- telemetry：物化写入单独计时（`materialize_seconds`、`materialized_bytes`），与 fragment 发布耗时分列（P5，为消融提供口径）。
+- telemetry：沿用已有 `materialize_full_seconds`，新增 `materialized_bytes`/`materialized_this_event`，与 fragment 发布耗时分列（P5，为消融提供口径）。
+- 审计补充：事件 0、配置周期和达到显式 outer target 时物化仍不足以保证 `input_exhausted`/其他终止原因的 latest materialized checkpoint 对应最终 fragment state。所有正常终止路径必须强制一次最终物化；否则 Q4/Q5 eval 会评估旧模型。
 
 ## 3. 目标与完成谓词
 
 1. 缺省语义修正：fragment 模式缺该字段或 ≤0 → 配置拒绝（MAT-01）；`should_materialize_fragment_full` 不再包含"None→每事件"分支（MAT-02 静态检查）；
-2. telemetry 字段落地并在 tiny fragment run 可见（MAT-03）；
+2. telemetry 使用现有命名 `materialize_full_seconds`，新增 `materialized_bytes`/`materialized_this_event`，并在 tiny fragment run 可见（MAT-03）；
 3. 消融完成：`=1` vs `=10`（其余配置同 commit 单变量，P6）成对 fragment run，把物化 I/O 从协调等待中剥离的定量结论写入 run_analysis（MAT-04）；
 4. in-repo fragment 配置全部显式赋值；全量 pytest 通过。
 
@@ -23,9 +24,9 @@
 
 | Loop | SPECIFY/RED | IMPLEMENT/GREEN | HARDEN、CHECK、PERSIST |
 | --- | --- | --- | --- |
-| L0 语义盘点 | 确认物化 checkpoint 的全部消费方（resume？分析？Checker？）→ 决定校验下界规则 | 无实现 | 消费方清单入 progress.md |
+| L0 语义盘点 | 确认物化 checkpoint 的全部消费方（resume、learner startup、analysis/eval、Checker）与所有 stop reason | 无实现 | 周期任意正整数；初始化与正常终止强制物化，resume 依赖 fragment checkpoint 而非 materialized full |
 | L1 校验修正 | MAT-01 先 RED（当前 None 被接受且最贵） | 必填正整数校验；分支移除；in-repo 配置补值 | MAT-02 静态检查；全量 pytest |
-| L2 telemetry | 字段冻结 | 物化计时/字节上报 | tiny fragment run 字段可见（MAT-03） |
+| L2 telemetry | 字段冻结 | 物化计时/字节/是否发生上报；终止调用显式 `force_materialize=true` | tiny fragment run 与 input_exhausted 反例中 final materialized 权重对应最终 event（MAT-03） |
 | L3 消融 | 成对实验设计冻结（resolved config diff 审查） | 无代码 | `=1` vs `=10` 成对 run；剥离结论 + commit 入 run_analysis（MAT-04） |
 
 ## 5. 测试矩阵与通过条件
@@ -34,7 +35,7 @@
 | --- | --- | --- |
 | MAT-01 | 校验 | fragment 模式缺字段/None/0/负数 → 拒绝，错误信息含理由与下界 |
 | MAT-02 | 静态 | "未配置→每事件物化"分支不存在 |
-| MAT-03 | telemetry | 物化耗时/字节与 fragment 发布耗时分列，数值合理 |
+| MAT-03 | telemetry/终态 | 物化耗时/字节/布尔值与 fragment 发布耗时分列；任意正常 stop 后 final materialized checkpoint 对应最新 event |
 | MAT-04 | 消融 | 成对 run 单变量核查通过；物化 I/O 占比结论有数据支撑 |
 
 ## 6. 验证阶梯

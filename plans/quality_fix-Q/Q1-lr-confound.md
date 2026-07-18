@@ -7,15 +7,15 @@
 
 ## 2. 质量侧完成谓词
 
-B2 计划完成，且：
+B2 已在当前 worktree 完成（累计 local-step 调度、独立 `scheduler_total_steps`、正下限与 adoption 重建相位恢复）；Q1 不重复改实现。质量侧仍须：
 
 1. B2 的 SCH-02/03（LR 与 adoption 解耦、与 completion mode 无关）证据在 `reports/imp_plans/quality_fix-Q/Q1/progress.md` 中被引用归档；
-2. run_analysis 中涉及 reset/preserve 质量差异的段落已追加混杂因子注记（追加不改写历史文本），指向 B2 修复 commit；
+2. run_analysis 中涉及 reset/preserve 质量差异的段落已追加混杂因子注记（追加不改写历史文本），指向 B2 baseline/fingerprint；未获提交授权时不得虚构 fix commit；
 3. 新基线声明就位：明确记录"B2（建议连同 [Q3](Q3-data-shuffle.md)）合入 commit 之前的全部质量数据仅供机制参考，不得用于策略优劣结论"。
 
 ## 3. 对后续实验的纪律约束（本文件的存在意义）
 
-- 在 B2 合入前，**不得**启动 reset/preserve 消融、prediction 质量对照（Q4 的对照部分）、staleness λ 消融（Q2）——先跑只会再产出一批不可归因数据；
+- 在 B2+Q3 新基线及 R0 source identity 就绪前，**不得**启动 reset/preserve 消融、prediction 质量对照（Q4 的对照部分）、staleness λ 消融（Q2）；
 - run_analysis 建议的"rebase-preserve + global_only"实验在 B2 之前**禁止执行**：正是 B2 缺陷 3 的触发组合（超 horizon 步 LR 恰好为 0，无告警）；
 - 消融开关（moments reset/preserve 显式化）属于 B2 之后的实验计划，其配置形态遵循 [S5](../bug_fixing_plans/S5-config-strategy-grouping.md) 的策略分组。
 

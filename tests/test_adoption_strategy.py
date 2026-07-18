@@ -29,6 +29,7 @@ def _context(
     wait_latest=None,
     prepare_prediction=None,
     reference=None,
+    load_or_refresh_latest=None,
 ):
     logger = logger or RecordingLogger()
     reference = reference if reference is not None else torch.arange(4, dtype=torch.float32)
@@ -54,6 +55,7 @@ def _context(
         snapshot_model_fn=lambda **_kwargs: (reference, {"reference_compute_device": "cpu"}),
         prepare_prediction_fn=prepare_prediction
         or (lambda **_kwargs: (reference, {"prediction_compute_device": "cpu"}, None, None)),
+        load_or_refresh_latest_fn=load_or_refresh_latest,
     )
 
 
@@ -91,6 +93,74 @@ def test_replace_returns_reset_adoption_outcome():
     assert action.adoption.version == 2
     assert action.adoption.tokens_since_global_load == 0
     assert action.adoption.preserve_inner_state is False
+
+
+def test_replace_adoption_uses_actual_latest_returned_by_retry_helper():
+    config = resolve_config("configs/fs_diloco_tiny_local.yaml")
+    logger = RecordingLogger()
+
+    def recovered_load(**kwargs):
+        recovered = {"version": 3, "weight_path": "v3"}
+        value = kwargs["load_fn"](recovered)
+        return type(
+            "Result",
+            (),
+            {
+                "latest": recovered,
+                "value": value,
+                "retry_count": 1,
+                "waited_seconds": 0.1,
+                "missing_path": "v2",
+            },
+        )()
+
+    action = ReplaceGlobalAdoptionStrategy().on_newer_latest(
+        _context(config, logger=logger, load_or_refresh_latest=recovered_load),
+        {"version": 2, "weight_path": "v2"},
+    )
+
+    assert action.adoption is not None
+    assert action.adoption.version == 3
+    assert action.adoption.latest["version"] == 3
+    assert logger.events[0] == (
+        "latest_load_recovered",
+        {
+            "requested_version": 2,
+            "loaded_version": 3,
+            "retry_count": 1,
+            "waited_seconds": 0.1,
+            "missing_path": "v2",
+        },
+    )
+
+
+def test_rebase_context_returns_actual_latest_from_retry_helper():
+    config = resolve_config("configs/fs_diloco_tiny_rebase_local.yaml")
+
+    def recovered_load(**kwargs):
+        recovered = {"version": 4, "weight_path": "v4"}
+        value = kwargs["load_fn"](recovered)
+        return type(
+            "Result",
+            (),
+            {
+                "latest": recovered,
+                "value": value,
+                "retry_count": 1,
+                "waited_seconds": 0.1,
+                "missing_path": "v3",
+            },
+        )()
+
+    version, delta_norm, stats, latest = _context(
+        config,
+        load_or_refresh_latest=recovered_load,
+    ).rebase_local_delta({"version": 3, "weight_path": "v3"}, torch.zeros(4))
+
+    assert version == 4
+    assert delta_norm == 1.25
+    assert stats == {"reconcile_compute_device": "cpu"}
+    assert latest["version"] == 4
 
 
 def test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption():

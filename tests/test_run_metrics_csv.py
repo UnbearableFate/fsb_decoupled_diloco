@@ -157,6 +157,77 @@ def test_extract_report_oriented_metrics(tmp_path):
     assert row["loss_mean"] == 6.5
 
 
+def test_extract_interval_overlap_and_syncer_cost_metrics(tmp_path):
+    root = _base_run(tmp_path)
+    _write_json(
+        root / "control" / "source_identity.json",
+        {"source_fingerprint": "sha256:example"},
+    )
+    _write_csv(
+        root / "metrics" / "syncer_metrics.csv",
+        [
+            "version",
+            "selected_count",
+            "global_interval_seconds",
+            "discovery_seconds",
+            "idle_seconds",
+            "read_seconds",
+            "aggregation_seconds",
+            "outer_step_seconds",
+            "publish_seconds",
+            "interval_residual_seconds",
+            "quorum_trigger",
+            "publish_ingest_passes",
+            "publish_ingested_updates",
+        ],
+        [
+            {
+                "version": 1,
+                "selected_count": 1,
+                "global_interval_seconds": 10,
+                "discovery_seconds": 1,
+                "idle_seconds": 2,
+                "read_seconds": 1,
+                "aggregation_seconds": 1,
+                "outer_step_seconds": 1,
+                "publish_seconds": 1,
+                "interval_residual_seconds": 0.5,
+                "quorum_trigger": "quorum_max",
+                "publish_ingest_passes": 2,
+                "publish_ingested_updates": 3,
+            },
+            {
+                "version": 2,
+                "selected_count": 1,
+                "global_interval_seconds": 20,
+                "discovery_seconds": 2,
+                "idle_seconds": 3,
+                "read_seconds": 2,
+                "aggregation_seconds": 1,
+                "outer_step_seconds": 1,
+                "publish_seconds": 2,
+                "interval_residual_seconds": 1,
+                "quorum_trigger": "fastest_upload_eta",
+                "publish_ingest_passes": 1,
+                "publish_ingested_updates": 4,
+            },
+        ],
+    )
+
+    row = extract_run_metrics(root)
+
+    assert row["source_fingerprint"] == "sha256:example"
+    assert row["global_interval_seconds_mean"] == 15.0
+    assert row["global_interval_seconds_p95"] == 19.5
+    assert row["quorum_detection_seconds_mean"] == 4.0
+    assert row["quorum_max_trigger_ratio"] == 0.5
+    assert row["publish_ingest_passes_total"] == 3
+    assert row["publish_ingested_updates_total"] == 7
+    assert row["interval_residual_ratio_mean"] == 0.05
+    assert row["syncer_merge_compute_seconds_p95"] == 3.95
+    assert row["syncer_duty_cycle_percent"] == 80.0
+
+
 def test_old_run_falls_back_to_committed_selection_logs(tmp_path):
     root = tmp_path / "old"
     _write_json(root / "control" / "summary.json", {"run_id": "old", "final_version": 2})

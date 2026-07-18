@@ -83,6 +83,8 @@ def lr_lambda(step):
 
 **建议**：在跑任何 rebase-preserve + global_only 实验之前完成 `todo/cosine_scheduler_decoupling.md`：引入 `inner_optimizer.scheduler_total_steps` 独立 horizon；明确 scheduler 进度用累计 local step 还是 adoption 后相对 step；LR 乘子加下限（如 `min_lr_ratio`）避免 clamp 到 0。
 
+**实施状态（2026-07-17，当前 worktree）**：B2 已按修订后的累计步规格实施。cosine 使用显式 `scheduler_total_steps`，warmup/cosine 接点有 golden 测试，超过 horizon 保持 `min_lr_ratio`；full/fragment 的所有 scheduler 重建恢复当前累计 `local_step`。1 节点 replace/rebase/fragment tiny run 的 LR 轨迹在 warmup 后单调非增，fragment 每次 adoption 后的 reset 事件相位与下一步 LR 一致；完整 pytest 207 项通过。历史 loss/质量结论仍受旧 LR 语义污染，修复后的 run 必须建立新基线。
+
 ### B3（中）未消费配置字段
 
 - `inner_optimizer.reset_on_global_update`（config.py:118）：全仓库无任何消费点（已 grep 确认）。实际 reset/preserve 行为由 adoption strategy 硬编码。resolved config snapshot 里记录着一个不生效的 `reset_on_global_update: true`，对照实验读配置时会得出错误结论。todo 文件也点名了此项。
@@ -291,6 +293,8 @@ replace 模式每次 adoption：读 498MB checkpoint → 逐参数 copy → opti
 
 量化：正式配置 base lr=5e-5、warmup=100、cosine horizon=5000。replace 模式下每次 adoption 重置 scheduler，adoption 间隔约一个 cycle（100 步）→ learner 实际 LR 轨迹是 0.01×→1.0×base 的锯齿，平均约 0.5×base，且从不进入 cosine 衰减段；而 preserve 模式（H、rebase-preserve）scheduler epoch 连续累积，实际执行了 warmup 一次 + 完整 cosine。**因此 reset 与 preserve 两组的差异同时包含"optimizer moments 保留"和"完全不同的 LR 日程"两个因子**，现有 run 无法区分。run_analysis 已谨慎地不下质量结论，但"preserve 带来 384/395 点 loss 改善"的机制解释里应加入这一混杂因子。修复顺序：先做 scheduler decoupling（P9），再重跑 reset/preserve 消融，否则消融开关（run_analysis 最后一条建议）做了也白做。
 
+**修复说明（2026-07-17）**：scheduler decoupling 已在当前 worktree 完成并通过单节点三路径验证；这只解除后续实验的混杂，不追溯修正上段引用的历史 run。下一批 reset/preserve 对照必须共同使用该实现和显式 horizon。
+
 ### Q2（中）绝对参数平均在混 base 下的语义
 
 merge 是绝对快照的 token/staleness 加权平均（merge.py:16-33, 115-123；syncer.py:1761-1770），stale proposal 缺少最近 1–2 个版本的全局进展，把它平均进来等价于把全局参数往回拉，`staleness_lambda=0.25` 只有 1/(1+0.25s) 的温和降权。G run 是现成证据：staleness≥1 占 64%，对齐 local loss 全面回退（+0.05）。00 计划 §4.5 已规划 base-relative displacement 路线，这里补充两条可低成本先行的事：
@@ -356,3 +360,35 @@ upload BF16 → syncer FP32 聚合 → FP32 发布：单次量化，安全。`al
 - B6/B7/B8 是窗口/边界条件分析，当前规模下未观察到实际触发（B6 的 prediction 变体已实际触发过一次并已修复，是该类风险真实存在的证据）。
 - E1/E2 的吞吐改进幅度是定性判断，实施前应先用现有 syncer_metrics 的 publish/read/grace 分解确认占比。
 - Q2/Q4/Q5 的质量影响方向有 run 级证据支持（G run staleness vs loss、H 的系统优势），但幅度必须等 P7 的 validation 数据。
+
+## 9. 2026-07-18 E/Q 实施闭环
+
+本报告的 E/Q 建议随后按依赖顺序进入 `plans/perf_fix-E` 与
+`plans/quality_fix-Q`。实施审计发现并修正了两处计划问题：Q6 原趋势门禁会拒绝
+“显著下降”的量化误差，已改为只拒绝 slope CI 全正；Q5 原 v50 stop target 会在输入
+关闭前结束，不能产生 terminal predecessor，已改为 input-closure 驱动。其余计划的完成
+谓词未发现需要缩减范围的错误。
+
+当前闭合结论如下：
+
+- E1：并行 publication 三 seed 均值降低 44.5%；BF16 publish 文件减半但 publication
+  慢 62.5%，质量门禁通过仍不改 FP32 默认。
+- E2：scan 2→.2 秒使三 seed 完整时间改善 2.39%；publish-wait ingestion 无额外收益，
+  保持 opt-in。
+- E3：materialize interval 1→10 使字节减少 90%、物化时间降低 81.45%，生产 profile
+  改为 10，终态仍强制物化。
+- E4：固定 `(learner, fragment)` pointer/frontier 取代 payload glob；1000-cycle 界限与
+  六条 9 节点 fragment run 均通过。
+- E5：8 节点共置中位数劣化 1.83% 通过门槛，但有 +41.4% 离群 seed，9 节点仍默认。
+- E6：当前 9 节点 adoption pause 占 completed-cycle time 1.368–1.436%，非主导项。
+- Q1/Q3/Q4：scheduler 与 shuffle 前置已进入正式同 fingerprint 矩阵；专用 validation
+  evaluator/afterok 链路闭合。replace 三 seed 均值优于 prediction/rebase，保持默认。
+- Q2：λ=1/4 均未显著优于 λ=.25；fresh-only 平均恶化 0.04305 nats，否决默认并上调
+  base-relative displacement 优先级。
+- Q6：BF16 三 seed paired quality 与误差趋势门禁通过；E1 性能结果决定其仍为 opt-in。
+- Q5：修正版 terminal capture 三 seed 均为 selected=3/quorum_min=4；post-pre loss
+  配对均值 -0.000330，所有 seed 均低于 ε=.01，故按条件计划不实施 outer-LR scaling。
+
+正式矩阵与逐项证据在 `reports/imp_plans/perf_fix-E/`、
+`reports/imp_plans/quality_fix-Q/`，汇总结论在 `reports/run_analysis.md`。本节覆盖并取代
+上文“仍待 P7/仍为定性判断”的时点性陈述，但保留原审查文字作为问题发现记录。

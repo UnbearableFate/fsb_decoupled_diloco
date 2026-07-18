@@ -40,7 +40,7 @@ fragment 模式(`initialize_fragment_run`)额外:构建并发布 `fragment_index
 1. 建目录、开 JSONL 日志、按 `seed + learner_index` 设随机种子、选 GPU;
 2. 加载模型与 tokenizer(HF `gpt2` 等,或 `synthetic-tiny` 冒烟模型);
 3. **阻塞等待** `param_index.json`(fragment 模式还有 `fragment_index.json`),用本地模型重建 index 严格比对;
-4. **阻塞等待** `latest.json`,整体加载全局权重(fragment 模式:从各片权重 materialize 后加载),建内层 AdamW + warmup/cosine 调度器;
+4. **阻塞等待** `latest.json`,整体加载全局权重(fragment 模式:从各片权重 materialize 后加载),按累计本地步 0 建内层 AdamW + 可选 warmup/cosine 调度器。若 pointer 引用的 current-only 文件已被下一轮 GC 回收，learner 在有界预算内等待严格更新的 latest 并从整份新快照重试;
 5. 写第一份心跳(phase=`loaded_global` / `loaded_fragment_latest`);
 6. 构建数据迭代器:WikiText-2 按 learner 连续分片(`dataset.shard(num_shards=N, index=i, contiguous=True)`)后切块、无限循环;或合成随机 token 流。
 
@@ -70,7 +70,7 @@ while not stop_requested():                     # 默认:本地上限或 stop;gl
   if learner.adopt_global_after_upload:
       strategy.on_after_publish():读 latest;若已有新版则直接采纳
       rebase 无新版才构造 anchor;predict 无新版才构造预测 reference
-      runner 根据 StrategyAction 统一 reset 或 preserve optimizer/scheduler 并发公共事件
+      runner 根据 StrategyAction 统一 reset 或 preserve optimizer；重建 scheduler 时恢复累计 local-step 相位并发公共事件
 finally:
   写 status=stopped 的最终心跳,记 process_exit
 ```
@@ -78,19 +78,21 @@ finally:
 要点:
 
 - 上传的是**参数本身**而非差值;伪梯度由 syncer 计算。
-- `base_global_version` 初始取区间开始时已加载的版本;显式开启区间中途采纳后,会更新为本次上传实际基于的最新 global。
+- LR 调度只由累计 `local_step`、`warmup_steps`、独立 `scheduler_total_steps` 与 `min_lr_ratio` 决定；adoption 重建不会再次 warmup，超过 horizon 后保持正下限。
+- `base_global_version` 初始取区间开始时已加载的版本；显式开启 replace + inner poll 后，每次中途采纳会更新为上传时的最新 global。此时区间前半段仍来自旧 base，proposal 以 `mid_cycle_adoption_count` 和最近一次 `base_switched_at_step` 标明这个近似；计数器在每个 cycle 开始时清零，upload skip 不会把证据带入下一周期。
 - local-delta rebase 仅在发布后的第一次 latest 检查未发现新版时保留 `x_local,t`;发现首个新版并完成 `global_new+(local-x_local,t)` 后立即释放,直到下一次发布才可能重新建立。prediction、reference 和 reconcile 算术统一使用 `syncer.compute_dtype`,默认在 learner GPU 上执行；CUDA 安全余量不足或实际 OOM 时保持 dtype 回退 CPU,并把 placement、估算字节数和 fallback reason 写入 learner JSONL。
 - learner 不自行删除 proposal;payload 生命周期由 syncer 根据 DB/指针引用统一回收。
 - 心跳、日志、指标全部只追加/原子覆盖,不依赖任何锁。
 - `completion_mode=global_only` 到达 `max_local_steps` 时记录 `local_step_horizon_reached`,但继续执行完整训练/上传循环,直到 syncer 达到全局目标并发布 `stop.json`。
+- 首次加载 latest 后，full/fragment learner 都启动进展 watchdog。每个 optimizer step 后检查 deadline；触发前重读 latest/stop，确认 syncer 无进展后记录 `syncer_unresponsive`、写带同名 `status_reason` 的 stopped 心跳并以 0 退出。
 
 ## 3. learner 主循环(fragment 模式差异)
 
-- 每轮上传前用 `select_fragment(local_update_index, K)` 决定本轮上传哪一片,再用 `extract_fragment_from_model()` 按 fragment slices 直接读取目标命名参数并转换为 `io.tensor_dtype`,不构造完整 flatten 向量;随后写 `update_*_fragment_XXX.params.safetensors` + meta(带 `update_kind: "fragment"`、`fragment_id`、`base_fragment_version`、`base_global_merge_event`、`tensor_dtype`)。
+- 每轮上传前用 `select_fragment(local_update_index, K)` 决定本轮上传哪一片,再用 `extract_fragment_from_model()` 按 fragment slices 直接读取目标命名参数并转换为 `io.tensor_dtype`,不构造完整 flatten 向量；随后写不可变 `update_*_fXXX.params.safetensors`，再把带 `update_kind: "fragment"`、`fragment_id`、`base_fragment_version`、`base_global_merge_event`、`tensor_dtype` 的 metadata 原子替换到 per-(learner,fragment) 固定 pointer。
 - `param_norm` 通过逐参数 FP32 L2 norm 再汇总计算,同样不需要完整扁平副本;`fragment_norm` 对实际上传片以 FP32 累积计算。
-- 采纳是**增量**的:`adopt_fragment_updates()` 只加载 `latest.json` 中版本比本地新的片,scatter 进本地向量后一次性写回模型;有变化时按配置重置内层优化器。
-- fragment proposal 仍在 `updates/payloads/learner_XXX/` 中保留独立 meta 文件供扫描;不同片消费后由 syncer 的 reference-driven maintenance 统一回收。
-- 收尾:到达 `max_local_steps` 后不立即退出,在 finally 中轮询等待 `global_merge_event` 达到 `stop_after_outer_steps`(带超时),期间持续采纳,最后再整体采纳一次最终版本——保证退出时本地模型是最终模型。
+- 采纳是**增量**的:`adopt_fragment_updates()` 只加载 `latest.json` 中版本比本地新的片,scatter 进本地向量后一次性写回模型;有变化时按配置重置内层优化器。若任一片在加载时已被 GC，丢弃本次私有 flat/version 草稿，等待更新的 global merge event 后从整份 fragment latest 重试，绝不混合两个快照。
+- fragment proposal 的 payload 目录只保存不可变 tensor；syncer 只枚举 `updates/latest/learner_XXX_fNNN.json` 固定 pointer，SQLite frontier 与文件 signature 短路重放/重复解析，消费后的 tensor 由 reference-driven maintenance 统一回收。
+- 收尾与 full 共用 `completion_mode`：`local_or_global` 到达 `max_local_steps` 后写 stopped 输入闭合，`global_only` 则继续训练直到全局 stop；两者退出前都采用最后可见版本。syncer 在全部 learner stopped 后负责 terminal grace/drain 和最终 stop。
 
 ## 4. syncer 主循环(全量模式)
 
@@ -120,7 +122,8 @@ while True:
   外层步进:θ, state = outer_optimizer_step(θ, g, state)
   发布:publish_global(v+1)
       # 权重 → outer → 一个 SQLite 事务(版本+applied+drop) → latest.json
-  archive_and_prune():终态 update/旧 version 先 append+fsync JSONL,再删活跃 DB 行
+  archive_and_prune():终态 update/旧 version 先 append+fsync JSONL,
+                      再以同一 SQLite 事务 stage gc_pending + 删除活跃 DB 行
   collect_runtime_artifacts():按 DB/latest/pointer 引用只保留当前 checkpoint 与 live payload
   记 syncer_metrics.csv 与 W&B;v = v+1;刷新进展时间戳
 finally:
@@ -132,10 +135,10 @@ finally:
 
 - 每轮先算目标片 `k = global_merge_event mod K`,资格查询、quorum、宽限窗口都**只针对该片**的更新、以该片的 `fragment_version` 计 staleness;
 - 合并后:该片 θ_f/外层状态/版本推进,`global_merge_event +1`;保存该片新权重与优化器状态、写 `fragment_versions` 行;
-- `publish_fragment_latest()`:按 `should_materialize_fragment_full()` 决定是否重拼完整权重(事件 0、达到目标步数、或每 `materialize_full_every_events` 次),然后原子写 fragment 布局的 `latest.json`;
+- `publish_fragment_latest()`:按 `should_materialize_fragment_full()` 决定是否重拼完整权重(事件 0、达到目标步数、或每个显式正整数 `materialize_full_every_events` 周期),然后原子写 fragment 布局的 `latest.json`;
 - 丢弃逻辑同样按片(superseded 按 learner+片;obsolete 按该片 staleness 窗口);
-- 正常停机时 finally 中额外做一次**最终 materialize**,发布 stop 后做末次摄取、终态化、archive/GC。
-- 不支持 resume;没有 terminal merge(quorum 不足只能等待或超时停机)。
+- 正常停机时 finally 中额外做一次**强制最终 materialize**,发布 stop 后做末次摄取、终态化、archive/GC。
+- 不支持 resume；全部 learner 已 stopped 后会按片执行 terminal grace/drain，允许低于正常 `quorum_min` 的最后合并；仍无合法 pending 时以 `input_exhausted` 正常结束。
 
 ## 6. 一次完整 run 的时间线(全量模式示例)
 

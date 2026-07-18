@@ -22,7 +22,13 @@ def _read_csv_rows(path: Path) -> list[dict[str, str]]:
     if not path.exists():
         return []
     with path.open("r", encoding="utf-8", newline="") as handle:
-        return list(csv.DictReader(handle))
+        reader = csv.DictReader(handle)
+        first_field = reader.fieldnames[0] if reader.fieldnames else None
+        return [
+            row
+            for row in reader
+            if first_field is None or row.get(first_field) != first_field
+        ]
 
 
 def _read_csv_summary(path: Path) -> dict[str, Any]:
@@ -120,6 +126,15 @@ def _db_summary(path: Path | None, root: Path) -> dict[str, Any]:
             dropped_rows = [
                 row for row in full_by_id.values() if row.get("status") == "dropped"
             ]
+            mid_cycle_counts = [
+                int(row.get("mid_cycle_adoption_count") or 0)
+                for row in full_by_id.values()
+            ]
+            base_switch_steps = [
+                int(row["base_switched_at_step"])
+                for row in full_by_id.values()
+                if row.get("base_switched_at_step") is not None
+            ]
             pending = conn.execute(
                 "SELECT COUNT(*) AS n FROM updates WHERE status='pending'"
             ).fetchone()["n"]
@@ -149,6 +164,13 @@ def _db_summary(path: Path | None, root: Path) -> dict[str, Any]:
                     "dropped_updates": len(dropped_rows),
                     "global_versions": versions,
                     "contributors": contributors,
+                    "mid_cycle_adoption": {
+                        "proposals_with_adoption": sum(
+                            count > 0 for count in mid_cycle_counts
+                        ),
+                        "adoption_count": sum(mid_cycle_counts),
+                        "base_switched_at_step_values": base_switch_steps,
+                    },
                 }
             )
         if _table_exists(conn, "fragment_updates"):
@@ -244,6 +266,156 @@ def _numeric_summary(values: list[float]) -> dict[str, Any]:
     }
 
 
+def staleness_observational_summary(
+    syncer_rows: list[dict[str, str]],
+    learner_rows: list[dict[str, str]],
+) -> dict[str, Any]:
+    evidence_rows: list[tuple[float, dict[str, str]]] = []
+    aggregate_counts: Counter[int] = Counter()
+    effective_values: list[float] = []
+    fresh_values: list[float] = []
+    for row in syncer_rows:
+        raw_effective = row.get("effective_staleness_mean")
+        raw_fresh = row.get("fresh_effective_weight")
+        raw_timestamp = row.get("timestamp")
+        if raw_effective in (None, "") or raw_fresh in (None, ""):
+            continue
+        try:
+            timestamp = float(raw_timestamp or 0.0)
+            effective = float(raw_effective)
+            fresh = float(raw_fresh)
+            counts = json.loads(row.get("staleness_counts_json") or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if not all(math.isfinite(value) for value in (timestamp, effective, fresh)):
+            continue
+        evidence_rows.append((timestamp, row))
+        effective_values.append(effective)
+        fresh_values.append(fresh)
+        if isinstance(counts, dict):
+            for key, value in counts.items():
+                try:
+                    aggregate_counts[int(key)] += int(value)
+                except (TypeError, ValueError):
+                    continue
+    if not evidence_rows:
+        return {"status": "unavailable", "reason": "staleness evidence fields missing"}
+
+    learner_events: list[tuple[float, dict[str, str], float]] = []
+    for row in learner_rows:
+        try:
+            timestamp = float(row.get("timestamp") or 0.0)
+            loss = float(row.get("train_loss") or "nan")
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(timestamp) and math.isfinite(loss):
+            learner_events.append((timestamp, row, loss))
+    learner_events.sort(key=lambda item: item[0])
+
+    links: list[dict[str, Any]] = []
+    learner_index = 0
+    for merge_timestamp, row in sorted(evidence_rows, key=lambda item: item[0]):
+        while (
+            learner_index < len(learner_events)
+            and learner_events[learner_index][0] <= merge_timestamp
+        ):
+            learner_index += 1
+        link: dict[str, Any] = {
+            "merge_version": row.get("global_merge_event") or row.get("version"),
+            "merge_timestamp": merge_timestamp,
+            "effective_staleness_mean": float(row["effective_staleness_mean"]),
+            "fresh_effective_weight": float(row["fresh_effective_weight"]),
+            "staleness_counts": json.loads(row.get("staleness_counts_json") or "{}"),
+        }
+        if learner_index < len(learner_events):
+            next_timestamp, next_row, loss = learner_events[learner_index]
+            link.update(
+                next_learner_id=next_row.get("learner_id"),
+                next_local_step=int(float(next_row.get("local_step") or 0)),
+                next_train_loss=loss,
+                next_update_timestamp=next_timestamp,
+                delay_seconds=next_timestamp - merge_timestamp,
+            )
+        links.append(link)
+    return {
+        "status": "available_observational_only",
+        "warning": "merge-to-next-learner loss links are temporal observations, not validation",
+        "merge_count": len(evidence_rows),
+        "effective_staleness_mean": _numeric_summary(effective_values),
+        "fresh_effective_weight": _numeric_summary(fresh_values),
+        "aggregate_staleness_counts": {
+            str(key): value for key, value in sorted(aggregate_counts.items())
+        },
+        "links": links,
+    }
+
+
+def _percentile(values: list[float], quantile: float) -> float | None:
+    finite = sorted(value for value in values if math.isfinite(value))
+    if not finite:
+        return None
+    position = (len(finite) - 1) * float(quantile)
+    lower = int(math.floor(position))
+    upper = int(math.ceil(position))
+    if lower == upper:
+        return finite[lower]
+    fraction = position - lower
+    return finite[lower] + (finite[upper] - finite[lower]) * fraction
+
+
+def syncer_resource_cost(
+    rows: list[dict[str, str]],
+    complete_training_time_seconds: float | None,
+) -> dict[str, Any]:
+    """Account for the dedicated syncer node using non-overlapping merge metrics."""
+    if not rows or complete_training_time_seconds is None:
+        return {"status": "unavailable", "merge_count": len(rows)}
+    duration = float(complete_training_time_seconds)
+    if not math.isfinite(duration) or duration <= 0.0:
+        return {"status": "unavailable", "merge_count": len(rows)}
+
+    merge_compute_samples: list[float] = []
+    publish_samples: list[float] = []
+    for row in rows:
+        try:
+            merge_compute = sum(
+                float(row.get(key) or 0.0)
+                for key in ("read_seconds", "aggregation_seconds", "outer_step_seconds")
+            )
+            publish = float(row.get("publish_seconds") or 0.0)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if merge_compute < 0.0 or publish < 0.0:
+            continue
+        if math.isfinite(merge_compute) and math.isfinite(publish):
+            merge_compute_samples.append(merge_compute)
+            publish_samples.append(publish)
+    if not merge_compute_samples:
+        return {"status": "unavailable", "merge_count": len(rows)}
+
+    merge_compute_total = sum(merge_compute_samples)
+    publish_total = sum(publish_samples)
+    active_total = merge_compute_total + publish_total
+    duty_cycle = min(1.0, active_total / duration)
+    reserved_node_hours = duration / 3600.0
+    return {
+        "status": "available",
+        "merge_count": len(merge_compute_samples),
+        "complete_training_time_seconds": duration,
+        "merge_compute_total_seconds": merge_compute_total,
+        "merge_compute_p50_seconds": _percentile(merge_compute_samples, 0.50),
+        "merge_compute_p95_seconds": _percentile(merge_compute_samples, 0.95),
+        "publish_total_seconds": publish_total,
+        "publish_p50_seconds": _percentile(publish_samples, 0.50),
+        "publish_p95_seconds": _percentile(publish_samples, 0.95),
+        "active_total_seconds": active_total,
+        "duty_cycle": duty_cycle,
+        "duty_cycle_percent": duty_cycle * 100.0,
+        "reserved_syncer_node_hours": reserved_node_hours,
+        "estimated_idle_gpu_node_hours": reserved_node_hours * (1.0 - duty_cycle),
+    }
+
+
 def _loss_summary(rows: list[dict[str, str]]) -> dict[str, Any]:
     values: list[float] = []
     for row in rows:
@@ -296,6 +468,76 @@ def _learner_fragment_adoption(
             "last_adopted_fragments": adopted,
             "last_loaded_fragment_versions": versions,
             "has_adopted_after_initial": bool(counts.get(learner_id, 0) > 0 or adopted or inferred),
+        }
+    return payload
+
+
+def _learner_adoption_pause(
+    root: Path,
+    learner_metric_rows: list[dict[str, str]],
+) -> dict[str, dict[str, Any]]:
+    cycle_elapsed: dict[str, float] = defaultdict(float)
+    learner_ids = {
+        str(row["learner_id"])
+        for row in learner_metric_rows
+        if row.get("learner_id")
+    }
+    for row in learner_metric_rows:
+        learner_id = row.get("learner_id")
+        raw = row.get("local_cycle_elapsed_seconds")
+        if not learner_id or raw in (None, ""):
+            continue
+        try:
+            value = float(raw)
+        except ValueError:
+            continue
+        if math.isfinite(value) and value >= 0.0:
+            cycle_elapsed[learner_id] += value
+
+    events_by_learner: dict[str, list[float | None]] = defaultdict(list)
+    for path in sorted((root / "logs").glob("learner_*.jsonl")):
+        learner_id = path.stem
+        learner_ids.add(learner_id)
+        with path.open("r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                event_type = str(event.get("event_type") or "")
+                if event_type != "global_adopted" and not event_type.endswith(
+                    "fragments_adopted"
+                ):
+                    continue
+                raw = event.get("adoption_pause_seconds")
+                try:
+                    value = float(raw) if raw is not None else None
+                except (TypeError, ValueError):
+                    value = None
+                if value is not None and not math.isfinite(value):
+                    value = None
+                events_by_learner[learner_id].append(value)
+
+    payload: dict[str, dict[str, Any]] = {}
+    for learner_id in sorted(learner_ids):
+        events = events_by_learner.get(learner_id, [])
+        timed = [value for value in events if value is not None]
+        available = len(timed) == len(events)
+        total = sum(timed) if available else None
+        mean = total / len(timed) if available and timed else None
+        denominator = cycle_elapsed.get(learner_id, 0.0)
+        fraction = (
+            total / denominator
+            if available and total is not None and denominator > 0.0
+            else None
+        )
+        payload[learner_id] = {
+            "status": "available" if available else "unavailable",
+            "adoption_count": len(events),
+            "adoption_pause_total_seconds": total,
+            "adoption_pause_mean_seconds": mean,
+            "completed_cycle_elapsed_seconds": denominator,
+            "adoption_pause_fraction": fraction,
         }
     return payload
 
@@ -393,12 +635,18 @@ def summarize_run(shared_root: str | Path, db_path: str | Path | None = None) ->
         "fragment_staleness_distribution": _numeric_summary(db_staleness or metric_staleness),
         "learner_local_steps": learner_local_steps,
         "learner_fragment_adoption": _learner_fragment_adoption(heartbeats, learner_rows),
+        "learner_adoption_pause": _learner_adoption_pause(root, learner_rows),
+        "staleness_evidence": staleness_observational_summary(syncer_rows, learner_rows),
         "loss_summary": _loss_summary(learner_rows),
         "stop": stop,
         "stop_reason": (stop or {}).get("reason"),
         "run_summary": run_summary,
         "complete_training_time_seconds": (run_summary or {}).get("complete_training_time_seconds"),
         "learner_resources": (run_summary or {}).get("learner_resources"),
+        "syncer_resource_cost": syncer_resource_cost(
+            syncer_rows,
+            (run_summary or {}).get("complete_training_time_seconds"),
+        ),
         "materialized_weight_exists": materialized_weight_exists,
         "heartbeats": heartbeats,
         "syncer_metrics": _read_csv_summary(root / "metrics" / "syncer_metrics.csv"),

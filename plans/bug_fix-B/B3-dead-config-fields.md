@@ -18,7 +18,7 @@ review 建议二选一（删除 / 让 `reset_on_global_update` 成为 preserve/r
 
 全部满足才可声明完成：
 
-1. 三个字段从 dataclass 定义中删除；`grep -rn "reset_on_global_update\|upload_mode\|quorum_policy" fs_diloco/ configs/` 返回 0 行（DCF-04）；
+1. 三个字段从 dataclass 定义、运行时消费点与仓库 YAML 中删除；DCF-01 为了输出“字段已移除”必须在 parser tombstone 表保留三个字符串，因此 DCF-04 不能使用全目录零命中的自相矛盾 grep。静态检查应证明命中只存在于 `REMOVED_CONFIG_KEYS`、拒绝测试与说明文档，不存在 dataclass 字段、`getattr`/字典消费点或 `configs/*.yaml`（DCF-04）；
 2. YAML 中再出现任一字段时 `resolve_config` 拒绝，错误信息含"字段已移除"与本计划路径（DCF-01）；
 3. `configs/` 下全部 YAML 清理完毕且逐一 resolve 成功（DCF-03）;
 4. 全量 pytest 通过；一次 tiny run 正常完成（配置面变化不影响运行的管线证据）。
@@ -48,13 +48,13 @@ review 建议二选一（删除 / 让 `reset_on_global_update` 成为 preserve/r
 | DCF-01 | 死字段拒绝 | 三字段任一出现在 YAML → resolve 失败，错误含"已移除" |
 | DCF-02 | 未知键拒绝（条件性） | 任意未定义键 → resolve 失败并指出键名与所在节 |
 | DCF-03 | 全配置回归 | `configs/` 下每个 YAML resolve 成功（参数化，常驻） |
-| DCF-04 | 静态清扫 | 三字段名在 `fs_diloco/` 与 `configs/` 出现 0 次 |
+| DCF-04 | 静态清扫 | `configs/*.yaml` 与 dataclass/runtime 消费点零命中；`fs_diloco` 中仅允许 parser tombstone 字符串 |
 
 progress.md 每条记录必须列出覆盖的 DCF ID（P8）。
 
 ## 7. 验证阶梯
 
-1. **登录节点**：DCF-04 grep、lint、`git diff --check`。
+1. **登录节点**：DCF-04 的 YAML 零命中 + parser tombstone 白名单审计、lint、`git diff --check`。
 2. **1 节点 compute**：`pytest tests/test_config.py` → 全量 pytest → tiny run。
 3. 2/9 节点：不需要。合入时序注意（经验文档 §6.4）：不得在 in-flight 作业仍会重读配置的窗口期合入。
 

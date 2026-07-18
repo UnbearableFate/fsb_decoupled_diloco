@@ -38,6 +38,20 @@ CREATE TABLE IF NOT EXISTS proposal_frontiers (
     observed_at REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS fragment_proposal_frontiers (
+    learner_id TEXT NOT NULL,
+    fragment_id INTEGER NOT NULL,
+    last_observed_update_id TEXT NOT NULL,
+    last_pointer_path TEXT NOT NULL,
+    observed_at REAL NOT NULL,
+    PRIMARY KEY (learner_id, fragment_id)
+);
+
+CREATE TABLE IF NOT EXISTS gc_pending (
+    file_path TEXT PRIMARY KEY,
+    archived_at REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS updates (
     update_id TEXT PRIMARY KEY,
     learner_id TEXT NOT NULL,
@@ -48,6 +62,8 @@ CREATE TABLE IF NOT EXISTS updates (
     inner_steps INTEGER NOT NULL,
     tokens_this_update INTEGER NOT NULL,
     tokens_since_global_load INTEGER NOT NULL,
+    mid_cycle_adoption_count INTEGER NOT NULL DEFAULT 0,
+    base_switched_at_step INTEGER,
     num_examples_this_update INTEGER,
     train_loss REAL,
     grad_norm REAL,

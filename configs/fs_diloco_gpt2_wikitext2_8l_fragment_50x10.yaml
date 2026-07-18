@@ -64,6 +64,8 @@ inner_optimizer:
   weight_decay: 0.1
   scheduler: cosine
   warmup_steps: 50
+  scheduler_total_steps: 500
+  min_lr_ratio: 0.1
 
 outer_optimizer:
   name: nesterov
@@ -89,7 +91,7 @@ fragments:
   schedule: round_robin_global
   fragments_per_update: 1
   reset_inner_optimizer_on_fragment_adopt: true
-  materialize_full_every_events: 1
+  materialize_full_every_events: 10
 
 failure_sim:
   enabled: false

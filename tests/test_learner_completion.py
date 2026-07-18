@@ -1,7 +1,12 @@
 import pytest
 
 from fs_diloco.core.config import resolve_config
-from fs_diloco.runtime.learner import stop_requested
+from fs_diloco.runtime.learner import (
+    SyncerProgressWatchdog,
+    confirm_syncer_unresponsive,
+    stop_requested,
+)
+from fs_diloco.storage.atomic_io import atomic_write_json
 from fs_diloco.storage.paths import RunPaths
 
 
@@ -79,3 +84,65 @@ def test_fragment_stop_checks_global_stop_before_local_horizon(tmp_path):
     paths.stop_json.write_text('{"reason": "stop_after_outer_steps"}', encoding="utf-8")
 
     assert stop_requested(paths, 100, config)
+
+
+def test_syncer_watchdog_refresh_and_deadline_boundaries():
+    watchdog = SyncerProgressWatchdog.start(
+        timeout_seconds=10.0,
+        initial_version=3,
+        now_monotonic=100.0,
+        now_wall=1000.0,
+    )
+
+    assert not watchdog.observe(3, now_monotonic=105.0, now_wall=1005.0)
+    assert not watchdog.deadline_reached(now_monotonic=109.999)
+    assert watchdog.deadline_reached(now_monotonic=110.0)
+    assert watchdog.observe(4, now_monotonic=110.0, now_wall=1010.0)
+    assert watchdog.last_observed_version == 4
+    assert not watchdog.deadline_reached(now_monotonic=119.999)
+    assert watchdog.deadline_reached(now_monotonic=120.0)
+
+
+@pytest.mark.parametrize(
+    ("version_field", "latest_payload"),
+    [
+        ("version", {"version": 2}),
+        ("global_merge_event", {"latest_kind": "fragment", "global_merge_event": 2}),
+    ],
+)
+def test_syncer_watchdog_confirms_latest_before_triggering(
+    tmp_path, version_field, latest_payload
+):
+    paths = RunPaths(tmp_path)
+    paths.control.mkdir(parents=True, exist_ok=True)
+    watchdog = SyncerProgressWatchdog.start(
+        timeout_seconds=5.0,
+        initial_version=1,
+        now_monotonic=10.0,
+        now_wall=100.0,
+    )
+    atomic_write_json(paths.latest_json, latest_payload)
+
+    assert not confirm_syncer_unresponsive(
+        watchdog,
+        paths,
+        version_field=version_field,
+        now_monotonic=15.0,
+        now_wall=105.0,
+    )
+    assert watchdog.last_observed_version == 2
+    assert confirm_syncer_unresponsive(
+        watchdog,
+        paths,
+        version_field=version_field,
+        now_monotonic=20.0,
+        now_wall=110.0,
+    )
+    atomic_write_json(paths.stop_json, {"reason": "target"})
+    assert not confirm_syncer_unresponsive(
+        watchdog,
+        paths,
+        version_field=version_field,
+        now_monotonic=21.0,
+        now_wall=111.0,
+    )

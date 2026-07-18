@@ -9,10 +9,10 @@
 
 ## 2. 设计规格
 
-- `_batched_blocks` 增加 epoch 级重排：第 e 个 epoch（对 block 列表的一整轮消费）使用由 `(training.seed, learner_index, e)` 确定性派生的 permutation；epoch 内按重排顺序切 batch，epoch 边界处按新 permutation 继续（不足一个 batch 的尾部处理方式在 SPECIFY 冻结并测试）；
+- `_batched_blocks` 增加 epoch 级重排：第 e 个 epoch 使用由 `(training.seed, learner_index, e)` 经固定 64-bit mixing 派生的 permutation；把各 epoch permutation 串成无限 block stream，再按固定 `micro_batch_size` 切批。若 block 数不能整除 batch，最后一批跨 epoch 边界，仍保持固定 batch shape；“每个 epoch 完整 permutation”是 stream 语义，不把跨界 batch 错算为 epoch 内重复；
 - 确定性保持：同 (seed, learner_index) → 逐 batch 完全可复现（多 seed 纪律 P6 依赖此性质）；
 - 分片方式（contiguous、互不相交）**不动**——分片重叠/全局采样属 00 §4.6 数据升级方向（非目标）；
-- synthetic 路径不动；配置面可加 `data.shuffle_blocks: bool = true`（默认开启；`false` 保留旧行为用于诊断对照，命名与默认在 SPECIFY 冻结）。
+- synthetic 路径不动；新增 `data.shuffle_blocks: bool = true`（默认开启）；`false` 必须逐 batch 复现旧 modulo 序列。seed 取 `training.seed`，显式传入 data iterator，不在 `DataSection` 复制第二个 seed。
 
 ## 3. 目标与完成谓词
 
@@ -32,7 +32,7 @@
 
 | Loop | SPECIFY/RED | IMPLEMENT/GREEN | HARDEN、CHECK、PERSIST |
 | --- | --- | --- | --- |
-| L0 冻结 | 尾部 batch 语义、开关命名、permutation 派生式冻结；基线 commit | 无实现 | 决策入 progress.md |
+| L0 冻结 | 跨 epoch 固定 batch stream、开关命名、稳定 64-bit seed mixing；baseline source fingerprint | 无实现 | 决策入 progress.md |
 | L1 单元 | DSH-01–04 先 RED | epoch shuffle 实现 | 单元全绿；全量 pytest |
 | L2 管线 | — | — | tiny run 正常完成；loss 曲线形态变化记录（预期：下降更慢、更平滑）；与 B2 的同批合入协调记录 |
 
@@ -40,7 +40,7 @@
 
 | ID | 测试 | 通过条件 |
 | --- | --- | --- |
-| DSH-01 | 完整性 | 每 epoch 消费的 block 恰为全集一遍 |
+| DSH-01 | 完整性 | 将 batch 展平并按 epoch 长度切片后，每片恰为全集 permutation；不可整除反例同样成立 |
 | DSH-02 | 重排性 | 相邻 epoch 顺序不同（排除恒等 permutation 的退化实现） |
 | DSH-03 | 确定性 | 同参数逐 batch 相同；learner/epoch 间 permutation 互异 |
 | DSH-04 | 旧行为锚 | 关闭开关 → 与旧实现逐 batch 一致 |

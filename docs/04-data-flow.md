@@ -20,16 +20,20 @@
 │   └── outer_v{VVVVVV}.safetensors  # 外层优化器状态(theta + momentum/exp_avg 等)
 ├── updates/
 │   ├── latest/
-│   │   └── learner_{III}.json       # 全量模式固定 proposal pointer,每 learner 恰好一份
-│   └── payloads/learner_{III}/      # 不可变 proposal payload;fragment metadata 也在此
+│   │   ├── learner_{III}.json       # 全量模式固定 proposal pointer,每 learner 恰好一份
+│   │   └── learner_{III}_f{FFF}.json # fragment 模式固定 per-(learner,fragment) pointer
+│   └── payloads/learner_{III}/      # 仅不可变 proposal tensor；metadata 在固定 pointer
 │       ├── <update_id>.params.safetensors
-│       └── update_{uuid}_fragment_{FFF}.{params.safetensors,meta.json}
+│       └── <update_id>_f{FFF}.params.safetensors
 ├── fragments/                       # fragment 模式专用
 │   ├── fragment_index.json
 │   ├── weights/fragment_{FFF}/v{VVVVVV}.safetensors
 │   └── optim/fragment_{FFF}/v{VVVVVV}.safetensors
 ├── heartbeats/
 │   └── learner_{III}.json           # 每 learner 一份,原子覆盖
+├── eval_checkpoints/                 # 默认不存在；Q5 terminal-partial 离线证据，非权威
+│   ├── terminal_predecessor_v{V}.safetensors
+│   └── terminal_predecessor_v{V}.manifest.json
 ├── logs/
 │   ├── syncer.jsonl                 # JSONL 事件日志(每进程一份)
 │   ├── learner_{III}.jsonl
@@ -39,10 +43,16 @@
     ├── learner_metrics.csv
     ├── update_manifest.csv
     ├── update_history.jsonl         # applied/dropped 历史(append+fsync 后 DB 剪枝)
-    └── global_version_history.jsonl # 旧 global/fragment version 历史
+    ├── global_version_history.jsonl # 旧 global/fragment version 历史
+    ├── validation_eval.json         # terminal latest 的 validation 主结果
+    └── validation_terminal_predecessor_v{V}.json # Q5 前驱结果，不覆盖主 attachment
 ```
 
 SQLite 与 run 同生命周期、固定在 `control/syncer_metadata.sqlite3`。它不使用 WAL 或节点本地 shadow copy;计算节点切换后直接重开同一个文件。
+
+`eval_checkpoints/` 只在显式研究开关开启且 input-closed terminal selection 低于
+`quorum_min` 时创建。manifest 的 source version/checksum/selected/quorum 是评估溯源；
+目录不进入 DB、latest、resume 或 runtime GC 引用集合。
 
 ## 2. 文件格式详解
 
@@ -86,18 +96,19 @@ fragment 模式(`fragment_latest_payload`,`latest_kind` 用于区分):
 }
 ```
 
-### 2.2 full proposal pointer / fragment metadata(提交标记)
+### 2.2 proposal pointer（提交标记）
 
-全量 learner 的 `write_update()` 先创建不可变 payload,再把下面的 metadata 原子写到固定路径 `updates/latest/learner_XXX.json`。新 pointer 覆盖旧 pointer,因此 discovery 永远只读 `N` 个 JSON;SQLite 的 `proposal_frontiers` 防止同一 pointer 重放。fragment 版 `write_fragment_update()` 仍把每份 metadata 放在 payload 目录,并另有 `update_kind/fragment_id/base_fragment_version/base_global_merge_event/tokens_since_fragment_load/fragment_norm` 字段。
+全量 learner 的 `write_update()` 先创建不可变 payload,再把下面的 metadata 原子写到固定路径 `updates/latest/learner_XXX.json`。fragment learner 同样先写不可变 tensor，再原子替换每 `(learner, fragment)` 的 `updates/latest/learner_XXX_fNNN.json`，并追加 `update_kind/fragment_id/base_fragment_version/base_global_merge_event/tokens_since_fragment_load/fragment_norm` 字段；payload 目录不再保存 metadata。新 pointer 覆盖同 pair 旧 pointer，因此 discovery 只枚举全量模式 `N` 个或 fragment 模式 `N×K` 个 JSON；SQLite frontier 防止重放，进程内文件 signature 让未变化 pointer 不重复解析。
 
 | 字段 | 含义 |
 |---|---|
 | `format_version` / `run_id` | JSON 格式版本与所属 run(syncer 校验不匹配即忽略;DB identity 另含 `protocol_version`) |
 | `update_id` | `learner_XXX_{local_step:08d}_{uuid12}`(fragment:中间再加 `fXXX`) |
 | `learner_id` / `hostname` / `pid` | 来源标识 |
-| `base_global_version` | 本区间出发时加载的全局版本(staleness 依据) |
+| `base_global_version` | 通常是本区间出发时加载的版本；replace + inner poll 时为最近一次中途采纳后的版本(staleness 依据) |
 | `local_step_start` / `local_step_end` / `inner_steps` | 区间步数信息 |
 | `tokens_this_update` / `tokens_since_global_load` / `num_examples_this_update` | token/样本计量(合并权重依据) |
+| `mid_cycle_adoption_count` / `base_switched_at_step` | full replace 路径在本区间 inner poll 成功采纳的次数，以及最近一次切换前已完成的区间内 step 数(1-based)；无切换恒为 `0` / `null` |
 | `train_loss` / `grad_norm` / `param_norm` / `delta_norm` | 训练侧统计(`delta_norm` 当前恒为 null) |
 | `tensor_dtype` | learner update 的实际落盘 dtype(例如 `bfloat16`) |
 | `training_{cpu,gpu}_utilization_peak_percent` | 从 learner 启动至本 update 为止的 CPU/GPU 利用率最高值 |
@@ -105,7 +116,12 @@ fragment 模式(`fragment_latest_payload`,`latest_kind` 用于区分):
 | `local_cycle_step_time_seconds_mean` | 上一 local 训练周期内逐训练 step 耗时的算术平均值 |
 | `local_cycle_step_count` / `local_cycle_resource_sample_count` | 上一周期的计时 step 数与资源采样数 |
 | `file_path` / `file_size_bytes` / `sha256` | 张量文件指针(sha256 仅在 `io.compute_sha256` 开启时计算) |
-| `created_at` / `committed_at` | 张量写完时间 / 元数据提交时间 |
+| `created_at` / `committed_at` | learner 节点 wall clock 的张量写完时间 / 元数据提交时间；跨节点仅作研究证据与排序，不参与秒级 deadline 减法 |
+| `ingested_at`（SQLite） | syncer 节点 wall clock 的首次入库时间；适合离线证据，不参与进程内 adaptive deadline |
+
+adaptive grace 另维护有界的进程内 `update_id → first_seen_monotonic/first_seen_wall` registry。deadline 只使用 monotonic 值；wall 值供诊断，不落入协议元数据。syncer resume 后 registry 为空，旧 update 保守地不提供 ETA。
+
+staleness 加权仍把整份 full proposal 近似为基于单一 `base_global_version` 训练。replace + inner poll 发生中途切换时，以上两个字段量化该近似，但不改变 token 统计或 merge 数学；fragment、rebase 与 predict 不使用这组字段表达其 reference 语义。
 
 ### 2.3 张量文件(safetensors)
 
@@ -129,8 +145,8 @@ update 文件可用 BF16 降低共享文件系统 payload;syncer 读取 `local_p
 
 ### 2.6 CSV 指标(字段清单见 `observability/metrics.py`)
 
-- `syncer_metrics.csv`:每次合并一行——版本/事件号、selected_count、token 数、read/aggregation/outer_step/publish/SQLite commit/maintenance/materialize 耗时、staleness 统计、丢弃数、两次合并间隔,以及本次 selected learners 的资源指标均值。
-- `learner_metrics.csv`:每次上传一行——loss、tokens、tokens/s、写盘耗时、param/fragment norm、已加载片版本,全训练/当前 local cycle 资源峰值和 cycle 平均 step 时间等。
+- `syncer_metrics.csv`:每次合并一行——版本/事件号、selected_count、token 数、read/aggregation/outer_step/publish/SQLite commit/maintenance/materialize 耗时、是否物化及字节数、`maintenance_scanned_rows/gc_pending_rows` 有界性指标、staleness min/mean/max、按有效 merge 权重计算的 `effective_staleness_mean`、fresh effective-weight mass 与 staleness count JSON、丢弃数、两次合并间隔,以及本次 selected learners 的资源指标均值。interval 使用 monotonic clock 进一步分成 discovery/idle/grace/read/merge/publish/maintenance/residual，并记录 quorum trigger；full publish 还记录 I/O future 等待期间摄取 metadata/heartbeat 的次数与耗时。
+- `learner_metrics.csv`:每次上传一行——loss、tokens、tokens/s、写盘耗时、显式 `local_cycle_elapsed_seconds`、param/fragment norm、已加载片版本,全训练/当前 local cycle 资源峰值和 cycle 平均 step 时间等。
 - `update_manifest.csv`:每份 update 一行的清单(id、base 版本、步区间、`tensor_dtype`、文件指针与大小)。
 
 ### 2.7 `control/summary.json`
@@ -139,7 +155,7 @@ syncer 停止后等待 learner 收尾,然后写入 `run_id, final_version, stop_
 
 ### 2.8 JSONL 日志 `logs/*.jsonl`
 
-`JsonlLogger` 逐行追加 `{timestamp, actor, event_type, hostname, ...payload}` 并镜像到 stdout,fsync 落盘。关键事件类型:learner 侧 `process_start / loaded_global / update_written / global_adopted / fragments_adopted / heartbeat_written / error / process_exit`;syncer 侧 `run_initialized / metadata_ingested / quorum_wait / updates_selected / outer_step_applied / global_published / updates_dropped / state_maintenance_completed / stop_published / no_progress_timeout / error`。
+`JsonlLogger` 逐行追加 `{timestamp, actor, event_type, hostname, ...payload}` 并镜像到 stdout,fsync 落盘。关键事件类型:learner 侧 `process_start / loaded_global / update_written / global_adopted / fragments_adopted / heartbeat_written / error / process_exit`;其中 adoption 事件携带 load/apply、optimizer reset 与总 pause 三段计时，未来 latest 的纯等待另记。syncer 侧 `run_initialized / metadata_ingested / quorum_wait / updates_selected / outer_step_applied / global_published / terminal_predecessor_captured / updates_dropped / state_maintenance_completed / stop_published / no_progress_timeout / error`。
 
 ## 3. update 生命周期状态机(SQLite 中跟踪)
 
@@ -164,7 +180,7 @@ syncer 停止后等待 learner 收尾,然后写入 `run_id, final_version, stop_
 - 新 pointer 若替换同 learner 的 pending 行,旧行先终态化;已 selected 行不会被新 pointer 覆盖。摄取后即使旧 DB 行已归档,相同 pointer 也会被 frontier 拒绝重放。
 - `pending → selected`、`selected → pending`(崩溃恢复/读取失败回滚)、`* → dropped` 都是带状态前置条件的转换。
 - 常量定义在 `core/constants.py`(另有 `failed` 状态常量,当前未使用)。
-- 终态行先追加并 fsync 到 `metrics/update_history.jsonl`,再从活跃 DB 删除;对应 payload 由 reference-driven GC 回收。archive 允许崩溃重试形成重复行,分析时按 update identity 去重。
+- 终态行先追加并 fsync 到 `metrics/update_history.jsonl`;随后在同一个 SQLite 事务中把 payload 路径写入 `gc_pending` 并从活跃 DB 删除。对应 payload 删除/确认不存在后清除 pending 行。archive 允许崩溃重试形成重复行,分析时按 update identity 去重；运行时 GC 不回读随历史增长的 JSONL。
 
 ## 4. SQLite schema(`storage/schema.sql`)
 
@@ -176,12 +192,15 @@ syncer 停止后等待 learner 收尾,然后写入 `run_id, final_version, stop_
 | `global_versions` | 每个全局版本一行 | `version` 主键;weight/optim 路径、num_updates、token 计数、status、notes |
 | `learners` | 每 learner 最新快照 | `learner_id` 主键;last_seen、last_local_step、tokens_per_sec、status(+reason) |
 | `proposal_frontiers` | 全量固定 pointer 摄取水位 | `learner_id` 主键;最后观察到的 update_id/pointer_path |
-| `updates` | 全量模式 update 生命周期 | `update_id` 主键;`UNIQUE(learner_id, local_step_end, base_global_version)` 幂等去重;status 索引;learner 资源指标列 |
+| `fragment_proposal_frontiers` | fragment 固定 pointer 摄取水位 | `(learner_id, fragment_id)` 主键;最后观察到的 update_id/pointer_path |
+| `updates` | 全量模式 update 生命周期 | `update_id` 主键;`UNIQUE(learner_id, local_step_end, base_global_version)` 幂等去重;status 索引;learner 资源指标列与 mid-cycle adoption 元数据列 |
 | `fragments` | fragment 定义 | `fragment_id` 主键;strategy、numel、slices_json |
 | `fragment_versions` | 每片每版本一行 | `(fragment_id, version)` 主键;global_merge_event 索引 |
 | `fragment_updates` | fragment 模式 update 生命周期 | `UNIQUE(learner_id, fragment_id, local_step_end, base_fragment_version)`;`(fragment_id, status, base_fragment_version)` 索引;learner 资源指标列 |
 
 全量 `v → v+1` 的事务同时校验唯一 committed 前驱、目标版本连续性、selected ID/learner 唯一性、future/stale 准入和归一化权重;随后插入唯一 committed `global_versions(v+1)`,记录 selected 的 applied version/staleness/effective weight,并终态化 superseded/stale/future pending 行。任一校验或 failpoint 异常都会 rollback 整个事务。
+
+旧 run 的 `updates` 表缺少 mid-cycle 两列时，connect-time 幂等迁移补上 `mid_cycle_adoption_count INTEGER NOT NULL DEFAULT 0` 与 nullable `base_switched_at_step`；`fragment_updates` 不迁移这两列。
 
 ## 5. 端到端数据流小结
 

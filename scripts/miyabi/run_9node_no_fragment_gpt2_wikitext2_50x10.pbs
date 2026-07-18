@@ -34,6 +34,8 @@ WANDB_DATA_DIR="${WANDB_DATA_DIR:-$LOCAL_RUNTIME_DIR/wandb/data}"
 SYNCER_CUDA_VISIBLE_DEVICES="${SYNCER_CUDA_VISIBLE_DEVICES:-0}"
 LEARNER_CUDA_VISIBLE_DEVICES="${LEARNER_CUDA_VISIBLE_DEVICES:-0}"
 NUM_LEARNERS=8
+TRAINING_SEED="${TRAINING_SEED:-}"
+PARALLEL_CHECKPOINT_WRITES="${PARALLEL_CHECKPOINT_WRITES:-}"
 OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
 TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
 
@@ -64,8 +66,19 @@ mkdir -p \
   "$WANDB_DATA_DIR"
 LOG_ROOT="$PROJECT_ROOT/logs/qsub_${RUN_ID}"
 mkdir -p "$LOG_ROOT"
+SOURCE_IDENTITY_JSON="$SHARED_ROOT/control/source_identity.json"
+SOURCE_IDENTITY_ENV="$SHARED_ROOT/control/source_identity.env"
+"$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/capture_source_identity.py" \
+  --project-root "$PROJECT_ROOT" \
+  --output-json "$SOURCE_IDENTITY_JSON" \
+  --output-env "$SOURCE_IDENTITY_ENV" | tee "$LOG_ROOT/source_identity.log"
+source "$SOURCE_IDENTITY_ENV"
 
 MPI_ENV_ARGS=(
+  "FS_DILOCO_GIT_COMMIT=$FS_DILOCO_GIT_COMMIT"
+  "FS_DILOCO_GIT_DIRTY=$FS_DILOCO_GIT_DIRTY"
+  "FS_DILOCO_SOURCE_FINGERPRINT=$FS_DILOCO_SOURCE_FINGERPRINT"
+  "FS_DILOCO_REQUIRE_SOURCE_IDENTITY=$FS_DILOCO_REQUIRE_SOURCE_IDENTITY"
   "PROJECT_ROOT=$PROJECT_ROOT"
   "PYTHON_BIN=$PYTHON_BIN"
   "CONFIG=$CONFIG"
@@ -87,17 +100,22 @@ MPI_ENV_ARGS=(
   "SYNCER_CUDA_VISIBLE_DEVICES=$SYNCER_CUDA_VISIBLE_DEVICES"
   "LEARNER_CUDA_VISIBLE_DEVICES=$LEARNER_CUDA_VISIBLE_DEVICES"
   "NUM_LEARNERS=$NUM_LEARNERS"
+  "TRAINING_SEED=$TRAINING_SEED"
+  "PARALLEL_CHECKPOINT_WRITES=$PARALLEL_CHECKPOINT_WRITES"
   "OMP_NUM_THREADS=$OMP_NUM_THREADS"
   "TOKENIZERS_PARALLELISM=$TOKENIZERS_PARALLELISM"
 )
 
 echo "RUN_ID=$RUN_ID"
+echo "SOURCE_FINGERPRINT=$FS_DILOCO_SOURCE_FINGERPRINT"
 echo "PROJECT_ROOT=$PROJECT_ROOT"
 echo "PYTHON_BIN=$PYTHON_BIN"
 echo "CONFIG=$CONFIG"
 echo "SHARED_ROOT=$SHARED_ROOT"
 echo "SQLITE_DB=$SHARED_ROOT/control/syncer_metadata.sqlite3"
 echo "WANDB_MODE=$WANDB_MODE"
+echo "TRAINING_SEED=${TRAINING_SEED:-<config>}"
+echo "PARALLEL_CHECKPOINT_WRITES=${PARALLEL_CHECKPOINT_WRITES:-<config>}"
 echo "NNODES=$NNODES NUM_LEARNERS=$NUM_LEARNERS"
 printf 'HOST %s\n' "${HOSTS[@]}"
 
@@ -111,6 +129,16 @@ mpirun \
     set -eEuo pipefail
     rank="${OMPI_COMM_WORLD_RANK:?missing OMPI_COMM_WORLD_RANK}"
     host="$(hostname)"
+    config_args=()
+    if [[ -n "$TRAINING_SEED" ]]; then
+      config_args+=(--training-seed "$TRAINING_SEED")
+    fi
+    case "${PARALLEL_CHECKPOINT_WRITES,,}" in
+      "") ;;
+      1|true|yes|on) config_args+=(--parallel-checkpoint-writes) ;;
+      0|false|no|off) config_args+=(--no-parallel-checkpoint-writes) ;;
+      *) echo "Invalid PARALLEL_CHECKPOINT_WRITES=$PARALLEL_CHECKPOINT_WRITES" >&2; exit 2 ;;
+    esac
     echo "[launcher] rank=${rank} host=${host}"
     if [[ "$rank" -eq 0 ]]; then
       export CUDA_VISIBLE_DEVICES="$SYNCER_CUDA_VISIBLE_DEVICES"
@@ -119,6 +147,7 @@ mpirun \
         --run-id "$RUN_ID" \
         --shared-root "$SHARED_ROOT" \
         --num-learners "$NUM_LEARNERS" \
+        "${config_args[@]}" \
         2>&1 | tee "$PROJECT_ROOT/logs/qsub_${RUN_ID}/syncer.log"
     else
       learner_num=$((rank - 1))
@@ -130,6 +159,7 @@ mpirun \
         --shared-root "$SHARED_ROOT" \
         --learner-id "$learner_id" \
         --num-learners "$NUM_LEARNERS" \
+        "${config_args[@]}" \
         2>&1 | tee "$PROJECT_ROOT/logs/qsub_${RUN_ID}/${learner_id}.log"
     fi
   '
