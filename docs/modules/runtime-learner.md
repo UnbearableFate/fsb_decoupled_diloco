@@ -8,13 +8,13 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
 
 ### CLI 与入口
 
-- **`parse_args(argv)`** — `--config`(必填)、`--run-id`、`--shared-root`、`--learner-id`(必填)、`--num-learners`。
+- **`parse_args(argv)`** — `--config`(必填)、`--learner-id`(必填)、`--run-id`、`--shared-root`、`--num-learners`,以及与 syncer 对称的实验覆盖参数:`--training-seed`、`--scan-interval-seconds`、`--syncer-device`、`--syncer-publish-dtype`、`--staleness-lambda`、`--max-staleness-versions`、`--global-adoption-strategy`、`--completion-mode`、`--parallel-checkpoint-writes`、`--materialize-full-every-events`、`--ingest-during-publish`、`--capture-terminal-predecessor-for-eval`(launcher 把同一组覆盖传给两类进程,保证 resolved config 一致)。
 - **`main(argv)`** — `resolve_config` 后调 `run_learner`。
 - **`run_learner(config, learner_id)`** — 分派:`fragments.enabled` → `run_fragment_learner`,否则执行全量模式主循环(函数体内)。
 
 ### 共享文件交互
 
-- **`write_heartbeat(*, paths, config, learner_id, status, phase, last_loaded_global_version, last_local_step, last_update_id, tokens_per_sec=None, last_loaded_global_merge_event=None, last_loaded_fragment_versions=None, last_adopted_fragments=None, resource_metrics=None)`** — 组装心跳 payload 原子覆盖 `heartbeats/<id>.json`;fragment 相关字段仅在传入时包含;active update 心跳携带上一 local cycle 的资源指标,最终 stopped 心跳携带全训练资源峰值。
+- **`write_heartbeat(*, paths, config, learner_id, status, phase, last_loaded_global_version, last_local_step, last_update_id, tokens_per_sec=None, last_loaded_global_merge_event=None, last_loaded_fragment_versions=None, last_adopted_fragments=None, resource_metrics=None, learning_rate=None, scheduler_total_steps=None, status_reason=None)`** — 组装心跳 payload 原子覆盖 `heartbeats/<id>.json`;fragment 相关字段仅在传入时包含;心跳恒带当前 `learning_rate` 与 `scheduler_total_steps`;active update 心跳携带上一 local cycle 的资源指标,最终 stopped 心跳携带全训练资源峰值,watchdog 退出时附 `status_reason=syncer_unresponsive`。
 - **`wait_for_json(path, *, timeout_seconds=1800, poll_seconds=1)`** — 轮询直到 `safe_read_json` 成功;启动期等待 param_index/fragment_index/latest 用;超时抛 `TimeoutError`。
 - **`read_latest_if_newer(paths, last_loaded_global_version) -> dict | None`** — 读 `latest.json`,版本不高于已加载值时返回 None(全量模式轮询原语)。
 - **`read_fragment_latest_if_newer(paths, last_loaded_global_merge_event)`** — fragment 版:要求 `latest_kind == "fragment"` 且 `global_merge_event` 更大。
@@ -58,7 +58,7 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
 - **`run_fragment_learner(config, learner_id)`** — fragment 模式主体,差异:
   - 启动时还要等待并校验 fragment index;
   - 上传前 `select_fragment(local_update_index, K)` 选片、`extract_fragment_from_model` 直接抽取目标片,不先构造完整 flatten;
-  - proposal metadata 仍以每份独立文件放在 payload 目录,由 syncer maintenance 在消费后统一清理;
+  - proposal metadata 原子替换到固定的 per-(learner,fragment) pointer `updates/latest/learner_XXX_fNNN.json`;payload 目录只保存不可变 tensor,消费后由 syncer maintenance 统一清理;
   - 采纳走增量 `adopt_fragment_updates`,变化片的 `tokens_since_fragment_load` 清零;
   - finally 中的收尾:若无错且设置了 `stop_after_outer_steps`,在 `no_progress_timeout_seconds` 预算内轮询等待 `global_merge_event` 达标(期间持续采纳),最后再整体采纳一次,保证退出时本地模型为最终版本。
 

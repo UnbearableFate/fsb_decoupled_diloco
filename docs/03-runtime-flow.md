@@ -102,17 +102,19 @@ finally:
 while True:
   停机检查:stop_after_outer_steps / stop_after_global_tokens
   sync_liveness_and_metadata():摄取心跳 → 重分类 liveness → 读取恰好 N 个固定 proposal pointers
-  eligible = 库中 pending 且 staleness ≤ max_staleness_versions 的更新
-  丢弃张量文件已消失者(dropped: missing_file)
-  one_per_learner = select_one_per_learner(eligible, quorum_max 截断)
-
-  if 不足 quorum_min:
-      terminal drain 可行?(全部预期 learner 最终心跳均为 stopped)
-        → 是:以 oldest_pending 选剩余更新,继续走合并
-        → 否:记 quorum_wait;无进展超时则停机;否则 sleep(scan_interval) 重来
+  input_closed = 全部预期 learner 最终心跳均为 stopped?
+  if input_closed:
+      (首次)terminal grace:睡一个 grace 周期后再摄取一轮
+      selected = select_terminal_drain_updates():严格 future/staleness 准入,
+                 按配置的 selection_policy 每 learner 选一,允许低于 quorum_min
+      无合法 proposal → input_exhausted 停机
   else:
-      collect_with_grace_window():在宽限窗口内反复重扫,凑 quorum_max 或超时
-      (窗口结束仍不足 quorum_min → 再试 terminal drain,否则重来)
+      eligible = 库中 pending 且 staleness ≤ max_staleness_versions 的更新
+      丢弃张量文件已消失者(dropped: missing_file)
+      one_per_learner = select_one_per_learner(eligible, quorum_max 截断)
+      不足 quorum_min → 记 quorum_wait;无进展超时则停机;否则 sleep(scan_interval) 重来
+      达到 quorum_min → collect_with_grace_window():宽限窗口内反复重扫,凑 quorum_max 或超时
+                        (窗口结束仍不足 quorum_min → 重来)
 
   mark_updates_selected(CAS:仅 pending → selected)
   读取阶段:再查文件存在性;加载所有向量、转为 syncer.compute_dtype 后送到 syncer.device

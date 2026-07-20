@@ -4,7 +4,7 @@ syncer 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.md
 
 ## CLI 与入口
 
-- **`parse_args(argv)`** — `--config`(必填)、`--run-id`、`--shared-root`、`--num-learners`。
+- **`parse_args(argv)`** — `--config`(必填)、`--run-id`、`--shared-root`、`--num-learners`,以及实验覆盖参数:`--training-seed`、`--scan-interval-seconds`、`--syncer-device`、`--syncer-publish-dtype`、`--staleness-lambda`、`--max-staleness-versions`、`--global-adoption-strategy`、`--completion-mode`、`--parallel-checkpoint-writes`、`--materialize-full-every-events`、`--ingest-during-publish`、`--capture-terminal-predecessor-for-eval`(与 learner 的 parse_args 对称)。
 - **`sqlite_path(config) -> Path`** — 唯一持久库路径:`<shared_root>/control/syncer_metadata.sqlite3`。
 - **`run_identity(config)`** — 形成写入 DB 的 run/format/protocol/mode/model identity,恢复时逐项严格比对。
 - **`resolve_syncer_device(config) -> torch.device`** — 解析 `syncer.device=auto/cpu/cuda`;显式 CUDA 不可用时 fail fast。
@@ -82,5 +82,5 @@ syncer 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.md
 - 开头 `raise NotImplementedError` 拦截 resume;
 - 每轮以 `select_fragment(global_merge_event, K)` 确定目标片;资格、quorum、宽限窗口、staleness、superseded/obsolete 丢弃全部**按片**进行;
 - 合并成功后:片版本 +1、事件 +1,存片权重/优化器状态、写 `fragment_versions` 行,`publish_fragment_latest`(内含按需 materialize);
-- quorum 不足只能等待或 `no_progress_timeout`(无 terminal merge);
+- 输入闭合(全部预期 learner stopped)后与 full 一样走 terminal grace/drain:`select_terminal_drain_fragment_updates` 对当前目标片按严格准入放宽 quorum 合并,目标片无合法 pending 即 `input_exhausted`;输入未闭合时 quorum 不足只能等待或 `no_progress_timeout`;
 - finally:非 error 时先做一次**最终 materialize + 发布**,再走 stop/末次摄取/终态化/archive/GC/W&B/close 序列。

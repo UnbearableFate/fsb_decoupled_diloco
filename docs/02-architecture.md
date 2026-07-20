@@ -45,7 +45,9 @@
 `protocol/merge.py: select_one_per_learner()`——同一 learner 若有多份合格更新,按策略选一份:
 
 - `most_recent_per_learner`(默认):取 `(local_step_end, committed_at)` 最大者;
-- `oldest_pending`:取 `committed_at` 最小者(仅 terminal drain 使用)。
+- `oldest_pending`:取 `committed_at` 最小者。
+
+同一 `sync.selection_policy` 同时用于常规合并与 terminal drain,不会在末端切换策略。
 
 结果截断到 `quorum_max` 份。
 

@@ -23,8 +23,8 @@
 │   │   ├── learner_{III}.json       # 全量模式固定 proposal pointer,每 learner 恰好一份
 │   │   └── learner_{III}_f{FFF}.json # fragment 模式固定 per-(learner,fragment) pointer
 │   └── payloads/learner_{III}/      # 仅不可变 proposal tensor；metadata 在固定 pointer
-│       ├── <update_id>.params.safetensors
-│       └── <update_id>_f{FFF}.params.safetensors
+│       ├── <update_id>.params.safetensors                     # 全量模式
+│       └── update_{uuid12}_fragment_{FFF}.params.safetensors  # fragment 模式
 ├── fragments/                       # fragment 模式专用
 │   ├── fragment_index.json
 │   ├── weights/fragment_{FFF}/v{VVVVVV}.safetensors
@@ -137,7 +137,7 @@ update 文件可用 BF16 降低共享文件系统 payload;syncer 读取 `local_p
 
 ### 2.4 心跳 `heartbeats/learner_XXX.json`
 
-`write_heartbeat()` 原子覆盖:`format_version, run_id, learner_id, hostname, pid, timestamp, status(active/stopped), phase(inner_steps/update_written/...), last_loaded_global_version, last_local_step, last_update_id, tokens_per_sec`;fragment 模式追加 `last_loaded_global_merge_event, last_loaded_fragment_versions, last_adopted_fragments`;update_written 阶段追加 local cycle 资源指标,stopped 阶段追加全训练 CPU/GPU 峰值、采样数与读取错误数。
+`write_heartbeat()` 原子覆盖:`format_version, run_id, learner_id, hostname, pid, timestamp, status(active/stopped), phase(inner_steps/update_written/...), last_loaded_global_version, last_local_step, last_update_id, tokens_per_sec, learning_rate, scheduler_total_steps`;fragment 模式追加 `last_loaded_global_merge_event, last_loaded_fragment_versions, last_adopted_fragments`;update_written 阶段追加 local cycle 资源指标,stopped 阶段追加全训练 CPU/GPU 峰值、采样数与读取错误数,watchdog 自保退出时附 `status_reason=syncer_unresponsive`。
 
 ### 2.5 `control/stop.json`
 

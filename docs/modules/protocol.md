@@ -13,7 +13,7 @@
 - **`normalized_fragment_update_weights(updates, *, current_fragment_version, staleness_lambda)`** — 同上,staleness 以 `base_fragment_version` 计。
 - **`select_one_per_learner(updates, *, policy, quorum_max) -> list`** — 每 learner 至多留一份:
   - `most_recent_per_learner`:取 `(local_step_end, committed_at)` 最大者,结果按 `(learner_id, local_step_end)` 排序;
-  - `oldest_pending`:取 committed_at 最早者,结果按 `(committed_at, learner_id)` 排序(terminal drain 用,保证先进先出);
+  - `oldest_pending`:取 committed_at 最早者,结果按 `(committed_at, learner_id)` 排序(可配置的备选策略;terminal drain 与常规合并共用 `sync.selection_policy`,不做末端切换);
   - 最后截断到 `quorum_max`。
 - **`stale_update_ids(updates, *, current_version, max_staleness_versions)`** / **`stale_fragment_update_ids(...)`** — 挑出过窗更新的 id(供测试/工具;运行时用 SQL 版 `drop_obsolete_*`)。
 - **`weighted_average_tensors(tensors, weights)`** — `Σ wᵢ·tᵢ`,用 `mul/add(alpha=)` 原位风格实现避免中间大张量;空列表或长度不匹配报错。

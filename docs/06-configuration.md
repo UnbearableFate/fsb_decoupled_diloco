@@ -1,6 +1,6 @@
 # 06 配置参考
 
-配置为单个 YAML 文件,由 `core/config.py` 解析为嵌套 dataclass。**所有字段都有默认值**;出现未知键会直接报错(防拼写错误)。CLI 的 `--run-id / --shared-root / --num-learners` 会覆盖对应字段。新 run 初始化时,解析后的完整配置会同时原子写入 run 根的 `run_config.resolved.yaml` 和 `control/run_config.resolved.yaml`;二者内容一致,后者保留给恢复与既有工具使用。
+配置为单个 YAML 文件,由 `core/config.py` 解析为嵌套 dataclass。**所有字段都有默认值**;出现未知键会直接报错(防拼写错误)。CLI 的 `--run-id / --shared-root / --num-learners` 及一组实验覆盖参数(`--training-seed`、`--scan-interval-seconds`、`--syncer-device`、`--syncer-publish-dtype`、`--staleness-lambda`、`--max-staleness-versions`、`--global-adoption-strategy`、`--completion-mode`、`--parallel-checkpoint-writes`、`--materialize-full-every-events`、`--ingest-during-publish`、`--capture-terminal-predecessor-for-eval`)会覆盖对应字段,syncer 与 learner 两侧接受同一组参数。新 run 初始化时,解析后的完整配置会同时原子写入 run 根的 `run_config.resolved.yaml` 和 `control/run_config.resolved.yaml`;二者内容一致,后者保留给恢复与既有工具使用。
 
 标注 ⚠ 的字段:在配置中声明但**当前运行时代码未消费**(预留)。
 

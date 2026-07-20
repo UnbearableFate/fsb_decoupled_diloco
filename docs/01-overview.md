@@ -53,7 +53,7 @@ fs_diloco 实现了一种 **Decoupled DiLoCo**(解耦的 DiLoCo)训练协议:
 | **staleness** | `当前版本 − base 版本`,更新的陈旧度。超过 `max_staleness_versions` 的 pending 更新被丢弃。 |
 | **quorum** | 一次合并需要的 update 数下限 `quorum_min` / 上限 `quorum_max`(每个 learner 至多贡献 1 份)。 |
 | **grace window(宽限窗口)** | 达到 `quorum_min` 后,syncer 再等待一小段时间以收集更多 learner 的更新。`fixed` 使用固定时长;`adaptive_fastest_upload_eta` 从 `initial_seconds` 开始,并以已选 learner 中最快下一次上传的 ETA 为界只缩短、不延长;凑满 `quorum_max` 也会提前结束。 |
-| **terminal drain(末端排空)** | 所有预期 learner 都明确写出 `stopped` 最终心跳后,syncer 等一个 grace/reingest 周期,在严格 future/staleness 准入下放宽 quorum、按最旧优先合并剩余 proposal;合法输入耗尽时以 `input_exhausted` 停止。 |
+| **terminal drain(末端排空)** | 所有预期 learner 都明确写出 `stopped` 最终心跳后,syncer 等一个 grace/reingest 周期,在严格 future/staleness 准入下放宽 quorum、按配置的选择策略合并剩余 proposal;合法输入耗尽时以 `input_exhausted` 停止。full/fragment 两条主循环都覆盖。 |
 | **latest.json** | learner 轮询的**唯一**全局指针文件,指向最新已提交的全局权重(或各 fragment 版本)。 |
 | **proposal pointer** | 全量模式中每 learner 固定的一份 `updates/latest/learner_XXX.json`;新 proposal 以原子替换覆盖旧可见面,SQLite 负责 latest-wins 摄取和生命周期。 |
 | **heartbeat** | learner 周期性写入的存活信号 JSON,syncer 据此把 learner 分类为 active/stale/dead/stopped。 |
