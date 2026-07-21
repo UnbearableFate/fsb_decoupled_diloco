@@ -1,0 +1,6 @@
+{
+  "error": "metric/global version count mismatch",
+  "error_type": "RuntimeError",
+  "result": "BLOCKED",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_resume2_20260721"
+}

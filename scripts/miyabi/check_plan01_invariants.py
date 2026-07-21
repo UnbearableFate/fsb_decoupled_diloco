@@ -39,6 +39,81 @@ def percentile_95(values: list[float]) -> float:
     return ordered[index]
 
 
+def validate_resume_progress(
+    events: list[dict[str, Any]],
+    *,
+    resume_generation: dict[str, Any] | None,
+    expected_learners: int,
+    final_version: int,
+) -> dict[str, Any]:
+    """Validate that the most recent resume opened a new live generation and progressed."""
+    resume_indexes = [
+        index
+        for index, event in enumerate(events)
+        if event.get("event_type") == "run_resumed"
+    ]
+    if not resume_indexes:
+        raise RuntimeError("run_resumed event is missing")
+    resume_index = resume_indexes[-1]
+    resume_event = events[resume_index]
+    resume_version = int(resume_event["version"])
+    if not isinstance(resume_generation, dict):
+        raise RuntimeError("resume_generation run_state is missing")
+    if str(resume_generation.get("resume_id")) != str(resume_event.get("resume_id")):
+        raise RuntimeError("resume event disagrees with resume_generation")
+    heartbeat_fences = resume_generation.get("heartbeat_fences")
+    if not isinstance(heartbeat_fences, dict) or len(heartbeat_fences) != expected_learners:
+        raise RuntimeError("resume heartbeat fence set is incomplete")
+    if int(resume_event.get("heartbeat_fence_count", -1)) != expected_learners:
+        raise RuntimeError("run_resumed heartbeat fence count is incomplete")
+
+    forbidden = {"input_exhausted", "stop_published", "error"}
+    active_index: int | None = None
+    progress_index: int | None = None
+    for index in range(resume_index + 1, len(events)):
+        event = events[index]
+        event_type = str(event.get("event_type"))
+        if event_type in forbidden:
+            raise RuntimeError(f"{event_type} occurred before post-resume progress")
+        if event_type == "learner_liveness_updated" and int(event.get("active", 0)) > 0:
+            active_index = index
+        if event_type in {"outer_step_applied", "global_published"} and int(
+            event.get("version", -1)
+        ) > resume_version:
+            progress_index = index
+            break
+    if active_index is None:
+        raise RuntimeError("no active current-generation learner observed after resume")
+    if progress_index is None:
+        raise RuntimeError("no strictly newer commit observed after resume")
+    if final_version <= resume_version:
+        raise RuntimeError("final version did not advance beyond resume version")
+
+    progress_event = events[progress_index]
+    return {
+        "resume_event_index": resume_index,
+        "resume_id": str(resume_event.get("resume_id")),
+        "resume_version": resume_version,
+        "heartbeat_fence_count": len(heartbeat_fences),
+        "active_liveness_event_index": active_index,
+        "progress_event_index": progress_index,
+        "progress_event_type": str(progress_event.get("event_type")),
+        "progress_version": int(progress_event["version"]),
+        "final_version": final_version,
+    }
+
+
+def write_resume_artifact(path: str | None, payload: dict[str, Any]) -> None:
+    if path is None:
+        return
+    artifact_path = Path(path).resolve()
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
 def check(args: argparse.Namespace) -> str:
     root = Path(args.run_root).resolve()
     control = root / "control"
@@ -49,6 +124,7 @@ def check(args: argparse.Namespace) -> str:
         raise FileNotFoundError(db_path)
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=60.0)
     conn.row_factory = sqlite3.Row
+    resume_generation: dict[str, Any] | None = None
     try:
         if [row[0] for row in conn.execute("PRAGMA integrity_check")] != ["ok"]:
             raise RuntimeError("integrity check failed")
@@ -83,6 +159,14 @@ def check(args: argparse.Namespace) -> str:
             active_table = "updates"
         if version < args.expected_version:
             raise RuntimeError("expected version not reached")
+        if args.require_resume_progress:
+            run_state_row = conn.execute(
+                "SELECT value FROM run_state WHERE key = 'resume_generation'"
+            ).fetchone()
+            if run_state_row is not None:
+                decoded = json.loads(str(run_state_row[0]))
+                if isinstance(decoded, dict):
+                    resume_generation = decoded
         active_updates = int(
             conn.execute(
                 f"SELECT COUNT(*) FROM {active_table} "
@@ -197,6 +281,15 @@ def check(args: argparse.Namespace) -> str:
     if event_types & {"error", "no_progress_timeout", "db_dumped"}:
         raise RuntimeError("failure or dump event exists")
 
+    resume_details: dict[str, Any] | None = None
+    if args.require_resume_progress:
+        resume_details = validate_resume_progress(
+            events,
+            resume_generation=resume_generation,
+            expected_learners=args.expected_learners,
+            final_version=version,
+        )
+
     if args.require_complete:
         stop = read_json(control / "stop.json")
         summary = read_json(control / "summary.json")
@@ -229,8 +322,20 @@ def check(args: argparse.Namespace) -> str:
         training_seconds = float(summary["complete_training_time_seconds"])
         if (sum(sqlite_seconds) + sum(maintenance_seconds)) / training_seconds >= 0.05:
             raise RuntimeError("SQLite plus maintenance overhead exceeded")
-        return "PASS"
-    return "PASS_WITH_FOLLOWUPS"
+        result = "PASS"
+    else:
+        result = "PASS_WITH_FOLLOWUPS"
+    if args.require_resume_progress:
+        write_resume_artifact(
+            args.resume_artifact,
+            {
+                "result": result,
+                "run_root": str(root),
+                "latest_version": int(latest["version"]),
+                "resume_progress": resume_details,
+            },
+        )
+    return result
 
 
 def main() -> None:
@@ -239,11 +344,23 @@ def main() -> None:
     parser.add_argument("--expected-learners", type=int, required=True)
     parser.add_argument("--expected-version", type=int, required=True)
     parser.add_argument("--require-complete", action="store_true")
+    parser.add_argument("--require-resume-progress", action="store_true")
+    parser.add_argument("--resume-artifact")
     args = parser.parse_args()
     try:
         result = check(args)
-    except Exception:
+    except Exception as exc:
         result = "BLOCKED"
+        if args.require_resume_progress:
+            write_resume_artifact(
+                args.resume_artifact,
+                {
+                    "result": result,
+                    "run_root": str(Path(args.run_root).resolve()),
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                },
+            )
     print(result)
     raise SystemExit(0 if result != "BLOCKED" else 1)
 

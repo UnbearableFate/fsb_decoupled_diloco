@@ -59,6 +59,7 @@
 全局版本 / learner:
 
 - **`initialize_full_run(...)`** — 一个事务写入 committed v0、run identity 与配置快照;拒绝覆盖已有 committed run。
+- **`prepare_full_resume(...)`** — full resume 的单一事务边界：`selected → pending`，把全部预期 learner 行重置为 `unknown/resumed` 并清空本代 hostname/pid/last_seen/heartbeat path，同时把 resume ID/时间/旧 heartbeat 内容 fence 写入 `run_state.resume_generation`。事务失败不会暴露部分切代。
 - **`commit_full_merge(...)`** — 全量 `N→N+1` 的唯一事务边界:校验前驱/目标、selected 行与 learner 唯一性、future/stale 准入、归一化权重,插入 global row,写 applied 字段并终态化 superseded/stale/future 行;任何异常整笔 rollback。
 - **`upsert_global_version(...)`** — fragment/兼容路径的版本行写入。
 - **`get_global_version(version)`**。
@@ -99,6 +100,6 @@ fragment 模式(与上面逐一对应,多了 fragment 维度):
 ## storage/maintenance.py — 归档与引用驱动 GC
 
 - **`archive_and_prune(store, paths)`** — 把 terminal update 与非 current version 行追加到 `metrics/update_history.jsonl` / `global_version_history.jsonl`,flush+fsync 成功后才以 `gc_pending + active row delete` 的 SQLite 事务剪枝。崩溃重试可形成重复 archive 行,分析器按 identity 去重。
-- **`collect_runtime_artifacts(...)`** — checkpoint 按当前权威引用回收，proposal 按 active DB/pointer/`gc_pending` 回收；不读取 archive JSONL。清理成功后删除对应 pending 行。
-- **`collect_runtime_artifacts(store, paths, orphan_grace_seconds, extra_terminal_paths=...)`** — 保留 current global/fragment checkpoint、latest 引用的 materialized full、active DB payload;删除不再引用的 checkpoint、终态 payload/meta 与临时文件。未发布 proposal/orphan payload 至少等待 grace。
+- **`collect_runtime_artifacts(...)`** — checkpoint 按当前权威引用回收，proposal tensor 按 active DB/pointer/`gc_pending` 回收；不读取 archive JSONL，也不扫描旧布局 `updates/payloads/**/.meta.json`。清理成功后删除对应 pending 行。
+- **`collect_runtime_artifacts(store, paths, orphan_grace_seconds, extra_terminal_paths=...)`** — 保留 current global/fragment checkpoint、latest 引用的 materialized full、active DB payload;删除不再引用的 checkpoint、终态 payload tensor 与临时文件。未发布 proposal/orphan payload 至少等待 grace。
 - **`run_maintenance(..., input_closed=False)`** — 按顺序执行 archive → prune → GC。正常输入闭合时终态引用可零 grace 删除;其他时刻 orphan grace 为 `max(2×heartbeat interval, 2×scan interval)`。

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import time
 from pathlib import Path
 from typing import Any
 
-from ..storage.atomic_io import safe_read_json
 from ..core.constants import (
     FORMAT_VERSION,
     LEARNER_STATUS_ACTIVE,
@@ -39,23 +40,68 @@ def validate_heartbeat(
     return True, None
 
 
+def _read_heartbeat(path: Path) -> tuple[dict[str, Any], str] | None:
+    """Read one atomically published heartbeat and fingerprint those exact bytes."""
+
+    try:
+        content = path.read_bytes()
+        payload = json.loads(content)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload, hashlib.sha256(content).hexdigest()
+
+
+def capture_heartbeat_fences(
+    heartbeat_dir: str | Path,
+    *,
+    run_id: str,
+    num_learners: int,
+) -> dict[str, str]:
+    """Fingerprint valid heartbeat pointers that predate a resume generation."""
+
+    heartbeat_dir = Path(heartbeat_dir)
+    fences: dict[str, str] = {}
+    if not heartbeat_dir.exists():
+        return fences
+    for path in sorted(heartbeat_dir.glob("learner_*.json")):
+        heartbeat = _read_heartbeat(path)
+        if heartbeat is None:
+            continue
+        payload, fingerprint = heartbeat
+        ok, _reason = validate_heartbeat(
+            payload,
+            run_id=run_id,
+            num_learners=num_learners,
+        )
+        if ok:
+            fences[str(payload["learner_id"])] = fingerprint
+    return fences
+
+
 def ingest_heartbeats(
     store: SQLiteStore,
     heartbeat_dir: str | Path,
     *,
     run_id: str,
     num_learners: int,
+    heartbeat_fences: dict[str, str] | None = None,
 ) -> int:
     heartbeat_dir = Path(heartbeat_dir)
     count = 0
     if not heartbeat_dir.exists():
         return 0
     for path in sorted(heartbeat_dir.glob("learner_*.json")):
-        payload = safe_read_json(path)
-        if payload is None:
+        heartbeat = _read_heartbeat(path)
+        if heartbeat is None:
             continue
+        payload, fingerprint = heartbeat
         ok, _reason = validate_heartbeat(payload, run_id=run_id, num_learners=num_learners)
         if not ok:
+            continue
+        learner_id = str(payload["learner_id"])
+        if heartbeat_fences is not None and heartbeat_fences.get(learner_id) == fingerprint:
             continue
         status = payload.get("status") or LEARNER_STATUS_ACTIVE
         store.upsert_learner(

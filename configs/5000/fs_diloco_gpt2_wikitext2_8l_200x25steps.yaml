@@ -1,5 +1,5 @@
 run:
-  name: fs_diloco_gpt2_wikitext2_8l_5000steps_predict_bf16all_cuda
+  name: fs_diloco_gpt2_wikitext2_8l_5000steps
   run_id: null
   shared_root: /work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/{run_id}
   log_level: INFO
@@ -32,10 +32,11 @@ sync:
   selection_policy: most_recent_per_learner
   scan_interval_seconds: 2.0
   grace_window:
-    mode: fixed
+    mode: adaptive_fastest_upload_eta
     fixed_seconds: 20.0
+    initial_seconds: 10.0
     max_seconds: 60.0
-  stop_after_outer_steps: 50
+  stop_after_outer_steps: 25
   stop_after_global_tokens: null
   stop_file_poll_seconds: 5.0
 
@@ -46,7 +47,7 @@ liveness:
   no_progress_timeout_seconds: 3600.0
 
 training:
-  inner_steps: 100
+  inner_steps: 200
   micro_batch_size: 2
   gradient_accumulation_steps: 8
   block_size: 1024
@@ -84,16 +85,7 @@ io:
 learner:
   poll_latest_during_inner_steps: true
   adopt_global_after_upload: true
-  global_adoption_strategy: predict_post_publish_global
-  post_publish_latest_wait_seconds: 0.0
-  post_publish_latest_poll_seconds: 0.2
-  prediction:
-    reconcile_timeout_seconds: 60.0
-
-syncer:
-  device: cuda
-  compute_dtype: bfloat16
-  publish_dtype: bfloat16
+  global_adoption_strategy: rebase_post_publish_delta
 
 failure_sim:
   enabled: false
@@ -105,10 +97,9 @@ wandb:
   enabled: true
   mode: offline
   entity: null
-  group: fs_diloco_gpt2_wikitext2_8l_5000steps_predict
+  group: fs_diloco_gpt2_wikitext2_8l_5000steps
   tags:
     - gpt2
     - wikitext-2
     - 5000-local-steps
     - 8-learners
-    - predicted-global

@@ -52,6 +52,8 @@ SQLite 与 run 同生命周期、固定在 `control/syncer_metadata.sqlite3`。�
 
 `eval_checkpoints/` 只在显式研究开关开启且 input-closed terminal selection 低于
 `quorum_min` 时创建。manifest 的 source version/checksum/selected/quorum 是评估溯源；
+它是证据包提交点。manifest 前的 checkpoint 是可校验、可原子覆盖的未提交中间态；
+manifest 存在后，缺失/损坏 checkpoint 或 identity/source checksum 冲突均 fail closed。
 目录不进入 DB、latest、resume 或 runtime GC 引用集合。
 
 ## 2. 文件格式详解
@@ -139,13 +141,19 @@ update 文件可用 BF16 降低共享文件系统 payload;syncer 读取 `local_p
 
 `write_heartbeat()` 原子覆盖:`format_version, run_id, learner_id, hostname, pid, timestamp, status(active/stopped), phase(inner_steps/update_written/...), last_loaded_global_version, last_local_step, last_update_id, tokens_per_sec, learning_rate, scheduler_total_steps`;fragment 模式追加 `last_loaded_global_merge_event, last_loaded_fragment_versions, last_adopted_fragments`;update_written 阶段追加 local cycle 资源指标,stopped 阶段追加全训练 CPU/GPU 峰值、采样数与读取错误数,watchdog 自保退出时附 `status_reason=syncer_unresponsive`。
 
+full resume 会把切代时通过 run/learner/JSON 校验的 pointer 内容 SHA256 记录在
+`run_state.resume_generation.heartbeat_fences`。该 fence 是恢复辅助状态，不是训练权威：
+只有字节内容完全相同的旧 pointer 被忽略，任意合法的新原子替换都按本代心跳摄取。
+fragment final wait 使用 `active, phase=final_fragment_wait` 周期心跳，最后仍以
+`stopped, phase=process_exit` 收束。
+
 ### 2.5 `control/stop.json`
 
 `{format_version, run_id, reason, version, total_seen_tokens, timestamp}`;常见 `reason ∈ {stop_after_outer_steps, stop_after_global_tokens, input_exhausted, no_progress_timeout, completed, error}`。
 
 ### 2.6 CSV 指标(字段清单见 `observability/metrics.py`)
 
-- `syncer_metrics.csv`:每次合并一行——版本/事件号、selected_count、token 数、read/aggregation/outer_step/publish/SQLite commit/maintenance/materialize 耗时、是否物化及字节数、`maintenance_scanned_rows/gc_pending_rows` 有界性指标、staleness min/mean/max、按有效 merge 权重计算的 `effective_staleness_mean`、fresh effective-weight mass 与 staleness count JSON、丢弃数、两次合并间隔,以及本次 selected learners 的资源指标均值。interval 使用 monotonic clock 进一步分成 discovery/idle/grace/read/merge/publish/maintenance/residual，并记录 quorum trigger；full publish 还记录 I/O future 等待期间摄取 metadata/heartbeat 的次数与耗时。
+- `syncer_metrics.csv`:每次合并一行——版本/事件号、selected_count、token 数、read/aggregation/outer_step/publish/SQLite commit/maintenance/materialize 耗时、是否物化及字节数、`maintenance_scanned_rows/gc_pending_rows` 有界性指标、staleness min/mean/max、按有效 merge 权重计算的 `effective_staleness_mean`、fresh effective-weight mass 与 staleness count JSON、丢弃数、两次合并间隔,以及本次 selected learners 的资源指标均值。interval 使用 monotonic clock 进一步分成 discovery/idle/grace/read/merge/publish/maintenance/residual，并记录 quorum trigger。full publish 的 `publish_ingest_passes` 只统计 checkpoint futures 未完成时真实调用 callback 的轮数；updates/heartbeats 是各轮插入数之和，seconds 只含 callback wall time。`sync.ingest_during_publish=false` 时四字段严格为 `0/0/0/0.0`。
 - `learner_metrics.csv`:每次上传一行——loss、tokens、tokens/s、写盘耗时、显式 `local_cycle_elapsed_seconds`、param/fragment norm、已加载片版本,全训练/当前 local cycle 资源峰值和 cycle 平均 step 时间等。
 - `update_manifest.csv`:每份 update 一行的清单(id、base 版本、步区间、`tensor_dtype`、文件指针与大小)。
 
@@ -181,6 +189,7 @@ syncer 停止后等待 learner 收尾,然后写入 `run_id, final_version, stop_
 - `pending → selected`、`selected → pending`(崩溃恢复/读取失败回滚)、`* → dropped` 都是带状态前置条件的转换。
 - 常量定义在 `core/constants.py`(另有 `failed` 状态常量,当前未使用)。
 - 终态行先追加并 fsync 到 `metrics/update_history.jsonl`;随后在同一个 SQLite 事务中把 payload 路径写入 `gc_pending` 并从活跃 DB 删除。对应 payload 删除/确认不存在后清除 pending 行。archive 允许崩溃重试形成重复行,分析时按 update identity 去重；运行时 GC 不回读随历史增长的 JSONL。
+- runtime maintenance 只扫描不可变 proposal tensor 与临时文件；metadata 的唯一运行时发现面是 `updates/latest/` 固定 pointer，不扫描 `updates/payloads/**/.meta.json`。旧布局如需迁移必须由离线工具显式完成。
 
 ## 4. SQLite schema(`storage/schema.sql`)
 

@@ -45,6 +45,8 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
 - **`load_fragment_latest_into_model(*, model, latest, param_index, fragment_index, device, paths, config) -> (global_merge_event, {fragment_id: version})`** — 启动期:加载 latest 中**所有**片、materialize 成完整向量后整体写回；缺片时以更新 event 的完整快照重试。
 - **`adopt_fragment_updates(*, model, latest, param_index, fragment_index, last_loaded_fragment_versions, device, paths, config) -> (event, versions, changed)`** — 运行期增量采纳:flatten 当前模型 → 只加载版本更新的片并 scatter → 全部成功后才一次性提交模型与版本。有片被 GC 时丢弃私有草稿并以整份更新 latest 重试。
 - **`apply_fragment_adoption(...) -> FragmentAdoptionResult`** — 四个 fragment 采纳语境的统一收尾；调用点显式指定事件名、是否清零对应 token、是否允许按配置重置 optimizer/scheduler、是否附带完整片版本。inner poll/upload 后、final wait、最终 latest 的既有差异由参数表达，不再复制状态转换块。事件分别记录 checkpoint load/apply、optimizer/scheduler reset 与两者总 pause；调用前的 latest 等待不计入 pause。
+- **`wait_for_final_fragment_progress(...)`** — fragment finally 的有界等待器；no-progress deadline 与 heartbeat schedule 使用独立单调时钟。等待中按配置间隔写 `active, phase=final_fragment_wait`，采纳 latest 后立即补带新版本的心跳，但任何心跳/采纳都不延长 deadline。
+- **`finalize_fragment_adoption_and_heartbeat(...)`** — 把 final adoption 的诊断边界与最终 stopped heartbeat 分开；adoption 异常记录后仍调用 stopped heartbeat，随后重新抛出原异常，不能把收尾失败伪装成成功；heartbeat 自身失败同样向外传播并保留异常链。
 
 ### update 提交
 
@@ -60,7 +62,7 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
   - 上传前 `select_fragment(local_update_index, K)` 选片、`extract_fragment_from_model` 直接抽取目标片,不先构造完整 flatten;
   - proposal metadata 原子替换到固定的 per-(learner,fragment) pointer `updates/latest/learner_XXX_fNNN.json`;payload 目录只保存不可变 tensor,消费后由 syncer maintenance 统一清理;
   - 采纳走增量 `adopt_fragment_updates`,变化片的 `tokens_since_fragment_load` 清零;
-  - finally 中的收尾:若无错且设置了 `stop_after_outer_steps`,在 `no_progress_timeout_seconds` 预算内轮询等待 `global_merge_event` 达标(期间持续采纳),最后再整体采纳一次,保证退出时本地模型为最终版本。
+  - finally 中的收尾:若无错且设置了 `stop_after_outer_steps`,在 `no_progress_timeout_seconds` 预算内轮询等待 `global_merge_event` 达标，期间持续采纳并周期写 active final-wait heartbeat；最后再整体采纳一次，然后由外层 finally 写 stopped process-exit heartbeat。final adoption 异常记录 `final_fragment_adoption_failed`，仍继续尝试 stopped heartbeat。
 
 ---
 
@@ -70,6 +72,7 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
 - **`ReplaceGlobalAdoptionStrategy` / `RebaseGlobalAdoptionStrategy` / `PredictGlobalAdoptionStrategy`** — 分别封装直接覆盖、发布点 local-delta rebase、prediction/reconcile 的私有 reference、token 和 update-id 状态。
 - **钩子顺序** — 每个 cycle 依次为 `on_local_tokens` → 可选 `on_newer_latest` → `on_stop` 或 `on_cycle_end` → `before_publish` → `on_after_publish`。
 - **`StrategyAction` / `AdoptionOutcome`** — 把新版本、latest metadata、token 计数与 preserve/reset 决策返回 runner；`global_adopted`、`inner_training_state_preserved`、`inner_optimizer_reset` 只由 learner 的统一收尾函数发出。
+- stop 是策略状态机的正常输入：predict reconcile wait 返回 None 时有 stop 则 abandon/清空 state，无 stop 才抛 timeout；predict/rebase after-publish 仍优先直接采纳已可见新版，只有“无新版且无 stop”才创建新 prediction reference/rebase anchor。
 - **`validate_global_adoption_strategy(config)` / `make_global_adoption_strategy(config)`** — 配置解析经同一策略类型表调用当前策略的 `validate`，运行期再由唯一工厂构造状态机；非法策略名启动即拒绝。prediction 专属超时位于 `learner.prediction.reconcile_timeout_seconds`。策略状态只存在于进程内，不写入磁盘或 DB。
 
 ---

@@ -1,0 +1,2 @@
+{"actor": "learner_000", "base_global_version": 3, "event_type": "global_prediction_start_skipped_on_stop", "hostname": "mg0010", "timestamp": 1784560858.6434333, "update_id": "learner_000_00000008_e29b902711f8"}
+{"actor": "learner_000", "event_type": "process_exit", "global_version": 3, "hostname": "mg0010", "local_step": 8, "resource_reader_error_count": 0, "status_reason": null, "timestamp": 1784560858.6501167, "training_cpu_utilization_peak_percent": 4.3478260869565215, "training_gpu_utilization_peak_percent": 2.0, "training_resource_sample_count": 14}

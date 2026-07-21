@@ -726,6 +726,74 @@ class SQLiteStore:
         self.conn.commit()
         return int(cur.rowcount)
 
+    def prepare_full_resume(
+        self,
+        *,
+        resume_id: str,
+        resumed_at: float,
+        expected_learner_ids: Iterable[str],
+        heartbeat_fences: dict[str, str],
+        before_commit: Callable[[], None] | None = None,
+    ) -> dict[str, Any]:
+        """Atomically roll back transient merge/liveness state for a new syncer generation."""
+
+        learner_ids = sorted({str(learner_id) for learner_id in expected_learner_ids})
+        learner_id_set = set(learner_ids)
+        self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            selected = self.conn.execute(
+                """
+                UPDATE updates
+                SET status = ?, selected_at = NULL, selected_by_run = NULL
+                WHERE status = ?
+                """,
+                (UPDATE_STATUS_PENDING, UPDATE_STATUS_SELECTED),
+            ).rowcount
+            self.conn.executemany(
+                """
+                INSERT INTO learners(learner_id, status, status_reason)
+                VALUES (?, ?, ?)
+                ON CONFLICT(learner_id) DO UPDATE SET
+                    hostname=NULL,
+                    pid=NULL,
+                    last_seen=NULL,
+                    tokens_per_sec=NULL,
+                    last_heartbeat_path=NULL,
+                    status=excluded.status,
+                    status_reason=excluded.status_reason
+                """,
+                [
+                    (learner_id, LEARNER_STATUS_UNKNOWN, "resumed")
+                    for learner_id in learner_ids
+                ],
+            )
+            generation = {
+                "resume_id": str(resume_id),
+                "resumed_at": float(resumed_at),
+                "heartbeat_fences": {
+                    learner_id: str(heartbeat_fences[learner_id])
+                    for learner_id in sorted(heartbeat_fences)
+                    if learner_id in learner_id_set
+                },
+            }
+            self._set_run_state_in_transaction(
+                self.conn,
+                "resume_generation",
+                generation,
+                now=float(resumed_at),
+            )
+            if before_commit is not None:
+                before_commit()
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
+        return {
+            **generation,
+            "reset_selected": int(selected),
+            "reset_learners": len(learner_ids),
+        }
+
     def drop_updates(self, update_ids: list[str], reason: str) -> None:
         if not update_ids:
             return

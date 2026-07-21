@@ -85,6 +85,23 @@ def test_publish_global_writes_weight_and_outer_concurrently_before_db_commit(
     assert publication["publish_roundtrip_l2_error"] > 0.0
     assert publication["publish_roundtrip_linf_error"] > 0.0
     assert publication["publish_roundtrip_relative_l2_error"] > 0.0
+    assert publication["publish_ingest_passes"] == 0
+    assert publication["publish_ingested_updates"] == 0
+    assert publication["publish_ingested_heartbeats"] == 0
+    assert publication["publish_ingest_seconds"] == 0.0
+
+
+def test_checkpoint_wait_callback_is_absent_when_ingestion_disabled(tmp_path):
+    config, _paths, _theta = _publication_inputs(tmp_path)
+
+    def callback():
+        return {"metadata": 1}
+
+    config.sync.ingest_during_publish = False
+    assert syncer.checkpoint_wait_ingestion_callback(config, callback) is None
+
+    config.sync.ingest_during_publish = True
+    assert syncer.checkpoint_wait_ingestion_callback(config, callback) is callback
 
 
 def test_serial_experiment_mode_preserves_weight_then_outer_commit_order(

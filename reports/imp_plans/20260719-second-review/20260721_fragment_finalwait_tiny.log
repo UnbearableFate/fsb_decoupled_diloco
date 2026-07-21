@@ -1,0 +1,392 @@
+{
+  "complete_training_time_seconds": 7.756545158103108,
+  "db": {
+    "applied_updates": 0,
+    "archived_updates": 1,
+    "archived_versions": 1,
+    "contributors": [],
+    "dropped_updates": 0,
+    "exists": true,
+    "fragment_applied_updates": 1,
+    "fragment_dropped_updates": 0,
+    "fragment_learners_with_updates": [
+      "learner_000"
+    ],
+    "fragment_pending_updates": 0,
+    "fragment_selected_counts_by_event": {
+      "1": 1
+    },
+    "fragment_staleness_values": [
+      0
+    ],
+    "fragment_update_integrity": {
+      "archived_payloads_expected_absent": true,
+      "ok": true
+    },
+    "fragment_versions_rows": [
+      {
+        "fragment_id": 0,
+        "global_merge_event": 1,
+        "num_updates": 1,
+        "status": "committed",
+        "version": 1
+      },
+      {
+        "fragment_id": 1,
+        "global_merge_event": 0,
+        "num_updates": 0,
+        "status": "committed",
+        "version": 0
+      }
+    ],
+    "global_versions": 0,
+    "integrity_check": [
+      "ok"
+    ],
+    "integrity_ok": true,
+    "mid_cycle_adoption": {
+      "adoption_count": 0,
+      "base_switched_at_step_values": [],
+      "proposals_with_adoption": 0
+    },
+    "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_finalwait_20260721/control/syncer_metadata.sqlite3",
+    "pending_updates": 0
+  },
+  "fragment_merge_counts": {
+    "0": 1,
+    "1": 0
+  },
+  "fragment_sizes": {
+    "imbalance_ratio": 1.0,
+    "max": 1024,
+    "mean": 1024.0,
+    "min": 1024
+  },
+  "fragment_staleness_distribution": {
+    "count": 1,
+    "max": 0.0,
+    "mean": 0.0,
+    "min": 0.0
+  },
+  "fragment_versions": {
+    "0": 1,
+    "1": 0
+  },
+  "global_merge_event": 1,
+  "heartbeats": {
+    "learner_000": {
+      "format_version": 1,
+      "hostname": "mg0010",
+      "last_adopted_fragments": [
+        0
+      ],
+      "last_loaded_fragment_versions": {
+        "0": 1,
+        "1": 0
+      },
+      "last_loaded_global_merge_event": 1,
+      "last_loaded_global_version": 1,
+      "last_local_step": 2,
+      "last_update_id": "learner_000_00000002_f000_fc155d88732c",
+      "learner_id": "learner_000",
+      "learning_rate": 0.001,
+      "phase": "process_exit",
+      "pid": 2008078,
+      "resource_reader_error_count": 0,
+      "run_id": "second_review_fragment_finalwait_20260721",
+      "scheduler_total_steps": null,
+      "status": "stopped",
+      "timestamp": 1784562596.5192454,
+      "tokens_per_sec": null,
+      "training_cpu_utilization_peak_percent": 1.1235955056179776,
+      "training_gpu_utilization_peak_percent": 1.0,
+      "training_resource_sample_count": 5
+    }
+  },
+  "latest": {
+    "created_at": 1784562596.4526098,
+    "format_version": 1,
+    "fragment_index_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_finalwait_20260721/fragments/fragment_index.json",
+    "fragments": {
+      "0": {
+        "optim_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_finalwait_20260721/fragments/optim/fragment_000/v000001.safetensors",
+        "updated_at_global_merge_event": 1,
+        "version": 1,
+        "weight_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_finalwait_20260721/fragments/weights/fragment_000/v000001.safetensors"
+      },
+      "1": {
+        "optim_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_finalwait_20260721/fragments/optim/fragment_001/v000000.safetensors",
+        "updated_at_global_merge_event": 0,
+        "version": 0,
+        "weight_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_finalwait_20260721/fragments/weights/fragment_001/v000000.safetensors"
+      }
+    },
+    "global_merge_event": 1,
+    "latest_kind": "fragment",
+    "latest_layout_version": 2,
+    "materialized_weight_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_finalwait_20260721/weights/global_v000001.safetensors",
+    "param_index_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_finalwait_20260721/control/param_index.json",
+    "run_id": "second_review_fragment_finalwait_20260721",
+    "total_seen_tokens": 64,
+    "version": 1
+  },
+  "latest_kind": "fragment",
+  "learner_adoption_pause": {
+    "learner_000": {
+      "adoption_count": 1,
+      "adoption_pause_fraction": 0.004697832670144132,
+      "adoption_pause_mean_seconds": 0.001142557943239808,
+      "adoption_pause_total_seconds": 0.001142557943239808,
+      "completed_cycle_elapsed_seconds": 0.24320958694443107,
+      "status": "available"
+    }
+  },
+  "learner_fragment_adoption": {
+    "learner_000": {
+      "fragment_adopt_count": 0,
+      "has_adopted_after_initial": true,
+      "last_adopted_fragments": [
+        0
+      ],
+      "last_loaded_fragment_versions": {
+        "0": 1,
+        "1": 0
+      }
+    }
+  },
+  "learner_local_steps": {
+    "learner_000": 2
+  },
+  "learner_metrics": {
+    "exists": true,
+    "last": {
+      "base_fragment_version": "0",
+      "fragment_adopt_count": "0",
+      "fragment_id": "0",
+      "fragment_norm": "32.788082122802734",
+      "global_merge_event": "0",
+      "global_version": "0",
+      "last_loaded_fragment_versions_json": "{\"0\": 0, \"1\": 0}",
+      "learner_id": "learner_000",
+      "learning_rate": "0.001",
+      "local_cycle_cpu_utilization_peak_percent": "1.1235955056179776",
+      "local_cycle_elapsed_seconds": "0.24320958694443107",
+      "local_cycle_gpu_utilization_peak_percent": "1.0",
+      "local_cycle_resource_sample_count": "3",
+      "local_cycle_step_count": "2",
+      "local_cycle_step_time_seconds_mean": "0.11348821292631328",
+      "local_step": "2",
+      "param_norm": "33.11745834350586",
+      "phase": "fragment_update_written",
+      "scheduler_total_steps": "",
+      "timestamp": "1784562592.0927544",
+      "tokens": "64",
+      "tokens_per_sec": "263.1475214610797",
+      "train_loss": "4.278603792190552",
+      "training_cpu_utilization_peak_percent": "1.1235955056179776",
+      "training_gpu_utilization_peak_percent": "1.0",
+      "update_write_seconds": "0.011007472174242139"
+    },
+    "rows": 1
+  },
+  "learner_resources": {
+    "cpu_utilization_scope": "whole_node",
+    "gpu_utilization_scope": "learner_cuda_visible_device",
+    "per_learner": {
+      "learner_000": {
+        "last_local_step": 2,
+        "status": "stopped",
+        "training_cpu_utilization_peak_percent": 1.1235955056179776,
+        "training_gpu_utilization_peak_percent": 1.0
+      }
+    },
+    "training_cpu_utilization_peak_percent_max": 1.1235955056179776,
+    "training_cpu_utilization_peak_percent_mean": 1.1235955056179776,
+    "training_gpu_utilization_peak_percent_max": 1.0,
+    "training_gpu_utilization_peak_percent_mean": 1.0
+  },
+  "loss_summary": {
+    "count": 1,
+    "first_10_mean": 4.278603792190552,
+    "last_10_mean": 4.278603792190552,
+    "last_vs_first_ratio": 1.0,
+    "max": 4.278603792190552,
+    "mean": 4.278603792190552,
+    "min": 4.278603792190552,
+    "obvious_divergence": false
+  },
+  "materialized_weight_exists": true,
+  "run_summary": {
+    "all_learners_stopped": true,
+    "complete_training_time_seconds": 7.756545158103108,
+    "final_version": 1,
+    "format_version": 1,
+    "learner_resources": {
+      "cpu_utilization_scope": "whole_node",
+      "gpu_utilization_scope": "learner_cuda_visible_device",
+      "per_learner": {
+        "learner_000": {
+          "last_local_step": 2,
+          "status": "stopped",
+          "training_cpu_utilization_peak_percent": 1.1235955056179776,
+          "training_gpu_utilization_peak_percent": 1.0
+        }
+      },
+      "training_cpu_utilization_peak_percent_max": 1.1235955056179776,
+      "training_cpu_utilization_peak_percent_mean": 1.1235955056179776,
+      "training_gpu_utilization_peak_percent_max": 1.0,
+      "training_gpu_utilization_peak_percent_mean": 1.0
+    },
+    "run_id": "second_review_fragment_finalwait_20260721",
+    "stop_reason": "no_progress_timeout",
+    "total_seen_tokens": 64,
+    "training_completed_at": 1784562597.4920182,
+    "training_started_at": 1784562589.735473
+  },
+  "selected_count_distribution": {
+    "1": 1
+  },
+  "shared_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_finalwait_20260721",
+  "staleness_evidence": {
+    "aggregate_staleness_counts": {
+      "0": 1
+    },
+    "effective_staleness_mean": {
+      "count": 1,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0
+    },
+    "fresh_effective_weight": {
+      "count": 1,
+      "max": 1.0,
+      "mean": 1.0,
+      "min": 1.0
+    },
+    "links": [
+      {
+        "effective_staleness_mean": 0.0,
+        "fresh_effective_weight": 1.0,
+        "merge_timestamp": 1784562592.3473346,
+        "merge_version": "1",
+        "staleness_counts": {
+          "0": 1
+        }
+      }
+    ],
+    "merge_count": 1,
+    "status": "available_observational_only",
+    "warning": "merge-to-next-learner loss links are temporal observations, not validation"
+  },
+  "stop": {
+    "format_version": 1,
+    "reason": "no_progress_timeout",
+    "run_id": "second_review_fragment_finalwait_20260721",
+    "timestamp": 1784562596.455493,
+    "total_seen_tokens": 64,
+    "version": 1
+  },
+  "stop_reason": "no_progress_timeout",
+  "syncer_log_flags": {
+    "error": false,
+    "exists": true,
+    "no_progress_timeout": true,
+    "uncaught_exception": false
+  },
+  "syncer_metrics": {
+    "exists": true,
+    "last": {
+      "aggregation_seconds": "0.005818135105073452",
+      "discovery_seconds": "0.04995976481586695",
+      "effective_staleness_mean": "0.0",
+      "fragment_aggregation_seconds": "0.005818135105073452",
+      "fragment_id": "0",
+      "fragment_read_seconds": "0.0009419189300388098",
+      "fragment_staleness_max": "0",
+      "fragment_staleness_mean": "0.0",
+      "fragment_staleness_min": "0",
+      "fragment_version": "1",
+      "fresh_effective_weight": "1.0",
+      "gc_pending_rows": "0",
+      "global_interval_seconds": "2.13796136691235",
+      "global_merge_event": "1",
+      "grace_seconds": "0.0014353259466588497",
+      "idle_seconds": "2.0005595271941274",
+      "interval_residual_seconds": "0.02440389757975936",
+      "learner_local_cycle_cpu_utilization_peak_percent_mean": "1.1235955056179776",
+      "learner_local_cycle_gpu_utilization_peak_percent_mean": "1.0",
+      "learner_local_cycle_step_time_seconds_mean": "0.11348821292631328",
+      "learner_training_cpu_utilization_peak_percent_mean": "1.1235955056179776",
+      "learner_training_gpu_utilization_peak_percent_mean": "1.0",
+      "maintenance_scan_seconds": "0.022551293019205332",
+      "maintenance_scanned_rows": "1",
+      "maintenance_seconds": "0.034636523108929396",
+      "materialize_full_seconds": "0.003915865905582905",
+      "materialized_bytes": "8352",
+      "materialized_this_event": "True",
+      "merge_seconds": "0.00609157420694828",
+      "outer_step_seconds": "0.00027343910187482834",
+      "publish_checkpoint_seconds": "",
+      "publish_dtype": "",
+      "publish_ingest_passes": "",
+      "publish_ingest_seconds": "",
+      "publish_ingested_heartbeats": "",
+      "publish_ingested_updates": "",
+      "publish_outer_bytes": "",
+      "publish_outer_seconds": "",
+      "publish_roundtrip_l2_error": "",
+      "publish_roundtrip_linf_error": "",
+      "publish_roundtrip_relative_l2_error": "",
+      "publish_seconds": "0.019932835130020976",
+      "publish_weight_bytes": "",
+      "publish_weight_seconds": "",
+      "quorum_trigger": "quorum_max",
+      "read_seconds": "0.0009419189300388098",
+      "selected_count": "1",
+      "sqlite_commit_seconds": "",
+      "stale_updates_dropped": "0",
+      "staleness_counts_json": "{\"0\":1}",
+      "timestamp": "1784562592.3473346",
+      "total_update_tokens": "64",
+      "version": "1"
+    },
+    "rows": 1
+  },
+  "syncer_resource_cost": {
+    "active_total_seconds": 0.026966328267008066,
+    "complete_training_time_seconds": 7.756545158103108,
+    "duty_cycle": 0.003476590120646288,
+    "duty_cycle_percent": 0.3476590120646288,
+    "estimated_idle_gpu_node_hours": 0.002147105230510028,
+    "merge_compute_p50_seconds": 0.00703349313698709,
+    "merge_compute_p95_seconds": 0.00703349313698709,
+    "merge_compute_total_seconds": 0.00703349313698709,
+    "merge_count": 1,
+    "publish_p50_seconds": 0.019932835130020976,
+    "publish_p95_seconds": 0.019932835130020976,
+    "publish_total_seconds": 0.019932835130020976,
+    "reserved_syncer_node_hours": 0.0021545958772508636,
+    "status": "available"
+  },
+  "update_manifest": {
+    "exists": true,
+    "last": {
+      "base_fragment_version": "0",
+      "base_global_merge_event": "0",
+      "base_global_version": "0",
+      "file_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_finalwait_20260721/updates/payloads/learner_000/update_fc155d88732c_fragment_000.params.safetensors",
+      "file_size_bytes": "4184",
+      "fragment_id": "0",
+      "learner_id": "learner_000",
+      "local_step_end": "2",
+      "local_step_start": "0",
+      "sha256": "0ff71076d05b8c587198c34abacbbbb4db2fd1008027425bbf05f64fd996da21",
+      "tensor_dtype": "float32",
+      "timestamp": "1784562592.0937884",
+      "tokens_this_update": "64",
+      "update_id": "learner_000_00000002_f000_fc155d88732c",
+      "update_kind": "fragment"
+    },
+    "rows": 1
+  }
+}

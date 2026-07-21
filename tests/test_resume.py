@@ -8,6 +8,7 @@ import torch
 from fs_diloco.core.config import resolve_config
 from fs_diloco.observability.logging_utils import JsonlLogger
 from fs_diloco.runtime.syncer import initialize_run, resume_run, run_syncer
+from fs_diloco.storage.atomic_io import atomic_write_json
 from fs_diloco.storage.paths import RunPaths, prepare_run_dirs
 from fs_diloco.storage.sqlite_store import SQLiteStore
 from fs_diloco.storage.tensor_codec import save_outer_state
@@ -120,6 +121,151 @@ def test_resume_resets_selected_and_is_idempotent(tmp_path):
     second_rows = [dict(row) for row in store.conn.execute("SELECT * FROM updates")]
     assert paths.latest_json.read_bytes() == first_latest
     assert second_rows == first_rows
+    store.close()
+
+
+def test_resume_fences_stopped_heartbeat_generation_and_resets_learners(tmp_path):
+    config, paths, store, logger, _initialized = _setup(tmp_path)
+    now = time.time()
+    for index in range(config.sync.num_learners):
+        learner_id = f"learner_{index:03d}"
+        store.upsert_learner(
+            learner_id,
+            hostname="old-host",
+            pid=100 + index,
+            last_seen=now,
+            last_heartbeat_path=str(paths.heartbeats / f"{learner_id}.json"),
+            status="stopped",
+            status_reason="process_exit",
+        )
+        atomic_write_json(
+            paths.heartbeats / f"{learner_id}.json",
+            {
+                "format_version": 1,
+                "run_id": config.run.run_id,
+                "learner_id": learner_id,
+                "hostname": "old-host",
+                "pid": 100 + index,
+                "timestamp": now,
+                "status": "stopped",
+                "phase": "process_exit",
+            },
+        )
+    config.init.resume = True
+
+    resume_run(config, paths, store, logger)
+
+    generation = store.get_run_state("resume_generation")
+    assert generation["resume_id"]
+    assert set(generation["heartbeat_fences"]) == {
+        f"learner_{index:03d}" for index in range(config.sync.num_learners)
+    }
+    learners = store.list_learners()
+    assert [row["status"] for row in learners] == ["unknown", "unknown"]
+    assert [row["status_reason"] for row in learners] == ["resumed", "resumed"]
+    assert all(row["last_seen"] is None for row in learners)
+    assert all(row["last_heartbeat_path"] is None for row in learners)
+    assert all(row["pid"] is None for row in learners)
+    store.close()
+
+
+def test_prepare_full_resume_rolls_back_selected_and_liveness_together(tmp_path):
+    paths = RunPaths(tmp_path)
+    prepare_run_dirs(paths, 1)
+    store = SQLiteStore(paths.sqlite_db)
+    payload = paths.update_payload_dir("learner_000") / "selected.params.safetensors"
+    payload.write_text("selected", encoding="utf-8")
+    now = time.time()
+    store.insert_update_metadata(
+        {
+            "update_id": "selected",
+            "learner_id": "learner_000",
+            "base_global_version": 0,
+            "local_step_start": 0,
+            "local_step_end": 1,
+            "inner_steps": 1,
+            "tokens_this_update": 1,
+            "tokens_since_global_load": 1,
+            "file_path": str(payload),
+            "created_at": now,
+            "committed_at": now,
+        }
+    )
+    store.mark_updates_selected(["selected"], "interrupted")
+    store.upsert_learner("learner_000", last_seen=now, status="stopped")
+
+    with pytest.raises(RuntimeError, match="injected resume failure"):
+        store.prepare_full_resume(
+            resume_id="resume-fail",
+            resumed_at=now + 1.0,
+            expected_learner_ids=["learner_000"],
+            heartbeat_fences={"learner_000": "digest"},
+            before_commit=lambda: (_ for _ in ()).throw(
+                RuntimeError("injected resume failure")
+            ),
+        )
+
+    assert store.get_update("selected")["status"] == "selected"
+    assert store.list_learners()[0]["status"] == "stopped"
+    assert store.get_run_state("resume_generation") is None
+    store.close()
+
+
+def test_resume_rejects_completed_run_and_preserves_terminal_markers(tmp_path):
+    config, paths, store, logger, _initialized = _setup(tmp_path)
+    stop = {
+        "format_version": 1,
+        "run_id": config.run.run_id,
+        "reason": "stop_after_outer_steps",
+        "version": 0,
+    }
+    summary = {
+        "format_version": 1,
+        "run_id": config.run.run_id,
+        "stop_reason": "stop_after_outer_steps",
+        "final_version": 0,
+    }
+    atomic_write_json(paths.stop_json, stop)
+    atomic_write_json(paths.summary_json, summary)
+    config.init.resume = True
+
+    with pytest.raises(RuntimeError, match="cannot reopen a completed run"):
+        resume_run(config, paths, store, logger)
+
+    assert json.loads(paths.stop_json.read_text(encoding="utf-8")) == stop
+    assert json.loads(paths.summary_json.read_text(encoding="utf-8")) == summary
+    assert store.get_run_state("resume_generation") is None
+    store.close()
+
+
+def test_resume_archives_interrupted_error_markers(tmp_path):
+    config, paths, store, logger, _initialized = _setup(tmp_path)
+    atomic_write_json(
+        paths.stop_json,
+        {
+            "format_version": 1,
+            "run_id": config.run.run_id,
+            "reason": "error",
+            "version": 0,
+        },
+    )
+    atomic_write_json(
+        paths.summary_json,
+        {
+            "format_version": 1,
+            "run_id": config.run.run_id,
+            "stop_reason": "error",
+            "final_version": 0,
+        },
+    )
+    config.init.resume = True
+
+    resume_run(config, paths, store, logger)
+
+    assert not paths.stop_json.exists()
+    assert not paths.summary_json.exists()
+    assert len(list(paths.logs.glob("resume_*_previous_stop.json"))) == 1
+    assert len(list(paths.logs.glob("resume_*_previous_summary.json"))) == 1
     store.close()
 
 

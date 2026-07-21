@@ -302,6 +302,12 @@ GC-race 修复没有在本次实际调度中进入 recovery 分支:`global_predi
 
 把 scan 从 2 秒缩短到 0.2 秒使完整时间改善 2.39%、interval 改善 2.43%、quorum 检测改善 6.83%；共享盘 8-pointer/0.2s 实测仅占单核 0.0402% CPU，因此可用于 latency-sensitive 实验。publish-wait 摄取确实命中 24 次 metadata，但相邻三 seed 完整时间反而轻微增加 0.08%，没有形成端到端收益；它只保留为 opt-in。三组 interval residual ratio 均值为 0.084%/0.283%/0.284%，遥测闭合。原始矩阵见 `reports/imp_plans/perf_fix-E/E2/artifacts/20260718-1300_e2-formal-matrix.csv`。
 
+遥测口径勘误（2026-07-21）：本修复之前，full caller 在 `ingest_during_publish=false`
+时仍传入一个返回 None 的 callable，因此历史 `publish_ingest_passes` 可能包含 checkpoint
+等待轮询空转，不能解释为真实 ingestion callback 次数。历史
+`publish_ingested_updates/heartbeats` 的非零值仍表示实际插入；上表的“24 次 metadata”来自
+非零 inserted update 计数，不受该空转 passes 污染。修复后的 false 模式四字段严格为零。
+
 ### Syncer 第九节点资源账本与 CPU 可行性
 
 按冻结口径，syncer active time 定义为每轮 `read + aggregation + outer_step + publish`，完整训练墙钟为分母；publication 与 merge compute 仍分开报告。既有 9 节点 run H=`codex_predict_gc_retry_wait0_fixed20_global50_full5000_20260717_073011` 的 50 轮总 merge compute 为 18.345 秒、publication 为 44.946 秒，而完整训练为 1180.456 秒：第九节点 duty cycle 只有 5.362%。该作业占用 0.3279 syncer node-hours，其中按此口径估计有 0.3103 GPU node-hours处于非 syncer-active 状态。merge-compute p95 为 0.4912 秒，publication p95 为 0.9906 秒。

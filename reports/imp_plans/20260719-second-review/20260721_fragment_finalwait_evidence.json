@@ -1,0 +1,220 @@
+{
+  "configured_dead_after_seconds": 1.5,
+  "configured_final_wait_timeout_seconds": 4.0,
+  "configured_heartbeat_interval_seconds": 0.5,
+  "final_heartbeat": {
+    "format_version": 1,
+    "hostname": "mg0010",
+    "last_adopted_fragments": [
+      0
+    ],
+    "last_loaded_fragment_versions": {
+      "0": 1,
+      "1": 0
+    },
+    "last_loaded_global_merge_event": 1,
+    "last_loaded_global_version": 1,
+    "last_local_step": 2,
+    "last_update_id": "learner_000_00000002_f000_fc155d88732c",
+    "learner_id": "learner_000",
+    "learning_rate": 0.001,
+    "phase": "process_exit",
+    "pid": 2008078,
+    "resource_reader_error_count": 0,
+    "run_id": "second_review_fragment_finalwait_20260721",
+    "scheduler_total_steps": null,
+    "status": "stopped",
+    "timestamp": 1784562596.5192454,
+    "tokens_per_sec": null,
+    "training_cpu_utilization_peak_percent": 1.1235955056179776,
+    "training_gpu_utilization_peak_percent": 1.0,
+    "training_resource_sample_count": 5
+  },
+  "final_wait_duration_seconds": 3.5299227237701416,
+  "final_wait_heartbeats": [
+    {
+      "global_merge_event": 1,
+      "phase": "final_fragment_wait",
+      "timestamp": 1784562592.5187304
+    },
+    {
+      "global_merge_event": 1,
+      "phase": "final_fragment_wait",
+      "timestamp": 1784562593.022767
+    },
+    {
+      "global_merge_event": 1,
+      "phase": "final_fragment_wait",
+      "timestamp": 1784562593.5268393
+    },
+    {
+      "global_merge_event": 1,
+      "phase": "final_fragment_wait",
+      "timestamp": 1784562594.031769
+    },
+    {
+      "global_merge_event": 1,
+      "phase": "final_fragment_wait",
+      "timestamp": 1784562594.536159
+    },
+    {
+      "global_merge_event": 1,
+      "phase": "final_fragment_wait",
+      "timestamp": 1784562595.040216
+    },
+    {
+      "global_merge_event": 1,
+      "phase": "final_fragment_wait",
+      "timestamp": 1784562595.5445204
+    },
+    {
+      "global_merge_event": 1,
+      "phase": "final_fragment_wait",
+      "timestamp": 1784562596.0486531
+    }
+  ],
+  "liveness_during_final_wait": [
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562592.5759604
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562592.7906656
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562593.005035
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562593.2199607
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562593.433937
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562593.6487834
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562593.8637295
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562594.0778465
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562594.291821
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562594.5067587
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562594.7214656
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562594.937175
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562595.1516738
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562595.3670783
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562595.5817525
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562595.8004227
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562596.0147002
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562596.2294252
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562596.4441996
+    },
+    {
+      "active": 1,
+      "dead": 0,
+      "stale": 0,
+      "stopped": 0,
+      "timestamp": 1784562596.4718735
+    }
+  ],
+  "max_heartbeat_gap_seconds": 0.504929780960083,
+  "run_id": "second_review_fragment_finalwait_20260721"
+}

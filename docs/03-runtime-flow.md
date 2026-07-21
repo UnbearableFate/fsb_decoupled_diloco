@@ -33,7 +33,8 @@ fragment 模式(`initialize_fragment_run`)额外:构建并发布 `fragment_index
 2. 运行 SQLite `integrity_check`,校验 DB 中的 run identity、format/protocol version、模式和模型配置;
 3. 取 DB 中最大 committed `global_versions` 行作为唯一恢复版本;校验 param index 与当前模型兼容,并要求该行引用的权重/outer 文件都存在;
 4. 分别加载权重 θ 与 outer checkpoint 中的 θ,要求形状和值完全一致;不从 `latest.json` 猜测或回退;
-5. 将崩溃遗留的全部 `selected` 行重置为 `pending`,原子重建 `latest.json`,执行 archive/GC 后继续主循环。重复 resume 不增加 global row,也不会重复应用 update。
+5. 读取并校验当前每个固定 heartbeat pointer，保存其完整内容 SHA256 fence；在一个 SQLite 事务中将崩溃遗留的全部 `selected` 行重置为 `pending`，把预期 learner 行重置为 `unknown/resumed` 并清空本代 `hostname/pid/last_seen/last_heartbeat_path`，同时写入 `run_state.resume_generation`；
+6. 原子重建 `latest.json`,执行 archive/GC 后继续主循环。摄取层忽略与 fence 完全相同的旧 heartbeat，learner 原子替换为新 active 后才重新打开本代输入。重复 resume 不增加 global row,也不会重复应用 update；已有一致非错误 `stop.json + summary.json` 的 completed run 拒绝 resume，error 终态证据则先归档再恢复。
 
 ### 1.4 learner 启动(`run_learner` / `run_fragment_learner`)
 
@@ -69,7 +70,8 @@ while not stop_requested():                     # 默认:本地上限或 stop;gl
   # —— 采纳阶段 ——
   if learner.adopt_global_after_upload:
       strategy.on_after_publish():读 latest;若已有新版则直接采纳
-      rebase 无新版才构造 anchor;predict 无新版才构造预测 reference
+      若已有 stop 仍先采纳已可见新版；无新版则不再构造 rebase anchor/predict reference
+      无 stop 且无新版时，rebase 才构造 anchor、predict 才构造预测 reference
       runner 根据 StrategyAction 统一 reset 或 preserve optimizer；重建 scheduler 时恢复累计 local-step 相位并发公共事件
 finally:
   写 status=stopped 的最终心跳,记 process_exit
@@ -81,6 +83,7 @@ finally:
 - LR 调度只由累计 `local_step`、`warmup_steps`、独立 `scheduler_total_steps` 与 `min_lr_ratio` 决定；adoption 重建不会再次 warmup，超过 horizon 后保持正下限。
 - `base_global_version` 初始取区间开始时已加载的版本；显式开启 replace + inner poll 后，每次中途采纳会更新为上传时的最新 global。此时区间前半段仍来自旧 base，proposal 以 `mid_cycle_adoption_count` 和最近一次 `base_switched_at_step` 标明这个近似；计数器在每个 cycle 开始时清零，upload skip 不会把证据带入下一周期。
 - local-delta rebase 仅在发布后的第一次 latest 检查未发现新版时保留 `x_local,t`;发现首个新版并完成 `global_new+(local-x_local,t)` 后立即释放,直到下一次发布才可能重新建立。prediction、reference 和 reconcile 算术统一使用 `syncer.compute_dtype`,默认在 learner GPU 上执行；CUDA 安全余量不足或实际 OOM 时保持 dtype 回退 CPU,并把 placement、估算字节数和 fallback reason 写入 learner JSONL。
+- predict reconcile 的 wait 返回 `None` 后会重新检查 stop：stop 在场是正常 abandon 并清空 prediction state；没有 stop 才是 `TimeoutError`。该区分不靠延长 reconcile timeout。
 - learner 不自行删除 proposal;payload 生命周期由 syncer 根据 DB/指针引用统一回收。
 - 心跳、日志、指标全部只追加/原子覆盖,不依赖任何锁。
 - `completion_mode=global_only` 到达 `max_local_steps` 时记录 `local_step_horizon_reached`,但继续执行完整训练/上传循环,直到 syncer 达到全局目标并发布 `stop.json`。
@@ -92,7 +95,7 @@ finally:
 - `param_norm` 通过逐参数 FP32 L2 norm 再汇总计算,同样不需要完整扁平副本;`fragment_norm` 对实际上传片以 FP32 累积计算。
 - 采纳是**增量**的:`adopt_fragment_updates()` 只加载 `latest.json` 中版本比本地新的片,scatter 进本地向量后一次性写回模型;有变化时按配置重置内层优化器。若任一片在加载时已被 GC，丢弃本次私有 flat/version 草稿，等待更新的 global merge event 后从整份 fragment latest 重试，绝不混合两个快照。
 - fragment proposal 的 payload 目录只保存不可变 tensor；syncer 只枚举 `updates/latest/learner_XXX_fNNN.json` 固定 pointer，SQLite frontier 与文件 signature 短路重放/重复解析，消费后的 tensor 由 reference-driven maintenance 统一回收。
-- 收尾与 full 共用 `completion_mode`：`local_or_global` 到达 `max_local_steps` 后写 stopped 输入闭合，`global_only` 则继续训练直到全局 stop；两者退出前都采用最后可见版本。syncer 在全部 learner stopped 后负责 terminal grace/drain 和最终 stop。
+- 收尾与 full 共用 `completion_mode`：`local_or_global` 到达 `max_local_steps` 后进入 final wait，`global_only` 则继续训练直到全局 stop。fragment final wait 在独立 no-progress deadline 内继续采纳 latest，并按 `heartbeat_interval_seconds` 写 `active, phase=final_fragment_wait`；版本采纳不延长 deadline，退出 finally 最终再写一次 `stopped, phase=process_exit`。syncer 在全部 learner stopped 后负责 terminal grace/drain 和最终 stop。
 
 ## 4. syncer 主循环(全量模式)
 
@@ -105,9 +108,11 @@ while True:
   input_closed = 全部预期 learner 最终心跳均为 stopped?
   if input_closed:
       (首次)terminal grace:睡一个 grace 周期后再摄取一轮
-      selected = select_terminal_drain_updates():严格 future/staleness 准入,
+      decision = select_terminal_drain_updates():严格 future/staleness 准入,
                  按配置的 selection_policy 每 learner 选一,允许低于 quorum_min
-      无合法 proposal → input_exhausted 停机
+      decision=open → 复位 grace，回到常规 discovery
+      decision=closed_selected → 合并 decision.selected
+      decision=closed_empty → input_exhausted 停机
   else:
       eligible = 库中 pending 且 staleness ≤ max_staleness_versions 的更新
       丢弃张量文件已消失者(dropped: missing_file)

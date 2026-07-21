@@ -155,19 +155,6 @@ def collect_runtime_artifacts(
         if _unlink(payload):
             deleted += 1
 
-    for metadata in paths.updates_payloads.glob("learner_*/*.meta.json"):
-        payload_name = metadata.name.removesuffix(".meta.json") + ".params.safetensors"
-        payload = metadata.with_name(payload_name)
-        resolved = payload.resolve(strict=False)
-        terminal = resolved in terminal_payloads
-        age = now - metadata.stat().st_mtime
-        if resolved in live_payloads:
-            continue
-        if not terminal and payload.exists() and age < orphan_grace_seconds:
-            continue
-        if _unlink(metadata):
-            deleted += 1
-
     for root in (paths.control, paths.weights, paths.optim, paths.fragments):
         for tmp in root.glob("**/.*.tmp"):
             if _unlink(tmp):

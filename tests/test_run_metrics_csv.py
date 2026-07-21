@@ -6,6 +6,8 @@ import pytest
 from fs_diloco.tools.run_metrics_csv import (
     CSV_COLUMNS,
     extract_run_metrics,
+    find_finished_run_roots,
+    main,
     write_metrics_csv,
 )
 
@@ -264,14 +266,32 @@ def test_old_run_falls_back_to_committed_selection_logs(tmp_path):
     assert row["applied_tokens"] == 30
 
 
-def test_csv_overwrite_then_append_and_schema_guard(tmp_path):
+def test_find_finished_run_roots_recursively_and_deduplicates_overlapping_roots(tmp_path):
+    runs = tmp_path / "runs"
+    finished_a = runs / "finished_a"
+    finished_b = runs / "group" / "finished_b"
+    unfinished = runs / "unfinished"
+    _write_json(finished_a / "control" / "stop.json", {"run_id": "a"})
+    _write_json(finished_b / "control" / "stop.json", {"run_id": "b"})
+    _write_json(unfinished / "control" / "latest.json", {"run_id": "unfinished"})
+
+    discovered = find_finished_run_roots([runs, runs / "group"])
+
+    assert discovered == sorted([finished_a.resolve(), finished_b.resolve()], key=str)
+
+
+def test_csv_overwrite_then_append_without_duplicates_and_schema_guard(tmp_path):
     output = tmp_path / "metrics.csv"
     row = {column: "" for column in CSV_COLUMNS}
     row["run_id"] = "one"
+    row["run_path"] = str(tmp_path / "one")
 
     assert write_metrics_csv([row], output, append=False) == 1
+    assert write_metrics_csv([row], output, append=True) == 0
     row["run_id"] = "two"
+    row["run_path"] = str(tmp_path / "two")
     assert write_metrics_csv([row], output, append=True) == 1
+    assert write_metrics_csv([row, row], output, append=True) == 0
     with output.open(encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
     assert [item["run_id"] for item in rows] == ["one", "two"]
@@ -279,3 +299,24 @@ def test_csv_overwrite_then_append_and_schema_guard(tmp_path):
     output.write_text("wrong,header\n", encoding="utf-8")
     with pytest.raises(ValueError, match="schema differs"):
         write_metrics_csv([row], output, append=True)
+
+
+def test_main_scans_finished_runs_and_only_adds_new_rows(tmp_path, capsys):
+    runs = tmp_path / "runs"
+    output = tmp_path / "metrics.csv"
+    first = runs / "first"
+    second = runs / "nested" / "second"
+    unfinished = runs / "unfinished"
+    _write_json(first / "control" / "stop.json", {"run_id": "first", "reason": "done"})
+    _write_json(unfinished / "control" / "latest.json", {"run_id": "unfinished"})
+
+    main([str(runs), "--output", str(output)])
+    assert "found 1 finished run(s); wrote 1 new row(s)" in capsys.readouterr().out
+
+    _write_json(second / "control" / "stop.json", {"run_id": "second", "reason": "done"})
+    main([str(runs), "--output", str(output)])
+    assert "found 2 finished run(s); wrote 1 new row(s); skipped 1" in capsys.readouterr().out
+
+    with output.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert [row["run_id"] for row in rows] == ["first", "second"]

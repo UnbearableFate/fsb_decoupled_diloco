@@ -362,6 +362,83 @@ def wait_for_fragment_latest_if_newer(
     return None
 
 
+def wait_for_final_fragment_progress(
+    *,
+    paths: RunPaths,
+    target_global_merge_event: int,
+    current_global_merge_event_fn: Callable[[], int],
+    no_progress_timeout_seconds: float,
+    heartbeat_interval_seconds: float,
+    poll_seconds: float,
+    handle_latest_fn: Callable[[dict[str, Any]], None],
+    write_heartbeat_fn: Callable[[], None],
+    logger: JsonlLogger,
+    read_latest_fn: Callable[[RunPaths, int], dict[str, Any] | None] = (
+        read_fragment_latest_if_newer
+    ),
+) -> str:
+    """Wait for terminal fragment progress while keeping learner liveness current."""
+
+    started = time.monotonic()
+    deadline = started + float(no_progress_timeout_seconds)
+    heartbeat_interval = max(0.001, float(heartbeat_interval_seconds))
+    poll_interval = max(0.001, float(poll_seconds))
+    next_heartbeat_at = started
+
+    while current_global_merge_event_fn() < int(target_global_merge_event):
+        if paths.stop_json.exists():
+            return "stop_seen"
+        now = time.monotonic()
+        if now >= deadline:
+            logger.event(
+                "final_fragment_wait_timeout",
+                current_global_merge_event=current_global_merge_event_fn(),
+                target_global_merge_event=int(target_global_merge_event),
+            )
+            return "timeout"
+        if now >= next_heartbeat_at:
+            write_heartbeat_fn()
+            next_heartbeat_at = time.monotonic() + heartbeat_interval
+
+        maybe_latest = read_latest_fn(paths, current_global_merge_event_fn())
+        if maybe_latest is not None:
+            handle_latest_fn(maybe_latest)
+            if time.monotonic() >= next_heartbeat_at:
+                write_heartbeat_fn()
+                next_heartbeat_at = time.monotonic() + heartbeat_interval
+            continue
+
+        now = time.monotonic()
+        sleep_seconds = min(
+            poll_interval,
+            max(0.0, deadline - now),
+            max(0.0, next_heartbeat_at - now),
+        )
+        if sleep_seconds > 0.0:
+            time.sleep(sleep_seconds)
+    return "target_reached"
+
+
+def finalize_fragment_adoption_and_heartbeat(
+    *,
+    final_adoption_fn: Callable[[], None],
+    write_stopped_heartbeat_fn: Callable[[], None],
+    logger: JsonlLogger,
+) -> None:
+    """Keep stopped-heartbeat publication outside final-adoption failure scope."""
+    try:
+        final_adoption_fn()
+    except Exception as exc:
+        logger.event("final_fragment_adoption_failed", error=repr(exc))
+        try:
+            write_stopped_heartbeat_fn()
+        except Exception as heartbeat_exc:
+            raise heartbeat_exc from exc
+        raise
+    else:
+        write_stopped_heartbeat_fn()
+
+
 @dataclass(frozen=True)
 class LatestLoadResult:
     value: Any
@@ -1837,38 +1914,63 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
     finally:
         resource_monitor.stop()
         training_resources = finite_resource_metrics(resource_monitor.training_snapshot())
-        try:
+
+        def attempt_final_fragment_adoption() -> None:
             target_event = config.sync.stop_after_outer_steps
             if (
                 not had_error
                 and watchdog_stop_reason is None
                 and target_event is not None
             ):
-                deadline = time.monotonic() + config.liveness.no_progress_timeout_seconds
-                while (
-                    last_loaded_global_merge_event < int(target_event)
-                    and not paths.stop_json.exists()
-                ):
-                    if time.monotonic() >= deadline:
-                        logger.event(
-                            "final_fragment_wait_timeout",
-                            current_global_merge_event=last_loaded_global_merge_event,
-                            target_global_merge_event=int(target_event),
-                        )
-                        break
-                    maybe_latest = read_fragment_latest_if_newer(
-                        paths, last_loaded_global_merge_event
+                def write_final_wait_heartbeat() -> None:
+                    write_heartbeat(
+                        paths=paths,
+                        config=config,
+                        learner_id=learner_id,
+                        status=LEARNER_STATUS_ACTIVE,
+                        phase="final_fragment_wait",
+                        last_loaded_global_version=last_loaded_global_merge_event,
+                        last_loaded_global_merge_event=last_loaded_global_merge_event,
+                        last_loaded_fragment_versions=last_loaded_fragment_versions,
+                        last_adopted_fragments=last_adopted_fragments,
+                        last_local_step=local_step,
+                        last_update_id=last_update_id,
+                        resource_metrics=training_resources,
+                        learning_rate=current_inner_learning_rate(optimizer),
+                        scheduler_total_steps=(
+                            config.inner_optimizer.scheduler_total_steps
+                        ),
                     )
-                    if maybe_latest is not None:
-                        handle_fragment_latest(
-                            maybe_latest,
-                            event_type="final_wait_fragments_adopted",
-                            reset_tokens=True,
-                            reset_optimizer=False,
-                            include_fragment_versions=False,
-                        )
-                        continue
-                    time.sleep(config.sync.stop_file_poll_seconds)
+                    logger.event(
+                        "heartbeat_written",
+                        local_step=local_step,
+                        phase="final_fragment_wait",
+                        global_merge_event=last_loaded_global_merge_event,
+                    )
+
+                wait_for_final_fragment_progress(
+                    paths=paths,
+                    target_global_merge_event=int(target_event),
+                    current_global_merge_event_fn=(
+                        lambda: last_loaded_global_merge_event
+                    ),
+                    no_progress_timeout_seconds=(
+                        config.liveness.no_progress_timeout_seconds
+                    ),
+                    heartbeat_interval_seconds=(
+                        config.liveness.heartbeat_interval_seconds
+                    ),
+                    poll_seconds=config.sync.stop_file_poll_seconds,
+                    handle_latest_fn=lambda maybe_latest: handle_fragment_latest(
+                        maybe_latest,
+                        event_type="final_wait_fragments_adopted",
+                        reset_tokens=True,
+                        reset_optimizer=False,
+                        include_fragment_versions=False,
+                    ),
+                    write_heartbeat_fn=write_final_wait_heartbeat,
+                    logger=logger,
+                )
             maybe_latest = (
                 safe_read_json(paths.latest_json)
                 if watchdog_stop_reason is None
@@ -1882,27 +1984,33 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                     reset_optimizer=False,
                     include_fragment_versions=False,
                 )
-        except Exception as exc:
-            logger.event("final_fragment_adoption_failed", error=repr(exc))
-        if paths.stop_json.exists():
-            stop_payload = safe_read_json(paths.stop_json) or {}
-            logger.event("stop_seen", reason=stop_payload.get("reason"))
-        write_heartbeat(
-            paths=paths,
-            config=config,
-            learner_id=learner_id,
-            status=LEARNER_STATUS_STOPPED,
-            phase="process_exit",
-            last_loaded_global_version=last_loaded_global_merge_event,
-            last_loaded_global_merge_event=last_loaded_global_merge_event,
-            last_loaded_fragment_versions=last_loaded_fragment_versions,
-            last_adopted_fragments=last_adopted_fragments,
-            last_local_step=local_step,
-            last_update_id=last_update_id,
-            resource_metrics=training_resources,
-            learning_rate=current_inner_learning_rate(optimizer),
-            scheduler_total_steps=config.inner_optimizer.scheduler_total_steps,
-            status_reason=watchdog_stop_reason,
+
+        def write_final_stopped_heartbeat() -> None:
+            if paths.stop_json.exists():
+                stop_payload = safe_read_json(paths.stop_json) or {}
+                logger.event("stop_seen", reason=stop_payload.get("reason"))
+            write_heartbeat(
+                paths=paths,
+                config=config,
+                learner_id=learner_id,
+                status=LEARNER_STATUS_STOPPED,
+                phase="process_exit",
+                last_loaded_global_version=last_loaded_global_merge_event,
+                last_loaded_global_merge_event=last_loaded_global_merge_event,
+                last_loaded_fragment_versions=last_loaded_fragment_versions,
+                last_adopted_fragments=last_adopted_fragments,
+                last_local_step=local_step,
+                last_update_id=last_update_id,
+                resource_metrics=training_resources,
+                learning_rate=current_inner_learning_rate(optimizer),
+                scheduler_total_steps=config.inner_optimizer.scheduler_total_steps,
+                status_reason=watchdog_stop_reason,
+            )
+
+        finalize_fragment_adoption_and_heartbeat(
+            final_adoption_fn=attempt_final_fragment_adoption,
+            write_stopped_heartbeat_fn=write_final_stopped_heartbeat,
+            logger=logger,
         )
         logger.event(
             "process_exit",

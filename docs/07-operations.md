@@ -50,7 +50,12 @@ python -m fs_diloco.learner \
 - syncer 的权威 DB 固定为 `<shared-root>/control/syncer_metadata.sqlite3`;所有节点必须看到同一 shared root;
 - 中途停止:向 run 目录写 `control/stop.json` 即可让 learner 退出(syncer 只认自己的停止条件)。
 
-恢复时使用同一个 run id/shared root,并把配置中的 `init.resume` 设为 `true`。恢复不会信任 `latest.json`:持久 DB 必须存在且通过 integrity/identity/checkpoint 一致性校验,否则 syncer fail closed。不要移动或清理 `control/syncer_metadata.sqlite3`。
+恢复时使用同一个 run id/shared root,并把配置中的 `init.resume` 设为 `true`。恢复不会信任 `latest.json`:持久 DB 必须存在且通过 integrity/identity/checkpoint 一致性校验,否则 syncer fail closed。不要移动或清理 `control/syncer_metadata.sqlite3`。启动 resume syncer 后再启动新 learner；resume 事务会把旧代 learner 行重置为 `unknown`，并 fence 切代时 heartbeat pointer 的完整内容，旧 `stopped` 不会触发本代 `input_exhausted`。检查 `run_resumed` 后应先看到新代 `learner_liveness_updated(active>0)`，再看到严格更大版本的 `outer_step_applied/global_published`。
+
+已有一致非错误 `control/stop.json + summary.json` 表示 run 已完成，resume 会 fail closed，
+不得手工删除终态文件重开。`error` 终态可由 resume 原子归档后继续。可用 Checker 的
+`--require-resume-progress --resume-artifact <path>` 同时验证 DB/latest/checkpoint、旧 heartbeat
+fence、新代 active 与下一次 commit；stdout 仍只有三值结果。
 
 ## 3. 本地冒烟(无 GPU、无外网)
 
@@ -73,6 +78,7 @@ scripts/local/clean_run.sh --delete --keep-latest-global runs/fs_diloco
 | `run_1node_fragment_debug.pbs` | 1 节点 | fragment 冒烟 |
 | `run_plan01_regression.pbs` | 1 节点 | 持久状态完整 pytest + tiny full telemetry 回归 |
 | `run_2node_debug.pbs` / `run_2node_fragment_debug.pbs` | 2 节点 | 双节点验证 |
+| `run_2node_resume_regression.pbs` | 2 节点 | 构造旧代 stopped DB/heartbeat，受控终止 phase-A syncer，再跨节点原地 resume 并运行扩展 Checker |
 | `run_9node_gpt2_wikitext2.pbs` | 9 节点 | 8 learner + 1 syncer 短跑 |
 | `run_9node_gpt2_wikitext2_5000steps.pbs` | 9 节点 | 名义 5000 本地步、global step 50 终止的正式实验;learner 超过 5000 后继续到 stop |
 | `run_8node_colocated_gpt2_wikitext2_5000steps.pbs` | 8 节点 | 实验性部署：rank0 CPU syncer + GPU learner_000，其余七节点各一 learner；双进程 fail-fast 监督。GPT-2 124M 三 seed 中位数劣化 1.83%，通过 ≤10% 门禁，但有一个 +41.4% 离群 seed，故不替代 9 节点默认 |
@@ -120,20 +126,25 @@ allocation 的尾部时间；训练失败时不会生成伪成功结果。结构
 `<run_root>/metrics/validation_eval.json`，协议见
 [`reports/imp_plans/quality_fix-Q/validation_protocol.md`](../reports/imp_plans/quality_fix-Q/validation_protocol.md)。
 
-把一个或多个 run 中用于实验对比的核心指标抽取到 CSV：
+递归遍历一个或多个 root，以 `control/stop.json` 作为训练结束标志，把所有已结束
+run 中用于实验对比的核心指标抽取到 CSV：
 
 ```bash
-# 默认追加到 reports/run_metrics.csv
+# 扫描 runs/fs_diloco；默认新建或追加到 reports/run_metrics.csv
 python -m fs_diloco.tools.run_metrics_csv \
-  runs/fs_diloco/run_a runs/fs_diloco/run_b
+  runs/fs_diloco
 
-# 指定输出；--overwrite 原子覆盖，否则追加并校验既有表头
+# 可指定多个扫描 root；--overwrite 原子覆盖
 python -m fs_diloco.tools.run_metrics_csv \
-  runs/fs_diloco/run_a -o reports/my_metrics.csv --overwrite
+  runs/fs_diloco reports/checked -o reports/my_metrics.csv --overwrite
 
 # 安装 editable package 后也可使用
-fs-diloco-export-run-metrics runs/fs_diloco/run_c -o reports/my_metrics.csv
+fs-diloco-export-run-metrics runs/fs_diloco -o reports/my_metrics.csv
 ```
+
+默认追加模式会读取已有 CSV，以 `run_id` 或规范化后的 `run_path` 去重，只写入新发现
+的 run；重复传入扫描范围或重复执行命令都不会产生重复行。只有 `--overwrite` 会重建
+完整输出文件，既有表头不兼容时追加模式会拒绝写入。
 
 每个 run 输出一行，包括 produced/applied/dropped、proposal 利用率、drop reason、local steps、完整训练时间、selected 分布、applied staleness 0/1/2、produced/applied tokens、loss first-10/last-10/全量均值及关键配置。新 run 优先使用 `update_history.jsonl + SQLite` 的终态；旧 run 缺少 history 时，从 committed syncer merge 指标和 `updates_selected` 日志重建 applied/staleness。未完成 run 的未知 proposal 记入 `pending_or_unclassified_updates`，不会误计为 dropped。
 

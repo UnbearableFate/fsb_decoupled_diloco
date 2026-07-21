@@ -17,7 +17,7 @@
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
-| `resume` | `false` | true 时从 `<shared_root>/control/syncer_metadata.sqlite3` 的最大 committed 行恢复(fragment 模式不支持);DB 缺失或校验失败即退出 |
+| `resume` | `false` | true 时从 `<shared_root>/control/syncer_metadata.sqlite3` 的最大 committed 行恢复(fragment 模式不支持)，并原子重置本代 learner liveness、持久化旧 heartbeat 内容 fence；DB 缺失/校验失败或已有一致非错误 stop+summary 的 completed run 即退出 |
 
 ## model
 
@@ -52,7 +52,7 @@
 | `selection_policy` | `most_recent_per_learner` | 或 `oldest_pending` |
 | `scan_interval_seconds` | 2.0 | 元数据/心跳重扫描间隔 |
 | `ingest_during_publish` | false | full syncer 等待并行 checkpoint I/O 时，允许主线程继续串行摄取 heartbeat/pointer 元数据；不改变 selection、maintenance、DB version commit 或 latest 顺序 |
-| `capture_terminal_predecessor_for_eval` | false | 研究证据开关；仅在 full input-closed 且 terminal drain 低于 `quorum_min` 时，把 merge 前权威 weight 以 hardlink（失败则原子 copy）保留到 `eval_checkpoints/` 并写 checksum manifest。该目录不参与 latest、DB、resume 或 GC 权威判定 |
+| `capture_terminal_predecessor_for_eval` | false | 研究证据开关；仅在 full input-closed 且 terminal drain 低于 `quorum_min` 时，把 merge 前权威 weight 以 hardlink（失败则原子 copy）保留到 `eval_checkpoints/` 并写 checksum manifest。manifest 是证据提交点：manifest 前残留 checkpoint 可校验恢复，manifest 后任一 identity/checksum/缺文件冲突 fail closed。该目录不参与 latest、DB、resume 或 GC 权威判定 |
 | `grace_window.mode` | `fixed` | `fixed` 或 `adaptive_fastest_upload_eta` |
 | `grace_window.fixed_seconds` | 20.0 | fixed 模式的宽限窗口时长 |
 | `grace_window.initial_seconds` | 10.0 | adaptive 模式的初始窗口;用 syncer 首见 update 的 monotonic 时钟估算最快下一上传，运行中只会缩短 |

@@ -1,0 +1,505 @@
+{
+  "complete_training_time_seconds": 6.318513500038534,
+  "db": {
+    "applied_updates": 0,
+    "archived_updates": 10,
+    "archived_versions": 4,
+    "contributors": [],
+    "dropped_updates": 0,
+    "exists": true,
+    "fragment_applied_updates": 8,
+    "fragment_dropped_updates": 2,
+    "fragment_learners_with_updates": [
+      "learner_000",
+      "learner_001"
+    ],
+    "fragment_pending_updates": 0,
+    "fragment_selected_counts_by_event": {
+      "1": 2,
+      "2": 2,
+      "3": 2,
+      "4": 2
+    },
+    "fragment_staleness_values": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "fragment_update_integrity": {
+      "archived_payloads_expected_absent": true,
+      "ok": true
+    },
+    "fragment_versions_rows": [
+      {
+        "fragment_id": 0,
+        "global_merge_event": 3,
+        "num_updates": 2,
+        "status": "committed",
+        "version": 2
+      },
+      {
+        "fragment_id": 1,
+        "global_merge_event": 4,
+        "num_updates": 2,
+        "status": "committed",
+        "version": 2
+      }
+    ],
+    "global_versions": 0,
+    "integrity_check": [
+      "ok"
+    ],
+    "integrity_ok": true,
+    "mid_cycle_adoption": {
+      "adoption_count": 0,
+      "base_switched_at_step_values": [],
+      "proposals_with_adoption": 0
+    },
+    "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_20260721/control/syncer_metadata.sqlite3",
+    "pending_updates": 0
+  },
+  "fragment_merge_counts": {
+    "0": 2,
+    "1": 2
+  },
+  "fragment_sizes": {
+    "imbalance_ratio": 1.0,
+    "max": 1024,
+    "mean": 1024.0,
+    "min": 1024
+  },
+  "fragment_staleness_distribution": {
+    "count": 8,
+    "max": 0.0,
+    "mean": 0.0,
+    "min": 0.0
+  },
+  "fragment_versions": {
+    "0": 2,
+    "1": 2
+  },
+  "global_merge_event": 4,
+  "heartbeats": {
+    "learner_000": {
+      "format_version": 1,
+      "hostname": "mg0010",
+      "last_adopted_fragments": [
+        1
+      ],
+      "last_loaded_fragment_versions": {
+        "0": 2,
+        "1": 2
+      },
+      "last_loaded_global_merge_event": 4,
+      "last_loaded_global_version": 4,
+      "last_local_step": 10,
+      "last_update_id": "learner_000_00000010_f000_748fbd157005",
+      "learner_id": "learner_000",
+      "learning_rate": 0.001,
+      "phase": "process_exit",
+      "pid": 1998396,
+      "resource_reader_error_count": 0,
+      "run_id": "second_review_fragment_20260721",
+      "scheduler_total_steps": null,
+      "status": "stopped",
+      "timestamp": 1784560928.2039344,
+      "tokens_per_sec": null,
+      "training_cpu_utilization_peak_percent": 9.090909090909092,
+      "training_gpu_utilization_peak_percent": 16.0,
+      "training_resource_sample_count": 19
+    },
+    "learner_001": {
+      "format_version": 1,
+      "hostname": "mg0010",
+      "last_adopted_fragments": [
+        1
+      ],
+      "last_loaded_fragment_versions": {
+        "0": 2,
+        "1": 2
+      },
+      "last_loaded_global_merge_event": 4,
+      "last_loaded_global_version": 4,
+      "last_local_step": 10,
+      "last_update_id": "learner_001_00000010_f000_e534b37ccc31",
+      "learner_id": "learner_001",
+      "learning_rate": 0.001,
+      "phase": "process_exit",
+      "pid": 1998397,
+      "resource_reader_error_count": 0,
+      "run_id": "second_review_fragment_20260721",
+      "scheduler_total_steps": null,
+      "status": "stopped",
+      "timestamp": 1784560928.2018337,
+      "tokens_per_sec": null,
+      "training_cpu_utilization_peak_percent": 9.67741935483871,
+      "training_gpu_utilization_peak_percent": 16.0,
+      "training_resource_sample_count": 19
+    }
+  },
+  "latest": {
+    "created_at": 1784560926.8099527,
+    "format_version": 1,
+    "fragment_index_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_20260721/fragments/fragment_index.json",
+    "fragments": {
+      "0": {
+        "optim_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_20260721/fragments/optim/fragment_000/v000002.safetensors",
+        "updated_at_global_merge_event": 3,
+        "version": 2,
+        "weight_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_20260721/fragments/weights/fragment_000/v000002.safetensors"
+      },
+      "1": {
+        "optim_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_20260721/fragments/optim/fragment_001/v000002.safetensors",
+        "updated_at_global_merge_event": 4,
+        "version": 2,
+        "weight_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_20260721/fragments/weights/fragment_001/v000002.safetensors"
+      }
+    },
+    "global_merge_event": 4,
+    "latest_kind": "fragment",
+    "latest_layout_version": 2,
+    "materialized_weight_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_20260721/weights/global_v000004.safetensors",
+    "param_index_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_20260721/control/param_index.json",
+    "run_id": "second_review_fragment_20260721",
+    "total_seen_tokens": 512,
+    "version": 4
+  },
+  "latest_kind": "fragment",
+  "learner_adoption_pause": {
+    "learner_000": {
+      "adoption_count": 4,
+      "adoption_pause_fraction": 0.01952169344562598,
+      "adoption_pause_mean_seconds": 0.0010245187440887094,
+      "adoption_pause_total_seconds": 0.004098074976354837,
+      "completed_cycle_elapsed_seconds": 0.20992415375076234,
+      "status": "available"
+    },
+    "learner_001": {
+      "adoption_count": 4,
+      "adoption_pause_fraction": 0.021916538766444452,
+      "adoption_pause_mean_seconds": 0.001133230049163103,
+      "adoption_pause_total_seconds": 0.004532920196652412,
+      "completed_cycle_elapsed_seconds": 0.2068264631088823,
+      "status": "available"
+    }
+  },
+  "learner_fragment_adoption": {
+    "learner_000": {
+      "fragment_adopt_count": 4,
+      "has_adopted_after_initial": true,
+      "last_adopted_fragments": [
+        1
+      ],
+      "last_loaded_fragment_versions": {
+        "0": 2,
+        "1": 2
+      }
+    },
+    "learner_001": {
+      "fragment_adopt_count": 4,
+      "has_adopted_after_initial": true,
+      "last_adopted_fragments": [
+        1
+      ],
+      "last_loaded_fragment_versions": {
+        "0": 2,
+        "1": 2
+      }
+    }
+  },
+  "learner_local_steps": {
+    "learner_000": 10,
+    "learner_001": 10
+  },
+  "learner_metrics": {
+    "exists": true,
+    "last": {
+      "base_fragment_version": "2",
+      "fragment_adopt_count": "4",
+      "fragment_id": "0",
+      "fragment_norm": "33.68722915649414",
+      "global_merge_event": "4",
+      "global_version": "4",
+      "last_loaded_fragment_versions_json": "{\"0\": 2, \"1\": 2}",
+      "learner_id": "learner_000",
+      "learning_rate": "0.001",
+      "local_cycle_cpu_utilization_peak_percent": "7.6923076923076925",
+      "local_cycle_elapsed_seconds": "0.019434693036600947",
+      "local_cycle_gpu_utilization_peak_percent": "0.0",
+      "local_cycle_resource_sample_count": "3",
+      "local_cycle_step_count": "2",
+      "local_cycle_step_time_seconds_mean": "0.0018943968461826444",
+      "local_step": "10",
+      "param_norm": "34.00040054321289",
+      "phase": "fragment_update_written",
+      "scheduler_total_steps": "",
+      "timestamp": "1784560926.7946165",
+      "tokens": "64",
+      "tokens_per_sec": "3293.080054285918",
+      "train_loss": "4.33685302734375",
+      "training_cpu_utilization_peak_percent": "9.090909090909092",
+      "training_gpu_utilization_peak_percent": "16.0",
+      "update_write_seconds": "0.007717557949945331"
+    },
+    "rows": 10
+  },
+  "learner_resources": {
+    "cpu_utilization_scope": "whole_node",
+    "gpu_utilization_scope": "learner_cuda_visible_device",
+    "per_learner": {
+      "learner_000": {
+        "last_local_step": 10,
+        "status": "stopped",
+        "training_cpu_utilization_peak_percent": 9.090909090909092,
+        "training_gpu_utilization_peak_percent": 16.0
+      },
+      "learner_001": {
+        "last_local_step": 10,
+        "status": "stopped",
+        "training_cpu_utilization_peak_percent": 9.67741935483871,
+        "training_gpu_utilization_peak_percent": 16.0
+      }
+    },
+    "training_cpu_utilization_peak_percent_max": 9.67741935483871,
+    "training_cpu_utilization_peak_percent_mean": 9.3841642228739,
+    "training_gpu_utilization_peak_percent_max": 16.0,
+    "training_gpu_utilization_peak_percent_mean": 16.0
+  },
+  "loss_summary": {
+    "count": 10,
+    "first_10_mean": 4.314598822593689,
+    "last_10_mean": 4.314598822593689,
+    "last_vs_first_ratio": 1.0,
+    "max": 4.438193321228027,
+    "mean": 4.314598822593689,
+    "min": 4.262632369995117,
+    "obvious_divergence": false
+  },
+  "materialized_weight_exists": true,
+  "run_summary": {
+    "all_learners_stopped": true,
+    "complete_training_time_seconds": 6.318513500038534,
+    "final_version": 4,
+    "format_version": 1,
+    "learner_resources": {
+      "cpu_utilization_scope": "whole_node",
+      "gpu_utilization_scope": "learner_cuda_visible_device",
+      "per_learner": {
+        "learner_000": {
+          "last_local_step": 10,
+          "status": "stopped",
+          "training_cpu_utilization_peak_percent": 9.090909090909092,
+          "training_gpu_utilization_peak_percent": 16.0
+        },
+        "learner_001": {
+          "last_local_step": 10,
+          "status": "stopped",
+          "training_cpu_utilization_peak_percent": 9.67741935483871,
+          "training_gpu_utilization_peak_percent": 16.0
+        }
+      },
+      "training_cpu_utilization_peak_percent_max": 9.67741935483871,
+      "training_cpu_utilization_peak_percent_mean": 9.3841642228739,
+      "training_gpu_utilization_peak_percent_max": 16.0,
+      "training_gpu_utilization_peak_percent_mean": 16.0
+    },
+    "run_id": "second_review_fragment_20260721",
+    "stop_reason": "stop_after_outer_steps",
+    "total_seen_tokens": 512,
+    "training_completed_at": 1784560928.910697,
+    "training_started_at": 1784560922.5921829
+  },
+  "selected_count_distribution": {
+    "2": 4
+  },
+  "shared_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_20260721",
+  "staleness_evidence": {
+    "aggregate_staleness_counts": {
+      "0": 8
+    },
+    "effective_staleness_mean": {
+      "count": 4,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0
+    },
+    "fresh_effective_weight": {
+      "count": 4,
+      "max": 1.0,
+      "mean": 1.0,
+      "min": 1.0
+    },
+    "links": [
+      {
+        "delay_seconds": 0.09416937828063965,
+        "effective_staleness_mean": 0.0,
+        "fresh_effective_weight": 1.0,
+        "merge_timestamp": 1784560926.0146499,
+        "merge_version": "1",
+        "next_learner_id": "learner_000",
+        "next_local_step": 4,
+        "next_train_loss": 4.262632369995117,
+        "next_update_timestamp": 1784560926.1088192,
+        "staleness_counts": {
+          "0": 2
+        }
+      },
+      {
+        "delay_seconds": 0.20606040954589844,
+        "effective_staleness_mean": 0.0,
+        "fresh_effective_weight": 1.0,
+        "merge_timestamp": 1784560926.3565924,
+        "merge_version": "2",
+        "next_learner_id": "learner_001",
+        "next_local_step": 8,
+        "next_train_loss": 4.286255598068237,
+        "next_update_timestamp": 1784560926.5626528,
+        "staleness_counts": {
+          "0": 2
+        }
+      },
+      {
+        "delay_seconds": 0.09128403663635254,
+        "effective_staleness_mean": 0.0,
+        "fresh_effective_weight": 1.0,
+        "merge_timestamp": 1784560926.4713688,
+        "merge_version": "3",
+        "next_learner_id": "learner_001",
+        "next_local_step": 8,
+        "next_train_loss": 4.286255598068237,
+        "next_update_timestamp": 1784560926.5626528,
+        "staleness_counts": {
+          "0": 2
+        }
+      },
+      {
+        "effective_staleness_mean": 0.0,
+        "fresh_effective_weight": 1.0,
+        "merge_timestamp": 1784560926.8029263,
+        "merge_version": "4",
+        "staleness_counts": {
+          "0": 2
+        }
+      }
+    ],
+    "merge_count": 4,
+    "status": "available_observational_only",
+    "warning": "merge-to-next-learner loss links are temporal observations, not validation"
+  },
+  "stop": {
+    "format_version": 1,
+    "reason": "stop_after_outer_steps",
+    "run_id": "second_review_fragment_20260721",
+    "timestamp": 1784560926.8142502,
+    "total_seen_tokens": 512,
+    "version": 4
+  },
+  "stop_reason": "stop_after_outer_steps",
+  "syncer_log_flags": {
+    "error": false,
+    "exists": true,
+    "no_progress_timeout": false,
+    "uncaught_exception": false
+  },
+  "syncer_metrics": {
+    "exists": true,
+    "last": {
+      "aggregation_seconds": "6.544007919728756e-05",
+      "discovery_seconds": "0.057362351566553116",
+      "effective_staleness_mean": "0.0",
+      "fragment_aggregation_seconds": "6.544007919728756e-05",
+      "fragment_id": "1",
+      "fragment_read_seconds": "0.00110633485019207",
+      "fragment_staleness_max": "0",
+      "fragment_staleness_mean": "0.0",
+      "fragment_staleness_min": "0",
+      "fragment_version": "2",
+      "fresh_effective_weight": "1.0",
+      "gc_pending_rows": "0",
+      "global_interval_seconds": "0.32876366889104247",
+      "global_merge_event": "4",
+      "grace_seconds": "0.00156895793043077",
+      "idle_seconds": "0.2000585359055549",
+      "interval_residual_seconds": "0.014379788422957063",
+      "learner_local_cycle_cpu_utilization_peak_percent_mean": "2.5840076807022356",
+      "learner_local_cycle_gpu_utilization_peak_percent_mean": "0.0",
+      "learner_local_cycle_step_time_seconds_mean": "0.0017028295551426709",
+      "learner_training_cpu_utilization_peak_percent_mean": "9.3841642228739",
+      "learner_training_gpu_utilization_peak_percent_mean": "16.0",
+      "maintenance_scan_seconds": "0.026163676055148244",
+      "maintenance_scanned_rows": "2",
+      "maintenance_seconds": "0.03587799798697233",
+      "materialize_full_seconds": "0.004191769985482097",
+      "materialized_bytes": "8352",
+      "materialized_this_event": "True",
+      "merge_seconds": "0.00021766312420368195",
+      "outer_step_seconds": "0.00015222304500639439",
+      "publish_checkpoint_seconds": "",
+      "publish_dtype": "",
+      "publish_ingest_passes": "",
+      "publish_ingest_seconds": "",
+      "publish_ingested_heartbeats": "",
+      "publish_ingested_updates": "",
+      "publish_outer_bytes": "",
+      "publish_outer_seconds": "",
+      "publish_roundtrip_l2_error": "",
+      "publish_roundtrip_linf_error": "",
+      "publish_roundtrip_relative_l2_error": "",
+      "publish_seconds": "0.018192039104178548",
+      "publish_weight_bytes": "",
+      "publish_weight_seconds": "",
+      "quorum_trigger": "quorum_max",
+      "read_seconds": "0.00110633485019207",
+      "selected_count": "2",
+      "sqlite_commit_seconds": "",
+      "stale_updates_dropped": "0",
+      "staleness_counts_json": "{\"0\":2}",
+      "timestamp": "1784560926.8029263",
+      "total_update_tokens": "128",
+      "version": "4"
+    },
+    "rows": 4
+  },
+  "syncer_resource_cost": {
+    "active_total_seconds": 0.09365881374105811,
+    "complete_training_time_seconds": 6.318513500038534,
+    "duty_cycle": 0.01482291898885504,
+    "duty_cycle_percent": 1.482291898885504,
+    "estimated_idle_gpu_node_hours": 0.001729126301749299,
+    "merge_compute_p50_seconds": 0.0013193100458011031,
+    "merge_compute_p95_seconds": 0.006538122321944681,
+    "merge_compute_total_seconds": 0.011373456800356507,
+    "merge_count": 4,
+    "publish_p50_seconds": 0.018688534037210047,
+    "publish_p95_seconds": 0.02560207080096006,
+    "publish_total_seconds": 0.0822853569407016,
+    "reserved_syncer_node_hours": 0.0017551426388995929,
+    "status": "available"
+  },
+  "update_manifest": {
+    "exists": true,
+    "last": {
+      "base_fragment_version": "2",
+      "base_global_merge_event": "4",
+      "base_global_version": "4",
+      "file_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/second_review_fragment_20260721/updates/payloads/learner_000/update_748fbd157005_fragment_000.params.safetensors",
+      "file_size_bytes": "4184",
+      "fragment_id": "0",
+      "learner_id": "learner_000",
+      "local_step_end": "10",
+      "local_step_start": "8",
+      "sha256": "ca9963f7cff9e526ff9c1faff4849083a87dfaf4a3b67e8e18808f4535c4e053",
+      "tensor_dtype": "float32",
+      "timestamp": "1784560926.7951367",
+      "tokens_this_update": "64",
+      "update_id": "learner_000_00000010_f000_748fbd157005",
+      "update_kind": "fragment"
+    },
+    "rows": 10
+  }
+}

@@ -19,7 +19,7 @@
 2. **原子发布**:所有共享文件通过 `storage/atomic_io.py` 的"写临时文件 → fsync → `os.replace`"发布。读者要么看到旧文件、要么看到完整的新文件,永远不会读到半截。
 3. **proposal pointer 是提交标记**:learner 先写不可变张量 payload，再原子替换固定 pointer。全量模式为每 learner 一个 `updates/latest/learner_XXX.json`；fragment 模式为每 `(learner, fragment)` 一个 `updates/latest/learner_XXX_fNNN.json`。syncer 每轮只枚举 `N` 或 `N×K` 个固定路径，持久 frontier 和文件 signature 短路重放/重复解析；不扫描历史 payload metadata。
 4. **`control/latest.json` 是 learner 轮询的唯一全局指针**。learner 不扫描权重目录、不读数据库。
-5. **心跳 JSON 只是存活提示**,不参与正确性(丢心跳最多导致 liveness 误判,不会丢更新)。
+5. **心跳 JSON 只是带代际边界的存活提示**,不参与训练版本权威链。`stopped` 只证明当前 syncer 代际的输入闭合；full resume 会 fence 旧 pointer 内容，直到 learner 原子发布不同内容的新心跳。
 6. **SQLite 是共享目录中的持久提交记录**:`control/syncer_metadata.sqlite3`,使用 rollback journal(`journal_mode=DELETE`)、`synchronous=FULL`、60 秒 busy timeout。只有 syncer 改业务表,但不同计算节点可以重开并恢复同一 run;不使用 WAL、节点本地副本或 DB dump。
 7. **learner 的 global adoption 由单一策略状态机决定**:`replace`/直接 adoption 整体覆盖并重置内层 optimizer moments；scheduler 对象可重建，但始终恢复到累计 local-step 相位。rebase/prediction reconcile 在合成尚未发布的本地差值后保留完整内层训练状态。不存在与此并行的配置布尔开关。
 8. **外层优化器是显式扁平向量实现**(`modeling/outer_optim.py`),不复用 `torch.optim`,以便把优化器状态精确序列化成 safetensors 并跨 resume 保持一致。
@@ -131,6 +131,7 @@ learner 上传文件的 dtype 由 `io.tensor_dtype` 决定。使用 BF16 时,全
 | `stopped` | learner 退出时自报,粘性(不再被重分类) |
 
 - liveness 只影响观测与 `finite_local_training_complete()` 判断,**不直接**把 learner 的更新剔除——真正的准入由 staleness 窗口控制。
+- full resume 的原子 preparation 会把全部预期 learner 行重置为 `unknown/resumed`，并把当时有效 heartbeat pointer 的内容 SHA256 写入 `run_state.resume_generation`。摄取层只忽略与 fence 完全一致的旧内容；新 active/stopped 原子替换后正常进入本代 sticky 状态。
 - syncer 侧的全局保护:`no_progress_timeout_seconds` 内没有任何合并发生 → 停机并发布 stop。
 - learner 侧有对称 watchdog：首次加载 latest 后开始计时，严格更新的 full version/fragment global merge event 刷新计时；超过 `syncer_unresponsive_timeout_seconds`（null 时沿用 `no_progress_timeout_seconds`）且 deadline 确认读仍看不到进展或 stop 时，learner 记录 `syncer_unresponsive` 并受控退出。
 
@@ -147,9 +148,9 @@ syncer 停止条件(任一):
 
 learner 的常规停止条件由 `training.completion_mode` 决定，full 与 fragment 共用同一判定。默认 `local_or_global` 在 `max_local_steps` 达标或看到 `stop.json` 时停止；`global_only` 则把 `max_local_steps` 视为名义训练/调度 horizon,达到后继续训练与上传,只在 syncer 达到全局目标并发布 `stop.json` 后退出。若 syncer 未发布 stop 就失去进展，watchdog 提供独立的 `syncer_unresponsive` 自保退出。退出前写 `status=stopped` 的最终心跳；watchdog 路径同时写 `status_reason=syncer_unresponsive`。
 
-有限步训练的收尾由 **terminal drain** 衔接，full 与 fragment 均覆盖:只有全部预期 learner 的最终心跳都明确为 `stopped` 时输入才闭合。syncer 再等待一个 grace/reingest 周期,随后用当前严格的 future/staleness 准入规则、配置的选择策略和放宽的 quorum 合并剩余 proposal;达到目标或耗尽合法输入后以 `input_exhausted` 停止。fragment 保持 global event 的目标片调度，不跳过一个已耗尽的目标片去消费其他片；剩余项在终态化阶段处理。`dead` 但未自报 stopped 的 learner 不会触发末端排空。
+有限步训练的收尾由 **terminal drain** 衔接，full 与 fragment 均覆盖:只有全部预期 learner 的最终心跳都明确为 `stopped` 时输入才闭合。grace/reingest 后 selector 返回显式三态：`open`（输入重新打开）、`closed_selected`（按严格 future/staleness/selection policy 选中，允许低于 quorum）或 `closed_empty`。只有 `closed_empty` 能产生 `input_exhausted`；`open` 会复位 terminal grace 并回到常规 discovery。fragment 保持 global event 的目标片调度，不跳过一个已耗尽的目标片去消费其他片；剩余项在终态化阶段处理。`dead` 但未自报 stopped 的 learner 不会触发末端排空。
 
-full 模式可为研究评估显式开启 `sync.capture_terminal_predecessor_for_eval`。低于 `quorum_min` 的 terminal merge 在选中状态写入前，会把当前权威 weight hardlink/copy 到 `eval_checkpoints/` 并记录 source version、checksum、selected/quorum；这些文件只用于离线 pre/post 评估，不是第二权威，也不参与恢复或 latest 发布。默认关闭时不会创建该目录。
+full 模式可为研究评估显式开启 `sync.capture_terminal_predecessor_for_eval`。低于 `quorum_min` 的 terminal merge 在选中状态写入前，会把当前权威 weight hardlink/copy 到 `eval_checkpoints/` 并记录 source version、checksum、selected/quorum；manifest 是证据包提交点。manifest 前残留 checkpoint 会在校验 source 后复用或原子覆盖，manifest 后任一 identity/checksum/缺文件冲突都 fail closed。这些文件只用于离线 pre/post 评估，不是第二权威，也不参与恢复或 latest 发布。默认关闭时不会创建该目录。
 
 ## 8. 容错与崩溃恢复
 
@@ -157,7 +158,7 @@ full 模式可为研究评估显式开启 `sync.capture_terminal_predecessor_for
 |---|---|
 | learner 崩溃 | 心跳变旧 → stale/dead;其已提交更新照常可被合并;quorum 机制容忍缺席。 |
 | learner 变慢 | 其更新 staleness 增大 → 权重被 λ 折减,过窗即弃。 |
-| syncer 崩溃 | `init.resume: true` 必须原地打开持久 DB;先跑 `integrity_check`,校验 run/protocol identity,以最大 committed DB 行确定版本,校验权重与 outer 文件及其中 theta 完全一致,重置遗留 selected,重建 `latest.json`,再做 archive/GC。DB 缺失或不一致时 fail closed。 |
+| syncer 崩溃 | `init.resume: true` 必须原地打开持久 DB;先跑 `integrity_check`,校验 run/protocol identity,以最大 committed DB 行确定版本,校验权重与 outer 文件及其中 theta 完全一致；单一事务回滚 selected、重置 learner 本代 liveness 并持久化 heartbeat fence，再重建 `latest.json`、archive/GC。DB 缺失或不一致、或 run 已有一致非错误 stop+summary 时 fail closed。 |
 | 半截文件 | 不可能出现(原子 rename);张量写完前元数据不存在,syncer 不会看见。 |
 | 更新文件丢失 | 选择前后各有一次存在性检查;选择后发现丢失 → 丢弃该份、其余回滚为 pending、放弃本次合并重来。 |
 | 故障注入 | `failure_sim` 配置节可让 learner 随机睡眠/跳过上传/以 exit 97 崩溃,用于韧性实验。 |

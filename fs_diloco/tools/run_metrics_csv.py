@@ -1,4 +1,4 @@
-"""Extract report-oriented metrics from one or more run roots into CSV."""
+"""Discover completed runs below one or more roots and add their metrics to CSV."""
 
 from __future__ import annotations
 
@@ -594,13 +594,70 @@ def extract_run_metrics(run_path: str | Path) -> dict[str, Any]:
     return {column: row.get(column) for column in CSV_COLUMNS}
 
 
+def find_finished_run_roots(root_paths: Iterable[str | Path]) -> list[Path]:
+    """Find run roots recursively, using ``control/stop.json`` as completion marker."""
+    discovered: set[Path] = set()
+    for root_path in root_paths:
+        root = Path(root_path).expanduser().resolve()
+        if not root.is_dir():
+            raise FileNotFoundError(f"root path does not exist: {root}")
+
+        for current, directory_names, _file_names in os.walk(root, followlinks=False):
+            directory_names.sort()
+            current_path = Path(current)
+            control = current_path / "control"
+            if not control.is_dir():
+                continue
+
+            # A directory containing control/ is a run boundary. Do not scan its
+            # potentially large checkpoint/update trees or discover nested paths
+            # as separate runs.
+            directory_names.clear()
+            if (control / "stop.json").is_file():
+                discovered.add(current_path.resolve())
+
+    return sorted(discovered, key=lambda path: str(path))
+
+
+def _row_identity_tokens(row: dict[str, Any]) -> set[tuple[str, str]]:
+    tokens: set[tuple[str, str]] = set()
+    run_id = str(row.get("run_id") or "").strip()
+    if run_id:
+        tokens.add(("run_id", run_id))
+    run_path = str(row.get("run_path") or "").strip()
+    if run_path:
+        normalized_path = str(Path(run_path).expanduser().resolve())
+        tokens.add(("run_path", normalized_path))
+    if not tokens:
+        raise ValueError("CSV row must contain run_id or run_path")
+    return tokens
+
+
+def _new_unique_records(
+    records: Iterable[dict[str, Any]],
+    existing_records: Iterable[dict[str, Any]] = (),
+) -> list[dict[str, Any]]:
+    seen: set[tuple[str, str]] = set()
+    for record in existing_records:
+        seen.update(_row_identity_tokens(record))
+
+    unique: list[dict[str, Any]] = []
+    for record in records:
+        tokens = _row_identity_tokens(record)
+        if tokens & seen:
+            continue
+        unique.append(record)
+        seen.update(tokens)
+    return unique
+
+
 def write_metrics_csv(
     rows: Iterable[dict[str, Any]],
     output: str | Path,
     *,
     append: bool = True,
 ) -> int:
-    """Write rows with a stable schema; append by default and fsync the result."""
+    """Write only previously unseen runs, keyed by run ID or normalized run path."""
     records = list(rows)
     if not records:
         return 0
@@ -609,11 +666,16 @@ def write_metrics_csv(
     existing = append and path.is_file() and path.stat().st_size > 0
     if existing:
         with path.open("r", encoding="utf-8", newline="") as handle:
-            header = next(csv.reader(handle), [])
+            reader = csv.DictReader(handle)
+            header = reader.fieldnames or []
+            existing_records = list(reader)
         if header != CSV_COLUMNS:
             raise ValueError(
                 f"existing CSV schema differs at {path}; use --overwrite or a new output path"
             )
+        records = _new_unique_records(records, existing_records)
+        if not records:
+            return 0
         with path.open("a", encoding="utf-8", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS, extrasaction="raise")
             writer.writerows(records)
@@ -621,6 +683,7 @@ def write_metrics_csv(
             os.fsync(handle.fileno())
         return len(records)
 
+    records = _new_unique_records(records)
     with tempfile.NamedTemporaryFile(
         "w",
         encoding="utf-8",
@@ -646,7 +709,14 @@ def write_metrics_csv(
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("run_paths", nargs="+", help="One or more fs-diloco run roots")
+    parser.add_argument(
+        "root_paths",
+        nargs="+",
+        help=(
+            "One or more roots to scan recursively for completed fs-diloco runs "
+            "(marked by control/stop.json)"
+        ),
+    )
     parser.add_argument(
         "-o",
         "--output",
@@ -663,9 +733,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    rows = [extract_run_metrics(path) for path in args.run_paths]
+    run_roots = find_finished_run_roots(args.root_paths)
+    rows = [extract_run_metrics(path) for path in run_roots]
     count = write_metrics_csv(rows, args.output, append=not args.overwrite)
-    print(f"wrote {count} row(s) to {Path(args.output).expanduser().resolve()}")
+    skipped = len(rows) - count
+    print(
+        f"found {len(run_roots)} finished run(s); wrote {count} new row(s); "
+        f"skipped {skipped} existing/duplicate run(s); "
+        f"output={Path(args.output).expanduser().resolve()}"
+    )
 
 
 if __name__ == "__main__":

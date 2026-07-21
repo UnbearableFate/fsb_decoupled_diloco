@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 import torch
 
@@ -11,6 +13,7 @@ from fs_diloco.runtime.adoption import (
     make_global_adoption_strategy,
 )
 from fs_diloco.storage.paths import RunPaths
+from fs_diloco.storage.atomic_io import atomic_write_json
 
 
 class RecordingLogger:
@@ -30,12 +33,14 @@ def _context(
     prepare_prediction=None,
     reference=None,
     load_or_refresh_latest=None,
+    paths=None,
+    snapshot_model=None,
 ):
     logger = logger or RecordingLogger()
     reference = reference if reference is not None else torch.arange(4, dtype=torch.float32)
     return AdoptionContext(
         model=object(),
-        paths=RunPaths("unused"),
+        paths=paths or RunPaths(Path("unused")),
         param_index={"total_numel": 4},
         device=torch.device("cpu"),
         config=config,
@@ -52,7 +57,8 @@ def _context(
             1.25,
             {"reconcile_compute_device": "cpu"},
         ),
-        snapshot_model_fn=lambda **_kwargs: (reference, {"reference_compute_device": "cpu"}),
+        snapshot_model_fn=snapshot_model
+        or (lambda **_kwargs: (reference, {"reference_compute_device": "cpu"})),
         prepare_prediction_fn=prepare_prediction
         or (lambda **_kwargs: (reference, {"prediction_compute_device": "cpu"}, None, None)),
         load_or_refresh_latest_fn=load_or_refresh_latest,
@@ -220,6 +226,7 @@ def test_prediction_strategy_starts_reconciles_and_abandons_on_stop():
             "carried_delta_tokens": 16,
         },
     )
+    assert not strategy.wants_inner_poll(config)
 
 
 def test_prediction_strategy_timeout_keeps_state_for_diagnostics():
@@ -234,3 +241,120 @@ def test_prediction_strategy_timeout_keeps_state_for_diagnostics():
 
     assert strategy.wants_inner_poll(config)
     assert logger.events[-1][0] == "global_prediction_reconcile_wait_started"
+
+
+def test_prediction_reconcile_stop_during_wait_abandons_without_timeout(tmp_path):
+    config = resolve_config("configs/fs_diloco_tiny_predict_local.yaml")
+    paths = RunPaths(tmp_path)
+    logger = RecordingLogger()
+
+    def stop_during_wait(*_args, **_kwargs):
+        atomic_write_json(paths.stop_json, {"reason": "stop_after_outer_steps"})
+        return None, 0.25
+
+    ctx = _context(
+        config,
+        paths=paths,
+        logger=logger,
+        wait_latest=stop_during_wait,
+    )
+    strategy = PredictGlobalAdoptionStrategy()
+    strategy.on_after_publish(ctx, PublishResult(update_id="u1", base_global_version=1))
+    strategy.on_local_tokens(32)
+
+    action = strategy.on_cycle_end(ctx)
+
+    assert action.adoption is None
+    assert action.reset_optimizer_reason is None
+    assert not strategy.wants_inner_poll(config)
+    assert [event for event, _payload in logger.events][-2:] == [
+        "global_prediction_reconcile_wait_started",
+        "global_prediction_abandoned_on_stop",
+    ]
+    assert logger.events[-1][1]["carried_delta_tokens"] == 32
+
+
+def test_predict_after_publish_stop_skips_prediction_preparation(tmp_path):
+    config = resolve_config("configs/fs_diloco_tiny_predict_local.yaml")
+    paths = RunPaths(tmp_path)
+    atomic_write_json(paths.stop_json, {"reason": "stop_after_outer_steps"})
+    calls = []
+
+    def prepare(**_kwargs):
+        calls.append("prepare")
+        return torch.zeros(4), {}, None, None
+
+    logger = RecordingLogger()
+    strategy = PredictGlobalAdoptionStrategy()
+    action = strategy.on_after_publish(
+        _context(
+            config,
+            paths=paths,
+            logger=logger,
+            prepare_prediction=prepare,
+        ),
+        PublishResult(update_id="u1", base_global_version=1),
+    )
+
+    assert calls == []
+    assert action.adoption is None
+    assert action.reset_optimizer_reason is None
+    assert not strategy.wants_inner_poll(config)
+    assert logger.events[-1][0] == "global_prediction_start_skipped_on_stop"
+
+
+def test_rebase_after_publish_stop_skips_anchor_snapshot(tmp_path):
+    config = resolve_config("configs/fs_diloco_tiny_rebase_local.yaml")
+    paths = RunPaths(tmp_path)
+    atomic_write_json(paths.stop_json, {"reason": "stop_after_outer_steps"})
+    calls = []
+
+    def snapshot(**_kwargs):
+        calls.append("snapshot")
+        return torch.zeros(4), {}
+
+    logger = RecordingLogger()
+    strategy = RebaseGlobalAdoptionStrategy()
+    action = strategy.on_after_publish(
+        _context(
+            config,
+            paths=paths,
+            logger=logger,
+            snapshot_model=snapshot,
+        ),
+        PublishResult(update_id="u1", base_global_version=1),
+    )
+
+    assert calls == []
+    assert action.adoption is None
+    assert not strategy.wants_inner_poll(config)
+    assert logger.events[-1][0] == "local_rebase_anchor_skipped_on_stop"
+
+
+@pytest.mark.parametrize(
+    "strategy_type,config_path",
+    [
+        (PredictGlobalAdoptionStrategy, "configs/fs_diloco_tiny_predict_local.yaml"),
+        (RebaseGlobalAdoptionStrategy, "configs/fs_diloco_tiny_rebase_local.yaml"),
+    ],
+)
+def test_stop_does_not_skip_already_visible_direct_adoption(
+    tmp_path, strategy_type, config_path
+):
+    config = resolve_config(config_path)
+    paths = RunPaths(tmp_path)
+    atomic_write_json(paths.stop_json, {"reason": "stop_after_outer_steps"})
+    strategy = strategy_type()
+
+    action = strategy.on_after_publish(
+        _context(
+            config,
+            paths=paths,
+            read_latest=lambda *_args: {"version": 2},
+        ),
+        PublishResult(update_id="u1", base_global_version=1),
+    )
+
+    assert action.adoption is not None
+    assert action.adoption.version == 2
+    assert action.adoption.preserve_inner_state is False

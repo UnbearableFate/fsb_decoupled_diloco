@@ -10,6 +10,7 @@ import shutil
 import signal
 import socket
 import time
+import uuid
 from collections import OrderedDict
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, wait as wait_futures
@@ -54,7 +55,12 @@ from ..protocol.fragment_codec import (
 )
 from ..protocol.fragment_index import build_fragment_index, save_fragment_index
 from ..protocol.fragment_scheduler import select_fragment
-from ..protocol.liveness import ingest_heartbeats, no_progress_timed_out, update_liveness_statuses
+from ..protocol.liveness import (
+    capture_heartbeat_fences,
+    ingest_heartbeats,
+    no_progress_timed_out,
+    update_liveness_statuses,
+)
 from ..protocol.merge import (
     normalized_fragment_update_weights,
     normalized_update_weights,
@@ -125,15 +131,56 @@ def maybe_capture_terminal_predecessor_for_eval(
     checkpoint = paths.eval_checkpoints / f"{stem}.safetensors"
     manifest_path = paths.eval_checkpoints / f"{stem}.manifest.json"
 
-    existing_manifest = safe_read_json(manifest_path)
-    if existing_manifest is not None and checkpoint.is_file():
-        expected_sha = existing_manifest.get("checkpoint_sha256")
-        actual_sha = f"sha256:{sha256_file(checkpoint)}"
-        if expected_sha != actual_sha:
+    relative_checkpoint = checkpoint.relative_to(paths.shared_root).as_posix()
+    relative_manifest = manifest_path.relative_to(paths.shared_root).as_posix()
+    source_relative = source.relative_to(paths.shared_root).as_posix()
+    expected_identity: dict[str, Any] = {
+        "schema_version": 1,
+        "checkpoint_role": "terminal_predecessor_evidence",
+        "source_global_version": int(version),
+        "source_weight_path": source_relative,
+        "checkpoint_path": relative_checkpoint,
+        "manifest_path": relative_manifest,
+        "selected_count": len(selected),
+        "quorum_min": int(config.sync.quorum_min),
+        "quorum_max": int(config.sync.quorum_max),
+        "selected_update_ids": [str(row["update_id"]) for row in selected],
+        "selected_learner_ids": [str(row["learner_id"]) for row in selected],
+    }
+    source_sha = f"sha256:{sha256_file(source)}"
+
+    if manifest_path.exists():
+        existing_manifest = safe_read_json(manifest_path)
+        if existing_manifest is None:
             raise RuntimeError(
-                f"terminal predecessor capture checksum mismatch: {checkpoint}"
+                f"terminal predecessor manifest is unreadable: {manifest_path}"
+            )
+        if not checkpoint.is_file():
+            raise RuntimeError(
+                f"committed terminal predecessor checkpoint is missing: {checkpoint}"
+            )
+        mismatched = [
+            key
+            for key, expected in expected_identity.items()
+            if existing_manifest.get(key) != expected
+        ]
+        checkpoint_sha = f"sha256:{sha256_file(checkpoint)}"
+        if existing_manifest.get("checkpoint_sha256") != checkpoint_sha:
+            mismatched.append("checkpoint_sha256")
+        if checkpoint_sha != source_sha:
+            mismatched.append("source_checksum")
+        if mismatched:
+            raise RuntimeError(
+                "committed terminal predecessor evidence conflicts with source: "
+                f"{sorted(set(mismatched))}"
             )
         return existing_manifest
+
+    def copy_source() -> None:
+        atomic_write_with_writer(
+            checkpoint,
+            lambda temporary: shutil.copyfile(source, temporary),
+        )
 
     try:
         os.link(source, checkpoint)
@@ -141,30 +188,27 @@ def maybe_capture_terminal_predecessor_for_eval(
     except FileExistsError:
         if not checkpoint.is_file():
             raise
-        capture_method = "hardlink" if os.path.samefile(source, checkpoint) else "copy"
+        if os.path.samefile(source, checkpoint):
+            capture_method = "hardlink"
+        elif f"sha256:{sha256_file(checkpoint)}" == source_sha:
+            capture_method = "copy"
+        else:
+            copy_source()
+            capture_method = "copy"
     except OSError:
-        atomic_write_with_writer(
-            checkpoint,
-            lambda temporary: shutil.copyfile(source, temporary),
-        )
+        copy_source()
         capture_method = "copy"
 
-    relative_checkpoint = checkpoint.relative_to(paths.shared_root).as_posix()
-    relative_manifest = manifest_path.relative_to(paths.shared_root).as_posix()
+    checkpoint_sha = f"sha256:{sha256_file(checkpoint)}"
+    source_sha_after = f"sha256:{sha256_file(source)}"
+    if source_sha_after != source_sha or checkpoint_sha != source_sha:
+        raise RuntimeError(
+            "terminal predecessor source changed or checkpoint copy is inconsistent"
+        )
     manifest: dict[str, Any] = {
-        "schema_version": 1,
-        "checkpoint_role": "terminal_predecessor_evidence",
-        "source_global_version": int(version),
-        "source_weight_path": source.relative_to(paths.shared_root).as_posix(),
-        "checkpoint_path": relative_checkpoint,
-        "manifest_path": relative_manifest,
-        "checkpoint_sha256": f"sha256:{sha256_file(checkpoint)}",
+        **expected_identity,
+        "checkpoint_sha256": checkpoint_sha,
         "capture_method": capture_method,
-        "selected_count": len(selected),
-        "quorum_min": int(config.sync.quorum_min),
-        "quorum_max": int(config.sync.quorum_max),
-        "selected_update_ids": [str(row["update_id"]) for row in selected],
-        "selected_learner_ids": [str(row["learner_id"]) for row in selected],
     }
     atomic_write_json(manifest_path, manifest)
     return manifest
@@ -489,6 +533,15 @@ def publish_global(
     }
 
 
+def checkpoint_wait_ingestion_callback(
+    config: Config,
+    callback: Callable[[], dict[str, int] | int | None],
+) -> Callable[[], dict[str, int] | int | None] | None:
+    """Return the publication overlap callback only when ingestion is enabled."""
+
+    return callback if config.sync.ingest_during_publish else None
+
+
 def fragment_latest_payload(
     *,
     config: Config,
@@ -786,6 +839,21 @@ def resume_run(
     committed = store.latest_global_version()
     if committed is None:
         raise RuntimeError("resume requires a committed global version in persistent SQLite")
+    stop_payload = safe_read_json(paths.stop_json)
+    summary_payload = safe_read_json(paths.summary_json)
+    terminal_reasons = {
+        str(payload.get(key))
+        for payload, key in (
+            (stop_payload or {}, "reason"),
+            (summary_payload or {}, "stop_reason"),
+        )
+        if payload.get(key) not in (None, "", "error")
+    }
+    if terminal_reasons:
+        raise RuntimeError(
+            "resume cannot reopen a completed run; use a new run_id/shared_root "
+            f"(terminal reasons: {sorted(terminal_reasons)})"
+        )
     param_index = load_param_index(paths.param_index_json)
     model, _tokenizer = load_causal_lm_and_tokenizer(config.model)
     current_index = build_param_index(model, model_name_or_path=config.model.name_or_path)
@@ -811,7 +879,32 @@ def resume_run(
     if theta.shape != optim_theta.shape or not torch.equal(theta, optim_theta):
         raise RuntimeError("committed weight and outer checkpoint theta do not match")
 
-    reset_selected = store.reset_all_selected_to_pending()
+    resume_id = uuid.uuid4().hex
+    resumed_at = time.time()
+    heartbeat_fences = capture_heartbeat_fences(
+        paths.heartbeats,
+        run_id=config.run.run_id or "",
+        num_learners=config.sync.num_learners,
+    )
+    resume_generation = store.prepare_full_resume(
+        resume_id=resume_id,
+        resumed_at=resumed_at,
+        expected_learner_ids=(
+            learner_id_from_index(index)
+            for index in range(config.sync.num_learners)
+        ),
+        heartbeat_fences=heartbeat_fences,
+    )
+    for marker_name, marker_path in (
+        ("stop", paths.stop_json),
+        ("summary", paths.summary_json),
+    ):
+        if marker_path.exists():
+            ensure_dir(paths.logs)
+            os.replace(
+                marker_path,
+                paths.logs / f"resume_{resume_id}_previous_{marker_name}.json",
+            )
     total_seen_tokens = int(committed["total_seen_tokens"])
     repaired_latest = latest_payload(
         config=config,
@@ -833,7 +926,10 @@ def resume_run(
     logger.event(
         "run_resumed",
         version=int(committed["version"]),
-        reset_selected=reset_selected,
+        resume_id=resume_id,
+        reset_selected=resume_generation["reset_selected"],
+        reset_learners=resume_generation["reset_learners"],
+        heartbeat_fence_count=len(heartbeat_fences),
     )
     logger.event("state_maintenance_completed", **maintenance)
     return (
@@ -1022,12 +1118,14 @@ def sync_liveness_and_metadata(
     config: Config,
     logger: JsonlLogger,
     first_seen: UpdateFirstSeenRegistry | None = None,
+    heartbeat_fences: dict[str, str] | None = None,
 ) -> dict[str, int]:
     heartbeat_count = ingest_heartbeats(
         store,
         paths.heartbeats,
         run_id=config.run.run_id or "",
         num_learners=config.sync.num_learners,
+        heartbeat_fences=heartbeat_fences,
     )
     counts = update_liveness_statuses(
         store,
@@ -1224,6 +1322,7 @@ def collect_with_grace_window(
     *,
     source: UpdateProposalSource,
     first_seen: UpdateFirstSeenRegistry | None = None,
+    heartbeat_fences: dict[str, str] | None = None,
     telemetry_out: dict[str, float | str] | None = None,
 ) -> list[dict[str, Any]]:
     started_at = time.monotonic()
@@ -1281,6 +1380,7 @@ def collect_with_grace_window(
             config,
             logger,
             first_seen=first_seen,
+            heartbeat_fences=heartbeat_fences,
         )
     elapsed_seconds = time.monotonic() - started_at
     logger.event(
@@ -1326,6 +1426,20 @@ def all_expected_learners_stopped(store: SQLiteStore, config: Config) -> bool:
     return stopped == expected
 
 
+@dataclass(frozen=True)
+class TerminalDrainDecision:
+    state: str
+    selected: list[dict[str, Any]]
+
+    def __post_init__(self) -> None:
+        if self.state not in {"open", "closed_empty", "closed_selected"}:
+            raise ValueError(f"invalid terminal drain state: {self.state}")
+        if self.state == "closed_selected" and not self.selected:
+            raise ValueError("closed_selected requires at least one proposal")
+        if self.state != "closed_selected" and self.selected:
+            raise ValueError(f"{self.state} cannot contain selected proposals")
+
+
 def select_terminal_drain_updates(
     store: SQLiteStore,
     paths: RunPaths,
@@ -1333,15 +1447,15 @@ def select_terminal_drain_updates(
     logger: JsonlLogger,
     *,
     current_version: int,
-) -> list[dict[str, Any]]:
+) -> TerminalDrainDecision:
     if not all_expected_learners_stopped(store, config):
-        return []
+        return TerminalDrainDecision(state="open", selected=[])
     store.drop_ineligible_updates(current_version, config.sync.max_staleness_versions)
     source = full_update_proposal_source(
         current_version=current_version,
         max_staleness_versions=config.sync.max_staleness_versions,
     )
-    return _select_terminal_drain_from_source(
+    selected = _select_terminal_drain_from_source(
         store,
         paths,
         config,
@@ -1355,6 +1469,10 @@ def select_terminal_drain_updates(
             else None
         ),
     )
+    return TerminalDrainDecision(
+        state="closed_selected" if selected else "closed_empty",
+        selected=selected,
+    )
 
 
 def select_terminal_drain_fragment_updates(
@@ -1366,9 +1484,9 @@ def select_terminal_drain_fragment_updates(
     fragment_id: int,
     current_fragment_version: int,
     global_merge_event: int,
-) -> list[dict[str, Any]]:
+) -> TerminalDrainDecision:
     if not all_expected_learners_stopped(store, config):
-        return []
+        return TerminalDrainDecision(state="open", selected=[])
     store.drop_ineligible_fragment_updates(
         fragment_id=fragment_id,
         current_fragment_version=current_fragment_version,
@@ -1379,7 +1497,7 @@ def select_terminal_drain_fragment_updates(
         current_fragment_version=current_fragment_version,
         max_staleness_versions=config.sync.max_staleness_versions,
     )
-    return _select_terminal_drain_from_source(
+    selected = _select_terminal_drain_from_source(
         store,
         paths,
         config,
@@ -1388,6 +1506,10 @@ def select_terminal_drain_fragment_updates(
         selected_event="fragment_terminal_drain_selected",
         empty_event="fragment_terminal_drain_no_pending_updates",
         global_merge_event=global_merge_event,
+    )
+    return TerminalDrainDecision(
+        state="closed_selected" if selected else "closed_empty",
+        selected=selected,
     )
 
 
@@ -1514,6 +1636,7 @@ def wait_for_learner_shutdown(
     logger: JsonlLogger,
     stop_reason: str,
     first_seen: UpdateFirstSeenRegistry | None = None,
+    heartbeat_fences: dict[str, str] | None = None,
 ) -> bool:
     if stop_reason == "error":
         return False
@@ -1527,6 +1650,7 @@ def wait_for_learner_shutdown(
             config,
             logger,
             first_seen=first_seen,
+            heartbeat_fences=heartbeat_fences,
         )
         if all_expected_learners_stopped(store, config):
             logger.event("all_learners_stopped", count=len(expected))
@@ -1783,6 +1907,13 @@ def run_fragment_syncer(
             )
             input_closed = all_expected_learners_stopped(store, config)
             cycle_discovery_seconds += time.monotonic() - discovery_start
+            if not input_closed and terminal_grace_complete:
+                terminal_grace_complete = False
+                logger.event(
+                    "fragment_terminal_input_reopened",
+                    global_merge_event=global_merge_event,
+                    fragment_id=target_fragment,
+                )
             if input_closed and not terminal_grace_complete:
                 logger.event(
                     "fragment_terminal_input_closed",
@@ -1800,13 +1931,22 @@ def run_fragment_syncer(
                     logger,
                     first_seen=first_seen,
                 )
+                input_closed = all_expected_learners_stopped(store, config)
                 cycle_grace_seconds += time.monotonic() - terminal_grace_start
-                cycle_quorum_trigger = "terminal_drain"
-                terminal_grace_complete = True
+                if input_closed:
+                    cycle_quorum_trigger = "terminal_drain"
+                    terminal_grace_complete = True
+                else:
+                    logger.event(
+                        "fragment_terminal_input_reopened",
+                        global_merge_event=global_merge_event,
+                        fragment_id=target_fragment,
+                    )
 
+            terminal_drain = False
             if input_closed:
                 discovery_start = time.monotonic()
-                selected = select_terminal_drain_fragment_updates(
+                terminal_decision = select_terminal_drain_fragment_updates(
                     store,
                     paths,
                     config,
@@ -1816,7 +1956,15 @@ def run_fragment_syncer(
                     global_merge_event=global_merge_event,
                 )
                 cycle_discovery_seconds += time.monotonic() - discovery_start
-                if not selected:
+                if terminal_decision.state == "open":
+                    input_closed = False
+                    terminal_grace_complete = False
+                    logger.event(
+                        "fragment_terminal_input_reopened",
+                        global_merge_event=global_merge_event,
+                        fragment_id=target_fragment,
+                    )
+                elif terminal_decision.state == "closed_empty":
                     stop_reason = "input_exhausted"
                     logger.event(
                         "input_exhausted",
@@ -1824,50 +1972,51 @@ def run_fragment_syncer(
                         fragment_id=target_fragment,
                     )
                     break
-                terminal_drain = len(selected) < config.sync.quorum_min
-            else:
-                terminal_drain = False
-            discovery_start = time.monotonic()
-            eligible = proposal_source.eligible_updates(store)
-            eligible = drop_missing_update_files(
-                store,
-                eligible,
-                logger,
-                source=proposal_source,
-                first_seen=first_seen,
-            )
-            one_per_learner = select_one_per_learner(
-                eligible,
-                policy=config.sync.selection_policy,
-                quorum_max=config.sync.quorum_max,
-            )
-            cycle_discovery_seconds += time.monotonic() - discovery_start
-            if not input_closed and len(one_per_learner) < config.sync.quorum_min:
-                logger.event(
-                    "fragment_quorum_wait",
-                    eligible=len(one_per_learner),
-                    quorum_min=config.sync.quorum_min,
-                    global_merge_event=global_merge_event,
-                    fragment_id=target_fragment,
-                    fragment_version=current_fragment_version,
-                )
-                if no_progress_timed_out(
-                    last_progress_time,
-                    config.liveness.no_progress_timeout_seconds,
-                ):
-                    stop_reason = "no_progress_timeout"
-                    logger.event(
-                        "no_progress_timeout",
-                        global_merge_event=global_merge_event,
-                        fragment_id=target_fragment,
-                    )
-                    break
-                idle_start = time.monotonic()
-                time.sleep(config.sync.scan_interval_seconds)
-                cycle_idle_seconds += time.monotonic() - idle_start
-                continue
+                else:
+                    selected = terminal_decision.selected
+                    terminal_drain = len(selected) < config.sync.quorum_min
 
             if not input_closed:
+                discovery_start = time.monotonic()
+                eligible = proposal_source.eligible_updates(store)
+                eligible = drop_missing_update_files(
+                    store,
+                    eligible,
+                    logger,
+                    source=proposal_source,
+                    first_seen=first_seen,
+                )
+                one_per_learner = select_one_per_learner(
+                    eligible,
+                    policy=config.sync.selection_policy,
+                    quorum_max=config.sync.quorum_max,
+                )
+                cycle_discovery_seconds += time.monotonic() - discovery_start
+                if len(one_per_learner) < config.sync.quorum_min:
+                    logger.event(
+                        "fragment_quorum_wait",
+                        eligible=len(one_per_learner),
+                        quorum_min=config.sync.quorum_min,
+                        global_merge_event=global_merge_event,
+                        fragment_id=target_fragment,
+                        fragment_version=current_fragment_version,
+                    )
+                    if no_progress_timed_out(
+                        last_progress_time,
+                        config.liveness.no_progress_timeout_seconds,
+                    ):
+                        stop_reason = "no_progress_timeout"
+                        logger.event(
+                            "no_progress_timeout",
+                            global_merge_event=global_merge_event,
+                            fragment_id=target_fragment,
+                        )
+                        break
+                    idle_start = time.monotonic()
+                    time.sleep(config.sync.scan_interval_seconds)
+                    cycle_idle_seconds += time.monotonic() - idle_start
+                    continue
+
                 grace_telemetry: dict[str, float | str] = {}
                 selected = collect_with_grace_window(
                     store,
@@ -2304,6 +2453,13 @@ def run_syncer(config: Config) -> None:
             logger,
             device=device,
         )
+        resume_generation = store.get_run_state("resume_generation") or {}
+        heartbeat_fences = {
+            str(learner_id): str(fingerprint)
+            for learner_id, fingerprint in dict(
+                resume_generation.get("heartbeat_fences") or {}
+            ).items()
+        }
     else:
         version, theta, outer_state, param_index, total_seen_tokens = initialize_run(
             config,
@@ -2312,6 +2468,7 @@ def run_syncer(config: Config) -> None:
             logger,
             device=device,
         )
+        heartbeat_fences = {}
 
     first_seen = UpdateFirstSeenRegistry(capacity=update_first_seen_capacity(config))
     last_progress_time = time.time()
@@ -2344,9 +2501,13 @@ def run_syncer(config: Config) -> None:
                 config,
                 logger,
                 first_seen=first_seen,
+                heartbeat_fences=heartbeat_fences,
             )
             input_closed = all_expected_learners_stopped(store, config)
             cycle_discovery_seconds += time.monotonic() - discovery_start
+            if not input_closed and terminal_grace_complete:
+                terminal_grace_complete = False
+                logger.event("terminal_input_reopened", version=version)
             if input_closed and not terminal_grace_complete:
                 logger.event("terminal_input_closed", version=version)
                 terminal_grace_start = time.monotonic()
@@ -2359,14 +2520,20 @@ def run_syncer(config: Config) -> None:
                     config,
                     logger,
                     first_seen=first_seen,
+                    heartbeat_fences=heartbeat_fences,
                 )
+                input_closed = all_expected_learners_stopped(store, config)
                 cycle_grace_seconds += time.monotonic() - terminal_grace_start
-                cycle_quorum_trigger = "terminal_drain"
-                terminal_grace_complete = True
+                if input_closed:
+                    cycle_quorum_trigger = "terminal_drain"
+                    terminal_grace_complete = True
+                else:
+                    logger.event("terminal_input_reopened", version=version)
 
+            terminal_drain = False
             if input_closed:
                 discovery_start = time.monotonic()
-                selected = select_terminal_drain_updates(
+                terminal_decision = select_terminal_drain_updates(
                     store,
                     paths,
                     config,
@@ -2374,33 +2541,38 @@ def run_syncer(config: Config) -> None:
                     current_version=version,
                 )
                 cycle_discovery_seconds += time.monotonic() - discovery_start
-                if not selected:
+                if terminal_decision.state == "open":
+                    input_closed = False
+                    terminal_grace_complete = False
+                    logger.event("terminal_input_reopened", version=version)
+                elif terminal_decision.state == "closed_empty":
                     stop_reason = "input_exhausted"
                     logger.event("input_exhausted", version=version)
                     break
-                terminal_drain = len(selected) < config.sync.quorum_min
-            else:
-                terminal_drain = False
-            proposal_source = full_update_proposal_source(
-                current_version=version,
-                max_staleness_versions=config.sync.max_staleness_versions,
-            )
-            discovery_start = time.monotonic()
-            eligible = proposal_source.eligible_updates(store)
-            eligible = drop_missing_update_files(
-                store,
-                eligible,
-                logger,
-                source=proposal_source,
-                first_seen=first_seen,
-            )
-            one_per_learner = select_one_per_learner(
-                eligible,
-                policy=config.sync.selection_policy,
-                quorum_max=config.sync.quorum_max,
-            )
-            cycle_discovery_seconds += time.monotonic() - discovery_start
+                else:
+                    selected = terminal_decision.selected
+                    terminal_drain = len(selected) < config.sync.quorum_min
+
             if not input_closed:
+                proposal_source = full_update_proposal_source(
+                    current_version=version,
+                    max_staleness_versions=config.sync.max_staleness_versions,
+                )
+                discovery_start = time.monotonic()
+                eligible = proposal_source.eligible_updates(store)
+                eligible = drop_missing_update_files(
+                    store,
+                    eligible,
+                    logger,
+                    source=proposal_source,
+                    first_seen=first_seen,
+                )
+                one_per_learner = select_one_per_learner(
+                    eligible,
+                    policy=config.sync.selection_policy,
+                    quorum_max=config.sync.quorum_max,
+                )
+                cycle_discovery_seconds += time.monotonic() - discovery_start
                 if len(one_per_learner) < config.sync.quorum_min:
                     logger.event(
                         "quorum_wait",
@@ -2428,6 +2600,7 @@ def run_syncer(config: Config) -> None:
                         logger,
                         source=proposal_source,
                         first_seen=first_seen,
+                        heartbeat_fences=heartbeat_fences,
                         telemetry_out=grace_telemetry,
                     )
                     cycle_grace_seconds += float(grace_telemetry["grace_seconds"])
@@ -2565,16 +2738,16 @@ def run_syncer(config: Config) -> None:
                 effective_weights=weights_by_update,
                 predecessor_version=version,
                 roundtrip_metrics=roundtrip_metrics,
-                during_checkpoint_wait=(
+                during_checkpoint_wait=checkpoint_wait_ingestion_callback(
+                    config,
                     lambda: sync_liveness_and_metadata(
                         store,
                         paths,
                         config,
                         logger,
                         first_seen=first_seen,
-                    )
-                    if config.sync.ingest_during_publish
-                    else None
+                        heartbeat_fences=heartbeat_fences,
+                    ),
                 ),
                 checkpoint_poll_seconds=min(
                     0.2,
@@ -2735,6 +2908,7 @@ def run_syncer(config: Config) -> None:
                 logger=logger,
                 stop_reason=stop_reason,
                 first_seen=first_seen,
+                heartbeat_fences=heartbeat_fences,
             )
             ingest_update_metadata(
                 store,

@@ -200,14 +200,17 @@ def test_terminal_drain_requires_stopped_and_keeps_strict_eligibility(tmp_path):
     selected = select_terminal_drain_updates(
         store, paths, config, logger, current_version=3
     )
-    assert [row["update_id"] for row in selected] == ["fresh"]
+    assert selected.state == "closed_selected"
+    assert [row["update_id"] for row in selected.selected] == ["fresh"]
     assert store.get_update("future")["drop_reason"] == "future_base"
 
     store.update_learner_status("learner_001", "dead", "heartbeat timeout")
     assert not all_expected_learners_stopped(store, config)
-    assert select_terminal_drain_updates(
+    reopened = select_terminal_drain_updates(
         store, paths, config, logger, current_version=3
-    ) == []
+    )
+    assert reopened.state == "open"
+    assert reopened.selected == []
     store.close()
 
 
@@ -261,8 +264,45 @@ def test_fragment_terminal_drain_allows_partial_quorum_and_rejects_future(tmp_pa
         current_fragment_version=3,
         global_merge_event=3,
     )
-    assert [row["update_id"] for row in selected] == ["fresh"]
+    assert selected.state == "closed_selected"
+    assert [row["update_id"] for row in selected.selected] == ["fresh"]
     assert store.get_fragment_update("future")["drop_reason"] == "future_base"
+    store.close()
+
+
+def test_terminal_drain_distinguishes_closed_empty_from_reopened(tmp_path):
+    config = resolve_config(
+        "configs/fs_diloco_tiny_local.yaml",
+        run_id="terminal_states",
+        shared_root=str(tmp_path),
+        num_learners=1,
+    )
+    paths = RunPaths(tmp_path)
+    prepare_run_dirs(paths, 1)
+    store = SQLiteStore(paths.sqlite_db)
+    logger = JsonlLogger(paths.logs / "test.jsonl", "test", mirror_stdout=False)
+
+    store.upsert_learner("learner_000", status="stopped")
+    empty = select_terminal_drain_updates(
+        store,
+        paths,
+        config,
+        logger,
+        current_version=0,
+    )
+    assert empty.state == "closed_empty"
+    assert empty.selected == []
+
+    store.update_learner_status("learner_000", "active", "resumed")
+    reopened = select_terminal_drain_updates(
+        store,
+        paths,
+        config,
+        logger,
+        current_version=0,
+    )
+    assert reopened.state == "open"
+    assert reopened.selected == []
     store.close()
 
 
