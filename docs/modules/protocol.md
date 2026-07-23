@@ -1,12 +1,12 @@
 # 模块参考:fs_diloco/protocol
 
-合并选择与加权、liveness 规则、fragment 索引/编解码/调度。除 liveness 的入库操作外均为纯函数。
+合并选择与加权、liveness 规则、fragment 索引/编解码/调度。`merge.py` 和 `fragment_scheduler.py` 是纯函数模块；`liveness.py` 会读心跳/写 DB，fragment index/codec 也包含 JSON 和 safetensors I/O 薄封装。
 
 ---
 
 ## protocol/merge.py — 合并选择与 token/staleness 加权
 
-- **`staleness(current_version, base_global_version) -> int`** — `max(0, current − base)`。
+- **`staleness(current_version, base_global_version) -> int`** — `max(0, current − base)`；纯函数本身把 future base 截为 0，不负责拒绝，runtime/SQLite eligible 查询必须先执行 `base≤current` 准入。
 - **`raw_update_weight(tokens, staleness_versions, staleness_lambda) -> float`** — `tokens / (1 + λ·staleness)`。
 - **`normalized_update_weights(updates, *, current_version, staleness_lambda) -> dict[update_id, float]`** — 对选中集合计算原始权重并归一化(和为 1);总权重非正时抛 `ValueError`(如全部 tokens=0)。
 - full proposal 的加权仍假设整个 upload interval 基于行内单一 `base_global_version`；replace + inner poll 的混合 base 由 `mid_cycle_adoption_count/base_switched_at_step` 标注为可观测近似，不改变本模块计算。
@@ -16,19 +16,21 @@
   - `oldest_pending`:取 committed_at 最早者,结果按 `(committed_at, learner_id)` 排序(可配置的备选策略;terminal drain 与常规合并共用 `sync.selection_policy`,不做末端切换);
   - 最后截断到 `quorum_max`。
 - **`stale_update_ids(updates, *, current_version, max_staleness_versions)`** / **`stale_fragment_update_ids(...)`** — 挑出过窗更新的 id(供测试/工具;运行时用 SQL 版 `drop_obsolete_*`)。
-- **`weighted_average_tensors(tensors, weights)`** — `Σ wᵢ·tᵢ`,用 `mul/add(alpha=)` 原位风格实现避免中间大张量;空列表或长度不匹配报错。
+- **`weighted_average_tensors(tensors, weights)`** — `Σ wᵢ·tᵢ`；先做 `tensors[0].mul(w0)`，再逐项用返回新 tensor 的 `result.add(tensor, alpha=w)` 累加。它不 stack 全部 update，也不就地改写输入 tensor；空列表或长度不匹配报错。
 
 ## protocol/liveness.py — 心跳与存活分类
 
 - **`valid_learner_ids(num_learners) -> set[str]`** — 合法 id 集合 `{learner_000...}`。
 - **`validate_heartbeat(payload, *, run_id, num_learners) -> (bool, reason)`** — 校验 format_version / run_id / learner_id / timestamp;不合法返回失败原因字段名。
-- **`ingest_heartbeats(store, heartbeat_dir, *, run_id, num_learners) -> int`** — 扫描 `heartbeats/learner_*.json`,合法者 `upsert_learner` 入库(status 取心跳自报值,缺省 active;phase 记入 status_reason),返回摄取数。
+- **`_read_heartbeat(path)`** — 一次读取原子发布文件的精确 bytes，JSON 必须是 object；同时返回 bytes 的 SHA256。OSError/JSON 损坏/非 object 返回 None。
+- **`capture_heartbeat_fences(...)`** — resume 前只为通过 run/format/learner 校验的 pointer 保存 `learner_id → exact-bytes SHA256`；不存在的目录得到空 dict。
+- **`ingest_heartbeats(store, heartbeat_dir, *, run_id, num_learners, heartbeat_fences)`** — 扫描 `heartbeats/learner_*.json`,跳过无效 JSON、identity 不符或与当前 generation fence 完全相同的 bytes；其余 `upsert_learner` 入库(status 缺省 active，status_reason 优先显式 reason、否则 phase),返回实际 upsert 数。fence 不会因看到新内容而在内存中删除，但新 fingerprint 自然不匹配。
 - **`classify_liveness(*, now, last_seen, current_status, stale_after_seconds, dead_after_seconds) -> (status, reason)`** — 分类规则:
   - `stopped` 粘性(learner 自报退出后不再重分类);
   - 从未见过 → `dead("never_seen")`;
   - 心跳年龄 ≤ stale_after → `active`;≤ dead_after → `stale`;否则 `dead`(reason 带年龄)。
 - **`update_liveness_statuses(store, *, stale_after_seconds, dead_after_seconds, now=None) -> dict[status, count]`** — 对库中每个 learner 重分类并写回,返回各状态计数。
-- **`no_progress_timed_out(last_progress_time, timeout_seconds, now=None) -> bool`** — syncer 无进展停机判定。
+- **`no_progress_timed_out(last_progress_time, timeout_seconds, now=None) -> bool`** — 使用 `time.time()` wall clock，严格 `now-last > timeout` 才为 true；与 adaptive grace/learner watchdog 的 monotonic 时钟不同。
 
 ## protocol/fragment_index.py — 分片索引
 
@@ -54,8 +56,8 @@ fragment index JSON 结构:`{format_version, strategy, num_fragments, total_nume
 - **`scatter_fragment(flat, fragment_index, fragment_id, fragment_tensor) -> Tensor`** — 逆操作:把片写回完整向量的对应区间(在 clone 上操作,返回新张量);numel 不符报错。
 - **`load_fragment_into_model(model, fragment_tensor, param_index, fragment_index, fragment_id)`** — flatten 当前模型 → scatter 该片 → `load_flat_into_model` 写回(`@torch.no_grad`)。
 - **`save_fragment_update(path, fragment_tensor, dtype)`** / **`load_fragment_update(path, device, dtype=float32)`** — learner 上传/ syncer 读取的分片更新(存盘与加载 dtype 分别可配)。
-- **`save_fragment_weight(path, fragment_tensor, dtype=None)`** / **`load_fragment_weight(path, device)`** — syncer 按可选 dtype 发布、learner 采纳的分片全局权重。
-- **`materialize_full_from_fragments(fragment_tensors, fragment_index, total_numel) -> Tensor`** — 把全部片 scatter 进一个新向量,重建完整参数;缺片抛 `ValueError`。
+- **`save_fragment_weight(path, fragment_tensor, dtype=None)`** / **`load_fragment_weight(path, device)`** — syncer 按可选 dtype 发布；加载函数无论落盘 dtype 如何都转换为 FP32，这与 `load_fragment_update(..., dtype)` 的可配 compute dtype 不同。
+- **`materialize_full_from_fragments(fragment_tensors, fragment_index, total_numel) -> Tensor`** — 非空时以第一片的 dtype/device 建完整 uninitialized flat，再逐片 scatter；缺片报错。输入 dict 为空时直接返回 CPU FP32 空 tensor，不检查 `total_numel`。
 
 ## protocol/fragment_scheduler.py — 调度
 

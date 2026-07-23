@@ -29,6 +29,7 @@ fsb_decoupled_diloco/
 │   ├── observability/             # 观测
 │   │   ├── logging_utils.py       #   JsonlLogger、未捕获异常钩子
 │   │   ├── metrics.py             #   CSV 追加与三张表的字段清单
+│   │   ├── resource_monitor.py    #   /proc CPU、CUDA utilization、step/cycle 资源统计
 │   │   └── wandb_logging.py       #   W&B 命名/标签/config/选中更新统计
 │   ├── runtime/                   # 进程实现(组装以上全部)
 │   │   ├── adoption.py            #   full learner 的 replace/rebase/predict 策略状态机
@@ -43,13 +44,21 @@ fsb_decoupled_diloco/
 │   │   ├── validation_eval.py     #   resolved-config validation loss/ppl 与身份校验
 │   │   └── publish_quality_gate.py #  FP32/BF16 paired quality/trend 三态门禁
 │   ├── cli.py                     # python -m fs_diloco.cli {syncer|learner|inspect}
+│   ├── __init__.py                # 包版本 __version__ = 0.1.0
 │   └── {learner,syncer,analysis,eval_lm_harness}.py   # 兼容入口(转发到 runtime/tools)
+├── main.py                        # 等价于调用 fs_diloco.cli.main()
 ├── configs/                       # YAML 配置(gpt2+wikitext2 全量/分片、tiny 冒烟)
+│   └── 5000/                     #   保留的 200×25 historical experiment config
 ├── scripts/
 │   ├── miyabi/                    # PBS 批作业(1/2/9 节点)与检查脚本
 │   └── local/                     # 本地 CPU 合成冒烟
 ├── tests/                         # pytest 单元/集成测试
-└── docs/                          # 本文档
+├── docs/                          # 本系统文档
+├── plans/                         # 实施计划与已完成任务记录，不进入 runtime
+├── reports/                       # 已保留的实验/审计证据与 run metrics
+├── pyproject.toml                 # 包元数据、依赖/extras、console scripts
+├── uv.lock                        # 锁定依赖
+└── .python-version                # Python 3.13
 ```
 
 ## 2. 分层与依赖方向
@@ -101,13 +110,19 @@ core  ←  storage  ←  protocol / modeling / observability  ←  runtime  ← 
 | `python -m fs_diloco.syncer` | `runtime/syncer.py: main` |
 | `python -m fs_diloco.analysis` | `tools/analysis.py: main`(`summary` / `assert-fragment-smoke` / `assert-fragment-5000` 子命令) |
 | `python -m fs_diloco.eval_lm_harness` | `tools/eval_lm_harness.py: main`(`resolve-checkpoint` / `export-checkpoint` / `results-to-csv`) |
+| `fs-diloco-syncer` / `fs-diloco-learner` | 由 `pyproject.toml` 直接映射到两个 `runtime.*:main` |
+| `fs-diloco-inspect` | `tools/analysis.py: main` |
+| `fs-diloco-lm-eval` | `tools/eval_lm_harness.py: main` |
 | `fs-diloco-export-run-metrics` | `tools/run_metrics_csv.py: main` |
 | `fs-diloco-validation-eval` | `tools/validation_eval.py: main` |
 | `fs-diloco-publish-quality-gate` | `tools/publish_quality_gate.py: main` |
 | `python -m fs_diloco.cli {syncer,learner,inspect}` | 便捷分发器 |
+| `python main.py {syncer,learner,inspect}` | 根目录薄入口，直接调用同一 `fs_diloco.cli.main` |
 
 ## 5. 测试布局
 
-`tests/` 顶层为聚焦单测:原子 I/O、配置、param index 往返、merge 选择/加权、外层优化器、liveness、持久 SQLite/事务/1000-cycle boundedness、maintenance、DB-first resume、fixed proposal surface、fragment 全家桶、syncer 选择逻辑、共享 SQLite probe 与 W&B 命名。子目录按协议/生命周期主题组织更多测试。
+`tests/` 当前所有测试文件都直接位于顶层，没有按主题建立子目录。覆盖原子 I/O、配置、param index 往返、merge 选择/加权、外层优化器、liveness、持久 SQLite/事务/1000-cycle boundedness、maintenance、DB-first resume、fixed proposal surface、fragment 全链路、syncer 选择、共享 SQLite probe、观测与离线工具等。
 
 运行:`.venv/bin/python -m pytest tests/ -q`(需要 torch;部分测试用 `synthetic-tiny` 模型在 CPU 上跑)。
+
+`scripts/` 不在 Python 包内，但 launcher 和诊断工具的准确行为也是运行契约的一部分；逐函数参考见 [modules/scripts.md](modules/scripts.md)，PBS 作业差异与提交前检查见 [07-operations.md](07-operations.md)。

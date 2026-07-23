@@ -6,34 +6,36 @@ syncer 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.md
 
 - **`parse_args(argv)`** — `--config`(必填)、`--run-id`、`--shared-root`、`--num-learners`,以及实验覆盖参数:`--training-seed`、`--scan-interval-seconds`、`--syncer-device`、`--syncer-publish-dtype`、`--staleness-lambda`、`--max-staleness-versions`、`--global-adoption-strategy`、`--completion-mode`、`--parallel-checkpoint-writes`、`--materialize-full-every-events`、`--ingest-during-publish`、`--capture-terminal-predecessor-for-eval`(与 learner 的 parse_args 对称)。
 - **`sqlite_path(config) -> Path`** — 唯一持久库路径:`<shared_root>/control/syncer_metadata.sqlite3`。
-- **`run_identity(config)`** — 形成写入 DB 的 run/format/protocol/mode/model identity,恢复时逐项严格比对。
+- **`run_identity(config)`** — 精确包含 run_id、format/protocol、mode、model name、num_fragments 与 git commit/dirty/source fingerprint；full resume 要求整个 dict 相等。
 - **`resolve_syncer_device(config) -> torch.device`** — 解析 `syncer.device=auto/cpu/cuda`;显式 CUDA 不可用时 fail fast。
 - **`syncer_compute_dtype(config)`** / **`syncer_publish_dtype(config)`** — 把 syncer 的计算/发布 dtype 配置解析为 torch dtype。
 - **`maybe_capture_terminal_predecessor_for_eval(...)`** — 默认关闭的 full terminal-partial 研究捕获；从当前权威 weight 建 hardlink（失败则原子 copy），写入 checksum/版本/selected/quorum manifest。manifest 前残留 checkpoint 若同源则复用、不同则由 source 原子覆盖；已有 manifest 的 identity/checkpoint/source 任一冲突 fail closed。返回值只供事件日志，路径不进入 DB/latest/resume。
 - **`align_state_to_publication_dtype(config, theta, state, *, roundtrip_metrics_out=None)`** — 每次发布前按发布 dtype 量化浮点权重/状态并转回计算 dtype,让持续运行、learner 可见 checkpoint 与 resume 共享同一数值边界；可在覆盖原值前记录 chunked L2/L∞/relative-L2 量化误差。
-- **`publication_failpoint(name)`** — 由环境变量控制的确定性崩溃注入点,用于 publication crash matrix。
+- **`_publication_error_metrics()` / `publication_roundtrip_metrics()`** — 每个 chunk 先以 FP32 tensor 求误差平方和/参考平方和，再把 `.item()` 结果累加到 Python float；给出 L2、L∞ 与相对 L2。reference 范数为 0 时相对值固定为 0。`publication_roundtrip_metrics` 对非浮点或已是 publish dtype 的 tensor 直接返回三个 0。
+- **`publication_failpoint(name)`** — `$FS_DILOCO_PUBLICATION_FAILPOINT` 命中 `weight_temp/after_weight/after_outer/sqlite_transaction/after_db_commit/after_latest` 时触发；`$FS_DILOCO_FAILPOINT_ACTION=kill` 发 SIGKILL，缺省 `raise` 抛异常，其他 action 报配置错误。
 - **`main(argv)`** — `resolve_config` 后调 `run_syncer`。
-- **`run_syncer(config)`** — 公共启动(目录、SQLite、日志、设备、W&B)后分派:fragment 模式 → `run_fragment_syncer`;否则按 `init.resume` 走 `resume_run`/`initialize_run`,再执行全量模式主循环(函数体内,详见下文)。
+- **`run_syncer(config)`** — 公共启动(目录、SQLite、日志、设备、W&B)后分派:fragment 模式 → `run_fragment_syncer`;否则按 `init.resume` 走 `resume_run`/`initialize_run`,再执行全量模式主循环(函数体内,详见下文)。W&B 初始化发生在 initialize/resume 之前；初始化/恢复自身失败尚未进入主循环 `try/finally`，不会走正常 stop/summary/W&B-finish/close 序列。
 
 ## 发布
 
-- **`latest_payload(*, config, paths, version, weight_path, optim_path, total_seen_tokens) -> dict`** — 全量模式 `latest.json` 内容。
-- **`publish_global(..., selected_updates, effective_weights, predecessor_version)`** — 一个全量版本的完整发布序列:默认两个 worker 并发原子写权重/outer → 主线程等待双成功 → `initialize_full_run` 或 `commit_full_merge` 单事务 → **最后原子写 `latest.json`**。worker 不接触 DB/latest，单侧失败不会提交。`syncer.parallel_checkpoint_writes=false` 只为串行消融恢复 weight→outer 写序；事务边界不变。`sync.ingest_during_publish=true` 时，等待 future 的主线程可以串行摄取 heartbeat/pointer 元数据，但不能 selection、maintenance 或提交版本；false 时 caller 传 `None`，四个 publish-ingest 字段严格为零。两个文件都成功后才跨越事务边界。返回两个 worker 时长、checkpoint walltime、dtype/bytes、等待期真实 callback 调用/插入计数与 round-trip 误差。事务成功是正确性边界;latest 只是缓存。支持 weight temp、weight 后、outer 后、事务内、DB commit 后、latest 后六个 failpoint。
+- **`latest_payload(...)`** — 全量 `latest.json` 同时写 `total_update_tokens` 与 `total_seen_tokens`，并携带按 `RunPaths` 生成的 weight/optim/param-index 路径、created_at、format/run/version；函数不额外调用 `resolve()`，路径是否绝对取决于 shared root。
+- **`publish_global(...)`** — 默认两个 worker 并发原子写 weight/outer，主线程确认双成功后才调用 v0 初始化事务或 `commit_full_merge`，最后原子写 latest。`num_updates` 形参在 merge commit 中不作权威计数，DB 取 selected 长度。串行模式保持 weight→outer 次序。只有并行 futures 尚未全部完成时才可能调用 during-wait ingestion；callback poll 上限为 `min(0.2, scan_interval)`，只做心跳/metadata，不做 selection/maintenance/version commit。返回 worker/墙钟/bytes/摄取/roundtrip 计时。DB commit 是版本边界，latest 是缓存。
+- **`checkpoint_wait_ingestion_callback(config, callback)`** — `sync.ingest_during_publish=false` 时返回 None，true 时原样返回 callback，不再包装。pass/update/heartbeat/seconds 是 `publish_global` 调用它时累加的。串行 checkpoint 写入没有 futures wait，因此即便开关 true 也不会摄取。
 - **`fragment_latest_payload(*, ..., global_merge_event, fragment_versions, fragment_updated_events, materialized_weight_path)`** — fragment 布局的 latest 内容(`latest_kind: "fragment"`,每片版本/路径/最后更新事件)。
 - **`should_materialize_fragment_full(config, global_merge_event) -> bool`** — 是否本事件重拼完整权重:事件 0、达到 `stop_after_outer_steps`、或按显式正整数 `materialize_full_every_events` 取模；fragment 配置缺失/null/≤0 会在启动时 fail closed。
-- **`publish_fragment_latest(*, ..., force_materialize=False) -> FragmentLatestPublication`** — 按需 materialize 完整权重存为 `weights/global_v{event:06d}.safetensors`,再原子写 fragment latest；返回路径、耗时、是否发生和字节数。不 materialize 时沿用上一次路径；正常终止以 `force_materialize=true` 保证最终权重对应最终 fragment state。
+- **`FragmentLatestPublication` / `publish_fragment_latest(...)`** — 按需 materialize 完整权重再原子写 fragment latest；返回路径、耗时、是否发生和 bytes。不 materialize 时沿用旧路径。注意片 weight、outer、`fragment_versions`、latest、update applied/drop 是独立顺序步骤，不构成 full publication 那样的单一事务；fragment 又不支持 resume。
 - **`publish_stop(paths, *, config, reason, version, total_seen_tokens)`** — 原子写 `control/stop.json`。
 
 ## 初始化与恢复
 
-- **`initialize_run(config, paths, store, logger, *, device) -> (version=0, theta, outer_state, param_index, total_seen_tokens=0)`** — 全新 run:DB committed 防覆盖 → 按 `syncer.compute_dtype` 加载模型/index/θ/outer → 按 `syncer.publish_dtype` 发布 index/config/checkpoint → `publish_global(0)` 在一个事务写 v0+identity+config → maintenance。
+- **`initialize_run(config, paths, store, logger, *, device) -> (version=0, theta, outer_state, param_index, total_seen_tokens=0)`** — 全新 run:DB committed 防覆盖 → 模型/index及 compute-dtype θ/outer → 先把浮点 state 对齐 publication roundtrip → 原子写 index 与两份 config → `publish_global(0)` 按 publish dtype写 checkpoint并在一个事务写 v0+identity+config → maintenance。
 - **`initialize_fragment_run(config, paths, store, logger, *, device) -> (event=0, fragment_thetas, outer_states, param_index, fragment_index, fragment_versions, fragment_updated_events, total_seen_tokens=0, materialized_weight_path)`** — fragment 版:另建并发布 fragment index;逐片抽取 θ_f、建状态、存 v0、写 `fragments`/`fragment_versions` 表;materialize 事件 0 并发布 fragment latest。
-- **`resume_run(config, paths, store, logger, *, device)`** — DB-first 恢复(仅全量模式):integrity → identity/protocol → 最大 committed row → model/index → 引用文件存在 → 浮点状态转换到 `syncer.compute_dtype` → weight θ 与 outer θ 精确相等 → 捕获旧 heartbeat 内容 fence → `prepare_full_resume` 单事务回滚 selected、重置预期 learner 本代 liveness 并写 resume generation → 重建 latest → maintenance。任何权威状态缺失/冲突及 completed run 的一致非错误 stop+summary 都 fail closed；error 终态文件先原子归档。不读取 latest 决定版本,不回退 DB dump。
+- **`resume_run(config, paths, store, logger, *, device)`** — DB-first 恢复(仅 full):integrity → identity exact match → 最大 committed row → model/index → 文件存在 → 按 compute dtype加载 → weight theta 与 outer theta `torch.equal` → heartbeat fences → 单事务切代 → 归档剩余 marker（不可读，或 reason 空/`error`）→ 重建 latest → maintenance。只要 stop reason 或 summary stop_reason 任一为非空且非 error 就拒绝，不要求成对一致。DB 是否存在由 `run_syncer` 在构造 store 前检查；不读 latest 决定版本，也无 DB dump fallback。
 
 ## 摄取(共享盘 → SQLite)
 
-- **`validate_update_metadata(payload, *, config, paths) -> bool`** — 元数据准入:format_version、run_id、learner_id 合法;fragment 模式要求 `update_kind == "fragment"`、fragment_id 在界内、fragment 专属字段齐全(全量模式反之拒绝 fragment 更新);张量文件必须存在。
-- **`ingest_update_metadata(store, paths, config, logger) -> int`** — 全量模式每轮读取恰好 `num_learners` 个 `updates/latest/learner_XXX.json`；fragment 模式枚举配置决定的 `num_learners × num_fragments` 个 `updates/latest/learner_XXX_fNNN.json`。两者都以固定 pointer latest-wins 摄取；fragment 的持久 frontier 与进程内文件 signature 会短路重放/重复 JSON 解析，不扫描历史 payload meta。返回新插入数。
+- **`validate_update_metadata(payload, *, config, paths) -> bool`** — 校验 format/run/learner/mode；fragment 还校验 kind、fragment_id 与 base 字段；`file_path` 必须存在且 resolve 后位于 shared root。它不对所有通用数值字段做完整 schema/type 校验，后续 DB 白名单取值仍可能 fail closed。
+- **`ingest_update_metadata(store, paths, config, logger) -> int`** — 全量模式每轮读取恰好 `num_learners` 个 `updates/latest/learner_XXX.json`；fragment 模式枚举配置决定的 `num_learners × num_fragments` 个 `updates/latest/learner_XXX_fNNN.json`。两者都以固定 pointer latest-wins 摄取并由各自持久 frontier 防重放；fragment 另外在读 JSON 前用进程内文件 signature 跳过未变化 pointer。两者都不扫描历史 payload meta，返回新插入数。
 - **`sync_liveness_and_metadata(store, paths, config, logger, heartbeat_fences=None)`** — 每轮例行:摄取不匹配 resume fence 的本代心跳 → 重分类 liveness → 摄取元数据。
 - update 元数据中的 learner 资源字段随 `updates`/`fragment_updates` 行持久化;已有 SQLite 文件在连接时用兼容迁移补齐新列。
 
@@ -41,25 +43,29 @@ syncer 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.md
 
 - **`UpdateProposalSource` / `full_update_proposal_source(...)` / `fragment_update_proposal_source(...)`** — 参数化 full/fragment 的候选枚举、staleness 键、缺文件降级动作、事件名与上下文字段；两种磁盘协议保持各自原有事件 payload。
 - **`drop_missing_update_files(store, updates, logger, *, source) -> list`** — 共享过滤骨架；张量文件消失时经 source 在对应表中标 `dropped(missing_file)`，发 full 或 fragment 原事件并返回存活子集。
-- **`configured_grace_seconds(config)`** — fixed 模式返回 `min(fixed_seconds,max_seconds)`,adaptive 模式返回 `min(initial_seconds,max_seconds)`。
-- **`UpdateFirstSeenRegistry` / `update_first_seen_capacity(config)`** — syncer 进程内、有界、插入有序的 update 首见时钟域；首次成功 DB insert 记录 monotonic+wall，重复 ingest 不刷新，应用/明确 missing 主动删除，FIFO 淘汰只会让 ETA 保守缺失。容量为 `max(64, 4 × learners × max(1, fragments))`。
+- **`configured_grace_seconds(config)`** — fixed 模式返回 `max(0,min(fixed_seconds,max_seconds))`,adaptive 模式对 `initial_seconds` 做同样 clamp。
+- **`UpdateFirstSeen` / `UpdateFirstSeenRegistry`** — entry 保存 learner/可选 fragment、monotonic/wall 首见。`observe` 只插新 ID，容量满按 FIFO 淘汰；`get/discard_many` 管理 ID；full 新 proposal 还用 `discard_full_learner` 删除同 learner 旧首见。容量为 `max(64, 4 × learners × max(1, fragments))`。
+- `UpdateFirstSeenRegistry.__init__()` 建有序 dict，`__len__()` 返回当前项数，`get()` 查询，`discard_many()` 批删；`update_first_seen_capacity()` 计算上述容量。`_pointer_signature()` 从 stat 返回 inode/size/mtime_ns/ctime_ns，文件消失返回 None。
+- `UpdateProposalSource.eligible_updates()` / `drop_updates()` 把同一 grace/terminal 骨架参数化到 full 或指定 fragment 的 SQLite 查询与 drop 方法。
 - **`interval_breakdown(...)`** — 用单调时钟校验一次 merge interval 的 discovery、idle polling、grace、read、merge、publish、maintenance 分量互不重叠并显式给出 residual；full/fragment 主循环跨多次 quorum wait 累计这些计数，只在成功 merge 后重置。
 - **`fastest_next_upload_eta_seconds(updates, *, first_seen, inner_steps, now_monotonic)`** — 用各已选 update 的 `first_seen_monotonic + local_cycle_step_time_seconds_mean × inner_steps` 估计下一上传时间,返回最快剩余秒数；不读取 learner `committed_at`，因此不受跨节点 wall-clock 偏差影响。
-- **`collect_with_grace_window(store, paths, config, logger, *, source, first_seen) -> list`** — full/fragment 共用的宽限窗口骨架:循环【source 查合格 → 共享缺文件过滤 → 每 learner 选一】。adaptive 模式每轮用最快上传 ETA 向前收紧 deadline,不允许后续估计把窗口延长;凑满 `quorum_max` 或 deadline 耗尽即结束,并按 source 保留原 started/shortened/completed 上下文字段。resume 中无 registry 项的旧 update 跳过估计。
-- **`all_expected_learners_stopped(store, config) -> bool`** — 只有全部预期 learner 都存在且最终状态明确为 `stopped` 才证明输入闭合;dead/step 达标不够。
+- **`maybe_shorten_grace_deadline()` / `collect_with_grace_window(...)`** — adaptive 只把 deadline 向前移动。入口先用当前 DB 做一次【source 查合格 → missing 过滤 → 每 learner 选一】；若继续等待，sleep 后同步心跳/metadata，再进入下轮查询。满 quorum_max 或 deadline 到即返回；函数可能返回少于 quorum_min，调用方必须再次检查。resume 中没有首见记录的旧 update 不缩短窗口。
+- **`all_expected_learners_stopped(store, config) -> bool`** — 实现取 DB 中所有 `status=stopped` 的 ID 集，要求它与预期 ID 集**完全相等**；所以全部预期 learner 都必须存在并明确 stopped，dead/step 达标不够，异常遗留的额外 stopped ID 也会阻止闭合（正常摄取校验不会创建这种额外 ID）。
 - **`TerminalDrainDecision(state, selected)`** — terminal selector 的显式返回契约：`open`、`closed_empty`、`closed_selected`；空 selected 不再同时表示重新打开和耗尽。
 - **`select_terminal_drain_updates(...)`** — 输入闭合后的全量末端排空:再次确认 closure，仍执行严格 future/staleness 准入与 missing-file 检查,按配置策略每 learner 选一,允许低于 quorum；只有 `closed_empty` 由主循环转为 `input_exhausted`。
 - **`select_terminal_drain_fragment_updates(...)`** — fragment 对应入口：对当前调度目标片执行相同三态契约和严格 future/staleness/missing-file 准入；目标片 `closed_empty` 才结束，不跨过 round-robin 顺序消费其他片。
+- **`_select_terminal_drain_from_source()`** — 两个 terminal 入口在已确认 closure、已 drop `future_base/too_stale` 后调用的共同实现；helper 自身只查 eligible、drop missing、按正常 selection policy 取最多 quorum_max 并记事件，不再次查 closure。wrapper 随后用 `TerminalDrainDecision.__post_init__()` 校验 state 与 selected 是否一致。
 - **`merge_staleness_evidence(...)`** — 按实际 normalized merge weights 计算 effective staleness 均值、fresh 权重质量和 staleness count JSON；full 使用 global base，fragment 使用目标片 base。
 
 ## 观测与辅助
 
 - **`init_wandb_run(*, config, paths, logger, device, hostname) -> run | None`** — W&B 初始化(项目/名称/标签/config 由 `observability/wandb_logging.py` 生成;`syncer/version` 定义为 step 轴);禁用、import 失败、init 失败都返回 None 并记日志,不影响训练。
 - **`_fragment_staleness_stats(selected, current_fragment_version)`**(私有)— 选中集合的 staleness min/mean/max。
+- **`_selected_resource_csv_fields(metrics)`** — 把 selected resource summary 的 W&B 风格键映射成 syncer CSV 列名，缺失项保持空。
 - **`learner_shutdown_timeout_seconds(config)`** — 显式 `liveness.learner_shutdown_timeout_seconds` 优先；null 时返回 `max(120, 2 × heartbeat_interval_seconds)`，不再用旧的 120 秒上限。
-- **`wait_for_learner_shutdown(...)`** — 发布 stop 后在该有界窗口内持续摄取 heartbeat 与 update 元数据;只有 SQLite `learners` 表中的全部预期 learner 都成为 stopped 才返回成功。超时事件逐 learner 记录当前 status/status_reason/last_seen；安全地跳过未确认场景的强制 proposal 终态化。
-- **`learner_resource_summary(...)`** — 合并 SQLite 历史 update 与最终 stopped 心跳,生成逐 learner 训练期 CPU/GPU 峰值及 max/mean 聚合。
-- **`write_training_summary(...)`** — 原子写 `control/summary.json`,包含 syncer 启动至 learner 全部停止的完整训练时间、最终版本/token 数/停止原因及 learner 资源峰值;同样更新 W&B run summary。
+- **`wait_for_learner_shutdown(...)`** — reason=`error` 时立即返回 false；否则在 timeout 内继续摄取，sleep 单次最多 1 秒。全部 expected learner stopped 才返回 true；超时逐 learner 记录 status/reason/last_seen，并跳过强制终态化。
+- **`learner_resource_summary(...)`** — 合并**当前 live update 表**聚合与最终 heartbeat，不回读已归档 JSONL；后者通常是完整训练峰值的主要终态证据。
+- **`write_training_summary(...)`** — 原子写 summary；进入主循环后，无论其以 error/non-error 离开都会在收尾序列中尝试执行，并尝试更新 W&B summary。初始化/恢复阶段异常不在这个保证内。
 
 ## 主循环
 
@@ -69,12 +75,12 @@ syncer 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.md
 
 - 选中后、读取前**再次**检查文件存在性;`load_update_vector` 期间竞态出现 `FileNotFoundError` 时同样处理:丢失者 `dropped`,其余 `reset_selected_to_pending` 回滚,放弃本次合并;
 - `run_selection_id = f"{run_id}_v{v+1:06d}"` 写入 selected_by_run,便于审计"哪次合并选了它";
-- 每次合并的 applied/superseded/stale/future 状态都由 `commit_full_merge` 与 global row 同事务提交;
+- 每次合并的 applied/`superseded`/`too_stale`/`future_base` 状态都由 `commit_full_merge` 与 global row 同事务提交;
 - 全部 stopped 后先等待一个 grace/reingest 周期并重新判断 closure；重新打开则复位 grace 并回常规 discovery，仍闭合时只有 `closed_empty` 产生 `input_exhausted`；input-closed 分支不再额外执行一遍未使用的常规 discovery;
 - fragment 主循环使用同一 input-closed 判定与 grace/reingest 生命周期；每次 terminal merge 推进 global event 后重新计算目标片，最终 pending/selected fragment proposal 由统一 shutdown 终态化。
 - 每次成功合并后刷新 `last_progress_time`;quorum 等待期间超过 `no_progress_timeout_seconds` 即停机;
 - 每次成功提交后执行 archive/GC,因此 active DB/checkpoint/proposal 面有界;
-- finally 序列:`publish_stop` → 等待 learner stopped 心跳/继续摄取 → 正常闭合时终态化未消费 proposal → summary → archive/GC → W&B/close。
+- 一旦成功进入主循环，finally 序列为:publish stop → 非 error 时等待 learner/末次摄取 → 只有全 stopped 才终态化未消费 proposal → summary；archive/GC 只在非 error 执行，随后 W&B finish/关库。
 
 ### fragment 模式(`run_fragment_syncer`)
 

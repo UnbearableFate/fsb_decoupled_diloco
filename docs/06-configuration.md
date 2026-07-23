@@ -10,14 +10,15 @@
 |---|---|---|
 | `name` | `fs_diloco_gpt2_wikitext2_8l` | run 名,用于默认 run_id 后缀与 W&B group |
 | `run_id` | `null` | 缺省时取 `$RUN_ID` 或 `时间戳_name` |
-| `shared_root` | 主工作树绝对路径 `.../runs/fs_diloco/{run_id}` | 共享目录；`{run_id}` 在配置解析后替换为最终 run ID，CLI `--shared-root` 仍可显式覆盖 |
+| `shared_root` | `null` | null 时解析为 `<project_root 或 cwd>/runs/fs_diloco/<run_id>`；非空值中的 `{run_id}` 替换为最终 ID。仓库正式 YAML 显式写主工作树绝对模板，CLI 仍可覆盖 |
 | `log_level` | `INFO` | ⚠ 未消费(日志始终全量写 JSONL) |
+| `git_commit` / `git_dirty` / `source_fingerprint` | `null` / `null` / `null` | launcher/source-identity 证据；分别可由 `$FS_DILOCO_GIT_COMMIT`、`$FS_DILOCO_GIT_DIRTY`、`$FS_DILOCO_SOURCE_FINGERPRINT` 补入。`$FS_DILOCO_REQUIRE_SOURCE_IDENTITY=true` 时 commit 与 fingerprint 必须存在 |
 
 ## init — 初始化与恢复(syncer)
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
-| `resume` | `false` | true 时从 `<shared_root>/control/syncer_metadata.sqlite3` 的最大 committed 行恢复(fragment 模式不支持)，并原子重置本代 learner liveness、持久化旧 heartbeat 内容 fence；DB 缺失/校验失败或已有一致非错误 stop+summary 的 completed run 即退出 |
+| `resume` | `false` | true 时从 `<shared_root>/control/syncer_metadata.sqlite3` 的最大 committed 行恢复(fragment 模式不支持)，并原子重置本代 learner liveness、持久化旧 heartbeat 内容 fence；DB 缺失/校验失败即退出。stop reason 或 summary stop_reason 任一为非 error 也拒绝恢复，不要求两文件成对一致 |
 
 ## model
 
@@ -25,7 +26,7 @@
 |---|---|---|
 | `name_or_path` | `gpt2` | HF 模型名;`synthetic-tiny` 走内置冒烟模型 |
 | `trust_remote_code` | `false` | 传给 HF from_pretrained |
-| `dtype` | `bfloat16` | 模型参数 dtype(bf16/fp16/fp32) |
+| `dtype` | `bfloat16` | 模型参数 dtype；BF16/FP16 别名显式映射，其他任意字符串当前静默回退 FP32（不是严格枚举，需避免拼写错误） |
 | `compile` | `false` | `torch.compile` |
 | `synthetic_vocab_size` / `synthetic_hidden_size` | 128 / 32 | 冒烟模型尺寸 |
 
@@ -39,6 +40,7 @@
 | `block_size` | 1024 | 序列长度(会同步覆盖 `training.block_size`) |
 | `num_proc` | 4 | ⚠ 未消费 |
 | `cache_dir` / `streaming` | `null` / `false` | 传给 `load_dataset` |
+| `shuffle_blocks` | `true` | WikiText 块在每个 epoch 以 learner 隔离的稳定 seed 重排；false 时按块原序无限循环 |
 | `synthetic_num_batches` | 128 | ⚠ 未消费(合成流无限生成) |
 
 ## sync — 合并协议(syncer 核心)
@@ -58,7 +60,7 @@
 | `grace_window.initial_seconds` | 10.0 | adaptive 模式的初始窗口;用 syncer 首见 update 的 monotonic 时钟估算最快下一上传，运行中只会缩短 |
 | `grace_window.max_seconds` | 60.0 | 初始/固定窗口的硬上限 |
 | `stop_after_outer_steps` | 20 | 外层步数(fragment:merge event 数)停止条件;null 不限 |
-| `stop_after_global_tokens` | `null` | 累计合并 token 停止条件 |
+| `stop_after_global_tokens` | `null` | 累计合并 token 停止条件；只在每轮开头检查，因此最后一次 merge 按整批提交，累计值可超过阈值 |
 | `stop_file_poll_seconds` | 5.0 | learner 侧轮询 stop/latest 的间隔 |
 
 ## syncer — syncer 计算与发布
@@ -94,7 +96,7 @@ relative-L2 也未累积增长；但 checkpoint 字节减半的同时，测得�
 | `heartbeat_interval_seconds` | 30.0 | learner 写心跳间隔 |
 | `stale_after_seconds` | 120.0 | 心跳超龄 → stale |
 | `dead_after_seconds` | 300.0 | 心跳超龄 → dead |
-| `no_progress_timeout_seconds` | 600.0 | syncer 无合并进展的停机超时;learner 收尾等待也用它 |
+| `no_progress_timeout_seconds` | 600.0 | syncer 无合并进展的停机超时；fragment learner 在有全局外层目标时的 final-progress wait 也用它。full learner 没有同类 final wait，syncer 等 learner 则使用下面的 shutdown timeout |
 | `syncer_unresponsive_timeout_seconds` | `null` | learner 观察不到新版 latest 时的自保超时；`null` 沿用 `no_progress_timeout_seconds`，显式值必须 > 0 |
 | `learner_shutdown_timeout_seconds` | `null` | syncer 发布 stop 后等待 stopped 心跳的上限；`null` 为 `max(120, 2 × heartbeat_interval_seconds)`，大模型收尾更慢时可显式调大 |
 
@@ -108,7 +110,7 @@ relative-L2 也未累积增长；但 checkpoint 字节减半的同时，测得�
 | `block_size` | 1024 | 由 `data.block_size` 覆盖 |
 | `max_local_steps` | `null` | 在默认 completion mode 下作为 learner 本地停止上限；不参与 LR 调度 |
 | `completion_mode` | `local_or_global` | `local_or_global`:本地上限或 stop 任一满足即停;`global_only`:忽略本地上限,一直训练到 syncer 发布 stop(要求配置全局停止目标) |
-| `precision` | `bf16` | CUDA 上 bf16 autocast;其余 fp32 |
+| `precision` | `bf16` | 只控制训练 autocast：设备是 CUDA 且值（忽略大小写）恰为 `bf16` 时启用 BF16 autocast，其他情况返回禁用的上下文；它不把模型强制转 FP32，参数 dtype 仍由 `model.dtype` 决定 |
 | `seed` | 1337 | 实际种子 = seed + learner_index |
 | `log_every_steps` | 10 | inner_step_summary 日志频率 |
 | `grad_clip` | `null` | 梯度范数裁剪阈值 |
@@ -155,12 +157,12 @@ checkpoint/update 保留数量不再是配置项。syncer 的 maintenance 按权
 |---|---|---|
 | `poll_latest_during_inner_steps` | `false` | 区间中途也轮询/采纳新版本 |
 | `adopt_global_after_upload` | `true` | 每次上传后轮询/采纳(fragment 模式会等待一小段时间) |
-| `global_adoption_strategy` | `replace` | full learner 的采纳方式:`replace` 直接替换本地权重;`rebase_post_publish_delta` 仅在发布后的第一次检查没有新版时保留按 `syncer.compute_dtype` 构造的发布点,随后将尚未发布的本地差值合成到首个新 global 并立即释放 reference。prediction/reconcile 优先使用 learner GPU，OOM 风险时回退 CPU。后者不支持 fragment |
+| `global_adoption_strategy` | `replace` | full learner 的采纳方式：`replace` 直接替换本地权重；`rebase_post_publish_delta` 仅在发布后的检查没有新版时保留按 `syncer.compute_dtype` 构造的发布点，随后将尚未发布的本地差值合成到首个新 global；`predict_post_publish_global` 则用上一 merge token 规模、外层 momentum 与本地 delta 预测下一 global，在真实新版到达时 reconcile 预测后的本地进展。rebase/prediction 算术优先用 learner GPU，OOM 风险时回退 CPU；fragment 只允许 replace |
 | `post_publish_latest_wait_seconds` | 0.0 | 三种 full 策略共用的发布后等待时长；0 表示只做即时检查 |
 | `post_publish_latest_poll_seconds` | 0.2 | 发布后等待及 latest 引用文件 GC 竞态重试的轮询间隔，必须大于 0 |
 | `prediction.reconcile_timeout_seconds` | 60.0 | prediction reconcile 的等待上限；也作为所有 learner latest 权重加载遭遇 current-only GC 竞态时的总重试预算，必须大于 0 |
 
-配置解析对未知键 fail-closed。`sync.upload_mode`、`liveness.quorum_policy`、`inner_optimizer.reset_on_global_update` 已作为未消费字段删除；再次出现会明确报“字段已移除”。旧的平铺键 `learner.prediction_reconcile_timeout_seconds` 同样拒绝，错误会指向 `learner.prediction.reconcile_timeout_seconds`，不提供静默别名或自动迁移。
+普通 `load_config/resolve_config` 对未知键 fail-closed。`sync.upload_mode`、`liveness.quorum_policy`、`inner_optimizer.reset_on_global_update` 已删除；再次出现会明确报“字段已移除”。旧的平铺键 `learner.prediction_reconcile_timeout_seconds` 也会提示新路径。只有 `load_resolved_config_snapshot()` 为读取历史 run 快照提供迁移：删除三个无替代旧键，并在新嵌套键缺失时把旧 prediction timeout 移入 `learner.prediction.reconcile_timeout_seconds`；这不是新配置文件的兼容别名。
 
 5000-step full 配置启用 `poll_latest_during_inner_steps=true` 和
 `global_adoption_strategy=rebase_post_publish_delta`:发布后仍只无阻塞检查一次 latest;若没有新版,
@@ -193,7 +195,7 @@ optimizer/scheduler 状态。
 | `enabled` | `false` | 总开关 |
 | `sleep_jitter_seconds` | 0.0 | 上传前随机睡 0~N 秒 |
 | `upload_skip_probability` | 0.0 | 跳过本次上传的概率 |
-| `crash_probability` | 0.0 | 以 exit 97 崩溃的概率(上传后/跳过后检查) |
+| `crash_probability` | 0.0 | 上传后/skip 后调用 `sys.exit(97)` 的概率。`SystemExit` 仍执行 runner `finally`，因此当前实现会停资源监控并尝试写最终 stopped heartbeat；fragment 下它不设置 `had_error`，还可能先跑有界 final wait。它不是 SIGKILL/节点失联模拟 |
 
 ## wandb(syncer 侧)
 
@@ -203,4 +205,8 @@ optimizer/scheduler 状态。
 | `mode` | `offline` | `$WANDB_MODE` 优先 |
 | `entity` / `group` / `tags` | null / null / [] | group 缺省用 `run.name` |
 
-W&B run 命名规则见 `observability/wandb_logging.py: syncer_wandb_run_name()`(时间戳 + run 名 + 模型 + 数据集 + learner 数 + quorum + 内层超参 + 外层优化器/lr 的 slug 拼接);project 固定 `fs-diloco-miyabi-syncer`;W&B 初始化失败只降级不中断训练。
+W&B run 命名规则见 `observability/wandb_logging.py: syncer_wandb_run_name()`(时间戳 + run 名 + 模型 + 数据集 + learner 数 + quorum + 内层超参 + 外层优化器/lr 的 slug 拼接);project 固定 `fs-diloco-miyabi-syncer`。import/init 失败会被捕获并降级为不上报；初始化成功后的 `run.log/summary/finish` 调用并非全部有局部异常隔离，因此不能笼统承诺任意 W&B 运行期故障都不影响训练。
+
+## 校验边界
+
+`resolve_config()` 当前显式校验：scan interval 正数、staleness λ/最大陈旧度非负、syncer device/dtype 枚举、grace 模式与非负秒数、completion 模式及 `global_only` 的全局停止目标、可选 timeout 正数、scheduler/warmup/horizon/min-ratio 组合、fragment 策略/片数/调度/materialize/adoption 组合、采纳策略组合、发布后 wait/poll，以及 `training.block_size=data.block_size`。它**没有**为每个数值字段做统一范围校验，例如 quorum 的正数与顺序、训练 batch/step 数、liveness 阈值顺序、故障概率、`model.dtype`、`io.tensor_dtype`、selection policy 和外层优化器名会在各自消费点才报错；其中未知 `model.dtype` 甚至由 `model_dtype()` 静默当作 FP32。文档中的“未知键 fail-closed”不应被理解为所有语义都在解析期验证。

@@ -1,6 +1,6 @@
 # fs_diloco 系统文档
 
-fs_diloco(Filesystem-backed Decoupled DiLoCo)是一个面向 Miyabi-G 超算的分布式训练研究原型:多个互相独立的单 GPU learner 进程本地训练 GPT 风格因果语言模型,一个 syncer 进程通过**共享文件系统**(而非任何网络集合通信)收集参数更新、执行 token/staleness 加权合并与外层优化器步进,并发布新的全局权重。
+fs_diloco(Filesystem-backed Decoupled DiLoCo)是一个面向 Miyabi-G 超算的分布式训练研究原型:多个互相独立的 learner 进程本地训练 GPT 风格因果语言模型（有 CUDA 时每进程用一张卡，本地 synthetic 可回退 CPU）,一个 syncer 进程通过**共享文件系统**(而非任何网络集合通信)收集参数更新、执行 token/staleness 加权合并与外层优化器步进,并发布新的全局权重。
 
 本目录是一组 wiki 式文档,按"先总览、后细节"组织。
 
@@ -32,6 +32,7 @@ Run 分析方法和实验结果不放在系统文档中,统一维护在 [reports
 | [modules/runtime-learner.md](modules/runtime-learner.md) | `fs_diloco/runtime/learner.py` + `failure_sim.py` — learner 进程 |
 | [modules/runtime-syncer.md](modules/runtime-syncer.md) | `fs_diloco/runtime/syncer.py` — syncer 进程 |
 | [modules/tools.md](modules/tools.md) | `fs_diloco/tools/` + `cli.py` — run 检查与 LM Eval Harness 工具 |
+| [modules/scripts.md](modules/scripts.md) | `scripts/` — 本地 launcher、Miyabi PBS launcher 与独立诊断脚本 |
 
 ## 快速定位
 
@@ -43,4 +44,4 @@ Run 分析方法和实验结果不放在系统文档中,统一维护在 [reports
 
 ## 文档对应的代码版本
 
-本组文档基于 2026-07 的代码(master 分支,SQLite `events` 表已移除、事件统一走 JSONL 日志之后)撰写。若代码与文档不一致,以代码为准并欢迎更新文档。
+本组文档已按 2026-07-22 的 `master` 代码重新核对。协议事实以 `runtime/`、`storage/schema.sql` 和 `core/config.py` 为最终依据；实验结论只引用仓库中已经保留的报告证据。模块参考同时覆盖公开入口和会影响协议行为的私有 helper。

@@ -2,7 +2,7 @@
 
 Filesystem-backed Decoupled DiLoCo research prototype for Miyabi-G.
 
-Milestone 1 uses independent single-GPU learners and one configurable CPU/GPU syncer process. Learners train GPT-style causal language models locally and publish immutable `safetensors` payloads behind one atomically replaced proposal pointer per learner. The syncer records authoritative state in a persistent SQLite database in the shared run directory, applies token/staleness-weighted merging with quorum and grace-window behavior on its configured device and dtype, steps an explicit flat-vector outer optimizer, logs syncer-side training telemetry to W&B, and publishes global weights in the configured publication dtype through `control/latest.json`.
+Milestone 1 uses independent learners (one CUDA device each when available, with a CPU fallback used by local synthetic runs) and one configurable CPU/GPU syncer process. Learners train GPT-style causal language models locally and publish immutable `safetensors` payloads behind atomically replaced proposal pointers (one per learner in full mode, one per learner/fragment pair in fragment mode). The syncer records authoritative state in a persistent SQLite database in the shared run directory, applies token/staleness-weighted merging with quorum and grace-window behavior on its configured device and dtype, steps an explicit flat-vector outer optimizer, optionally logs syncer-side training telemetry to W&B, and publishes global weights in the configured publication dtype through `control/latest.json`.
 
 The implementation intentionally does not use `torch.distributed`, NCCL, RPC, Ray, DeepSpeed, FSDP, or PCCL for milestone 1 communication.
 
@@ -69,12 +69,13 @@ python -m fs_diloco.analysis runs/fs_diloco/<RUN_ID>
 
 - Large tensors are stored as `safetensors`.
 - `updates/latest/learner_XXX.json` is each full-mode learner's bounded proposal surface; it points to an immutable payload.
+- Fragment mode uses one fixed `updates/latest/learner_XXX_fNNN.json` pointer per learner/fragment pair.
 - Heartbeat JSON files are liveness hints.
 - `control/latest.json` is the only global pointer learners poll.
 - `control/syncer_metadata.sqlite3` is the authoritative commit record and is opened directly from the shared filesystem with rollback journaling and `synchronous=FULL`.
 - Recovery is DB-first: `latest.json` is a rebuildable learner-facing cache, not a recovery authority.
-- The active runtime retains only current checkpoints, fixed proposal pointers, and proposals referenced by active DB rows; terminal history is archived in append-only JSONL files.
-- Learners overwrite the full model and reset the inner optimizer after adopting a newer global version.
+- The bounded tensor surface retains current checkpoints, fixed proposal pointers, payloads referenced by active DB rows, and short-lived `gc_pending` payloads awaiting deletion; terminal metadata history is archived in append-only JSONL files.
+- Full-mode adoption is strategy-dependent: `replace` overwrites the model and resets AdamW moments, while rebase/prediction reconciliation preserves unpublished local progress and optimizer state. Fragment adoption only replaces changed fragments and resets the optimizer only when configured.
 - Outer optimizers are explicit flat-vector SGD, momentum/Nesterov, and AdamW-style implementations.
 
 See [docs/07-operations.md](docs/07-operations.md) before launching on Miyabi.

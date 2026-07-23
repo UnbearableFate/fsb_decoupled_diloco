@@ -48,12 +48,12 @@ python -m fs_diloco.learner \
 - 所有进程的 `--run-id/--shared-root/--num-learners` 必须一致(元数据里的 run_id 不匹配会被 syncer 忽略);
 - `learner-id` 必须是 `learner_000` 到 `learner_{N-1:03d}`;
 - syncer 的权威 DB 固定为 `<shared-root>/control/syncer_metadata.sqlite3`;所有节点必须看到同一 shared root;
-- 中途停止:向 run 目录写 `control/stop.json` 即可让 learner 退出(syncer 只认自己的停止条件)。
+- 中途停止:向 run 目录原子写合法 `control/stop.json` 可让 learner 退出；syncer 不把该文件当自己的直接停止开关，但在全部 learner 写出 stopped 心跳后会经 terminal drain 以 `input_exhausted` 收束。手工写半截 JSON 不安全，应使用临时文件 + rename。
 
 恢复时使用同一个 run id/shared root,并把配置中的 `init.resume` 设为 `true`。恢复不会信任 `latest.json`:持久 DB 必须存在且通过 integrity/identity/checkpoint 一致性校验,否则 syncer fail closed。不要移动或清理 `control/syncer_metadata.sqlite3`。启动 resume syncer 后再启动新 learner；resume 事务会把旧代 learner 行重置为 `unknown`，并 fence 切代时 heartbeat pointer 的完整内容，旧 `stopped` 不会触发本代 `input_exhausted`。检查 `run_resumed` 后应先看到新代 `learner_liveness_updated(active>0)`，再看到严格更大版本的 `outer_step_applied/global_published`。
 
-已有一致非错误 `control/stop.json + summary.json` 表示 run 已完成，resume 会 fail closed，
-不得手工删除终态文件重开。`error` 终态可由 resume 原子归档后继续。可用 Checker 的
+任何可读的非 error `control/stop.json.reason` 或 `summary.json.stop_reason` 都会令 resume fail closed，
+不要求两文件成对一致；不得手工删除终态文件重开。`error` 终态可由 resume 原子归档后继续。可用 Checker 的
 `--require-resume-progress --resume-artifact <path>` 同时验证 DB/latest/checkpoint、旧 heartbeat
 fence、新代 active 与下一次 commit；stdout 仍只有三值结果。
 
@@ -66,11 +66,13 @@ scripts/local/clean_run.sh --delete runs/fs_diloco
 scripts/local/clean_run.sh --delete --keep-latest-global runs/fs_diloco
 ```
 
-`clean_run.sh` 只扫描项目 `runs/` 内的目标目录；默认是 dry-run，必须传入 `--delete` 才会删除。脚本会递归删除 `*.safetensors` 和 `*.db`;这会删除持久恢复权威,只应对确定废弃的 run 使用。`--keep-latest-global` 只保留编号最大的 `global_v<version>.safetensors`,不会保留恢复所需的 outer state/DB。
+`clean_run.sh` 只扫描项目 `runs/` 内的目标目录；默认 dry-run，必须传 `--delete` 才删除。它的实际 glob 是递归 `*.safetensors` 和 `*.db`：当前权威库名为 `syncer_metadata.sqlite3`，**不会**被该 glob 删除，但 global/outer/update/fragment tensor 会被删掉，run 仍无法恢复。`--keep-latest-global` 只在每个目录保留编号最大的 `global_v<version>.safetensors`，不会保留匹配的 outer/fragment/update tensor，也不会把残留 DB+weight 变成可恢复证据。
 
 对应配置 `configs/fs_diloco_tiny_local.yaml` / `fs_diloco_tiny_fragment_local.yaml`。
 
 ## 4. Miyabi PBS 批作业
+
+任何 PBS 提交前必须先运行 `bash -n scripts/miyabi/*.pbs`，并逐个确认 `#PBS -W group_list=...` 是当前账户可用的**字面 group ID**，不能保留 `<group_id>` placeholder；两项未完成时不要 `qsub`。
 
 | 脚本 | 规模 | 用途 |
 |---|---|---|
@@ -82,7 +84,8 @@ scripts/local/clean_run.sh --delete --keep-latest-global runs/fs_diloco
 | `run_9node_gpt2_wikitext2.pbs` | 9 节点 | 8 learner + 1 syncer 短跑 |
 | `run_9node_gpt2_wikitext2_5000steps.pbs` | 9 节点 | 名义 5000 本地步、global step 50 终止的正式实验;learner 超过 5000 后继续到 stop |
 | `run_8node_colocated_gpt2_wikitext2_5000steps.pbs` | 8 节点 | 实验性部署：rank0 CPU syncer + GPU learner_000，其余七节点各一 learner；双进程 fail-fast 监督。GPT-2 124M 三 seed 中位数劣化 1.83%，通过 ≤10% 门禁，但有一个 +41.4% 离群 seed，故不替代 9 节点默认 |
-| `run_9node_fragment_gpt2_wikitext2_5000steps.pbs` / `..._50x4.pbs` | 9 节点 | fragment 版实验 |
+| `run_9node_fragment_gpt2_wikitext2_5000steps.pbs` | 9 节点 | **当前脚本名与默认配置不一致**：默认指向 `...5000steps_predict_bf16all_cuda.yaml`（full predict，`fragments.enabled=false`），结尾却执行 fragment 断言；不覆盖 `CONFIG` 会失败。要跑其名义 fragment 实验必须显式设 `CONFIG=.../fs_diloco_gpt2_wikitext2_8l_fragment_5000steps.yaml` |
+| `run_9node_fragment_gpt2_wikitext2_50x4.pbs` | 9 节点 | 4 个 fragment merge event 的 50-inner-step 实验 |
 | `run_9node_fragment_gpt2_wikitext2_50x10.pbs` / `run_9node_no_fragment_gpt2_wikitext2_50x10.pbs` | 9 节点 | 8 learner、inner steps=50、outer steps=10 的 fragment/no-fragment 对照实验 |
 | `run_1node_lm_eval.pbs` | 1 节点 | checkpoint 导出 + lm-eval |
 | `run_1node_validation_eval.pbs` | 1 节点 | 使用 run resolved config 的专用 validation loss/ppl；校验非空 token、有限指标、checkpoint/source identity 并原子附加 summary |
@@ -116,7 +119,12 @@ scripts/miyabi/inspect_run.sh <run_root>    # 快速查看 run 状态
 python scripts/miyabi/sqlite_shared_fs_probe.py --help  # 共享 SQLite stress/kill-reopen probe
 python scripts/miyabi/publication_crash_probe.py --help # full publication crash matrix
 python scripts/miyabi/check_plan01_invariants.py --help # current-only/一致性/时延三值 Checker
+python scripts/miyabi/measure_pointer_polling.py --help # 固定 pointer 轮询成本测量
+python scripts/miyabi/benchmark_syncer_device.py --help # syncer device/dtype microbenchmark
+python scripts/miyabi/capture_source_identity.py --help # git/source fingerprint 捕获
 ```
+
+`scripts/local/prune_runs_without_5000.sh` 是面向特定历史清理任务的破坏性脚本：只看目标目录的**直接子目录**，名称不含字面 substring `5000` 的 run 都是候选；默认 dry-run，`--delete` 才递归删除。目标必须是项目 `runs/` 的严格后代。它不属于通用 runtime maintenance。`publication_crash_probe.py`、`sqlite_shared_fs_probe.py` 和 benchmark/measurement 脚本是独立诊断工具，不会由训练主循环自动运行。
 
 Run 分析方法和实验结果统一维护在 [reports/run_analysis.md](../reports/run_analysis.md)。
 
@@ -124,7 +132,7 @@ Run 分析方法和实验结果统一维护在 [reports/run_analysis.md](../repo
 `depend=afterok:<train_job_id>` 的独立一节点 validation job。评估不占用 9 节点训练
 allocation 的尾部时间；训练失败时不会生成伪成功结果。结构化主结果位于
 `<run_root>/metrics/validation_eval.json`，协议见
-[`reports/imp_plans/quality_fix-Q/validation_protocol.md`](../reports/imp_plans/quality_fix-Q/validation_protocol.md)。
+[`reports/checked/quality_fix-Q/validation_protocol.md`](../reports/checked/quality_fix-Q/validation_protocol.md)。
 
 递归遍历一个或多个 root，以 `control/stop.json` 作为训练结束标志，把所有已结束
 run 中用于实验对比的核心指标抽取到 CSV：
@@ -164,7 +172,7 @@ python -m fs_diloco.eval_lm_harness results-to-csv \
   --lm-eval-output evals/my_eval --output-csv evals/my_eval/metrics.csv --manifest exports/my_eval/manifest.json
 ```
 
-fragment run 评测用 materialize 出的 `weights/global_v{event}.safetensors`。
+fragment run 评测用 materialize 出的 `weights/global_v{event}.safetensors`。当前 `eval_lm_harness.resolve_checkpoint` 不会自动把 fragment latest 的 `materialized_weight_path` 当成 `weight_path`，因此需同时显式传 `--checkpoint <materialized_weight_path> --run-root <run_root>`。
 
 ## 6. 常见问题排查
 
@@ -173,7 +181,7 @@ fragment run 评测用 materialize 出的 `weights/global_v{event}.safetensors`�
 | learner 卡在启动 | 是否在等 `param_index.json`/`latest.json`(syncer 没起来或 shared_root 不一致);`wait_for_json` 默认 1800s 超时 |
 | syncer 一直 `quorum_wait` | learner 是否在替换 `updates/latest/learner_XXX.json`;run_id 是否一致;staleness 窗口是否太紧;最终会 `no_progress_timeout` 停机 |
 | 大量 `dropped(missing_file)` | payload 是否被外部清理/移动,或共享文件系统是否出现可见性/读取错误;learner 不再自行清理 payload |
-| 大量 `dropped(stale)` | learner 太慢或 `max_staleness_versions` 太小 |
+| 大量 `dropped(too_stale)` | learner 太慢或 `max_staleness_versions` 太小；`stale` 是旧文档/历史 run 的兼容称呼 |
 | resume 后重复合并了旧更新? | DB commit 是权威边界;resume 重置 selected、重建 latest,proposal frontier/唯一约束阻止重放。先检查 analysis 的 integrity 与 committed version |
 | SQLite 报锁/IO 错误 | 保留现场并运行共享 FS probe;确认 DB 使用 `journal_mode=delete`,`synchronous=2(FULL)`,且没有额外 writer/WAL 文件 |
-| W&B 报错 | 只影响遥测,训练继续;离线模式产物在 `logs/wandb/`,事后 `wandb sync` |
+| W&B 初始化失败 | import/init 会降级为不上报；离线产物在 `logs/wandb/`，事后可 `wandb sync`。初始化后的 SDK `log/summary/finish` 异常并非全部局部捕获，遇到 runtime error 仍需查 syncer traceback |

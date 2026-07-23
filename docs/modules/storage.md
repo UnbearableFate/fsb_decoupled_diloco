@@ -6,7 +6,7 @@
 
 ## storage/atomic_io.py — 原子文件系统助手
 
-所有共享状态发布的唯一原语:**写临时文件 → fsync → `os.replace()` 原子改名**。同目录 rename 在 POSIX/Lustre 上原子,读者永远不会看到半截文件。
+JSON/safetensors 共享状态的发布原语是:**同目录临时文件 → 文件 fsync → chmod → `os.replace()`**。读者不会看到半截目标文件；实现没有 fsync 父目录，因此只承诺运行期原子可见性，不承诺突然断电后的目录项持久。SQLite 和追加日志使用各自原语。
 
 - **`ensure_dir(path) -> Path`** — `mkdir -p`。
 - **`atomic_write_bytes(path, data, mode=0o644) -> Path`** — 在目标目录内建 `mkstemp` 临时文件(`.{name}.*.tmp`),写入 + flush + fsync,chmod 后 `os.replace` 到目标名;失败时清理临时文件并重抛。
@@ -14,18 +14,21 @@
 - **`atomic_write_json(path, payload)`** — `json.dumps(sort_keys=True, indent=2)` 后原子写;所有心跳/元数据/latest/stop 都经此发布。
 - **`atomic_write_with_writer(path, writer)`** — 先建临时文件,把路径交给回调 `writer(tmp_path)` 写内容(供 safetensors 的 `save_file` 使用),再 fsync + replace。
 - **`read_json(path) -> dict`** — 直接读,失败抛异常。
-- **`safe_read_json(path) -> dict | None`** — 读失败(不存在/损坏 JSON)返回 None;轮询共享文件的标准姿势。
+- **`safe_read_json(path) -> dict | None`** — 仅捕获 OSError/JSON decode error 并返回 None；它不检查顶层一定是 object，合法 JSON list 等会原样返回并可能在调用方使用 `.get` 时失败。
 - **`sha256_file(path, chunk_size=1MiB) -> str`** — 分块计算摘要。
 - **`file_size(path) -> int`** — `stat().st_size`。
 - **`wait_for_file(path, timeout_seconds, poll_seconds=1.0)`** — 轮询等待文件出现;超时抛 `TimeoutError`(当前 runtime 使用的是 learner 侧更严格的 `wait_for_json`)。
 
 ## storage/paths.py — 目录布局
 
-- **`RunPaths(shared_root)`**(frozen dataclass)— 共享目录布局的**唯一权威定义**。属性:`control / weights / optim / updates_latest / updates_payloads / fragments / fragment_weights / fragment_optim / heartbeats / logs / metrics`,文件:`latest_json / stop_json / summary_json / param_index_json / fragment_index_json / run_root_config_yaml / resolved_config_yaml / sqlite_db / update_history_jsonl / global_version_history_jsonl`。run 根与 control 中的 resolved config 内容一致。方法:
+- **`RunPaths(shared_root)`**(frozen dataclass)— 共享目录布局的**唯一权威定义**。目录属性:`control / weights / optim / updates_latest / updates_payloads / fragments / fragment_weights / fragment_optim / heartbeats / logs / metrics / eval_checkpoints`；`updates_pending` 是 `updates_payloads` 的兼容别名。文件属性:`latest_json / stop_json / summary_json / param_index_json / fragment_index_json / run_root_config_yaml / resolved_config_yaml / sqlite_db / update_history_jsonl / global_version_history_jsonl`。方法:
   - **`update_pointer_path(learner_id)`** / **`update_payload_dir(learner_id)`** — 全量固定 proposal pointer 与不可变 payload 目录;
+  - **`fragment_update_pointer_path(learner_id, fragment_id)`** — per-pair 固定 pointer，fragment ID 三位补零；
   - **`global_weight_path(version)`** / **`outer_optim_path(version)`** — 按模板拼版本化文件名;
   - **`fragment_weight_path(fragment_id, version)`** / **`fragment_outer_optim_path(...)`** — `fragments/{weights|optim}/fragment_{id:03d}/v{version:06d}.safetensors`。
-- **`prepare_run_dirs(paths, num_learners)`** — 建齐固定目录 + 每 learner 的 payload 子目录(幂等;learner 和 syncer 启动时都会调用)。
+- **`prepare_run_dirs(paths, num_learners)`** — 建齐 control/weight/optim/update/fragment/heartbeat/log/metric 目录和每 learner payload 子目录；不创建 `eval_checkpoints`，后者只在 terminal capture 实际发生时按需创建。
+
+属性的逐项映射为：`control`、`weights`、`optim`、`heartbeats`、`logs`、`metrics` 直接位于 run 根；`updates_latest`=`updates/latest`，`updates_payloads`=`updates/payloads`；`fragments` 下再分 `fragment_weights`=`weights` 与 `fragment_optim`=`optim`。`latest_json`、`stop_json`、`summary_json`、`param_index_json`、`resolved_config_yaml`、`sqlite_db` 位于 control；`fragment_index_json` 位于 fragments；`run_root_config_yaml` 位于根；`update_history_jsonl` 与 `global_version_history_jsonl` 位于 metrics。
 
 ## storage/tensor_codec.py — safetensors 编解码
 
@@ -34,8 +37,7 @@
 - **`load_safetensors(path, device)`** — `safetensors.load_file` 薄封装。
 - **`save_update_vector(path, flat, dtype)`** / **`load_update_vector(path, device, dtype=float32)`** — update 扁平向量,单键 `local_params`;落盘和加载 dtype 可分别配置。
 - **`save_global_weights(path, theta, param_index, dtype=None)`** / **`load_global_weights_flat(path, param_index, device, dtype=float32)`** — 命名 global 权重与扁平向量互转；syncer 可直接按计算 dtype 加载。
-- **`save_global_weights(path, theta, param_index)`** — 扁平 θ 先经 `flat_to_named_tensors` 还原为命名张量再存(每参数一键,可独立加载/导出)。
-- **`load_global_weights_flat(path, param_index, device) -> Tensor`** — 逆向:命名张量 → 扁平向量。
+- **`load_global_weights_into_model(path, model, param_index, strict_shape=True)`** — 用 `safe_open` 在 CPU 上逐个命名 tensor 读取并直接 copy 到参数 device/dtype，校验模型名、checkpoint 名、numel 和可选 shape；不会物化完整 host flat，直接 replace adoption 使用它。
 - **`save_outer_state(path, theta, state, dtype=None)`** / **`load_outer_state(path, device, dtype=None) -> (theta, state)`** — 外层优化器状态,`theta` + 各状态张量平铺为键;可统一转换浮点状态的发布/加载 dtype,整数状态不转换,缺 `step` 时补 0。
 
 ## storage/sqlite_store.py — 权威持久元数据库
@@ -44,46 +46,54 @@
 
 ### 模块级函数
 
+- **`_schema_text()`** — 通过 `importlib.resources` 读取随包分发的 `schema.sql`。
+- **`RESOURCE_COLUMNS`** — 旧 full/fragment update 表的共用迁移白名单：训练期/local-cycle CPU/GPU peak 四个 REAL、cycle step-time mean REAL、step count/resource sample count 两个 INTEGER。
+- **`FULL_UPDATE_METADATA_COLUMNS`** — 只对 full `updates` 表迁移 `mid_cycle_adoption_count INTEGER NOT NULL DEFAULT 0` 与 `base_switched_at_step INTEGER`。
+- **`_ensure_resource_columns(conn, table)`** / **`_ensure_full_update_metadata_columns(conn)`** — connect-time 幂等 `ALTER TABLE`，为旧 DB 补资源字段及 full mid-cycle 两列。
 - **`connect(path) -> sqlite3.Connection`** — 建父目录、连接(`timeout=60s`)、`row_factory=Row`,强制 `journal_mode=DELETE`、`synchronous=FULL`、busy timeout,执行幂等 schema/资源列及 full mid-cycle adoption 列迁移。
 - **`row_to_dict(row) -> dict | None`** — Row → dict 便捷转换。
 
-### class SQLiteStore
+### `SQLiteStore`
 
 通用:
 
-- **`__init__(path)` / `close()` / `execute(sql, params)`** — 连接管理与单语句直通执行。
-- **`integrity_check()` / `pragma_settings()`** — 验证 DB 完整性并报告 journal/synchronous/busy timeout。
+- **`__init__(path)` / `close()` / `execute(sql, params)`** — 连接管理；`execute` 每条语句后立即 commit，因此不能用它拼装多语句原子事务。
+- **`pointer_signature_is_cached()` / `cache_pointer_signature()`** — 仅进程内的 `(inode,size,mtime_ns,ctime_ns)` cache，用于 fragment fixed pointer 解析短路；持久重放权威仍是 frontier 表。
+- **`integrity_check()` / `pragma_settings()`** — 前者要求 `PRAGMA integrity_check` 唯一结果为 `ok`，否则抛错；后者当前只报告 `journal_mode` 与 `synchronous`，不返回 busy-timeout 字段。
 - **`committed_global_count()` / `latest_global_version()`** — 查询活跃 DB 中唯一 current committed global。
 - **`set_run_state(key, value)` / `get_run_state(key)`** — JSON 值的 kv upsert/读取。
+- **`_set_run_state_in_transaction(conn, key, value, now)`** — 不 commit 的静态 helper，供 initialize/resume 把 identity/config/generation 与其他状态放入同一事务。
 
 全局版本 / learner:
 
 - **`initialize_full_run(...)`** — 一个事务写入 committed v0、run identity 与配置快照;拒绝覆盖已有 committed run。
 - **`prepare_full_resume(...)`** — full resume 的单一事务边界：`selected → pending`，把全部预期 learner 行重置为 `unknown/resumed` 并清空本代 hostname/pid/last_seen/heartbeat path，同时把 resume ID/时间/旧 heartbeat 内容 fence 写入 `run_state.resume_generation`。事务失败不会暴露部分切代。
-- **`commit_full_merge(...)`** — 全量 `N→N+1` 的唯一事务边界:校验前驱/目标、selected 行与 learner 唯一性、future/stale 准入、归一化权重,插入 global row,写 applied 字段并终态化 superseded/stale/future 行;任何异常整笔 rollback。
-- **`upsert_global_version(...)`** — fragment/兼容路径的版本行写入。
+- **`commit_full_merge(...)`** — 全量 `N→N+1` 的唯一事务边界:校验前驱/目标、selected 行与 learner 唯一性、future/staleness 准入、effective-weight key 精确匹配，插入 global row、写 applied 字段并终态化 `superseded/too_stale/future_base` 行；任何异常整笔 rollback。
+- **`upsert_global_version(...)`** — standalone global-version upsert helper；当前 full runtime 使用 `initialize_full_run/commit_full_merge`，fragment runtime 使用 `upsert_fragment_version`，因而生产主路径不调它。
 - **`get_global_version(version)`**。
 - **`upsert_learner(learner_id, *, hostname, pid, last_seen, ..., status, status_reason)`** — 心跳快照 upsert;已有行的字段用 `COALESCE` 保留旧值(心跳缺字段不清空),status 总是覆盖。
 - **`update_learner_status(learner_id, status, reason)`** / **`list_learners()`**。
+- **`learner_resource_peaks(fragment_mode)`** — 只查询当前 live update 表按 learner 聚合的资源峰值；历史已归档行不会被回读，summary 层会再用最终 heartbeat 补充。
 
 全量模式 update 状态机:
 
-- **`insert_update_metadata(metadata, *, pointer_path) -> bool`** — latest-wins 摄取固定 pointer:相同 frontier 重放忽略;新的 pending proposal 终态化同 learner 旧 pending,但不覆盖 selected;同时推进 `proposal_frontiers`。full 的 `mid_cycle_adoption_count/base_switched_at_step` 经显式列白名单持久化并随终态行归档，旧 metadata 缺字段按 `0/null` 兼容。
-- **`insert_fragment_update_metadata(metadata, *, pointer_path) -> bool`** — 同一事务内按 `(learner_id, fragment_id)` 做 frontier 重放短路、只终态化同 pair 的旧 pending（不覆盖 selected）、插入新行并推进 `fragment_proposal_frontiers`。
+- **`insert_update_metadata(metadata, *, pointer_path) -> bool`** — latest-wins 摄取固定 pointer:相同 frontier update ID 立即 rollback/返回 false；否则先终态化同 learner 旧 pending（不覆盖 selected），以 `INSERT OR IGNORE` 插新行，再推进 `proposal_frontiers`。因此若新 ID 撞上 active 表的主键或 `(learner_id, local_step_end, base_global_version)` 唯一约束，插入返回 false但 frontier 仍在同一事务推进，且旧 pending 已 superseded；该 pointer 不会自动重试。正常 learner 的单调 local step + UUID 避免此路径。full 的 `mid_cycle_adoption_count/base_switched_at_step` 经显式列白名单持久化并随终态行归档，旧 metadata 缺字段按 `0/null` 兼容。
+- **`insert_fragment_update_metadata(metadata, *, pointer_path) -> bool`** — 同一事务内按 `(learner_id, fragment_id)` 做 frontier 重放短路、只终态化同 pair 的旧 pending（不覆盖 selected）、`INSERT OR IGNORE` 新行并推进 `fragment_proposal_frontiers`。撞上 update ID 或 `(learner_id, fragment_id, local_step_end, base_fragment_version)` 唯一约束时，与 full 一样可能“返回 false但 frontier 已推进”。
 - **`pending_updates()`** — 全部 pending,按 committed_at 升序。
 - **`eligible_updates(current_version, max_staleness_versions)`** — pending 且 staleness 在窗口内。
 - **`mark_updates_selected(update_ids, selected_by_run)`** — 条件转移 `pending → selected`(记 selected_at/selected_by_run)。
-- **`mark_updates_applied(updates, *, applied_version, effective_weights)`** — `→ applied`,记录 applied_at、staleness_versions(=applied_version−1−base)、实际合并权重。
+- **`mark_updates_applied(updates, *, applied_version, effective_weights)`** — standalone `→ applied` helper，记录 applied_at、staleness_versions(=applied_version−1−base)、实际合并权重。当前 full runtime 的同类转换已内联到 `commit_full_merge` 单事务，这个 helper 主要供独立状态机操作/测试。
 - **`reset_selected_to_pending(update_ids)`** — 合并中途失败的回滚(仅 `selected → pending`)。
-- **`reset_all_selected_to_pending()`** — DB-first resume 时回滚崩溃遗留的全部 selected。
+- **`reset_all_selected_to_pending()`** — standalone 回滚全部 selected。DB-first resume 在 `prepare_full_resume` 内执行相同 SQL 语义，以便和 liveness/fence 切代处在同一事务，不单独调该 helper。
 - **`drop_updates(update_ids, reason)`** — `pending|selected → dropped`,记 drop_reason。
-- **`drop_obsolete_updates(current_version, max_staleness) -> int`** — 批量把过窗 pending 置为 `dropped("stale")`,返回行数。
-- **`drop_superseded_updates(selected_updates, reason="superseded") -> int`** — 对每个被选中更新,把同 learner 的更旧 pending(local_step_end 更小,或同步数且 committed 更早)置为 dropped。
+- **`drop_obsolete_updates(current_version, max_staleness) -> int`** — standalone 批量把过窗 pending 置为 `dropped("too_stale")`,返回行数；当前 full merge 的 obsolete 终态化在 `commit_full_merge`。
+- **`drop_ineligible_updates(...)`** — 同一事务分别把 base 超前者标为 `future_base`、过窗者标为 `too_stale`，返回两类计数；terminal selector 使用。
+- **`drop_superseded_updates(selected_updates, reason="superseded") -> int`** — standalone 实现：对每个被选中更新,把同 learner 的更旧 pending(local_step_end 更小,或同步数且 committed 更早)置为 dropped。当前 full runtime 在 `commit_full_merge` 事务内完成这一步。
 - **`get_update(update_id)`**。
 
 归档/GC 支持:
 
-- **`active_payload_paths()` / `proposal_frontiers()` / `fragment_proposal_frontiers()` / `current_fragment_versions()`** — 计算活跃引用集合;
+- **`active_payload_paths()` / `proposal_frontiers()` / `fragment_proposal_frontiers()` / `current_fragment_versions()`** — 计算 pending/selected payload、frontier 和各片 current version 的活跃引用集合;
 - **`terminal_update_rows()` / `historical_version_rows()` / `delete_archived_rows(...)`** — 读取待归档终态/历史行；JSONL fsync 后，在同一 SQLite 事务内把终态 payload path 幂等 stage 到 `gc_pending` 并按精确 identity 删除 active 行；
 - **`gc_pending_paths()` / `gc_pending_count()` / `clear_gc_pending_paths(...)`** — 以尚未完成物理删除的 payload 数为界的持久集合；archive 后、unlink 前崩溃可在下一次 maintenance 恢复；
 - **`finalize_unconsumed_updates(fragment_mode, reason)`** — 已证明输入闭合的正常停机中把剩余 pending/selected 终态化。
@@ -94,12 +104,13 @@ fragment 模式(与上面逐一对应,多了 fragment 维度):
 - **`upsert_fragment_version(...)`** — 每片每版本一行,含 global_merge_event。
 - **`insert_fragment_update_metadata(metadata, *, pointer_path)`** — 唯一约束 `(learner_id, fragment_id, local_step_end, base_fragment_version)`；与 per-pair frontier 推进和旧 pending supersession 位于同一事务，selected 行不被覆盖。
 - **`pending_fragment_updates(*, fragment_id=None)`** / **`eligible_fragment_updates(*, fragment_id, current_fragment_version, max_staleness_versions)`**。
-- **`mark_fragment_updates_selected / mark_fragment_updates_applied / reset_fragment_selected_to_pending / drop_fragment_updates / drop_obsolete_fragment_updates / drop_superseded_fragment_updates`** — 语义同全量版;applied 时额外记录 applied_global_merge_event 与两种 staleness。
+- **`mark_fragment_updates_selected()`** / **`mark_fragment_updates_applied()`** / **`reset_fragment_selected_to_pending()`** / **`reset_all_fragment_selected_to_pending()`** / **`drop_fragment_updates()`** / **`drop_obsolete_fragment_updates()`** / **`drop_ineligible_fragment_updates()`** / **`drop_superseded_fragment_updates()`** — 语义同全量版；字面过期/未来 reason 仍为 `too_stale/future_base`；applied 时额外记录 applied_global_merge_event 与两种 staleness。
 - **`get_fragment_update(update_id)`** / **`list_fragment_versions()`** / **`current_fragment_versions()`**。
 
 ## storage/maintenance.py — 归档与引用驱动 GC
 
+- **`_append_jsonl_fsync()`** — 先 materialize rows，非空时逐行 JSON append、flush+fsync，返回行数；不做去重或原子替换。
+- **`_unlink()`** — 删除成功 true，不存在 false，其他错误传播；**`_resolved_paths()`** 对集合做 `resolve(strict=False)`；**`_pointer_state()`** 只读固定 pointer 的合法 `update_id/learner_id/file_path/fragment_id`，按 pair 保留最后扫描值。
 - **`archive_and_prune(store, paths)`** — 把 terminal update 与非 current version 行追加到 `metrics/update_history.jsonl` / `global_version_history.jsonl`,flush+fsync 成功后才以 `gc_pending + active row delete` 的 SQLite 事务剪枝。崩溃重试可形成重复 archive 行,分析器按 identity 去重。
-- **`collect_runtime_artifacts(...)`** — checkpoint 按当前权威引用回收，proposal tensor 按 active DB/pointer/`gc_pending` 回收；不读取 archive JSONL，也不扫描旧布局 `updates/payloads/**/.meta.json`。清理成功后删除对应 pending 行。
 - **`collect_runtime_artifacts(store, paths, orphan_grace_seconds, extra_terminal_paths=...)`** — 保留 current global/fragment checkpoint、latest 引用的 materialized full、active DB payload;删除不再引用的 checkpoint、终态 payload tensor 与临时文件。未发布 proposal/orphan payload 至少等待 grace。
-- **`run_maintenance(..., input_closed=False)`** — 按顺序执行 archive → prune → GC。正常输入闭合时终态引用可零 grace 删除;其他时刻 orphan grace 为 `max(2×heartbeat interval, 2×scan interval)`。
+- **`run_maintenance(..., input_closed=False)`** — 按顺序 archive/prune 后 GC。输入闭合时 orphan grace 为 0，否则 `max(2×heartbeat interval, 2×scan interval)`。`maintenance_scanned_rows` 只是本轮读取的 `gc_pending` path 数，不是 glob 过的文件总数；`gc_pending_rows` 是清理后的剩余行数，scan seconds 只包 artifact collection。

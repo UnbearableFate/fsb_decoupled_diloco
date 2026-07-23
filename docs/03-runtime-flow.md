@@ -11,17 +11,17 @@
 1. 读 YAML(所有节都有默认值,未知键报错);
 2. CLI 参数覆盖:`--run-id`、`--shared-root`、`--num-learners`;
 3. `run_id` 缺省时取 `$RUN_ID` 环境变量或 `时间戳_run.name`;
-4. 仓库配置的 `shared_root` 是主工作树绝对 `runs/fs_diloco/{run_id}` 模板；解析时用最终 run ID 替换占位符；
+4. `shared_root` 为 null 时回退到 `<project_root 或 cwd>/runs/fs_diloco/<run_id>`；非空字符串中的 `{run_id}` 用最终 ID 替换。仓库正式配置显式使用主工作树绝对模板；
 5. `num_learners` 覆盖时同步收紧 `quorum_min/max`;通用配置校验后按 `global_adoption_strategy` 调用对应策略类 `validate`。旧/未知键 fail-closed。
 
 ### 1.2 syncer 初始化(全量模式,`initialize_run`)
 
-1. `prepare_run_dirs()` 建齐共享目录树;直接打开 `<shared_root>/control/syncer_metadata.sqlite3`(建表幂等,rollback journal + FULL sync);
+1. 公共启动先解析 syncer device、`prepare_run_dirs()` 建齐共享目录树、直接打开 `<shared_root>/control/syncer_metadata.sqlite3`(建表幂等,rollback journal + FULL sync)，建立日志并初始化 W&B；W&B import/init 失败降级为不上报，然后才分派 full/fragment 初始化；
 2. 若 DB 已有 committed global row → 报错退出(防误覆盖已有 run;`latest.json` 不参与这个判定);
 3. 按 `syncer.device` 选择 CPU/GPU,加载模型 → `build_param_index()` → 按 `syncer.compute_dtype` flatten 初始 θ → `init_outer_state()`;
 4. 原子发布 `control/param_index.json`,并把完整配置快照同时写到 run 根和 `control/run_config.resolved.yaml`;
 5. `publish_global(version=0)`:保存 `global_v000000.safetensors` + `outer_v000000.safetensors`,在一个 DB 事务中写 committed v0、run identity 与配置快照,**最后**原子写 `latest.json`(v0 就绪,learner 可以开工);
-6. 执行首次 archive/GC;初始化 W&B(失败降级为不上报)。
+6. 执行首次 archive/GC。
 
 fragment 模式(`initialize_fragment_run`)额外:构建并发布 `fragment_index.json`;对每个 fragment 抽取 θ_f、建外层状态、保存 v0 权重与优化器状态、写 `fragments`/`fragment_versions` 表;materialize 事件 0 的完整权重;发布 fragment 布局的 `latest.json`。
 
@@ -34,7 +34,7 @@ fragment 模式(`initialize_fragment_run`)额外:构建并发布 `fragment_index
 3. 取 DB 中最大 committed `global_versions` 行作为唯一恢复版本;校验 param index 与当前模型兼容,并要求该行引用的权重/outer 文件都存在;
 4. 分别加载权重 θ 与 outer checkpoint 中的 θ,要求形状和值完全一致;不从 `latest.json` 猜测或回退;
 5. 读取并校验当前每个固定 heartbeat pointer，保存其完整内容 SHA256 fence；在一个 SQLite 事务中将崩溃遗留的全部 `selected` 行重置为 `pending`，把预期 learner 行重置为 `unknown/resumed` 并清空本代 `hostname/pid/last_seen/last_heartbeat_path`，同时写入 `run_state.resume_generation`；
-6. 原子重建 `latest.json`,执行 archive/GC 后继续主循环。摄取层忽略与 fence 完全相同的旧 heartbeat，learner 原子替换为新 active 后才重新打开本代输入。重复 resume 不增加 global row,也不会重复应用 update；已有一致非错误 `stop.json + summary.json` 的 completed run 拒绝 resume，error 终态证据则先归档再恢复。
+6. 切代事务成功后，把仍存在的 stop/summary marker（不可读，或可读但相应 reason 为空/`error`）用 `os.replace` 归档到 `logs/resume_*`；原子重建 `latest.json`,执行 archive/GC 后继续主循环。摄取层忽略与 fence 完全相同的旧 heartbeat，learner 原子替换为新 active 后才重新打开本代输入。重复 resume 不增加 global row,也不会重复应用 update；任一可读 stop reason 或 summary stop_reason 表示非 error 终态时拒绝 resume，不要求两个文件成对存在或彼此一致。
 
 ### 1.4 learner 启动(`run_learner` / `run_fragment_learner`)
 
@@ -43,11 +43,11 @@ fragment 模式(`initialize_fragment_run`)额外:构建并发布 `fragment_index
 3. **阻塞等待** `param_index.json`(fragment 模式还有 `fragment_index.json`),用本地模型重建 index 严格比对;
 4. **阻塞等待** `latest.json`,整体加载全局权重(fragment 模式:从各片权重 materialize 后加载),按累计本地步 0 建内层 AdamW + 可选 warmup/cosine 调度器。若 pointer 引用的 current-only 文件已被下一轮 GC 回收，learner 在有界预算内等待严格更新的 latest 并从整份新快照重试;
 5. 写第一份心跳(phase=`loaded_global` / `loaded_fragment_latest`);
-6. 构建数据迭代器:WikiText-2 按 learner 连续分片(`dataset.shard(num_shards=N, index=i, contiguous=True)`)后切块、无限循环;或合成随机 token 流。
+6. 构建数据迭代器:WikiText-2 按 learner 连续分片(`dataset.shard(num_shards=N, index=i, contiguous=True)`)，逐文本 tokenize、样本后加 EOS、拼接后切成不重叠整块并丢尾；`data.shuffle_blocks=true` 时每个 learner 用稳定 seed 在每个 epoch 重排块，false 时按原序无限循环。`streaming` 只控制 datasets 加载方式，随后仍会物化块列表。合成模式则生成无限随机 token 流。
 
 ## 2. learner 主循环(全量模式)
 
-每一轮(一个"更新区间"):
+启动步骤全部成功并进入训练 `try` 后，每一轮(一个"更新区间")如下；更早的模型/index/latest/data 初始化异常不会发布最终 stopped 心跳：
 
 ```
 while not stop_requested():                     # 默认:本地上限或 stop;global_only:只看 stop
@@ -128,20 +128,23 @@ while True:
   聚合:p̄ = Σ wᵢ pᵢ;g = θ − p̄
   外层步进:θ, state = outer_optimizer_step(θ, g, state)
   发布:publish_global(v+1)
-      # 权重 → outer → 一个 SQLite 事务(版本+applied+drop) → latest.json
+      # 默认并发写权重/outer（可配串行 weight→outer）
+      # 两者完成 → 一个 SQLite 事务(版本+applied+drop) → latest.json
   archive_and_prune():终态 update/旧 version 先 append+fsync JSONL,
                       再以同一 SQLite 事务 stage gc_pending + 删除活跃 DB 行
   collect_runtime_artifacts():按 DB/latest/pointer 引用只保留当前 checkpoint 与 live payload
   记 syncer_metrics.csv 与 W&B;v = v+1;刷新进展时间戳
 finally:
   发布 stop.json(带 reason)→ 等待 stopped 心跳/末次摄取 → 终态化剩余 proposal
-  → summary → archive/GC → W&B finish → 关库
+  → summary → (非 error 才 archive/GC) → W&B finish → 关库
 ```
+
+该 finally 只覆盖已经成功完成初始化/恢复并进入主循环的阶段；startup/init/resume 异常发生得更早，不走这套 stop/summary/finish/close。主循环 finally 中 stop、wait/ingest、summary 和 maintenance 是同一顺序 try；前一步如果自身抛异常，不保证后续步骤继续，但最内层 finally 仍尝试 W&B finish 和 DB close。
 
 ## 5. syncer 主循环(fragment 模式差异)
 
 - 每轮先算目标片 `k = global_merge_event mod K`,资格查询、quorum、宽限窗口都**只针对该片**的更新、以该片的 `fragment_version` 计 staleness;
-- 合并后:该片 θ_f/外层状态/版本推进,`global_merge_event +1`;保存该片新权重与优化器状态、写 `fragment_versions` 行;
+- 合并后:该片 θ_f/外层状态/版本推进,`global_merge_event +1`;依次保存该片新权重与优化器状态、提交 `fragment_versions` 行、发布 latest，再单独把选中 update 标为 applied/丢弃 obsolete；这些不是一个跨文件/跨表事务，且 fragment 不支持崩溃恢复;
 - `publish_fragment_latest()`:按 `should_materialize_fragment_full()` 决定是否重拼完整权重(事件 0、达到目标步数、或每个显式正整数 `materialize_full_every_events` 周期),然后原子写 fragment 布局的 `latest.json`;
 - 丢弃逻辑同样按片(superseded 按 learner+片;obsolete 按该片 staleness 窗口);
 - 正常停机时 finally 中额外做一次**强制最终 materialize**,发布 stop 后做末次摄取、终态化、archive/GC。
@@ -154,10 +157,11 @@ t0   syncer: 初始化,发布 v0 + latest.json
 t0+  learners: 等到 latest.json,加载 v0,开始 inner steps
 t1   各 learner 陆续提交第 1 份 update(base=0)
 t1+  syncer: 凑齐 quorum → 宽限窗口 → 合并 → 发布 v1
-t1++ learners: 上传后轮询发现 v1 → 整体采纳、重置内层优化器 → 继续训练(base=1)
+t1++ learners: 上传后轮询发现 v1 → 按 replace/rebase/predict 策略采纳 → 继续训练
 ...  循环往复;慢 learner 的更新带着更高 staleness 参与或被弃
-tN   达到 stop_after_outer_steps → syncer 发布 stop.json、收尾 archive/GC、退出
-tN+  learners: 看到 stop.json(或先到 max_local_steps),写 stopped 心跳退出
+tN   达到 stop_after_outer_steps → syncer 发布 stop.json并等待 learners 收尾
+tN+  learners: 看到 stop.json(或已在有限步 final wait),写 stopped 心跳退出
+tN++ syncer:末次摄取；若全部 stopped 则终态化未消费 proposal，写 summary/archive/GC 后退出
 ```
 
 ## 7. 运行期观测点

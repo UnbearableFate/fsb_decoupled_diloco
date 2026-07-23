@@ -1,73 +1,84 @@
-# 模块参考:fs_diloco/tools 与 cli.py
+# 模块参考：`fs_diloco/tools` 与入口 shim
 
-离线工具:run 检查/断言、LM Evaluation Harness 对接,以及命令分发器。
+离线工具默认只读 run；明确的导出、CSV、validation attachment 命令例外。`analysis`、trace 比较和 CSV 抽取主要用标准库，可在没有 GPU 的环境运行。
 
----
+## `tools/analysis.py`
 
-## tools/analysis.py — run 摘要与断言
+### 读取与统计 helper
 
-- **`syncer_resource_cost(rows, complete_training_time_seconds)`** — 以 `read+aggregation+outer_step` 为 merge compute、publish 为独立 active 分量，计算 p50/p95、总 active、duty cycle、reserved syncer node-hours 与估算 idle GPU node-hours；旧 run 缺字段或终态墙钟时显式返回 unavailable。
-
-设计约束:只依赖标准库 + `protocol` 少量纯函数,**不需要 torch/GPU**,可在登录节点直接分析共享目录、持久 DB 与 JSONL archive。
-
-### 读取助手(私有)
-
-- **`_read_csv_rows(path)`** / **`_read_csv_summary(path)`** — CSV 全量读取 / `{exists, rows, last}` 概览。
-- **`_read_jsonl_deduplicated(path, key)`** — 读取 crash-retry 可能重复的 archive,按稳定 identity 去重。
-- **`_table_exists(conn, table)`** — 兼容不同 schema 版本的持久 DB。
-- **`_sha256_file(path)`** — 完整性校验用。
-- **`_fragment_update_integrity(rows)`** — 对 applied fragment 更新逐个检查文件存在与 sha256(有记录时),返回 `{missing, corrupt, ok}`。
-- **`_db_summary(path, root) -> dict`** — 打开持久 DB,执行 `integrity_check`,合并 live update/version 行与 `metrics/*_history.jsonl`,按 identity 去重后生成状态计数、贡献者、full mid-cycle adoption 次数/切换 step、fragment 事件/staleness/完整性等摘要。
-- **`_read_heartbeats(root)`** — 全部心跳 JSON。
-- **`_distribution(values)`** / **`_numeric_summary(values)`** — 计数分布 / min/max/mean(过滤非有限值)。
-- **`_loss_summary(rows)`** — learner loss 概览:整体统计 + 前 10/后 10 均值之比 + **`obvious_divergence`** 判定(末段均值 > max(3×首段, 首段+1))。
-- **`_learner_fragment_adoption(heartbeats, learner_metric_rows)`** — 每 learner 是否发生过 fragment 采纳(metrics 计数、心跳字段、版本推断三路证据)。
-- **`_syncer_log_flags(root)`** — 扫 syncer.jsonl 文本找 error / no_progress_timeout / traceback 标记。
+- `_read_csv_rows()` 用 `csv.DictReader` 读取行，并过滤“首列值再次等于首列表头”的重复 header（缓解多 learner 首写竞态）；其他畸形/并发破坏的行不做结构校验。`_read_csv_summary()` 返回 `{exists,rows,last}`，文件不存在得到空结果。
+- `_read_jsonl_deduplicated(path,key)` 忽略 JSON decode 失败的空/损坏行并按稳定 key 去重 archive crash-retry 重复项；合法 JSON 非 object 会在 `.get` 处失败，不在容错边界内。`_table_exists` 做旧 schema 兼容。
+- `_sha256_file` 分块摘要；`_fragment_update_integrity` 实现了对传入 fragment payload 行的存在性/可选 SHA 检查，但当前 `analysis.py` 没有调用该 helper。`_db_summary` 对已归档 fragment payload 仅报告“预期已删除”，不会重新 hash。
+- `_db_summary` 对 live DB 跑 integrity check，合并 live 与两个 archive JSONL，按 identity 去重后统计 update/version/fragment/frontier；不会把 archive 重新作为 runtime 权威。
+- `_read_heartbeats()` 收集 `safe_read_json` 返回的 truthy JSON，不再校验顶层 object；正常 runtime 心跳是 object，手工写入的合法 list 可在后续 `.get` 处使分析失败。`_distribution()` / `_numeric_summary()` / `_percentile()` 对可用有限数值统计。
+- `staleness_observational_summary` 从 syncer merge 行和 learner upload 行形成观测性分布；证据缺失时显式 unavailable，不把 wall clock 推断成协议 staleness。
+- `syncer_resource_cost` 把 read+aggregation+outer-step 视为 merge compute、publish 视为独立 active，给出 p50/p95、active/duty-cycle、reserved syncer node-hours 和估算 idle GPU node-hours。
+- `_loss_summary` 比较 first/last 10，末段均值超过 `max(3*first, first+1)` 标记 obvious divergence。
+- `_learner_fragment_adoption` 合并 metrics、heartbeat 和版本推断；`_learner_adoption_pause` 从 learner JSONL 只取 `adoption_pause_seconds`，聚合 count/total/mean，并以已完成 CSV cycle elapsed 求占比。它不分别聚合 load/apply 与 optimizer-reset 分量；任一已选 adoption 事件缺总 pause 时该 learner 标为 unavailable。
+- `_syncer_log_flags` 检查 error/no-progress/traceback 文本标志。
 
 ### 公开接口
 
-- **`summarize_run(shared_root, db_path=None) -> dict`** — 汇总一次 run 的全景:latest/stop、merge/fragment 状态、loss/心跳/CSV、持久 DB integrity、live+archive 历史和日志标记。默认 DB 是 `control/syncer_metadata.sqlite3`。
-- **`assert_fragment_run(args, *, require_local_steps)`** — fragment run 验收断言(冒烟/正式两档共用):latest_kind、事件数达标、片 id 齐全、**各片版本等于 round-robin 期望值**(`expected_fragment_versions_after_events`)、stop_reason 正确、materialized checkpoint 存在、指标行数与每事件 selected 数达标、心跳数量(可选:各 learner 本地步数)、DB 存在与 applied 更新完整性、每 learner 都有更新且发生过采纳、loss 无明显发散、syncer 日志无失败标记。任何一条不满足都收集后统一以 `SystemExit` 报出。
-- **`main(argv)`** — 子命令:`summary <shared_root> [--db] [--json]`(缺省子命令也走 summary,兼容 `python -m fs_diloco.analysis <root>` 旧用法)、`assert-fragment-smoke`、`assert-fragment-5000`(后者额外要求 `--expected-local-steps` 达标)。
+- `summarize_run(shared_root, db_path=None)` 汇总 latest/stop/summary、CSV、heartbeats、live+archive DB 生命周期、loss、adoption、staleness、资源和日志 flags。
+- `_parse_fragment_ids` 解析逗号分隔片 ID；`assert_fragment_run(args, require_local_steps)` 验证 fragment latest kind、事件数、round-robin 期望版本、stop/materialized/metrics/DB/update 完整性、贡献者/adoption/loss/logs，集中报告全部违例。
+- `_summary_parser()` / `_assert_parser()` / `_print_summary()` 构造 CLI 并选择 JSON/人类输出；`main` 支持 `summary`、`assert-fragment-smoke`、`assert-fragment-5000`，没有显式子命令时兼容旧的 summary 调法。
 
-## tools/eval_lm_harness.py — LM Evaluation Harness 对接
+## `tools/compare_event_traces.py`
 
-三步工作流:解析 checkpoint → 导出 HF 模型目录 → 把 lm-eval 结果拍平为 CSV。torch/transformers 依赖延迟到函数内 import。
+轨迹比较只建立**同一 actor 内**的事件序列，不从多个进程 wall timestamp 构造全局总序。
 
-- **`resolve_checkpoint(*, project_root, checkpoint=None, run_root=None, config=None) -> manifest dict`** — 决定评测哪个 checkpoint:
-  - 显式 `--checkpoint`(不在 `weights/` 下时必须给 `--run-root`);或显式 `--run-root` 取其 latest;或全自动:扫描 `runs/fs_diloco/*/control/latest.json` 按 created_at 取最新可用 run(`_find_latest_run_root`);
-  - 返回 manifest:解析模式、run 根/ID、checkpoint 路径与版本号、total_seen_tokens(仅当 checkpoint 就是 latest 版本)、param_index/config 路径(config 优先用 run 内快照 `run_config.resolved.yaml`)。
-- **`export_checkpoint(*, project_root, export_dir, eval_id, checkpoint, run_root, config, manifest_output) -> manifest`** — 按 manifest 加载模型骨架 → 校验 param index → 加载扁平权重灌回模型(`strict_shape=True`)→ `tie_weights()` → `save_pretrained`(safetensors)+ tokenizer;manifest(含 eval_id/导出时间)可原子写盘,作为评测溯源记录。
-- **`results_to_csv(*, lm_eval_output, output_csv, eval_id, manifest) -> rows`** — 递归找 `results_*.json`,把每个 task 的数值指标拍平为一行(自动配对 `*_stderr`),附 manifest 中的 run/version/token 溯源列;无数值指标时报错。
-- 私有助手:`_metric_stderr_base`(stderr 指标名配对,处理 `acc_stderr,none` 形态)、`_as_float`、`_result_json_files`、`_checkpoint_version`(从 `global_v{N}.safetensors` 文件名提取版本)、`_infer_run_root_from_checkpoint`、`_coerce_path`、`_read_json`、`_print_json`。
-- **`parse_args` / `main`** — 子命令 `resolve-checkpoint` / `export-checkpoint` / `results-to-csv`,均打印 JSON 结果。
+- `DEFAULT_STABLE_FIELDS` 是内置 profile 的参与比较字段白名单；`OBSERVATIONAL_EVENTS` 是 heartbeat/ingest/liveness/quorum 六个默认噪声事件集；`BUILTIN_PROFILES` 映射三个内置 profile。`_RANDOM_ID_SUFFIX` 只匹配 `..._<8位步数>[_f<3位片>]_<至少8位hex>` 的整个字符串。
+- `TraceInputError` 是输入/profile 错误类型；`TraceProfile.fields_for()` 取事件专属字段，否则 default fields；`NormalizedEvent.as_dict()` 只输出 actor、event_type 与被 profile 选中的 fields（不保留 timestamp/source line）；`TraceDivergence` 保存首个差异及上下文；`TraceComparison.equivalent` 等价于没有 divergence。
+- `_string_list` 严格校验 custom profile 的唯一字符串 list。`load_profile` 支持内置 `default`、`learner-adoption`、`core-pipeline` 或 JSON 文件；当前后两个内置 profile 的实现完全相同，都使用 default stable fields 并忽略 heartbeat/liveness/metadata/quorum 六种观测事件。
+- `_normalize_identifier` 把带随机 suffix 的 update ID 稳定化为 `<id>`；`_normalize_value` 把 list→tuple、dict→排序 tuple，标量保持可比，其他对象转 str。
+- `_trace_files` 接受单 JSONL 或 run/logs/普通目录；`_actor_role` 把 `syncer` 和 `learner*` 归类，其他 actor 的 role 就是 actor 原字符串。`normalize_trace` 逐行验证 object/actor/event_type，按 roles/actors/profile 过滤并保留 actor 内文件/行序。
+- `_first_difference` 找字段首差；`compare_traces` 对 actor 集和每 actor 序列做稳定比较并截取 context；`_event_dicts()` / `format_comparison()` 生成诊断。
+- `build_parser()` 定义两个 root、profile、role/actor filter 和 context；`main`：等价退出 0，首差退出 1，输入/profile 无效退出 2。
 
-## tools/validation_eval.py — 主 validation loss/ppl
+## `tools/eval_lm_harness.py`
 
-- 使用 run 的 resolved config 加载 `validation_split`，复用训练的 tokenizer、逐文本 EOS
-  与 non-overlap block 管线；causal shift 后以 predicted-token 总数归一化 cross entropy，
-  输出 loss/ppl、block/token 数和完整 protocol hash。
-- 默认只允许 `latest.json` 指向的 checkpoint；结果校验 checkpoint SHA/size、param index、
-  training/evaluator source identity，并原子写 `metrics/validation_eval.json` 和 summary attachment。
-- `--terminal-predecessor` 只读取 `eval_checkpoints/*.manifest.json` 的最高版本，复核 checksum
-  后写独立的 `validation_terminal_predecessor_v*.json`，不覆盖终态 attachment。结果顶层
-  `global_version` 是 capture manifest 的 `source_global_version`，不是 run 的 terminal latest。
-- `run_1node_validation_eval.pbs` 在退出前再次断言 success、非空 block/token、有限 loss/ppl
-  与 checkpoint SHA；`submit_train_with_validation.sh` 用 PBS `afterok` 将它与训练解耦。
+- `DEFAULT_SOURCE_RUN_ID` 与由它构造的 `DEFAULT_CHECKPOINT_RELATIVE` 是保留的历史常量，当前 resolver/parser 不使用它们作默认 checkpoint。`DEFAULT_CONFIG_RELATIVE=configs/fs_diloco_gpt2_wikitext2_8l_5000steps.yaml` 仍在 run 没有 control resolved-config 时作 config fallback。
+- `_GLOBAL_WEIGHT_RE` 只识别恰好六位数字的 `global_vNNNNNN.safetensors`；`_STDERR_SUFFIX="_stderr"` 用于把 lm-eval metric 与同名 stderr 配对。
+- `_read_json()` / `_coerce_path()` / `_checkpoint_version()` / `_infer_run_root_from_checkpoint()` 处理 manifest/path/version；checkpoint 文件名只识别恰好六位的 `global_vNNNNNN.safetensors`。
+- `_find_latest_run_root` 扫 `runs/fs_diloco/*/control/latest.json`，优先用可转 float 的 `created_at`，缺失/非法时回退 latest 文件 mtime，取排序键最大的 run。
+- `resolve_checkpoint` 优先显式 checkpoint，其次 run root latest，最后自动 run；返回 run/config/param-index/checkpoint/version/token 溯源。显式 checkpoint 不在标准 weights 布局时需给 run root。自动 latest 分支只读 `weight_path`，不读 fragment latest 的 `materialized_weight_path`；fragment run 必须显式传 materialized checkpoint 和 run root。
+- `export_checkpoint` 按 resolved manifest 加载模型骨架和 param index、灌入 checkpoint、`tie_weights`、`save_pretrained(safe_serialization=True)` 及 tokenizer，并可原子写导出 manifest。
+- `_metric_stderr_base()` / `_as_float()` / `_result_json_files()` 配对 lm-eval stderr、过滤数值、递归找结果；`results_to_csv` 每 task/metric 一行并附 run/version/token identity，无数值结果报错。
+- `_print_json()` / `parse_args()` / `main()` 实现 `resolve-checkpoint/export-checkpoint/results-to-csv`。
 
-## tools/publish_quality_gate.py — publish dtype 质量门禁
+## `tools/validation_eval.py`
 
-- `evaluate_publish_quality_gate` 以至少三组 paired FP32/BF16 validation loss 计算
-  `epsilon=max(.01, sample_sd(FP32))`，检查 paired mean 与 worst-seed 上限。
-- `roundtrip_trend` 对每个 BF16 run 的 relative-L2/version 做 OLS 斜率及 95% CI，并要求
-  CI 不得全正且后半/前半均值比 ≤1.25；显著下降属于通过而不是失败。
-- run-root CLI 还 fail closed 校验 seed 配对、source fingerprint、validation protocol、
-  normalized config 仅 `syncer.publish_dtype` 不同，以及 FP32/BF16 telemetry 口径。
+- `causal_cross_entropy_sum(logits,input_ids)` 把 logits 转 FP32，对 shift 后 token 做 reduction=sum；predicted-token 数是 `batch*(seq-1)`，不含每块首 token。
+- `finalize_validation_metrics` 要求 block/token 非零且 loss 有限，返回 token-normalized loss 与 `exp(loss)` perplexity。
+- `validate_checkpoint_identity` 默认要求 resolved checkpoint 路径等于 latest `weight_path`，并计算 size/SHA；它不单独比较 version。`allow_non_latest` 只跳过 latest path 比较，文件仍必须存在；param-index 兼容性是 `run_validation` 后续的独立检查。
+- `resolve_terminal_predecessor_checkpoint` 选择最高 source version 的 committed manifest，要求路径在 run root 内、文件存在、checksum 一致；`evaluated_global_version` 对 terminal capture 返回 source version。
+- `attach_validation_to_summary` 先原子写独立 result，再原子替换带 validation attachment 的 summary；两个文件各自原子，但不是跨文件事务。
+- `_dataset_identity()` / `_protocol_hash()` 形成 dataset 与评估算法 identity；`_source_identity` 默认要求训练 config 和 evaluator 环境都有 git commit+fingerprint，`--allow-missing-source-identity` 才放宽。evaluator git-dirty 是原始环境字符串证据。
+- `evaluate_blocks` batch 推理并累计 CE；`run_validation` 用历史 resolved-snapshot loader，拒绝 synthetic 数据，复用训练 tokenizer/EOS/non-overlap block 协议，可截最大 blocks，校验 param index并直接加载模型参数。实现先把模型转到 `--dtype`，再构建本地 param index 做严格 dtype 比较，因此该覆盖必须与训练 index 中的参数 dtype 相同；它目前不是可独立改变的评估精度旋钮。默认写/附加 `metrics/validation_eval.json`；terminal predecessor 写独立版本文件且不覆盖主 attachment。
+- `parse_args()` / `main()` 校验 batch/max-block/device/dtype/attachment/terminal 组合并打印结果。
 
-## cli.py — 命令分发器
+## `tools/publish_quality_gate.py`
 
-- **`main(argv)`** — `python -m fs_diloco.cli {syncer|learner|inspect} <其余参数原样透传>`;延迟 import 对应模块的 main。
+- `_T_CRITICAL_95` 内置 df=1..120 的分段 95% 双侧临界值；`_t_critical(df)` 取第一个 `df≤bound` 的值，df>120 回退 1.96。
+- `roundtrip_trend(values)` 至少 3 点；对索引 1..N 做 OLS，返回 slope/CI/半段均值比。CI lower≤0 且 second-half/first-half≤1.25 才算 bounded；显著下降通过。
+- `evaluate_publish_quality_gate(fp32_losses,bf16_losses,bf16_trends)` 要求两边完全相同 seed 集且至少 3 seed；`epsilon=max(0.01, FP32 sample stdev)`，paired mean degradation≤epsilon、每 seed degradation≤2epsilon、全部 trend bounded 才 PASS。证据不足为 `NEEDS_MORE_SEEDS`，充分但不满足为 `FAIL`。
+- `_read_json()` 读取 validation/source object；`_read_metric_values()` 只从 CSV 的指定列提取非空 float。`_normalized_pair_config` 把 run id/root/name 和 publish dtype 中性化；`_run_evidence` 读取 source fingerprint、validation protocol/checkpoint SHA、seed/dtype/loss 与 roundtrip telemetry。
+- `_parse_seed_roots()` / `evaluate_run_roots()` 解析并配对 `SEED=RUN_ROOT`，要求除 publish dtype 外 normalized config 一致，且 FP32 relative-L2 telemetry 全为零；当前 CLI 只有重复 `--fp32 SEED=ROOT` / `--bf16 SEED=ROOT` 的 run-root 输入，可选原子写 `--output`。checkpoint SHA 被保留为证据字段，但门禁不要求 FP32/BF16 checkpoint SHA 相等。
 
-## 顶层兼容入口
+## `tools/run_metrics_csv.py`
 
-`fs_diloco/{learner,syncer,analysis,eval_lm_harness}.py` 均为 shim:re-export 对应 `runtime/`、`tools/` 模块的公开函数并提供 `__main__`,保证 `python -m fs_diloco.learner` 等历史命令行不变。
+- `CSV_COLUMNS` 是固定 75 列和精确输出顺序：
+
+  `run_id, run_path, mode, final_version, stop_reason, all_learners_stopped, num_learners, produced_updates, applied_updates, update_utilization_ratio, update_utilization_percent, dropped_updates, pending_or_unclassified_updates, drop_reasons_json, dropped_superseded, dropped_stale, dropped_stop_finalized, dropped_missing_file, dropped_future_base, dropped_unknown, local_steps_total, local_steps_min, local_steps_max, local_steps_mean, local_steps_by_learner_json, complete_training_time_seconds, source_fingerprint, training_seed, sync_scan_interval_seconds, ingest_during_publish, merge_count, selected_per_merge_min, selected_per_merge_max, selected_per_merge_mean, selected_count_distribution_json, global_interval_seconds_mean, global_interval_seconds_p50, global_interval_seconds_p95, quorum_detection_seconds_mean, quorum_detection_seconds_p95, quorum_max_trigger_count, quorum_max_trigger_ratio, quorum_trigger_distribution_json, publish_ingest_passes_total, publish_ingested_updates_total, interval_residual_ratio_mean, syncer_merge_compute_seconds_p95, syncer_duty_cycle_percent, estimated_idle_gpu_node_hours, applied_staleness_0, applied_staleness_1, applied_staleness_2, applied_staleness_gt_2, applied_staleness_mean, applied_staleness_distribution_json, produced_tokens, applied_tokens, loss_count, loss_first_10_mean, loss_last_10_mean, loss_mean, loss_last_vs_first_ratio, model_name_or_path, update_tensor_dtype, syncer_device, syncer_compute_dtype, syncer_publish_dtype, max_staleness_versions, inner_steps, max_local_steps, completion_mode, global_adoption_strategy, grace_window_mode, grace_window_seconds, db_integrity_ok`.
+- `_read_json()` / `_read_csv()` / `_read_jsonl()` / `_as_int()` / `_as_float()` / `_mean()` / `_percentile()` / `_json_cell()` 是容错读取/转换；损坏 JSON 返回空，JSONL 跳过坏行。
+- `_read_db` 以只读 URI 打开 live DB并查存在表；`_update_records` 先读 archive 再用同 ID live row 覆盖；`_manifest_records` 以 update manifest 构造 produced 集。
+- `_committed_merge_versions` 从 syncer metrics 取 committed merge；`_selection_fallback` 只把能对应 committed metric 的 `updates_selected` 事件当旧 run applied 证据。
+- `_loss_metrics()` / `_local_steps()` / `_staleness_for_update()` / `_nested()` 计算 loss、每 learner 最大本地步、优先 DB/manifest/log fallback 的 staleness及嵌套配置。
+- `extract_run_metrics(run_path)` 输出一行 75 列实验矩阵。`completed` 当前按 summary 是否存在，而目录 discovery 按 stop marker；无 summary 的未知 produced 计 `pending_or_unclassified`。drop reason JSON保留原字面值。当前 `dropped_future_base` 兼容计数只识别历史 `future_base_version/future_fragment_version`，因此新 runtime 的 `future_base` 仍会出现在 `drop_reasons_json`，但不会进入该专列；使用该列时要注意这一实现限制。
+- `find_finished_run_roots` 递归找 `control/stop.json`，遇到任意 `control` 目录后不再向该 run 内递归。
+- `_row_identity_tokens()` / `_new_unique_records()` 以 run_id 或规范化 run_path 任一相交去重。`write_metrics_csv` 追加时要求既有表头精确一致并依赖 append+fsync（非原子）；新建/overwrite 用同目录 temp+fsync+replace（不 fsync parent）。
+- `parse_args()` / `main()` 默认追加 `reports/run_metrics.csv`，`--overwrite` 重建。
+
+## `cli.py` 与顶层 shim
+
+`fs_diloco.cli.main(argv)` 只识别 `syncer/learner/inspect`，延迟 import 并透传剩余参数。`fs_diloco/{learner,syncer,analysis,eval_lm_harness}.py` 是 re-export + `__main__` 兼容层；真实实现分别在 `runtime/` 或 `tools/`。console scripts 以 `pyproject.toml` 为准。

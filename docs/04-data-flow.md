@@ -2,7 +2,7 @@
 
 ## 1. 共享目录布局
 
-一次 run 的 `shared_root`（仓库配置固定到主工作树绝对 `runs/fs_diloco/{run_id}` 模板）由 `storage/paths.py: RunPaths` 定义、`prepare_run_dirs()` 创建：
+一次 run 的 `shared_root` 由 `storage/paths.py: RunPaths` 定义、`prepare_run_dirs()` 创建。dataclass 默认 null 会回退到项目根/cwd 下的 `runs/fs_diloco/<run_id>`；仓库正式配置显式使用主工作树绝对模板：
 
 ```
 <shared_root>/
@@ -13,6 +13,8 @@
 │   ├── summary.json                 # 完整训练时间与 learner 全训练资源峰值
 │   ├── param_index.json             # 参数 ↔ 扁平向量映射契约
 │   ├── run_config.resolved.yaml     # 同一配置快照的 control 副本,兼容恢复与工具路径
+│   ├── source_identity.json          # 正式 launcher 写；git/fingerprint 结构化证据，非 runtime 必需
+│   ├── source_identity.env           # 同一 identity 的 shell export，供 MPI ranks source
 │   └── syncer_metadata.sqlite3      # 权威持久 DB(rollback journal,FULL sync)
 ├── weights/
 │   └── global_v{VVVVVV}.safetensors # 全局权重(全量模式每版一份;fragment 模式为 materialize 产物)
@@ -37,6 +39,7 @@
 ├── logs/
 │   ├── syncer.jsonl                 # JSONL 事件日志(每进程一份)
 │   ├── learner_{III}.jsonl
+│   ├── resume_*                     # resume 时归档的可恢复 stop/summary（不可读、reason 空或 error）
 │   └── wandb/                       # W&B 本地目录
 └── metrics/
     ├── syncer_metrics.csv
@@ -75,6 +78,8 @@ manifest 存在后，缺失/损坏 checkpoint 或 identity/source checksum 冲�
 }
 ```
 
+全量 payload 还包含 `"total_update_tokens"`：**本次 merge** 中 selected updates 的 `tokens_this_update` 之和；`total_seen_tokens` 才是所有已提交 merge 的累计 token 数。prediction adoption 把前一 global 的 `total_update_tokens` 作为本轮全局进展 token 的初始估计，为 0 时用本地进展 bootstrap；resume 从 DB 恢复累计的 `total_seen_tokens`。
+
 fragment 模式(`fragment_latest_payload`,`latest_kind` 用于区分):
 
 ```json
@@ -100,7 +105,7 @@ fragment 模式(`fragment_latest_payload`,`latest_kind` 用于区分):
 
 ### 2.2 proposal pointer（提交标记）
 
-全量 learner 的 `write_update()` 先创建不可变 payload,再把下面的 metadata 原子写到固定路径 `updates/latest/learner_XXX.json`。fragment learner 同样先写不可变 tensor，再原子替换每 `(learner, fragment)` 的 `updates/latest/learner_XXX_fNNN.json`，并追加 `update_kind/fragment_id/base_fragment_version/base_global_merge_event/tokens_since_fragment_load/fragment_norm` 字段；payload 目录不再保存 metadata。新 pointer 覆盖同 pair 旧 pointer，因此 discovery 只枚举全量模式 `N` 个或 fragment 模式 `N×K` 个 JSON；SQLite frontier 防止重放，进程内文件 signature 让未变化 pointer 不重复解析。
+全量 learner 的 `write_update()` 先创建不可变 payload,再把下面的 metadata 原子写到固定路径 `updates/latest/learner_XXX.json`。fragment learner 同样先写不可变 tensor，再原子替换每 `(learner, fragment)` 的 `updates/latest/learner_XXX_fNNN.json`，并追加 `update_kind/fragment_id/base_fragment_version/base_global_merge_event/tokens_since_fragment_load/fragment_norm` 字段；payload 目录不再保存 metadata。新 pointer 覆盖同 pair 旧 pointer，因此 discovery 只枚举全量模式 `N` 个或 fragment 模式 `N×K` 个 JSON；SQLite frontier 在两种模式都防止重放，只有 fragment ingestion 额外用进程内 stat signature 跳过未变化 pointer 的 JSON 解析，full 每轮仍读取固定 JSON 后由 frontier 拒绝同 ID。
 
 | 字段 | 含义 |
 |---|---|
@@ -112,7 +117,7 @@ fragment 模式(`fragment_latest_payload`,`latest_kind` 用于区分):
 | `tokens_this_update` / `tokens_since_global_load` / `num_examples_this_update` | token/样本计量(合并权重依据) |
 | `mid_cycle_adoption_count` / `base_switched_at_step` | full replace 路径在本区间 inner poll 成功采纳的次数，以及最近一次切换前已完成的区间内 step 数(1-based)；无切换恒为 `0` / `null` |
 | `train_loss` / `grad_norm` / `param_norm` / `delta_norm` | 训练侧统计(`delta_norm` 当前恒为 null) |
-| `tensor_dtype` | learner update 的实际落盘 dtype(例如 `bfloat16`) |
+| `tensor_dtype` | 原样记录 `io.tensor_dtype` 配置字符串（例如 `bfloat16` 或其别名）；codec 据此选择实际落盘 dtype，字段本身不做规范化 |
 | `training_{cpu,gpu}_utilization_peak_percent` | 从 learner 启动至本 update 为止的 CPU/GPU 利用率最高值 |
 | `local_cycle_{cpu,gpu}_utilization_peak_percent` | 本 update 对应的上一 local 训练周期 CPU/GPU 利用率最高值 |
 | `local_cycle_step_time_seconds_mean` | 上一 local 训练周期内逐训练 step 耗时的算术平均值 |
@@ -157,6 +162,8 @@ fragment final wait 使用 `active, phase=final_fragment_wait` 周期心跳，�
 - `learner_metrics.csv`:每次上传一行——loss、tokens、tokens/s、写盘耗时、显式 `local_cycle_elapsed_seconds`、param/fragment norm、已加载片版本,全训练/当前 local cycle 资源峰值和 cycle 平均 step 时间等。
 - `update_manifest.csv`:每份 update 一行的清单(id、base 版本、步区间、`tensor_dtype`、文件指针与大小)。
 
+`syncer_metrics.csv` 只有 syncer 写；后两张 learner CSV 由所有 learner 进程调用普通 append 无锁共享写入，没有显式 fsync 或跨进程 header/row 原子保证。它们是分析便利面，不参与 proposal 提交、恢复或 exactly-once 判定；严格生命周期以 SQLite 和归档 JSONL 为准。
+
 ### 2.7 `control/summary.json`
 
 syncer 停止后等待 learner 收尾,然后写入 `run_id, final_version, stop_reason, total_seen_tokens, training_started_at, training_completed_at, complete_training_time_seconds, all_learners_stopped`。`learner_resources` 包含逐 learner 的全训练 CPU/GPU 峰值、跨 learner 的 max/mean,并显式注明 CPU 是整节点利用率、GPU 是 learner CUDA 可见设备利用率。相同聚合也写入 W&B summary。
@@ -186,7 +193,9 @@ syncer 停止后等待 learner 收尾,然后写入 `run_id, final_version, stop_
 ```
 
 - 新 pointer 若替换同 learner 的 pending 行,旧行先终态化;已 selected 行不会被新 pointer 覆盖。摄取后即使旧 DB 行已归档,相同 pointer 也会被 frontier 拒绝重放。
-- `pending → selected`、`selected → pending`(崩溃恢复/读取失败回滚)、`* → dropped` 都是带状态前置条件的转换。
+- 若 pointer 在 syncer 首次读取前已再次被 learner 替换，被遮蔽的中间 proposal 从未进入 SQLite，不发生状态转移或 drop reason；其 payload 在 orphan grace 到期后由 maintenance 回收。固定 pointer 协议提供 latest-wins 摄取，不提供每次 learner publication 的持久队列语义。
+- 运行时字面 drop reason 是 `missing_file / superseded / too_stale / future_base`，正常闭合时剩余项还会使用 stop reason（例如 `input_exhausted`）终态化。图中的“文件丢失回滚”表示缺失的 selected 项被 dropped、同批其余 selected 回到 pending，并非缺失项本身回到 pending。
+- `pending → selected`、`selected → pending`(崩溃恢复/读取失败回滚)、`pending|selected → dropped` 都是带状态前置条件的转换；`applied/dropped` 不再回到活跃状态。
 - 常量定义在 `core/constants.py`(另有 `failed` 状态常量,当前未使用)。
 - 终态行先追加并 fsync 到 `metrics/update_history.jsonl`;随后在同一个 SQLite 事务中把 payload 路径写入 `gc_pending` 并从活跃 DB 删除。对应 payload 删除/确认不存在后清除 pending 行。archive 允许崩溃重试形成重复行,分析时按 update identity 去重；运行时 GC 不回读随历史增长的 JSONL。
 - runtime maintenance 只扫描不可变 proposal tensor 与临时文件；metadata 的唯一运行时发现面是 `updates/latest/` 固定 pointer，不扫描 `updates/payloads/**/.meta.json`。旧布局如需迁移必须由离线工具显式完成。
@@ -206,8 +215,9 @@ syncer 停止后等待 learner 收尾,然后写入 `run_id, final_version, stop_
 | `fragments` | fragment 定义 | `fragment_id` 主键;strategy、numel、slices_json |
 | `fragment_versions` | 每片每版本一行 | `(fragment_id, version)` 主键;global_merge_event 索引 |
 | `fragment_updates` | fragment 模式 update 生命周期 | `UNIQUE(learner_id, fragment_id, local_step_end, base_fragment_version)`;`(fragment_id, status, base_fragment_version)` 索引;learner 资源指标列 |
+| `gc_pending` | 已从活跃 update 表归档、但 payload 物理删除尚未确认的持久队列 | `file_path` 主键;`archived_at`；archive 后/删除前崩溃可继续回收 |
 
-全量 `v → v+1` 的事务同时校验唯一 committed 前驱、目标版本连续性、selected ID/learner 唯一性、future/stale 准入和归一化权重;随后插入唯一 committed `global_versions(v+1)`,记录 selected 的 applied version/staleness/effective weight,并终态化 superseded/stale/future pending 行。任一校验或 failpoint 异常都会 rollback 整个事务。
+全量 `v → v+1` 的事务同时校验唯一 committed 前驱、目标版本连续性、selected ID/learner 唯一性、future/stale 准入和归一化权重;随后插入唯一 committed `global_versions(v+1)`,记录 selected 的 applied version/staleness/effective weight,并终态化 `superseded/too_stale/future_base` pending 行。任一校验或 failpoint 异常都会 rollback 整个事务。fragment 的 version、latest 和 applied 状态不是同一个事务，不能据此推导同等级恢复保证。
 
 旧 run 的 `updates` 表缺少 mid-cycle 两列时，connect-time 幂等迁移补上 `mid_cycle_adoption_count INTEGER NOT NULL DEFAULT 0` 与 nullable `base_switched_at_step`；`fragment_updates` 不迁移这两列。
 
@@ -238,5 +248,5 @@ syncer 停止后等待 learner 收尾,然后写入 `run_id, final_version, stop_
    │ archive/GC:只保留 current checkpoint 与仍被引用的 payload
    │ learner 轮询
    ▼
- learner 整体加载 θ′、重置内层优化器 → 下一个区间
+ learner 按配置的 full adoption 策略采纳 θ′（或只采纳变化 fragment）→ 下一个区间
 ```

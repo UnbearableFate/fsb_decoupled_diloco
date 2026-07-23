@@ -1,55 +1,50 @@
-# 模块参考:fs_diloco/modeling
+# 模块参考：`fs_diloco/modeling`
 
-模型构建、数据管道、参数索引、外层优化器。
+## `hf_model.py`：模型与 tokenizer
 
----
+- `CausalLMOutput` 是 tiny 模型的 `{loss, logits}` 兼容返回类型。
+- `TinyCausalLM` 是 embedding 加无 bias linear head；`forward()` 返回全序列 logits，传 labels 时用 `logits[:, :-1]` 对 `labels[:, 1:]` 做均值 cross entropy。
+- `SyntheticTokenizer` 只有 `vocab_size/eos_token/pad_token`，没有 `__call__` 或 `eos_token_id`；它只服务 synthetic data 路径。
+- `is_synthetic_model()` 只识别 `synthetic-tiny/tiny-synthetic/tiny-local` 三个字面值。
+- `model_dtype()` 把 BF16/FP16 别名映射到对应 torch dtype；任何其他字符串（包括拼写错误）静默得到 FP32。
+- `load_causal_lm_and_tokenizer()` 对 synthetic 创建 tiny 模型并转 model dtype；真实模型用 HF `AutoTokenizer`/`AutoModelForCausalLM.from_pretrained(dtype=...)`，tokenizer 没有 pad 但有 EOS 时以 EOS 补 pad，可选 `torch.compile`。compile 后返回包装模型。
+- `choose_device()` 只按 `torch.cuda.is_available()` 选首个 CUDA 或 CPU，不解析设备编号。
 
-## modeling/hf_model.py — 模型与 tokenizer
+## `hf_data.py`：数据到无限 batch 流
 
-- **`CausalLMOutput`**(dataclass)— `{loss, logits}`,让 TinyCausalLM 与 HF 模型输出接口一致。
-- **`TinyCausalLM(vocab_size=128, hidden_size=32)`** — 冒烟用微型 LM:Embedding + 无偏置 lm_head,forward 里做 shift-1 交叉熵;无外网/无 GPU 环境即可测全链路。
-- **`SyntheticTokenizer(vocab_size)`** — 配套占位 tokenizer(只有 vocab_size/eos/pad 属性)。
-- **`is_synthetic_model(name_or_path) -> bool`** — `synthetic-tiny / tiny-synthetic / tiny-local` 判定。
-- **`model_dtype(dtype_name) -> torch.dtype`** — `bf16/fp16/其他 → bfloat16/float16/float32`。
-- **`load_causal_lm_and_tokenizer(config) -> (model, tokenizer)`** — 合成模型或 HF `AutoModelForCausalLM/AutoTokenizer`(按需 trust_remote_code、dtype、pad_token 兜底为 eos、可选 `torch.compile`)。
-- **`choose_device() -> torch.device`** — 有 CUDA 用 cuda,否则 cpu。
+| 名称 | 行为 |
+|---|---|
+| `Batch.to(device)` | 只移动 `input_ids/labels`，计数保持 Python int；返回新对象。 |
+| `synthetic_batches()` | 私有 `torch.Generator`，seed=`training.seed + learner_index*100003`；无限产生 `[micro_batch, block]` long tensor，labels 是 clone，token 数含全部输入位置。`synthetic_num_batches` 不参与。 |
+| `_chunks(tokens, block_size)` | 产生不重叠定长 Python list，尾部不足一块直接丢弃。 |
+| `load_text_split(data_config, split)` | 调 `datasets.load_dataset`。原始 name 恰为 `wikitext` 且设置环境变量时先重定向；首次失败且实际 name 不含 `/` 时尝试 `Salesforce/wikitext`。fallback 也失败时重新抛**第一次**异常。 |
+| `text_rows_to_blocks()` | 顺序消费所有 row；只接受 mapping 的非空 `text`；tokenize 时 `add_special_tokens=False`，若 tokenizer 有 `eos_token_id` 则每个文本后追加 EOS；拼成单流再 `_chunks`。 |
+| `_splitmix64()` | 64-bit wrapping SplitMix64 混合器，用于稳定生成 learner/epoch shuffle seed。 |
+| `_batched_blocks()` | 零块报错。shuffle=false 时按索引取模无限循环；true 时先混合 global seed 与 learner ID，每个 epoch 用独立 `random.Random` 重排全体块，再按 `micro_batch_size` 取块构造 tensor。 |
+| `wikitext_batches()` | 先加载 train split，再 `dataset.shard(..., contiguous=True)`，物化 blocks，最后建立上述无限 iterator。即使 `data.streaming=true`，token/block 阶段仍物化全部块。 |
+| `build_batch_iterator()` | `data.dataset_name == "synthetic"` 才走 synthetic；否则一律走 WikiText 风格 text 管线。synthetic vocab 优先取 tokenizer 的 `vocab_size`。 |
 
-## modeling/hf_data.py — 数据管道
+## `param_index.py`：模型/扁平向量契约
 
-- **`Batch`**(dataclass)— `{input_ids, labels, num_tokens, num_examples}` + `.to(device)`;labels 即 input_ids 副本(causal LM 内部做 shift)。
-- **`synthetic_batches(*, vocab_size, block_size, micro_batch_size, seed, learner_index) -> Iterator[Batch]`** — 无限随机 token 流;每 learner 种子隔离(`seed + index·100003`)。
-- **`_chunks(tokens, block_size)`**(私有)— token 流切成整块,尾部丢弃。
-- **`_batched_blocks(blocks, micro_batch_size)`**(私有)— 对块列表做无限轮转取批(索引取模,永不 StopIteration)。
-- **`wikitext_batches(data_config, tokenizer, *, learner_index, num_learners, micro_batch_size, block_size)`** — 真实数据管道:
-  1. `load_dataset`(支持 `$FS_DILOCO_HF_WIKITEXT_REPO` 重定向;`wikitext` 失败自动回退 `Salesforce/wikitext`);
-  2. **`dataset.shard(num_shards=num_learners, index=learner_index, contiguous=True)`** — 每 learner 拿到互不重叠的连续数据分片;
-  3. 全部文本 tokenize 成一条流(样本间插 eos)→ 切块 → 无限轮转批。
-- **`build_batch_iterator(config, tokenizer, *, learner_index, num_learners)`** — 按 `data.dataset_name` 分派合成/真实管道。
+index 按 `model.named_parameters()` 顺序记录 `name/shape/dtype/numel/offset`，顶层记录 format/model/trainable-only/total-numel。
 
-## modeling/param_index.py — 参数索引与扁平向量互转
+- `dtype_name()` 直接返回 `str(torch.dtype)`。
+- `build_param_index()` 默认跳过 `requires_grad=false` 参数；不要求至少一个参数。
+- `save_param_index()` 原子写 JSON；`load_param_index()` 只先校验 format version，完整结构在后续函数使用时验证。
+- `_named_param_map()` 把 `named_parameters()` 转 dict；缺名会自然抛 `KeyError`。
+- `flatten_trainable_params()` 按 index 查参数、detach/flatten/转 device/dtype 后 `cat`；空 index 返回目标设备上的空 tensor。
+- `trainable_params_l2_norm()` 逐参数用目标 dtype 求 norm，再对这些 norm 求二次 norm，避免完整 flat 副本；无 trainable 参数返回 CPU 标量零。
+- `load_flat_into_model()` 校验总 numel，逐段转成目标参数 device/dtype 后 `copy_`；strict 模式还校验当前参数 shape，非 strict 仍按当前参数 shape reshape。
+- `flat_to_named_tensors()` 校验总 numel，返回 detach 后的 CPU views/张量字典；不强制 clone。
+- `named_tensors_to_flat()` 按 index 的名字/numel 校验并转目标 dtype/device；空 index 返回空 tensor。
+- `validate_compatible_index()` 精确比较四个顶层字段以及完整 `params` list，因此参数顺序、dtype、shape、offset 任一差异都会失败。
 
-param index 是"模型 ↔ 扁平向量"映射的**契约**,JSON 结构:`{format_version, model_name_or_path, trainable_only, total_numel, params: [{name, shape, dtype, numel, offset}]}`,顺序 = `named_parameters()` 声明顺序。
+## `outer_optim.py`：显式外层优化器
 
-- **`dtype_name(dtype)`** — `str(dtype)`。
-- **`build_param_index(model, *, model_name_or_path, trainable_only=True) -> dict`** — 遍历可训练参数累积 offset。
-- **`save_param_index / load_param_index`** — 原子写 / 读取(校验 format_version)。
-- **`flatten_trainable_params(model, param_index, *, dtype=float32, device="cpu") -> Tensor`** — 按 index 顺序把各参数 reshape(-1) 拼接为扁平向量。
-- **`named_tensors_to_flat(named_tensors, param_index, *, device="cpu", dtype=float32) -> Tensor`** — 按 index 把 checkpoint 的命名张量直接转换到目标 device/dtype 后拼接，避免 syncer BF16 恢复时先物化 FP32 扁平向量。
-- **`trainable_params_l2_norm(model, *, dtype=float32) -> Tensor`** — 逐个可训练参数计算 L2 norm,再以同一 dtype 汇总为全局 norm;不物化完整扁平参数副本。
-- **`load_flat_into_model(model, flat, param_index, *, strict_shape=True)`** — 逆操作(`@torch.no_grad`):按 offset 切片、reshape、`param.copy_()` 写回;总长或形状不符抛错。
-- **`flat_to_named_tensors(flat, param_index) -> dict[name, Tensor]`** — 扁平向量 → 命名张量(存全局权重用)。
-- **`named_tensors_to_flat(named_tensors, param_index, *, device) -> Tensor`** — 逆向(加载全局权重用),逐张量校验 numel。
-- **`validate_compatible_index(param_index, other)`** — 严格比对 format_version / model / trainable_only / total_numel / **逐条 params**;不一致抛 `ValueError`。learner 启动时用它确保本地模型与 syncer 发布的契约完全一致。
+- `OuterOptimizerConfig` 保存 name/lr/momentum/weight-decay/betas/eps；`config_from_any()` 从属性对象复制，list betas 转 tuple，但不提前校验长度/范围。
+- `init_outer_state()` 总是建 CPU int64 `step=0`；SGD/momentum/Nesterov 另建与 theta 同形的 `momentum`，AdamW 建 `exp_avg/exp_avg_sq`；未知 name 报错。
+- `outer_optimizer_step()` 先 clone theta/grad，grad 转 theta dtype，step 加一并放 theta device。SGD 系先做耦合 L2 decay；纯 `sgd` 或 momentum=0 使用 grad 并把 buffer 清零；momentum 用 `b=μb+g`；Nesterov 用 `g+μb`。AdamW 先做 `theta*(1-lr*wd)`，再更新矩、做逐 step bias correction 和 `addcdiv`。返回的新 theta/state 不原地修改调用方输入。
+- `state_to_tensors()` 返回 CPU tensor dict，键为 `theta` 加 state；指定 dtype 时只转换浮点项，int step 保持整数。
+- `state_from_tensors()` 要求 `theta` 键；theta 默认加载为 FP32，指定 dtype 时所有浮点 state 同步转换，整数保持原 dtype；缺 step 的旧文件补 device 上 int64 零。
 
-## modeling/outer_optim.py — 显式扁平向量外层优化器
-
-不用 `torch.optim`,直接在扁平向量上实现,使优化器状态可精确 safetensors 序列化、跨 resume 位级一致。所有步进都是函数式的(输入 θ/grad/state,返回新 θ/新 state,不原地修改调用方张量)。
-
-- **`OuterOptimizerConfig`**(dataclass)— `{name, lr, momentum, weight_decay, betas, eps}`。
-- **`config_from_any(config)`** — 从任意带同名属性的对象(如 `core.config.OuterOptimizerSection`)构造,list betas 转 tuple。
-- **`init_outer_state(theta, config) -> dict[str, Tensor]`** — `{step: 0}` + 按优化器补 `momentum`(sgd 系)或 `exp_avg/exp_avg_sq`(adamw),全零初始化。
-- **`outer_optimizer_step(theta, grad, state, config) -> (theta', state')`** —
-  - `sgd/momentum/nesterov`:可选 weight_decay 加到 grad;momentum buffer `b ← μ·b + g`;nesterov 用 `g + μ·b`,momentum 用 `b`,纯 sgd(或 μ=0)直接用 `g`;`θ ← θ − lr·update`;
-  - `adamw`:解耦 weight decay(`θ ← θ·(1−lr·wd)`)、一阶/二阶矩 EMA、偏置校正、`θ ← θ − lr·m̂/(√v̂+ε)`;
-  - step 计数随 state 持久化,保证 resume 后偏置校正连续。
-- **`state_to_tensors(theta, state)`** / **`state_from_tensors(tensors, *, device) -> (theta, state)`** — 与 safetensors 的互转;theta 与状态存在同一文件里(见 `storage/tensor_codec.py: save_outer_state`),使"权重 + 优化器状态"构成单一原子快照。
+outer checkpoint 自身原子保存 theta 与 optimizer state，但 global weight 是另一个文件；full publication 在两文件都写成后用 SQLite 事务把它们共同纳入版本，不能把两个文件称作单文件原子快照。
