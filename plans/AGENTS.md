@@ -1,20 +1,20 @@
 # 实施记录与失败升级规则
 
-本目录中的实施计划在执行时，需要同步维护可供人工审阅的实施记录。记录应位于仓库根目录的 `reports/imp_plans/` 下，不要写回计划正文，也不要依赖终端滚屏作为唯一证据。
+本目录中的实施计划在执行时，需要同步维护可供人工审阅的实施记录。记录应位于仓库根目录的 `reports/DOING/` 下，不要写回计划正文，也不要依赖终端滚屏作为唯一证据。
 
 ## 报告路径与文件名
 
 每份计划使用计划文件名作为稳定标识：
 
 ```text
-plans/imp_plans/<plan-id>.md
-    → reports/imp_plans/<plan-id>/
+plans/DOING/<plan-id>.md
+    → reports/DOING/<plan-id>/
 ```
 
-例如，`plans/imp_plans/01.md` 对应：
+例如，`plans/DOING/01.md` 对应：
 
 ```text
-reports/imp_plans/01/
+reports/DOING/01/
 ├── progress.md
 ├── failures.md
 ├── code_review.md

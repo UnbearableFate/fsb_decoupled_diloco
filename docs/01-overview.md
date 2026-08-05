@@ -21,13 +21,6 @@ fs_diloco 实现了一种 **Decoupled DiLoCo**(解耦的 DiLoCo)训练协议:
 4. **崩溃一致性**:指针和张量快照用原子替换发布;全量 learner 先写不可变 payload,再原子替换自己的固定 proposal pointer;syncer 以共享目录中的持久 SQLite 提交记录为恢复权威,`latest.json` 只是可重建缓存。原子替换保证读者不会看到半文件；helper 并不 fsync 父目录，因此不宣称断电后的目录项持久性。
 5. **有界运行面**:长期 run 的活跃 DB、proposal 可见面、checkpoint 和单轮 discovery 工作量不随历史版本数增长;终态记录先 fsync 到 JSONL 历史再从活跃 DB 剪枝。
 
-## 非目标(Milestone 1 明确不做)
-
-- 不做梯度/参数压缩(上传的是 float32/可配 dtype 的完整参数向量或分片)。
-- 不做 learner 间点对点通信。
-- 不做多 GPU learner(每个 learner 单卡)。
-- fragment 模式暂不支持 resume(`run_fragment_syncer` 中显式 `NotImplementedError`)。
-
 ## 两种运行模式
 
 | | 全量模式(默认) | fragment 分片模式(`fragments.enabled: true`) |
