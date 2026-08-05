@@ -1,6 +1,6 @@
 # 实施记录与失败升级规则
 
-本目录中的实施计划在执行时，需要同步维护可供人工审阅的实施记录。记录应位于仓库根目录的 `reports/DOING/` 下，不要写回计划正文，也不要依赖终端滚屏作为唯一证据。
+本目录中的实施计划在执行时，需要同步维护可供人工审阅的实施记录。所有记录都应位于仓库根目录的 `reports/DOING/` 下；其中仓库根目录 `AGENTS.md` 规定的 phase/plan 双模型审查报告使用 `reports/DOING/code_review/`。不要写回计划正文，也不要依赖终端滚屏作为唯一证据。
 
 ## 报告路径与文件名
 
@@ -75,6 +75,18 @@ reports/DOING/01/
 
 所有报告使用清晰、可审阅的 Markdown。事实、推断和后续计划应分开表述；测试结果应能追溯到命令和 artifact；代码已修改但尚未验证时，不得在 `progress.md` 中记为完成。实施代码、测试、计划与报告之间出现不一致时，应先修正记录或说明差异，再继续扩大实验规模。
 
-## git branch usage
+## Git 分支与完成门禁
 
-Execute the new plan on the new git branch, and commit when a phase is completed.
+每个新 plan 必须在独立 Git branch 上执行。Phase 或 plan 的实现和初始关联测试通过后，先创建 review-target commit，再执行仓库根目录 `AGENTS.md` 中的 `Plan and Phase Completion Review Gate`。只有双模型审查、问题处置、修订测试和 phase-final/plan-final commit 全部完成后，才能宣布完成或进入下一 phase。
+
+连续三次失败后产生的 `reports/DOING/<plan-id>/code_review.md` 是失败诊断记录，不能替代完成门禁要求的 `reports/DOING/code_review/<plan-id>/<phase_id>/` 双模型独立报告；完成门禁报告也不能替代失败诊断记录。
+
+## Test Artifact Retention and Cleanup
+
+After each test or experiment reaches a terminal state, reduce the run output before starting the next work unit:
+
+1. Persist the core evidence first in the applicable `reports/DOING/<plan-id>/` record. Keep the exact command and resolved configuration, source identity, run ID, PBS job ID, structured Checker result, final or summary metrics, and paths needed to audit the result.
+2. For a successful test, retain only the smallest representative logs and artifacts needed to prove the tested invariant. For a failed test, retain the complete error log, the minimal reproduction evidence, and any artifact still needed for root-cause analysis.
+3. Delete redundant files produced solely by that completed test, including duplicate or intermediate checkpoints, temporary/staging files, caches, superseded raw telemetry, repeated successful per-rank logs, orphan payloads, and other run-generated files whose information is already captured by the retained summary or manifest.
+4. Resolve and inventory the exact cleanup targets before deletion. Limit cleanup to the completed test's known run directory; never delete files from a live, queued, or resumable run, the current database/checkpoint needed for recovery, source/configuration files, reports, unresolved failure evidence, pre-existing user data, or any path whose ownership is uncertain.
+5. Write, use, and extend fs_diloco/tools/clean_run.py to better clean up generated runs.
