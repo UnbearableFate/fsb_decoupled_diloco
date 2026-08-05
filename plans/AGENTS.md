@@ -1,6 +1,6 @@
 # 实施记录与失败升级规则
 
-本目录中的实施计划在执行时，需要同步维护可供人工审阅的实施记录。所有记录都应位于仓库根目录的 `reports/DOING/` 下；其中仓库根目录 `AGENTS.md` 规定的 phase/plan 双模型审查报告使用 `reports/DOING/code_review/`。不要写回计划正文，也不要依赖终端滚屏作为唯一证据。
+本目录中的实施计划在执行时，需要同步维护可供人工审阅的实施记录。所有记录都应位于仓库根目录的 `reports/DOING/` 下；其中本文件规定的 phase/plan 双模型审查报告使用 `reports/DOING/code_review/`。不要写回计划正文，也不要依赖终端滚屏作为唯一证据。
 
 ## 报告路径与文件名
 
@@ -77,9 +77,54 @@ reports/DOING/01/
 
 ## Git 分支与完成门禁
 
-每个新 plan 必须在独立 Git branch 上执行。Phase 或 plan 的实现和初始关联测试通过后，先创建 review-target commit，再执行仓库根目录 `AGENTS.md` 中的 `Plan and Phase Completion Review Gate`。只有双模型审查、问题处置、修订测试和 phase-final/plan-final commit 全部完成后，才能宣布完成或进入下一 phase。
+本节是执行 `plans/DOING/` 下计划时的完成门禁。Phase 或 plan 在以下流程结束前只能视为完成候选；门禁通过前，不得宣布完成或开始下一 phase。
 
 连续三次失败后产生的 `reports/DOING/<plan-id>/code_review.md` 是失败诊断记录，不能替代完成门禁要求的 `reports/DOING/code_review/<plan-id>/<phase_id>/` 双模型独立报告；完成门禁报告也不能替代失败诊断记录。
+
+### 冻结审查目标
+
+1. 每个新 plan 必须在独立 Git branch 上执行。
+2. 实现和初始关联测试组通过后，创建 review-target commit。审查覆盖的源代码和测试树必须与该 commit 一致；记录并排除审查范围外的既有改动。
+3. 将 `git rev-parse HEAD` 的完整输出记录为 `<commit_id>`。comparison base 使用上一 phase-final commit；第一 phase 使用 plan branch point。plan-completion 审查覆盖从 plan branch point 开始的累计 diff。
+4. `<plan-id>` 使用不含 `.md` 的计划文件名；`<phase_id>` 使用计划中稳定的 phase 标识；整个 plan 的审查使用 `plan-complete`。
+
+### 使用 `claude -p` 运行双模型独立审查
+
+针对同一 review-target commit 同时启动 Claude 和 Codex 审查。两者必须检查完整的范围内 diff，包括受影响的 `fs_diloco` 代码、测试、配置、PBS 脚本、launcher、Checker 和文档。
+
+1. Codex 从仓库根目录启动一个全新的 `claude --print`（`claude -p`）非交互进程。必须显式指定 Opus 5 的完整模型 ID、唯一的 `--session-id`、`--permission-mode bypassPermissions` 和 `--dangerously-skip-permissions`；不得使用 `--continue`、`--resume`、模型 fallback 或先前会话。调用应使用 `--output-format json`，以便从机器可读的返回元数据核验实际模型和 session ID。不得要求或依赖 Herdr、终端 pane 或交互式 Claude Code 会话。
+2. 启动前必须根据当前 `claude --help` 确认参数仍受支持。返回元数据中的实际模型必须明确属于 Opus 5，且 session ID 必须与本次新建 ID 一致；仅有命令行请求值或模型自述不足以完成核验。无法取得这些证据、实际模型不是 Opus 5、发生 fallback、认证失败或 bypass permission mode 不可用时，门禁标记为 blocked，不得替换其他模型或权限模式。
+3. non-interactive prompt 必须包含 review-target 和 comparison-base 的完整 commit ID、完整审查范围、目标报告绝对路径，以及本节规定的全部报告字段。它必须明确限定 Claude 为 reviewer-only：除其唯一指定的 Claude 报告外，不得修改实现、测试、配置、计划、其他报告或 Git 状态，也不得提交或删除 scheduler job、删除 run 数据、commit、push、创建 PR、变更远程服务或使用任务范围之外的凭据。
+4. Codex 应在启动该独立进程后立即进行自己的审查，并在读取 Claude 报告或 Claude 的实质性结论前完成并保存 Codex 报告。可以等待 non-interactive 进程结束并检查不含审查结论的状态和模型/session 元数据；Claude 报告内容必须等 Codex 报告落盘后才能读取。两份审查必须针对同一 review-target commit 和 comparison base。
+5. bypass/full-permission 是工具权限设置，不是额外的任务授权。它不授权任一 reviewer 提交或删除 scheduler job、删除 run 数据、commit、push、创建 PR、变更远程服务、使用任务范围之外的凭据，或在审查期间进行报告之外的代码修改。
+6. Claude 完成后，核对除指定 Claude 报告外不存在工作树改动。报告中记录 invocation 方式为 `claude --print`、实际完整模型 ID、session ID、permission mode 和 review-target；不得记录 token、认证信息、完整环境变量或其他秘密。命令输出若包含敏感或无关运行元数据，不得直接纳入版本库。
+
+完成的报告写入：
+
+```text
+reports/DOING/code_review/<plan-id>/<phase_id>/<model_name>_<commit_id>.md
+```
+
+Claude 使用 `claude-opus-5`，Codex 使用能稳定标识实际模型的 slug。完成的报告不可修改；同一模型重新审查同一 commit 时，在 `<model_name>` 后添加 `-retryN` 并新建文件，禁止覆盖或追加既有报告。不可变的双模型报告必须保存在 `reports/DOING/code_review/`，与每个 plan 的追加式 progress/failure 记录分开。
+
+每份报告必须包含：
+
+- review-target 和 comparison-base commit ID、source identity、审查范围及相关 diff；
+- 实际使用的模型；Claude 报告还必须包含 `claude --print` invocation、session ID 和 permission mode；
+- 按 `Critical`、`High`、`Medium`、`Low` 分类的 findings，以及证据和文件/行号；
+- correctness 和 regression 风险、错误处理、并发和持久化不变量、测试覆盖、与 plan acceptance criteria 的一致性；
+- 具体修复建议和缺失测试；无 findings 时，列明检查过的内容；
+- 最终 `APPROVE` 或 `CHANGES_REQUIRED` 决定，并明确区分事实、推断和建议。
+
+任何报告都不得包含 secrets、token、凭据或不必要的敏感环境数据。
+
+### 处置问题并验证
+
+1. 只有两份报告都完成后，Codex 才能一起读取它们并修改代码。Codex 必须在对应的 `reports/DOING/<plan-id>/progress.md` 或 `failures.md` 中，将每个 finding 处置为 `fixed`、`rejected-with-evidence` 或 `deferred-with-justification`。
+2. `Critical` 和 `High` findings 阻止完成，必须修复。`Medium` findings 必须修复，或在证据、影响和后续负责人明确的情况下延期。`Low` findings 可以记录为 follow-up。
+3. 对每个接受的行为缺陷，Codex 必须新增或更新一个在修复前会失败的测试，然后重新运行覆盖所有修复改动的测试。若修复触及 phase 的关键不变量，重新运行该 phase 的完整关联测试组。在 `reports/DOING/<plan-id>/` 下记录准确命令、解析后的配置、结果和保留的 artifact 路径。
+4. 修复和测试通过后，创建 phase-final 或 plan-final commit。审查修复 commit 不会递归触发另一轮完整双模型审查；但若修复改变公共接口、持久化格式、并发协议、安全边界或其他关键不变量，应创建新的 review-target commit，并针对它重复本门禁。
+5. 失败或不完整的测试会使 phase 或 plan 保持未完成，并遵循本文件中的失败记录和清理规则。
 
 ## Test Artifact Retention and Cleanup
 
