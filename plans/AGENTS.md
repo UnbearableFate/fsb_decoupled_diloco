@@ -74,3 +74,7 @@ reports/DOING/01/
 ## 记录质量
 
 所有报告使用清晰、可审阅的 Markdown。事实、推断和后续计划应分开表述；测试结果应能追溯到命令和 artifact；代码已修改但尚未验证时，不得在 `progress.md` 中记为完成。实施代码、测试、计划与报告之间出现不一致时，应先修正记录或说明差异，再继续扩大实验规模。
+
+## git branch usage
+
+Execute the new plan on the new git branch, and commit when a phase is completed.
