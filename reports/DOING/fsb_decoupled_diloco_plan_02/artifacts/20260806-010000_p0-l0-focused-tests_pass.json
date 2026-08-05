@@ -1,0 +1,26 @@
+{
+  "artifact_format_version": 1,
+  "captured_at": "2026-08-06T01:00:00+09:00",
+  "command": ".venv/bin/python -m pytest -q tests/test_plan02_feasibility.py tests/test_sqlite_probe.py tests/test_capture_source_identity.py tests/test_source_identity.py",
+  "environment": {
+    "hostname": "mg0004",
+    "modules": [
+      "nvidia/25.9",
+      "nv-hpcx/25.9"
+    ],
+    "pbs_job_id": "2496450.opbs",
+    "queue": "interact-g",
+    "select_nodes": 1
+  },
+  "result": {
+    "elapsed_seconds": 6.79,
+    "passed": 11,
+    "status": "PASS"
+  },
+  "test_files": [
+    "tests/test_plan02_feasibility.py",
+    "tests/test_sqlite_probe.py",
+    "tests/test_capture_source_identity.py",
+    "tests/test_source_identity.py"
+  ]
+}

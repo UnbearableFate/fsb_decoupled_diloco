@@ -444,7 +444,7 @@ syncer 达到目标并发布 stop 后，learner 可能在看到 stop 前再发�
 - 稳定设计/操作语义 → `docs/`；
 - 实验方法、run 分析和结果 → `reports/`；
 - 未来研究方向 → `plans/RESEARCH_PLAN.md`；
-- 实施过程、失败和证据索引 → `reports/imp_plans/<plan-id>/`。
+- 实施过程、失败和证据索引 → `reports/DOING/<plan-id>/`。
 
 ## 8. 推荐的 Plan 骨架
 

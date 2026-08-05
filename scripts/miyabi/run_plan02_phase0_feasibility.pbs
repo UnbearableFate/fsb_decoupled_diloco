@@ -1,0 +1,257 @@
+#!/bin/bash
+#PBS -N fsdiloco_plan02_phase0
+#PBS -q debug-g
+#PBS -W group_list=xg24i002
+#PBS -l select=2:mpiprocs=4
+#PBS -l walltime=00:20:00
+#PBS -j oe
+#PBS -m ae
+
+set -eEuo pipefail
+trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
+
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+module list 2>&1 | cat
+
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+PLAN_ID="fsb_decoupled_diloco_plan_02"
+PLAN02_REPORT_DIR="$PROJECT_ROOT/reports/DOING/$PLAN_ID"
+STAMP="${STAMP:-$(date +%Y%m%d-%H%M%S)}"
+JOB_ID_SHORT="${PBS_JOBID%%.*}"
+PLAN02_PHASE0_ARTIFACT_DIR="$PLAN02_REPORT_DIR/artifacts"
+PLAN02_PHASE0_WORK_DIR="$PLAN02_PHASE0_ARTIFACT_DIR/work_${STAMP}_${JOB_ID_SHORT}"
+FINAL_PREFIX="$PLAN02_PHASE0_ARTIFACT_DIR/${STAMP}_phase0-feasibility"
+SQLITE_PROBE="$PROJECT_ROOT/scripts/miyabi/sqlite_shared_fs_probe.py"
+FAULT_PROBE="$PROJECT_ROOT/scripts/miyabi/plan02_fault_probe.py"
+
+: "${PBS_NODEFILE:?PBS_NODEFILE is not set}"
+cd "$PROJECT_ROOT"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  echo "Python executable not found or not executable: $PYTHON_BIN" >&2
+  exit 2
+fi
+mapfile -t HOSTS < <(sort -u "$PBS_NODEFILE")
+if [[ "${#HOSTS[@]}" -ne 2 ]]; then
+  echo "Expected exactly two hosts, got ${#HOSTS[@]}" >&2
+  printf '%s\n' "${HOSTS[@]}" >&2
+  exit 2
+fi
+mkdir -p "$PLAN02_PHASE0_WORK_DIR" "$PLAN02_PHASE0_ARTIFACT_DIR"
+RESOLVED_ARTIFACT_DIR="$($PYTHON_BIN -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve())' "$PLAN02_PHASE0_ARTIFACT_DIR")"
+RESOLVED_WORK_DIR="$($PYTHON_BIN -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve())' "$PLAN02_PHASE0_WORK_DIR")"
+case "$RESOLVED_WORK_DIR" in
+  "$RESOLVED_ARTIFACT_DIR"/work_*_"$JOB_ID_SHORT") ;;
+  *)
+    echo "Unsafe Phase 0 work directory: $RESOLVED_WORK_DIR" >&2
+    exit 2
+    ;;
+esac
+
+echo "PLAN_ID=$PLAN_ID"
+echo "PROJECT_ROOT=$PROJECT_ROOT"
+echo "PBS_JOBID=${PBS_JOBID:-}"
+echo "PBS_NODEFILE=$PBS_NODEFILE"
+echo "PLAN02_PHASE0_WORK_DIR=$PLAN02_PHASE0_WORK_DIR"
+printf 'HOST %s\n' "${HOSTS[@]}"
+
+"$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/capture_source_identity.py" \
+  --project-root "$PROJECT_ROOT" \
+  --output-json "$PLAN02_PHASE0_WORK_DIR/source_identity.json" \
+  --output-env "$PLAN02_PHASE0_WORK_DIR/source_identity.env" \
+  > "$PLAN02_PHASE0_WORK_DIR/source_identity.log"
+
+"$PYTHON_BIN" "$FAULT_PROBE" writer-lock \
+  --work-dir "$PLAN02_PHASE0_WORK_DIR/writer_lock_work" \
+  --output-json "$PLAN02_PHASE0_WORK_DIR/writer_lock.json" \
+  > "$PLAN02_PHASE0_WORK_DIR/writer_lock.log"
+
+"$PYTHON_BIN" "$FAULT_PROBE" old-cache-writer \
+  --work-dir "$PLAN02_PHASE0_WORK_DIR/old_cache_work" \
+  --output-json "$PLAN02_PHASE0_WORK_DIR/old_cache_writer.json" \
+  > "$PLAN02_PHASE0_WORK_DIR/old_cache_writer.log"
+
+"$PYTHON_BIN" "$FAULT_PROBE" source-pinning \
+  --project-root "$PROJECT_ROOT" \
+  --work-dir "$PLAN02_PHASE0_WORK_DIR/source_pinning_work" \
+  --output-json "$PLAN02_PHASE0_WORK_DIR/source_pinning.json" \
+  > "$PLAN02_PHASE0_WORK_DIR/source_pinning.log"
+
+SQLITE_DB="$PLAN02_PHASE0_WORK_DIR/shared_sqlite_probe.sqlite3"
+"$PYTHON_BIN" "$SQLITE_PROBE" verify --db "$SQLITE_DB" \
+  > "$PLAN02_PHASE0_WORK_DIR/sqlite_initialized.json"
+
+MPI_COMMON=(
+  --mca mpi_abort_print_stack 1
+  --bind-to none
+)
+MPI_ENV_ARGS=(
+  "PYTHON_BIN=$PYTHON_BIN"
+  "SQLITE_PROBE=$SQLITE_PROBE"
+  "SQLITE_DB=$SQLITE_DB"
+  "PLAN02_PHASE0_WORK_DIR=$PLAN02_PHASE0_WORK_DIR"
+)
+
+mpirun "${MPI_COMMON[@]}" \
+  --map-by ppr:1:node \
+  -np 2 \
+  /usr/bin/env "${MPI_ENV_ARGS[@]}" \
+  bash -lc '
+    set -eEuo pipefail
+    rank="${OMPI_COMM_WORLD_RANK:?missing OMPI_COMM_WORLD_RANK}"
+    if [[ "$rank" -eq 0 ]]; then
+      "$PYTHON_BIN" "$SQLITE_PROBE" stress \
+        --db "$SQLITE_DB" --writer-id visibility-writer --count 25 \
+        > "$PLAN02_PHASE0_WORK_DIR/visibility_write.tmp"
+      mv "$PLAN02_PHASE0_WORK_DIR/visibility_write.tmp" "$PLAN02_PHASE0_WORK_DIR/visibility_write.json"
+      "$PYTHON_BIN" - "$PLAN02_PHASE0_WORK_DIR/visibility_ready.json" <<'"'"'PY'"'"'
+import json
+from pathlib import Path
+import sys
+import time
+Path(sys.argv[1]).write_text(json.dumps({"ready": True, "written_at": time.time()}))
+PY
+    else
+      for _attempt in $(seq 1 3000); do
+        [[ -s "$PLAN02_PHASE0_WORK_DIR/visibility_ready.json" ]] && break
+        sleep 0.01
+      done
+      test -s "$PLAN02_PHASE0_WORK_DIR/visibility_ready.json"
+      "$PYTHON_BIN" "$SQLITE_PROBE" verify --db "$SQLITE_DB" \
+        > "$PLAN02_PHASE0_WORK_DIR/visibility_read.tmp"
+      mv "$PLAN02_PHASE0_WORK_DIR/visibility_read.tmp" "$PLAN02_PHASE0_WORK_DIR/visibility_read.json"
+    fi
+  '
+
+mpirun "${MPI_COMMON[@]}" \
+  --map-by ppr:4:node \
+  -np 8 \
+  /usr/bin/env "${MPI_ENV_ARGS[@]}" \
+  bash -lc '
+    set -eEuo pipefail
+    rank="${OMPI_COMM_WORLD_RANK:?missing OMPI_COMM_WORLD_RANK}"
+    "$PYTHON_BIN" "$SQLITE_PROBE" contend \
+      --db "$SQLITE_DB" \
+      --writer-id "$(hostname)-rank${rank}" \
+      --count 50 \
+      --busy-timeout-ms 10 \
+      --retry-timeout-seconds 60 \
+      --hold-milliseconds 5 \
+      --seed "$((1337 + rank))" \
+      --output-json "$PLAN02_PHASE0_WORK_DIR/contend_${rank}.json" \
+      > "$PLAN02_PHASE0_WORK_DIR/contend_${rank}.log"
+  '
+
+CLOCK_MARKER="$PLAN02_PHASE0_WORK_DIR/clock_marker.json"
+rm -f -- "$CLOCK_MARKER"
+mpirun "${MPI_COMMON[@]}" \
+  --map-by ppr:1:node \
+  -np 2 \
+  /usr/bin/env "${MPI_ENV_ARGS[@]}" "CLOCK_MARKER=$CLOCK_MARKER" \
+  bash -lc '
+    set -eEuo pipefail
+    rank="${OMPI_COMM_WORLD_RANK:?missing OMPI_COMM_WORLD_RANK}"
+    "$PYTHON_BIN" "$SQLITE_PROBE" clock-sample \
+      --marker "$CLOCK_MARKER" \
+      --writer-id "rank${rank}" \
+      --output-json "$PLAN02_PHASE0_WORK_DIR/clock_${rank}.json" \
+      --timeout-seconds 30 \
+      > "$PLAN02_PHASE0_WORK_DIR/clock_${rank}.log"
+  ' &
+CLOCK_MPI_PID=$!
+sleep 1
+"$PYTHON_BIN" - "$CLOCK_MARKER" <<'PY'
+import json
+import os
+from pathlib import Path
+import sys
+import tempfile
+import time
+
+path = Path(sys.argv[1])
+descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+    json.dump({"written_time_ns": time.time_ns()}, handle)
+    handle.flush()
+    os.fsync(handle.fileno())
+os.replace(temporary, path)
+PY
+wait "$CLOCK_MPI_PID"
+
+mkdir -p "$PLAN02_PHASE0_WORK_DIR/pbs"
+"$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/plan02_pbs_capability.py" \
+  --project-root "$PROJECT_ROOT" \
+  --probe-root "$PLAN02_PHASE0_WORK_DIR/pbs" \
+  --parent-job-id "${PBS_JOBID:?PBS_JOBID is not set}" \
+  --child-script "$PROJECT_ROOT/scripts/miyabi/run_plan02_capability_child.pbs" \
+  --output-json "$PLAN02_PHASE0_WORK_DIR/pbs_capability.json" \
+  --timeout-seconds 180 \
+  > "$PLAN02_PHASE0_WORK_DIR/pbs_capability.log"
+
+AGGREGATE_ARGS=(
+  --writer-lock "$PLAN02_PHASE0_WORK_DIR/writer_lock.json"
+  --old-cache-writer "$PLAN02_PHASE0_WORK_DIR/old_cache_writer.json"
+  --sqlite-db "$SQLITE_DB"
+  --visibility-write "$PLAN02_PHASE0_WORK_DIR/visibility_write.json"
+  --visibility-read "$PLAN02_PHASE0_WORK_DIR/visibility_read.json"
+  --pbs-capability "$PLAN02_PHASE0_WORK_DIR/pbs_capability.json"
+  --source-pinning "$PLAN02_PHASE0_WORK_DIR/source_pinning.json"
+  --source-identity "$PLAN02_PHASE0_WORK_DIR/source_identity.json"
+  --pbs-job-id "${PBS_JOBID:?PBS_JOBID is not set}"
+  --max-clock-skew-seconds 2.0
+  --output-json "$PLAN02_PHASE0_WORK_DIR/phase0_raw.json"
+)
+for host in "${HOSTS[@]}"; do
+  AGGREGATE_ARGS+=(--host "$host")
+done
+for rank in 0 1; do
+  AGGREGATE_ARGS+=(--clock-sample "$PLAN02_PHASE0_WORK_DIR/clock_${rank}.json")
+done
+for rank in $(seq 0 7); do
+  AGGREGATE_ARGS+=(--contention-result "$PLAN02_PHASE0_WORK_DIR/contend_${rank}.json")
+done
+"$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/plan02_phase0_aggregate.py" \
+  "${AGGREGATE_ARGS[@]}"
+
+set +e
+CHECK_STATUS="$($PYTHON_BIN "$PROJECT_ROOT/scripts/miyabi/check_plan02_feasibility.py" \
+  --input-json "$PLAN02_PHASE0_WORK_DIR/phase0_raw.json" \
+  --output-json "$PLAN02_PHASE0_WORK_DIR/phase0_checker.json")"
+CHECK_RC=$?
+set -e
+CHECK_STATUS_LOWER="${CHECK_STATUS,,}"
+FINAL_ARTIFACT="${FINAL_PREFIX}_${CHECK_STATUS_LOWER}.json"
+"$PYTHON_BIN" - "$PLAN02_PHASE0_WORK_DIR/phase0_checker.json" "$FINAL_ARTIFACT" <<'PY'
+import os
+from pathlib import Path
+import sys
+import tempfile
+
+source = Path(sys.argv[1])
+destination = Path(sys.argv[2])
+descriptor, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", dir=destination.parent)
+with os.fdopen(descriptor, "wb") as handle:
+    handle.write(source.read_bytes())
+    handle.flush()
+    os.fsync(handle.fileno())
+os.replace(temporary, destination)
+PY
+test -s "$FINAL_ARTIFACT"
+printf 'PHASE0_CHECKER=%s\n' "$CHECK_STATUS"
+printf 'PHASE0_ARTIFACT=%s\n' "$FINAL_ARTIFACT"
+if [[ "$CHECK_RC" -ne 0 ]]; then
+  echo "Phase 0 blocked; retaining raw work at $PLAN02_PHASE0_WORK_DIR" >&2
+  exit "$CHECK_RC"
+fi
+
+RESOLVED_WORK_DIR="$($PYTHON_BIN -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve())' "$PLAN02_PHASE0_WORK_DIR")"
+case "$RESOLVED_WORK_DIR" in
+  "$RESOLVED_ARTIFACT_DIR"/work_*_"$JOB_ID_SHORT")
+    find "$RESOLVED_WORK_DIR" -depth -delete
+    ;;
+  *)
+    echo "Refusing unsafe Phase 0 cleanup target: $RESOLVED_WORK_DIR" >&2
+    exit 2
+    ;;
+esac
+printf 'PLAN02_PHASE0_COMPLETE=%s\n' "$FINAL_ARTIFACT"

@@ -1,0 +1,27 @@
+{
+  "artifact_format_version": 1,
+  "captured_at": "2026-08-06T01:02:00+09:00",
+  "consecutive_failure_count": 1,
+  "experiment_id": "phase0-feasibility",
+  "facts": {
+    "cleanup_executed": false,
+    "data_deletion_observed": false,
+    "job_exit_after_seconds": 18,
+    "job_id": "2496503.opbs",
+    "job_state_before_stop": "R",
+    "job_substate_before_stop": 42,
+    "nested_scalar_job_id": "2496506.opbs",
+    "nested_scalar_job_terminal": true,
+    "no_unfinished_jobs_after_stop": true,
+    "observed_work_root": "/work/xg24i002/x10041",
+    "requested_nodes": 2,
+    "stop_action": "qdel 2496503.opbs"
+  },
+  "hosts": [
+    "mg0004",
+    "mg0005"
+  ],
+  "log_path": "reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-010119_phase0-pbs.log",
+  "root_cause": "The PBS script inherited an unrelated broad WORK_ROOT environment value and used it as both probe output root and recursive cleanup target.",
+  "status": "FAIL"
+}

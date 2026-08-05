@@ -1,0 +1,148 @@
+Currently Loaded Modulefiles:
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9
+
+Key:
+(symbolic-version)
+PLAN_ID=fsb_decoupled_diloco_plan_02
+PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco
+PBS_JOBID=2496515.opbs
+PBS_NODEFILE=/var/spool/pbs/aux/2496515.opbs
+PLAN02_PHASE0_WORK_DIR=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-010700_2496515
+HOST mg0005
+HOST mg0008
+Traceback (most recent call last):
+Traceback (most recent call last):
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 496, in <module>
+    main()
+    ~~~~^^
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 496, in <module>
+    main()
+    ~~~~^^
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 461, in main
+    summary = contend(
+        args.db,
+    ...<5 lines>...
+        seed=args.seed,
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 210, in contend
+    conn = open_existing(
+        path,
+        timeout_seconds=busy_timeout_ms / 1000.0,
+        busy_timeout_ms=busy_timeout_ms,
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 461, in main
+    summary = contend(
+        args.db,
+    ...<5 lines>...
+        seed=args.seed,
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 210, in contend
+    conn = open_existing(
+        path,
+        timeout_seconds=busy_timeout_ms / 1000.0,
+        busy_timeout_ms=busy_timeout_ms,
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 96, in open_existing
+    _configure_connection(
+    ~~~~~~~~~~~~~~~~~~~~~^
+        conn,
+        ^^^^^
+        busy_timeout_ms=busy_timeout_ms,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        set_journal_mode=False,
+        ^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 30, in _configure_connection
+    conn.execute("PRAGMA synchronous=FULL")
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 96, in open_existing
+    _configure_connection(
+    ~~~~~~~~~~~~~~~~~~~~~^
+        conn,
+        ^^^^^
+        busy_timeout_ms=busy_timeout_ms,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        set_journal_mode=False,
+        ^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 30, in _configure_connection
+    conn.execute("PRAGMA synchronous=FULL")
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.OperationalError: database is locked
+sqlite3.OperationalError: database is locked
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 496, in <module>
+    main()
+    ~~~~^^
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 461, in main
+    summary = contend(
+        args.db,
+    ...<5 lines>...
+        seed=args.seed,
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 210, in contend
+    conn = open_existing(
+        path,
+        timeout_seconds=busy_timeout_ms / 1000.0,
+        busy_timeout_ms=busy_timeout_ms,
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 96, in open_existing
+    _configure_connection(
+    ~~~~~~~~~~~~~~~~~~~~~^
+        conn,
+        ^^^^^
+        busy_timeout_ms=busy_timeout_ms,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        set_journal_mode=False,
+        ^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 30, in _configure_connection
+    conn.execute("PRAGMA synchronous=FULL")
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.OperationalError: database is locked
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 496, in <module>
+    main()
+    ~~~~^^
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 461, in main
+    summary = contend(
+        args.db,
+    ...<5 lines>...
+        seed=args.seed,
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 210, in contend
+    conn = open_existing(
+        path,
+        timeout_seconds=busy_timeout_ms / 1000.0,
+        busy_timeout_ms=busy_timeout_ms,
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 96, in open_existing
+    _configure_connection(
+    ~~~~~~~~~~~~~~~~~~~~~^
+        conn,
+        ^^^^^
+        busy_timeout_ms=busy_timeout_ms,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        set_journal_mode=False,
+        ^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/sqlite_shared_fs_probe.py", line 30, in _configure_connection
+    conn.execute("PRAGMA synchronous=FULL")
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.OperationalError: database is locked
+--------------------------------------------------------------------------
+Primary job  terminated normally, but 1 process returned
+a non-zero exit code. Per user-direction, the job has been aborted.
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+mpirun detected that one or more processes exited with non-zero status, thus causing
+the job to be terminated. The first process to do so was:
+
+  Process name: [[57356,1],7]
+  Exit code:    1
+--------------------------------------------------------------------------
+[ERROR] Failed at line 126

@@ -63,7 +63,9 @@ full resume 已把持久 SQLite 的 committed row 定义为权威边界：public
 
 fragment 恢复比 full 更复杂，因为权威状态是 fragment version vector，而不是单一 global version。full 路径适合作为恢复语义的参考实现，之后可以把相同思想推广到 per-fragment current state、outer state、materialized checkpoint 和 global merge event。
 
-恢复研究的范围可以保持务实：重点放在进程退出和批作业重启，不追求 exact replay、自动 failover 或完整 inner optimizer 复现。节点断电级持久性可以作为代价与限制讨论，而不是让主系统过早承担复杂事务协议。
+恢复研究的范围可以保持务实：重点放在进程退出和批作业重启，不追求 exact replay 或完整 inner optimizer 复现。独立 PBS 角色启动和人工触发的 syncer restart 从 Plan 02 起纳入必做的系统恢复边界；自动 failover 提交仍默认关闭，只在显式启用时验证。节点断电级持久性可以作为代价与限制讨论，而不是让主系统过早承担复杂事务协议。
+
+2026-08-06 的 Plan 02 Phase 0 可行性门禁进一步冻结了这个范围：Miyabi 计算节点可以查询并提交标量作业，显式设为 rerunable 后也可提交 PBS job array，因而初始 learner 编排优先使用 array；自动 recovery/scaling 仍保持 opt-in。同时，旧 writer 若无限期暂停在 SQLite writer transaction 内，新候选者只能安全等待，不能仅靠 lease timeout 自动接管；此时仍需要有审计的 operator/scheduler 终止动作。详细证据见 `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-011600_phase0-feasibility_pass.json`。这些结论是后续 HA/dynamic 实现的可行性边界，不表示生产协议已经实现。
 
 ### 4.4 Fragment 何时真正有收益
 
