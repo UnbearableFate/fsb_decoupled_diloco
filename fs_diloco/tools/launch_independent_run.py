@@ -30,12 +30,33 @@ def _walltime_resource(value: str | None, *, required: bool) -> list[str]:
     return ["-l", f"walltime={value}"]
 
 
-def _qsub(command: list[str]) -> str:
-    completed = subprocess.run(command, check=True, capture_output=True, text=True)
-    job_id = completed.stdout.strip().splitlines()[-1]
-    if not job_id:
-        raise RuntimeError(f"qsub returned no job id: {command}")
-    return job_id
+def _qsub(command: list[str]) -> dict[str, Any]:
+    """Return an auditable receipt even when PBS rejects the submission."""
+
+    try:
+        completed = subprocess.run(command, check=False, capture_output=True, text=True)
+    except OSError as exc:
+        return {
+            "status": "failed",
+            "returncode": -1,
+            "stdout": "",
+            "stderr": repr(exc),
+            "command": list(command),
+        }
+    stdout = completed.stdout.strip()
+    receipt: dict[str, Any] = {
+        "status": "failed",
+        "returncode": int(completed.returncode),
+        "stdout": stdout,
+        "stderr": completed.stderr.strip(),
+        "command": list(command),
+    }
+    if completed.returncode == 0 and stdout:
+        receipt["status"] = "submitted"
+        receipt["job_id"] = stdout.splitlines()[-1]
+    elif completed.returncode == 0:
+        receipt["stderr"] = "qsub returned no job id"
+    return receipt
 
 
 def launch(
@@ -105,8 +126,22 @@ def launch(
         "submitted": bool(submit),
     }
     if submit:
-        result["syncer_job_id"] = _qsub(syncer_command)
-        result["learner_array_job_id"] = _qsub(learner_command)
+        syncer_receipt = _qsub(syncer_command)
+        result["syncer_submission"] = syncer_receipt
+        if syncer_receipt["status"] != "submitted":
+            result["submission_status"] = "failed"
+            return result
+        result["syncer_job_id"] = syncer_receipt["job_id"]
+
+        learner_receipt = _qsub(learner_command)
+        result["learner_submission"] = learner_receipt
+        if learner_receipt["status"] != "submitted":
+            # Do not cancel automatically.  Preserve the accepted syncer ID so
+            # an operator can inspect or terminate that exact scheduler job.
+            result["submission_status"] = "partial"
+            return result
+        result["learner_array_job_id"] = learner_receipt["job_id"]
+        result["submission_status"] = "submitted"
     return result
 
 
@@ -139,6 +174,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     json.dump(result, sys.stdout, sort_keys=True, indent=2)
     sys.stdout.write("\n")
+    if args.submit and result.get("submission_status") != "submitted":
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

@@ -256,9 +256,22 @@ def collect_runtime_artifacts(
         if _unlink(payload):
             deleted += 1
 
+    # HA authority writers remain active during final maintenance: in
+    # particular, the lease thread can atomically replace heartbeat.json while
+    # the main thread collects artifacts.  Never treat a freshly discovered
+    # authority temp as abandoned.  The lease/clock-skew GC grace is the point
+    # after which no current writer may still own it.
+    authority_temp_grace_seconds = max(
+        float(orphan_grace_seconds),
+        float(getattr(store, "gc_grace_seconds", 0.0)),
+    )
     for root in (paths.control, paths.weights, paths.optim, paths.fragments):
         for tmp in root.glob("**/.*.tmp"):
-            if _unlink(tmp):
+            try:
+                mtime = tmp.stat().st_mtime
+            except FileNotFoundError:
+                continue
+            if now - mtime >= authority_temp_grace_seconds and _unlink(tmp):
                 deleted += 1
     for root in (paths.updates_payloads,):
         for tmp in root.glob("**/.*.tmp"):

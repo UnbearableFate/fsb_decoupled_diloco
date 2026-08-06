@@ -91,6 +91,16 @@ class LeaseRenewalThread:
     def start(self) -> None:
         self._thread.start()
         if not self._started.wait(timeout=10.0):
+            # A delayed thread may still finish opening SQLite after this wait.
+            # Set the stop flag before returning so it cannot enter its renewal
+            # loop later and keep an otherwise abandoned lease alive.
+            self._stop.set()
+            self._thread.join(
+                timeout=max(
+                    5.0,
+                    self.config.coordination.syncer_ha.renew_interval_seconds * 2.0,
+                )
+            )
             raise RuntimeError("lease renewal thread did not start")
         self.raise_if_failed()
 
@@ -103,6 +113,10 @@ class LeaseRenewalThread:
 
     def stop(self) -> None:
         self._stop.set()
+        # ``Thread.start`` itself can fail.  Cleanup must remain safe for that
+        # partially initialized case and preserve the original startup error.
+        if self._thread.ident is None:
+            return
         self._thread.join(
             timeout=max(5.0, self.config.coordination.syncer_ha.renew_interval_seconds * 2.0)
         )

@@ -485,3 +485,41 @@ Artifacts:
 ### Follow-up
 
 - 对累计Phase 1 diff执行`plans/AGENTS.md`规定的Codex必做审查及Claude `claude -p`非交互审查；完成findings处置后才将HA-01…HA-20标记complete并进入Phase 2。
+
+## 2026-08-06 13:25 JST — Phase 1 completion review opened; Claude skipped-session-limit
+
+### Facts
+
+- 冻结审查目标为`6042886f1a1ec55759cc01c1af230ab82c0f9ebe`，comparison base为Phase 0 final `1ba9a1a70e4ede6fdd5edf066f11f6921f111da5`。Codex先启动外部reviewer，然后在读取任何外部实质结论前完成独立审查并保存不可变报告`reports/DOING/code_review/fsb_decoupled_diloco_plan_02/phase-1/gpt-5.6-sol_6042886f1a1ec55759cc01c1af230ab82c0f9ebe.md`；结论为`CHANGES_REQUIRED`。
+- 外部调用为fresh `claude -p`，请求完整模型ID`claude-opus-5`、session `b602dc27-fd5d-4cdc-a90a-6db12a39fa28`、JSON输出、`bypassPermissions`和`--dangerously-skip-permissions`，无resume/continue/fallback。进程在零模型token/零turn时返回HTTP 429及明确文本`You've hit your session limit · resets 1:30pm (Asia/Tokyo)`，`permission_denials=[]`；因请求未进入模型，返回中没有可声称的实际model usage。没有Claude报告或实现改动产生。
+- 按`plans/AGENTS.md`的唯一限额例外，此reviewer记为`skipped-session-limit`；这不是approval，但不阻断finding处置、当前phase、plan或后续任务，且不得要求重试或伪造报告。
+
+### Codex finding disposition plan
+
+- `Medium — partial independent qsub loses accepted syncer receipt`：接受，修改launcher逐次保留结构化receipt，第二次qsub失败返回`partial`及syncer job ID、CLI非零退出且不自动qdel，并新增先成功后失败的RED回归。
+- `Medium — post-acquire startup failures escape cleanup`：接受，把acquire后的store/logger/renew线程部分初始化纳入单一cleanup ownership guard；renew线程启动超时先置stop；新增store-open与renewer-start失败回归。
+- `Medium — canonical repair watchdog state/tests absent`：接受，在filesystem reader保留进程内epoch/owner/latest/terminal单调水位，消费`canonical_repair_wait_seconds`并记录两个要求的counter/event；补heartbeat无merge、旧600秒预算、canonical repair超窗和lower-epoch terminal拒绝回归。
+- `Low — shared recursive discovery contract only partially adopted`：暂定`deferred-with-justification`至Phase 2 MEM-02/MEM-20。Phase 1 static路径与正式evidence均非空且正确；把liveness/analysis/metrics的公开发现接口改为dynamic instance递归语义属于Phase 2 identity/path contract，届时统一迁移，避免Phase 1先引入没有admission validator的半套dynamic扫描。负责人：Phase 2 implementation work unit。
+
+### Verification boundary
+
+- 修复触及learner control observation和syncer startup ownership，但不改变DB schema、checkpoint/terminal格式或fenced transaction协议。先执行静态检查和完整Phase 1/full pytest；若通过，再用最短受影响runtime smoke验证canonical publication，正式1+8只在该smoke显示运行时行为变化时重跑。
+
+## 2026-08-06 13:42 JST — Phase 1 review remediation PASS
+
+### Facts
+
+- Codex的三个Medium finding均已修复：独立launcher逐个保留qsub receipt且partial submission非零退出；leadership acquire后的store/logger/renewer失败统一释放精确token和部分资源；filesystem epoch reader保留进程内单调水位、消费`canonical_repair_wait_seconds`并暴露`cache_rejected_lower_epoch_count`/`canonical_repair_wait_count`事件与计数。
+- `Low — shared recursive discovery contract only partially adopted`维持`deferred-with-justification`至Phase 2 MEM-02/MEM-20。Phase 1的static路径与正式evidence非空且正确；dynamic instance递归发现必须与Phase 2的identity/path admission contract一起迁移，避免先暴露无validator的半套API。负责人：Phase 2 implementation work unit。
+- 首轮remediation smoke `2498588.opbs`暴露final maintenance与HA heartbeat atomic writer的真实竞态，已在`failures.md`追加记录。authority temp现在至少等待lease/clock-skew GC grace，proposal temp的input-closed即时清理不变；RED回归验证fresh temp保留和grace边界删除。
+- replacement完整测试为PBS `2498597.opbs`，请求walltime `00:00:45`、实际`00:00:31`、`Exit_status=0`：Phase 1 focused `39 passed in 5.68s`，全量`418 passed in 22.11s`。
+- replacement tiny HA smoke为PBS `2498612.opbs`，根据历史12–13秒显式请求最短可行walltime `00:00:20`，实际`00:00:12`、`Exit_status=0`。run `plan02_phase1_review_remediation_2498597`达到final version 2、terminal generation 2、leader released、canonical stop/summary齐全、staged Checker `PASS_WITH_FOLLOWUPS`，日志无`error`、`uncaught_exception`或`lease_renewer_stop_failed`事件。
+- 结构化证据为`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-134242_phase1-review-remediation_pass.json`；test log SHA-256 `1675b1aaba72f98d24a408ce32ec41b5aa0c0105f0856b08261a309e0235a101`，smoke log SHA-256 `49a71d505de3a0e70f290822532d4e64f33163084de80045367d48e765175e6e`。
+
+### Inferences
+
+- 受影响runtime smoke与完整回归均已通过，因此无需重跑已经冻结通过的正式1+8 acceptance。修复改变learner observation liveness和syncer startup/maintenance并发边界，属于关键invariant remediation，必须冻结新target并重复completion review gate。
+
+### Follow-up
+
+- 完成最终静态检查，提交新的Phase 1 review target，然后按`plans/AGENTS.md`对Phase 0 base到新target的累计diff重复Codex及fresh `claude -p`审查。只有该门禁完成后才把HA-01…HA-20标记`complete`。

@@ -8,6 +8,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -21,9 +22,12 @@ from fs_diloco.core.constants import (
 from fs_diloco.protocol.control_epoch import EpochControlPublisher, EpochControlReader
 from fs_diloco.runtime import pbs_scheduler as pbs_scheduler_module
 from fs_diloco.runtime import syncer as syncer_runtime
+from fs_diloco.tools import launch_independent_run as independent_launcher
 from fs_diloco.runtime.launch_outbox import RecoveryClaimManager, recovery_observation_key
 from fs_diloco.runtime.learner import (
+    SyncerProgressWatchdog,
     close_epoch_control_reader,
+    confirm_syncer_unresponsive,
     read_authoritative_terminal,
 )
 from fs_diloco.runtime.pbs_scheduler import PBSJobObservation, PBSScheduler
@@ -143,6 +147,168 @@ def test_independent_launcher_validates_walltime_before_creating_run(
             allow_dirty_snapshot=False,
         )
     assert not (tmp_path / "must-not-exist").exists()
+
+
+def test_independent_launcher_preserves_syncer_receipt_when_learner_qsub_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = resolve_config(project_root=tmp_path)
+    config.sync.num_learners = 2
+    shared_root = tmp_path / "run"
+    monkeypatch.setattr(independent_launcher, "resolve_config", lambda *args, **kwargs: config)
+    monkeypatch.setattr(
+        independent_launcher,
+        "initialize_run",
+        lambda *args, **kwargs: {
+            "descriptor": {
+                "shared_root": str(shared_root),
+                "descriptor_sha256": "descriptor-digest",
+            }
+        },
+    )
+    submissions = iter(
+        (
+            subprocess.CompletedProcess([], 0, "12345.opbs\n", ""),
+            subprocess.CompletedProcess([], 1, "", "learner array rejected"),
+        )
+    )
+    monkeypatch.setattr(
+        independent_launcher.subprocess,
+        "run",
+        lambda *args, **kwargs: next(submissions),
+    )
+
+    result = launch(
+        config_path=tmp_path / "config.yaml",
+        run_id="partial-submit",
+        shared_root=str(shared_root),
+        project_root=tmp_path,
+        submit=True,
+        allow_dirty_snapshot=False,
+        syncer_walltime="00:00:20",
+        learner_walltime="00:00:45",
+    )
+
+    assert result["submission_status"] == "partial"
+    assert result["syncer_job_id"] == "12345.opbs"
+    assert result["syncer_submission"]["status"] == "submitted"
+    assert result["learner_submission"]["status"] == "failed"
+    assert "learner array rejected" in result["learner_submission"]["stderr"]
+
+
+def test_syncer_releases_acquired_lease_when_leader_store_open_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = resolve_config(
+        "configs/fs_diloco_tiny_ha_static.yaml",
+        run_id="startup-open-failure",
+        shared_root=str(tmp_path / "run"),
+    )
+    token = SimpleNamespace(epoch=1, owner_id="owner")
+
+    class FakeLease:
+        def __init__(self) -> None:
+            self.released: list[object] = []
+            self.closed = False
+
+        def release(self, released_token: object) -> None:
+            self.released.append(released_token)
+
+        def close(self) -> None:
+            self.closed = True
+
+    lease = FakeLease()
+    monkeypatch.setattr(
+        syncer_runtime,
+        "load_run_descriptor",
+        lambda *args, **kwargs: SimpleNamespace(config=config, identity=identity()),
+    )
+    monkeypatch.setattr(
+        syncer_runtime,
+        "acquire_candidate",
+        lambda **kwargs: (lease, token, object(), object()),
+    )
+    monkeypatch.setattr(
+        syncer_runtime,
+        "open_leader_store",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("store open failed")),
+    )
+
+    with pytest.raises(RuntimeError, match="store open failed"):
+        syncer_runtime.run_syncer(config)
+
+    assert lease.released == [token]
+    assert lease.closed
+
+
+def test_syncer_cleans_all_acquired_resources_when_renewer_start_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = resolve_config(
+        "configs/fs_diloco_tiny_ha_static.yaml",
+        run_id="startup-renewer-failure",
+        shared_root=str(tmp_path / "run"),
+    )
+    token = SimpleNamespace(epoch=1, owner_id="owner")
+
+    class FakeLease:
+        def __init__(self) -> None:
+            self.released: list[object] = []
+            self.closed = False
+
+        def release(self, released_token: object) -> None:
+            self.released.append(released_token)
+
+        def close(self) -> None:
+            self.closed = True
+
+    class FakeStore:
+        fenced_store = object()
+
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    class FailingRenewer:
+        instance: "FailingRenewer | None" = None
+
+        def __init__(self, **kwargs: object) -> None:
+            self.stopped = False
+            FailingRenewer.instance = self
+
+        def start(self) -> None:
+            raise RuntimeError("renewer start failed")
+
+        def stop(self) -> None:
+            self.stopped = True
+
+    lease = FakeLease()
+    store = FakeStore()
+    monkeypatch.setattr(
+        syncer_runtime,
+        "load_run_descriptor",
+        lambda *args, **kwargs: SimpleNamespace(config=config, identity=identity()),
+    )
+    monkeypatch.setattr(
+        syncer_runtime,
+        "acquire_candidate",
+        lambda **kwargs: (lease, token, object(), object()),
+    )
+    monkeypatch.setattr(syncer_runtime, "open_leader_store", lambda **kwargs: store)
+    monkeypatch.setattr(syncer_runtime, "LeaseRenewalThread", FailingRenewer)
+
+    with pytest.raises(RuntimeError, match="renewer start failed"):
+        syncer_runtime.run_syncer(config)
+
+    assert FailingRenewer.instance is not None and FailingRenewer.instance.stopped
+    assert store.closed
+    assert lease.released == [token]
+    assert lease.closed
 
 
 @pytest.mark.parametrize(
@@ -466,14 +632,21 @@ def test_epoch_control_ignores_fixed_cache_pollution_and_repairs_takeover(
     publisher1.publish_heartbeat(first.observe())
     paths.latest_json.write_text('{"epoch": 999, "version": 999}\n', encoding="utf-8")
     reader = EpochControlReader(paths, run_id="ha-test")
+    reader.configure_canonical_repair_wait(10.0)
     assert not hasattr(reader, "store")
-    assert reader.read_current_latest()["version"] == 0
+    assert reader.read_current_latest(now_monotonic=0.0)["version"] == 0
     first.release(token1)
     second, token2 = acquire(paths, "owner-2")
     store2 = fenced(paths, token2)
     publisher2 = EpochControlPublisher(paths, store2, token2)
     publisher2.publish_heartbeat(second.observe())
-    assert reader.read_current_latest() is None
+    assert reader.read_current_latest(now_monotonic=100.0) is None
+    assert reader.read_current_latest(now_monotonic=109.999) is None
+    assert reader.observation_metrics()["canonical_repair_wait_count"] == 0
+    assert reader.read_current_latest(now_monotonic=110.0) is None
+    repair_metrics = reader.observation_metrics()
+    assert repair_metrics["canonical_gap_epoch"] == 2
+    assert repair_metrics["canonical_repair_wait_count"] == 1
     repaired = publisher2.repair_latest_from_db()
     assert repaired is not None and repaired["source_commit_epoch"] == 1
     assert publisher2.repair_latest_from_db() == repaired
@@ -518,6 +691,16 @@ def test_epoch_control_ignores_fixed_cache_pollution_and_repairs_takeover(
     assert authoritative_terminal["epoch"] == 2
     assert authoritative_terminal["stop_reason"] == "completed"
     assert read_authoritative_terminal(paths, run_id="ha-test")["stop_reason"] == "completed"
+    heartbeat_path = paths.syncer_heartbeat_path(2, token2.owner_id)
+    head_path = paths.epoch_head_path(2, token2.owner_id)
+    heartbeat_bytes = heartbeat_path.read_bytes()
+    head_bytes = head_path.read_bytes()
+    heartbeat_path.unlink()
+    head_path.unlink()
+    assert reader.read_current_terminal() is None
+    assert reader.observation_metrics()["cache_rejected_lower_epoch_count"] >= 1
+    heartbeat_path.write_bytes(heartbeat_bytes)
+    head_path.write_bytes(head_bytes)
     canonical_stop_path = paths.epoch_stop_path(2, token2.owner_id, 2)
     canonical_stop = canonical_stop_path.read_bytes()
     corrupted_stop = json.loads(canonical_stop)
@@ -534,6 +717,80 @@ def test_epoch_control_ignores_fixed_cache_pollution_and_repairs_takeover(
     second.release(token2)
     first.close()
     second.close()
+
+
+def test_ha_watchdog_uses_heartbeat_progress_and_recovery_budget_not_model_merges(
+    tmp_path: Path,
+) -> None:
+    paths = bootstrapped(tmp_path)
+    config = resolve_config(project_root=tmp_path)
+    config.run.run_id = "ha-test"
+    config.run.shared_root = str(paths.shared_root)
+    config.coordination.syncer_ha.enabled = True
+    config.coordination.syncer_ha.learner_recovery_wait_seconds = 1800.0
+    lease, token = acquire(paths, "owner")
+    store = fenced(paths, token)
+    publisher = EpochControlPublisher(paths, store, token)
+    publisher.publish_heartbeat(lease.observe())
+    watchdog = SyncerProgressWatchdog.start(
+        timeout_seconds=30.0,
+        initial_version=0,
+        now_monotonic=0.0,
+        now_wall=100.0,
+    )
+
+    assert not confirm_syncer_unresponsive(
+        watchdog,
+        paths,
+        version_field="version",
+        config=config,
+        now_monotonic=0.0,
+        now_wall=100.0,
+    )
+    # A queued recovery candidate may exceed the legacy 600-second watchdog;
+    # the frozen HA recovery budget remains authoritative.
+    assert not confirm_syncer_unresponsive(
+        watchdog,
+        paths,
+        version_field="version",
+        config=config,
+        now_monotonic=700.0,
+        now_wall=800.0,
+    )
+
+    renewed = lease.renew(token)
+    publisher.publish_heartbeat(renewed)
+    assert not confirm_syncer_unresponsive(
+        watchdog,
+        paths,
+        version_field="version",
+        config=config,
+        now_monotonic=1000.0,
+        now_wall=1100.0,
+    )
+    assert watchdog.last_observed_version == 0
+    assert watchdog.last_heartbeat_seq == int(renewed["heartbeat_seq"])
+    assert not confirm_syncer_unresponsive(
+        watchdog,
+        paths,
+        version_field="version",
+        config=config,
+        now_monotonic=2799.999,
+        now_wall=2899.999,
+    )
+    assert confirm_syncer_unresponsive(
+        watchdog,
+        paths,
+        version_field="version",
+        config=config,
+        now_monotonic=2800.0,
+        now_wall=2900.0,
+    )
+
+    close_epoch_control_reader(paths)
+    store.close()
+    lease.release(token)
+    lease.close()
 
 
 def test_incomplete_completed_terminal_is_repaired_before_future_rejection(
@@ -911,6 +1168,46 @@ def test_ha_gc_registers_then_rechecks_and_deletes_only_archived_publication(
     assert deleted == 2
     assert not old_weight.exists() and not old_optim.exists()
     assert current_weight.exists() and current_optim.exists()
+    bound.close()
+    lease.release(token)
+    lease.close()
+
+
+def test_ha_maintenance_does_not_delete_current_authority_writer_temp(
+    tmp_path: Path,
+) -> None:
+    paths = bootstrapped(tmp_path)
+    lease, token = acquire(paths, "owner")
+    store = fenced(paths, token)
+    store.gc_grace_seconds = 30.0
+    bound = store.bind(token)
+    epoch_dir = paths.syncer_epoch_dir(token.epoch, token.owner_id)
+    epoch_dir.mkdir(parents=True, exist_ok=True)
+    heartbeat_tmp = epoch_dir / ".heartbeat.json.inflight.tmp"
+    heartbeat_tmp.write_text("in flight", encoding="utf-8")
+    modified_at = heartbeat_tmp.stat().st_mtime
+
+    assert (
+        collect_runtime_artifacts(
+            bound,
+            paths,
+            orphan_grace_seconds=0.0,
+            now=modified_at + 29.999,
+        )
+        == 0
+    )
+    assert heartbeat_tmp.is_file()
+    assert (
+        collect_runtime_artifacts(
+            bound,
+            paths,
+            orphan_grace_seconds=0.0,
+            now=modified_at + 30.0,
+        )
+        == 1
+    )
+    assert not heartbeat_tmp.exists()
+
     bound.close()
     lease.release(token)
     lease.close()

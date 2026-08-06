@@ -239,3 +239,26 @@ PBS `2497902.opbs` on `mg0035` exited 1 after 7 seconds. The `weight_temp` failp
 - Attempt 2, launcher `2497931.opbs`, exit 0, submitted child jobs `2497932.opbs`, `2497933.opbs` and `2497934[].opbs` with the generic scripts' 24-hour resource default. qstat estimated a materially later start. The exact queued children were canceled with authorized `qdel`; no live run data was removed. The acceptance launcher now overrides debug queue walltimes to 1 minute for the injected-crash candidate and 2 minutes for successor/learners.
 
 Attempt 3, `2497948.opbs`, submitted the short-walltime children and completed successfully. This scheduling correction also established the repository rule that every future qsub must estimate the shortest practical walltime from the workload and prior observations, overriding a materially longer script default.
+
+## 2026-08-06 13:28 JST — Phase 1 review-remediation smoke attempt 1
+
+### Experiment identity
+
+- Consecutive failure count for `phase1-review-remediation-smoke`: 1.
+- PBS `2498588.opbs`, queue `debug-g`, node `mg0044`; requested walltime `00:00:20` from the prior 12-second observation, used `00:00:13`, scheduler `Exit_status=0`.
+- Exact submission:
+
+  ```text
+  qsub -l walltime=00:00:20 -o reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-132630_phase1-review-remediation-smoke_review.log -v PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,RUN_ID=plan02_phase1_review_remediation_2498584 scripts/miyabi/run_plan02_phase1_smoke.pbs
+  ```
+
+### Expected and observed behavior
+
+- Expected：review finding修复后的tiny HA runtime保持无error事件，完成version 2、terminal generation 2和staged Checker `PASS_WITH_FOLLOWUPS`。
+- Observed：训练、terminal和Checker均完成，但syncer记录`lease_renewer_stop_failed`。renew线程的heartbeat atomic writer已创建`.heartbeat.json.<random>.tmp`，final maintenance同时无年龄门槛扫描并unlink `control/**/*.tmp`；writer随后在`os.chmod(tmp_path)`得到`FileNotFoundError`。这使run不能作为无error的remediation smoke PASS，尽管PBS和staged Checker当前仍返回零。
+- 完整日志：`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-132630_phase1-review-remediation-smoke_review.log`。run root：`runs/fs_diloco/plan02_phase1_review_remediation_2498584`。
+
+### Confirmed root cause and next falsification
+
+- `collect_runtime_artifacts()`对`control/weights/optim/fragments`的atomic temp无条件删除；`input_closed=True`把一般orphan grace降为0，但HA lease renewer在final maintenance期间仍必须运行并可能发布heartbeat，因此“input closed等于authority writer closed”的假设错误。
+- 对HA authority temp使用至少`FencedSQLiteStore.gc_grace_seconds = lease_duration + max_clock_skew`的年龄门槛；保留learner已停止后的proposal temp终态清理语义。新增RED回归：current HA control temp在grace内必须保留，超过grace才删除；然后重跑完整tests与相同smoke。若修复正确，replacement日志不得出现`error`或`lease_renewer_stop_failed`。

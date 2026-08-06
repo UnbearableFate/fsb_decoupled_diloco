@@ -1,0 +1,49 @@
+{
+  "failed_smoke": {
+    "failure_record": "reports/DOING/fsb_decoupled_diloco_plan_02/failures.md#2026-08-06-1328-jst--phase-1-review-remediation-smoke-attempt-1",
+    "pbs_job_id": "2498588.opbs",
+    "root_cause": "final maintenance deleted a fresh HA heartbeat atomic-writer temp while the lease renewer was active"
+  },
+  "review_findings": {
+    "canonical_repair_watchdog_state_and_tests": "fixed",
+    "partial_qsub_receipt_loss": "fixed",
+    "post_acquire_startup_cleanup": "fixed",
+    "recursive_discovery_contract": "deferred-with-justification to Phase 2 MEM-02/MEM-20"
+  },
+  "smoke": {
+    "checker": "PASS_WITH_FOLLOWUPS",
+    "error_event_count": 0,
+    "final_version": 2,
+    "host": "mg0003",
+    "leader_state": "released",
+    "log_sha256": "49a71d505de3a0e70f290822532d4e64f33163084de80045367d48e765175e6e",
+    "pbs_exit_status": 0,
+    "pbs_job_id": "2498612.opbs",
+    "requested_walltime": "00:00:20",
+    "run_id": "plan02_phase1_review_remediation_2498597",
+    "source_fingerprint": "sha256:b6663b446b8a76ab763d9d7db42dcdb3864d8846b5c5a5b97a2218f88022352d",
+    "terminal_generation": 2,
+    "terminal_publications": [
+      "stop",
+      "summary"
+    ],
+    "used_walltime": "00:00:12"
+  },
+  "status": "PASS",
+  "tests": {
+    "focused": {
+      "passed": 39,
+      "seconds": 5.68
+    },
+    "full": {
+      "passed": 418,
+      "seconds": 22.11
+    },
+    "host": "mg0003",
+    "log_sha256": "1675b1aaba72f98d24a408ce32ec41b5aa0c0105f0856b08261a309e0235a101",
+    "pbs_exit_status": 0,
+    "pbs_job_id": "2498597.opbs",
+    "requested_walltime": "00:00:45",
+    "used_walltime": "00:00:31"
+  }
+}

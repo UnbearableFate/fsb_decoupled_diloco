@@ -7,6 +7,7 @@ import json
 import os
 import re
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -239,9 +240,42 @@ class EpochControlReader:
     def __init__(self, paths: RunPaths, *, run_id: str) -> None:
         self.paths = paths
         self.run_id = run_id
+        self.highest_observed_epoch = 0
+        self.highest_observed_owner_id: str | None = None
+        self.highest_observed_latest_version = -1
+        self.highest_observed_terminal_generation = -1
+        self.cache_rejected_lower_epoch_count = 0
+        self.canonical_repair_wait_count = 0
+        self._canonical_repair_wait_seconds: float | None = None
+        self._canonical_gap_epoch: int | None = None
+        self._canonical_gap_started_monotonic: float | None = None
 
     def close(self) -> None:
         """Compatibility no-op; filesystem readers hold no persistent resource."""
+
+    def configure_canonical_repair_wait(self, seconds: float) -> None:
+        seconds = float(seconds)
+        if seconds <= 0.0:
+            raise ValueError("canonical repair wait must be > 0")
+        if (
+            self._canonical_repair_wait_seconds is not None
+            and self._canonical_repair_wait_seconds != seconds
+        ):
+            raise RuntimeError("canonical repair wait changed for a cached epoch reader")
+        self._canonical_repair_wait_seconds = seconds
+
+    def observation_metrics(self) -> dict[str, int | str | None]:
+        return {
+            "highest_observed_epoch": self.highest_observed_epoch,
+            "highest_observed_owner_id": self.highest_observed_owner_id,
+            "highest_observed_latest_version": self.highest_observed_latest_version,
+            "highest_observed_terminal_generation": (
+                self.highest_observed_terminal_generation
+            ),
+            "cache_rejected_lower_epoch_count": self.cache_rejected_lower_epoch_count,
+            "canonical_repair_wait_count": self.canonical_repair_wait_count,
+            "canonical_gap_epoch": self._canonical_gap_epoch,
+        }
 
     def _coordinates(self, directory: Path) -> tuple[int, str] | None:
         match = _EPOCH_DIRECTORY_RE.fullmatch(directory.name)
@@ -320,7 +354,7 @@ class EpochControlReader:
             raise RuntimeError(f"canonical latest identity mismatch: {expected_pointer}")
         return owner_id, payload
 
-    def _current_epoch(self) -> _FilesystemEpoch | None:
+    def _scan_current_epoch(self) -> _FilesystemEpoch | None:
         candidates: list[_FilesystemEpoch] = []
         if not self.paths.syncer_epochs.is_dir():
             return None
@@ -363,8 +397,80 @@ class EpochControlReader:
             raise RuntimeError(f"multiple valid owners published the same epoch: {highest_epoch}")
         return highest[0]
 
-    def current_leader(self) -> dict[str, Any] | None:
-        current = self._current_epoch()
+    def _observe_canonical_gap(self, epoch: int, *, now_monotonic: float) -> None:
+        if self._canonical_gap_epoch != epoch:
+            self._canonical_gap_epoch = epoch
+            self._canonical_gap_started_monotonic = now_monotonic
+            return
+        wait_seconds = self._canonical_repair_wait_seconds
+        started = self._canonical_gap_started_monotonic
+        if wait_seconds is None or started is None:
+            return
+        elapsed = max(0.0, now_monotonic - started)
+        completed_windows = int(elapsed // wait_seconds)
+        if completed_windows <= 0:
+            return
+        self.canonical_repair_wait_count += completed_windows
+        self._canonical_gap_started_monotonic = started + completed_windows * wait_seconds
+
+    def _clear_canonical_gap(self) -> None:
+        self._canonical_gap_epoch = None
+        self._canonical_gap_started_monotonic = None
+
+    def _current_epoch(
+        self,
+        *,
+        now_monotonic: float | None = None,
+    ) -> _FilesystemEpoch | None:
+        current = self._scan_current_epoch()
+        if current is None:
+            return None
+        now = time.monotonic() if now_monotonic is None else float(now_monotonic)
+        if current.epoch < self.highest_observed_epoch:
+            self.cache_rejected_lower_epoch_count += 1
+            return None
+        if (
+            current.epoch == self.highest_observed_epoch
+            and self.highest_observed_owner_id not in (None, current.owner_id)
+        ):
+            raise RuntimeError(
+                f"epoch {current.epoch} changed owner after it was observed"
+            )
+        if current.epoch > self.highest_observed_epoch:
+            self.highest_observed_epoch = current.epoch
+            self.highest_observed_owner_id = current.owner_id
+            self._clear_canonical_gap()
+        elif self.highest_observed_owner_id is None:
+            self.highest_observed_owner_id = current.owner_id
+
+        latest = current.latest
+        if latest is None:
+            self._observe_canonical_gap(current.epoch, now_monotonic=now)
+        else:
+            version = int(latest["version"])
+            if version < self.highest_observed_latest_version:
+                self.cache_rejected_lower_epoch_count += 1
+                latest = None
+                self._observe_canonical_gap(current.epoch, now_monotonic=now)
+            else:
+                self.highest_observed_latest_version = version
+                self._clear_canonical_gap()
+        if latest is current.latest:
+            return current
+        return _FilesystemEpoch(
+            epoch=current.epoch,
+            owner_id=current.owner_id,
+            directory=current.directory,
+            heartbeat=current.heartbeat,
+            latest=latest,
+        )
+
+    def current_leader(
+        self,
+        *,
+        now_monotonic: float | None = None,
+    ) -> dict[str, Any] | None:
+        current = self._current_epoch(now_monotonic=now_monotonic)
         if current is None:
             return None
         return {
@@ -373,12 +479,20 @@ class EpochControlReader:
             **({} if current.heartbeat is None else current.heartbeat),
         }
 
-    def read_current_heartbeat(self) -> dict[str, Any] | None:
-        current = self._current_epoch()
+    def read_current_heartbeat(
+        self,
+        *,
+        now_monotonic: float | None = None,
+    ) -> dict[str, Any] | None:
+        current = self._current_epoch(now_monotonic=now_monotonic)
         return None if current is None else current.heartbeat
 
-    def read_current_latest(self) -> dict[str, Any] | None:
-        current = self._current_epoch()
+    def read_current_latest(
+        self,
+        *,
+        now_monotonic: float | None = None,
+    ) -> dict[str, Any] | None:
+        current = self._current_epoch(now_monotonic=now_monotonic)
         if current is None or current.latest is None:
             return None
         resolved = dict(current.latest)
@@ -390,8 +504,12 @@ class EpochControlReader:
         resolved["param_index_path"] = str(self.paths.param_index_json)
         return resolved
 
-    def read_current_terminal(self) -> dict[str, Any] | None:
-        current = self._current_epoch()
+    def read_current_terminal(
+        self,
+        *,
+        now_monotonic: float | None = None,
+    ) -> dict[str, Any] | None:
+        current = self._current_epoch(now_monotonic=now_monotonic)
         if current is None:
             return None
         terminal_dir = current.directory / "terminal"
@@ -420,4 +538,10 @@ class EpochControlReader:
             candidates.append(payload)
         if not candidates:
             return None
-        return max(candidates, key=lambda payload: int(payload["generation"]))
+        terminal = max(candidates, key=lambda payload: int(payload["generation"]))
+        generation = int(terminal["generation"])
+        if generation < self.highest_observed_terminal_generation:
+            self.cache_rejected_lower_epoch_count += 1
+            return None
+        self.highest_observed_terminal_generation = generation
+        return terminal

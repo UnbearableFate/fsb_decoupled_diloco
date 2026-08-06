@@ -300,7 +300,10 @@ _EPOCH_CONTROL_READERS: dict[Path, EpochControlReader] = {}
 
 
 def _epoch_control_reader(
-    paths: RunPaths, *, run_id: str | None = None
+    paths: RunPaths,
+    *,
+    run_id: str | None = None,
+    canonical_repair_wait_seconds: float | None = None,
 ) -> EpochControlReader | None:
     if not paths.bootstrap_complete_json.is_file():
         return None
@@ -316,6 +319,8 @@ def _epoch_control_reader(
         _EPOCH_CONTROL_READERS[key] = reader
     elif run_id is not None and reader.run_id != run_id:
         raise RuntimeError("cached HA epoch control reader run_id mismatch")
+    if canonical_repair_wait_seconds is not None:
+        reader.configure_canonical_repair_wait(canonical_repair_wait_seconds)
     return reader
 
 
@@ -2238,6 +2243,15 @@ def run_learner(config: Config, learner_id: str) -> None:
         prepare_run_dirs(paths, config.sync.num_learners)
     logger = JsonlLogger(paths.logs / f"{learner_id}.jsonl", learner_id)
     log_uncaught_exception(logger)
+    control_reader = _epoch_control_reader(
+        paths,
+        run_id=config.run.run_id,
+        canonical_repair_wait_seconds=(
+            config.coordination.syncer_ha.canonical_repair_wait_seconds
+            if config.coordination.syncer_ha.enabled
+            else None
+        ),
+    )
     learner_index = learner_index_from_id(learner_id)
     torch.manual_seed(config.training.seed + learner_index)
     device = choose_device()
@@ -2256,14 +2270,23 @@ def run_learner(config: Config, learner_id: str) -> None:
     param_index = load_param_index(paths.param_index_json)
     current_index = build_param_index(model, model_name_or_path=config.model.name_or_path)
     validate_compatible_index(current_index, param_index)
-    initial_latest = wait_for_authoritative_latest(
-        paths,
-        timeout_seconds=(
-            config.coordination.syncer_ha.learner_recovery_wait_seconds
-            if config.coordination.syncer_ha.enabled
-            else 1800.0
-        ),
-    )
+    try:
+        initial_latest = wait_for_authoritative_latest(
+            paths,
+            timeout_seconds=(
+                config.coordination.syncer_ha.learner_recovery_wait_seconds
+                if config.coordination.syncer_ha.enabled
+                else 1800.0
+            ),
+        )
+    except Exception:
+        if control_reader is not None:
+            logger.event(
+                "canonical_latest_wait_failed",
+                **control_reader.observation_metrics(),
+            )
+        close_epoch_control_reader(paths)
+        raise
     initial_load = load_or_refresh_latest(
         paths=paths,
         latest=initial_latest,
@@ -2337,6 +2360,33 @@ def run_learner(config: Config, learner_id: str) -> None:
     last_update_id: str | None = None
     watchdog_stop_reason: str | None = None
     mid_cycle_adoptions = MidCycleAdoptionTracker()
+    reported_cache_rejections = 0
+    reported_canonical_repair_waits = 0
+
+    def log_control_observation_changes() -> None:
+        nonlocal reported_cache_rejections
+        nonlocal reported_canonical_repair_waits
+        if control_reader is None:
+            return
+        metrics = control_reader.observation_metrics()
+        cache_rejections = int(metrics["cache_rejected_lower_epoch_count"])
+        repair_waits = int(metrics["canonical_repair_wait_count"])
+        if cache_rejections > reported_cache_rejections:
+            logger.event(
+                "cache_rejected_lower_epoch",
+                count=cache_rejections,
+                delta=cache_rejections - reported_cache_rejections,
+                **metrics,
+            )
+            reported_cache_rejections = cache_rejections
+        if repair_waits > reported_canonical_repair_waits:
+            logger.event(
+                "canonical_repair_wait",
+                count=repair_waits,
+                delta=repair_waits - reported_canonical_repair_waits,
+                **metrics,
+            )
+            reported_canonical_repair_waits = repair_waits
 
     def current_adoption_context() -> AdoptionContext:
         return build_adoption_context(
@@ -2515,12 +2565,14 @@ def run_learner(config: Config, learner_id: str) -> None:
                     next_recovery_reconciliation = time.monotonic() + float(
                         config.coordination.recovery_submission.reconciliation_interval_seconds
                     )
-                if confirm_syncer_unresponsive(
+                syncer_unresponsive = confirm_syncer_unresponsive(
                     syncer_watchdog,
                     paths,
                     version_field="version",
                     config=config,
-                ):
+                )
+                log_control_observation_changes()
+                if syncer_unresponsive:
                     watchdog_stop_reason = (
                         "syncer_recovery_exhausted"
                         if config.coordination.syncer_ha.enabled

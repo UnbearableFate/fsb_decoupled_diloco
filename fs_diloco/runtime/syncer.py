@@ -2583,6 +2583,7 @@ def run_syncer(config: Config) -> None:
     lease_store = None
     leader_token = None
     lease_renewer = None
+    store = None
     if ha_mode:
         loaded = load_run_descriptor(
             paths.shared_root,
@@ -2595,33 +2596,63 @@ def run_syncer(config: Config) -> None:
             raise RuntimeError(
                 "candidate config differs from the immutable resolved run descriptor"
             )
-        lease_store, leader_token, lease_safety_tracker, _candidate_logger = acquire_candidate(
-            paths=paths,
-            identity=loaded.identity,
-            config=config,
-        )
-        store = open_leader_store(
-            paths=paths,
-            identity=loaded.identity,
-            config=config,
-            token=leader_token,
-            safety_tracker=lease_safety_tracker,
-        )
-        logger = JsonlLogger(
-            paths.logs
-            / "syncers"
-            / f"e{leader_token.epoch:06d}_{paths.owner_short(leader_token.owner_id)}.jsonl",
-            "syncer",
-        )
-        lease_renewer = LeaseRenewalThread(
-            paths=paths,
-            identity=loaded.identity,
-            config=config,
-            token=leader_token,
-            fenced_store=store.fenced_store,
-            safety_tracker=lease_safety_tracker,
-        )
-        lease_renewer.start()
+        try:
+            lease_store, leader_token, lease_safety_tracker, _candidate_logger = (
+                acquire_candidate(
+                    paths=paths,
+                    identity=loaded.identity,
+                    config=config,
+                )
+            )
+            store = open_leader_store(
+                paths=paths,
+                identity=loaded.identity,
+                config=config,
+                token=leader_token,
+                safety_tracker=lease_safety_tracker,
+            )
+            logger = JsonlLogger(
+                paths.logs
+                / "syncers"
+                / f"e{leader_token.epoch:06d}_{paths.owner_short(leader_token.owner_id)}.jsonl",
+                "syncer",
+            )
+            lease_renewer = LeaseRenewalThread(
+                paths=paths,
+                identity=loaded.identity,
+                config=config,
+                token=leader_token,
+                fenced_store=store.fenced_store,
+                safety_tracker=lease_safety_tracker,
+            )
+            lease_renewer.start()
+        except BaseException as startup_error:
+            # Leadership ownership starts at acquire(), not at the main-loop
+            # try/finally below.  Every later setup boundary therefore belongs
+            # to this partial-initialization cleanup guard.
+            for cleanup_name, cleanup in (
+                (
+                    "lease renewer stop",
+                    None if lease_renewer is None else lease_renewer.stop,
+                ),
+                ("leader store close", None if store is None else store.close),
+                (
+                    "leader lease release",
+                    (
+                        None
+                        if lease_store is None or leader_token is None
+                        else lambda: lease_store.release(leader_token)
+                    ),
+                ),
+                ("leader lease close", None if lease_store is None else lease_store.close),
+            ):
+                if cleanup is None:
+                    continue
+                try:
+                    cleanup()
+                except BaseException as cleanup_error:
+                    startup_error.add_note(f"{cleanup_name} failed: {cleanup_error!r}")
+            raise
     else:
         prepare_run_dirs(paths, config.sync.num_learners)
         if config.init.resume and not database_path.is_file():
@@ -2631,6 +2662,7 @@ def run_syncer(config: Config) -> None:
             )
         store = SQLiteStore(database_path)
         logger = JsonlLogger(paths.logs / "syncer.jsonl", "syncer")
+    assert store is not None
     log_uncaught_exception(logger)
     hostname = socket.gethostname()
     logger.event(
