@@ -50,7 +50,7 @@ CRASH_VARS="$BASE_VARS,FS_DILOCO_PUBLICATION_FAILPOINT=after_db_commit,FS_DILOCO
 
 CRASH_JOB_ID="$(qsub -q debug-g -l "walltime=$CRASH_WALLTIME" -v "$CRASH_VARS" "$PROJECT_ROOT/scripts/miyabi/run_syncer_candidate.pbs")"
 SUCCESSOR_JOB_ID="$(qsub -q debug-g -l "walltime=$SUCCESSOR_WALLTIME" -W "depend=afterany:$CRASH_JOB_ID" -v "$BASE_VARS" "$PROJECT_ROOT/scripts/miyabi/run_syncer_candidate.pbs")"
-LEARNER_JOB_ID="$(qsub -q debug-g -l "walltime=$LEARNER_WALLTIME" -r y -v "$BASE_VARS" -J 0-7 "$PROJECT_ROOT/scripts/miyabi/run_static_learner.pbs")"
+LEARNER_JOB_ID="$(qsub -q debug-g -l "walltime=$LEARNER_WALLTIME" -r y -W "depend=after:$SUCCESSOR_JOB_ID" -v "$BASE_VARS" -J 0-7 "$PROJECT_ROOT/scripts/miyabi/run_static_learner.pbs")"
 
 "$PYTHON_BIN" - "$ARTIFACT" "$RUN_ID" "$SHARED_ROOT" "$DESCRIPTOR_SHA" \
   "$CRASH_JOB_ID" "$SUCCESSOR_JOB_ID" "$LEARNER_JOB_ID" "${PBS_JOBID:-}" \
@@ -79,6 +79,7 @@ payload = {
         "failpoint": "after_db_commit",
         "action": "SIGKILL",
         "successor_dependency": "afterany",
+        "learner_dependency": "after-successor-start",
     },
 }
 output.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n")

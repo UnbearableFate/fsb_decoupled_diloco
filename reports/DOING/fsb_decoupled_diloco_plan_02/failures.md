@@ -280,3 +280,13 @@ Attempt 3, `2497948.opbs`, submitted the short-walltime children and completed s
 - 原始证据：`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-1435_phase1-review-smoke_pass.log`；run root `runs/fs_diloco/plan02_phase1_review_final_2498876`。
 - 已确认根因：review remediation把Checker默认写回live run目录的行为改为显式必填`--output`，但smoke PBS调用点未同步，属于launcher接口迁移遗漏。
 - 下一轮：给smoke脚本增加job/stamp唯一的report artifact路径并显式传`--output`，静态检查后用相同20秒最短walltime重跑。通过条件为runtime无error、Checker artifact存在且为`PASS_WITH_FOLLOWUPS`、PBS exit 0。
+
+## 2026-08-06 15:02 JST — phase1-final-1plus8 acceptance（连续失败 1）
+
+- 命令与环境：clean source commit `68de59c41b90163cdafde12e1fc3041bd405c503`；launcher PBS `2498929.opbs`请求`00:00:10`、实际1秒、exit 0。它为run `plan02_phase1_final_68de59c`提交crash syncer `2498986.opbs`（15秒）、successor `2498987.opbs`（35秒）和learner array `2498988[0-7].opbs`（每项40秒）。启动artifact为`artifacts/20260806-1445_phase1-independent-launch_pass.json`，descriptor SHA-256 `8020f331784455d8a19e7a6fedd0dd6df31eb8b5494250b20b3365fd18f55b14`。
+- 预期：crash syncer在v0 DB commit后SIGKILL；successor及时取得epoch2；8 learners在40秒最短walltime内共同达到10 merges并正常停止。
+- 实际：crash job按预期6秒/exit137。scheduler在crash结束后让learner array先占用可用GPU，而把已有`afterany`依赖的successor继续排队到15:01:09。learner 0–5于14:58:33启动，只看到缺canonical head的epoch1，分别在47–49秒被40秒walltime杀死；learner6在51秒时按45秒canonical wait预算超时；learner7虽等到successor epoch2并产生proposal，但单独不能满足quorum 8。successor取得epoch2并从DB v0恢复，但只看到1 active/7 dead，无法形成merge。该失败是调度启动顺序与短walltime组合，不是HA authority/fencing失败。
+- 原始证据：`fsdiloco_syncer_candidate.o2498987`、`fsdiloco_static_learner.o2498988.{0..7}`、run root `runs/fs_diloco/plan02_phase1_final_68de59c`及上述launch artifact。scheduler状态：learner0–5 `Exit_status=-29`，learner6 `Exit_status=1`，其余在确认quorum已不可能后终止。
+- 清理动作：为避免已无可能通过的run继续占用配额，operator执行`qdel 2498987.opbs '2498988[].opbs'`；successor最终exit271，learner7 exit-29。没有删除run或失败证据。
+- 已确认根因：launcher同时释放successor和learner array，不能保证successor先获得一个节点；短learner walltime把scheduler queue/startup delay计入同一预算，形成“learners占资源等待successor、successor排队等待资源”的可用性死锁。
+- 下一轮：把learner array改为PBS `depend=after:<successor_job>`（successor开始运行即释放，而非等待其结束），保留successor自身`afterany:<crash_job>`。这先保证一个successor slot，再并发启动8 learners。依据无startup等待时此前learners约30秒实测，replacement使用45秒learner walltime；successor包含15秒lease等待与训练，使用40秒；crash继续15秒。新增launcher artifact记录该start dependency。相同completed gate只有8 learners、successor和Checker全部exit0且性能/可靠性指标通过才算PASS。
