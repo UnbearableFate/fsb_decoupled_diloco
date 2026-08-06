@@ -112,7 +112,7 @@ HA 默认关闭，只允许 `fragments.enabled=false`。`recovery_submission.ena
 | `recovery_submission.max_attempts_per_observation` / `max_outstanding_candidates` | 3 / 1 | observation尝试预算和 scheduler中未完成候选上限 |
 | `recovery_submission.claim_retention_seconds` | 3600 | 已终态 claim的保留/归档窗口 |
 | `recovery_submission.candidate_pbs_script` | `scripts/miyabi/run_syncer_candidate.pbs` | qsub候选脚本；scheduler提交前仍执行 descriptor/source gate |
-| `recovery_submission.candidate_walltime` | `null` | 自动 recovery启用时必填的 workload估算 `HH:MM:SS`；每次 qsub显式传 `-l walltime=...`，避免继承通用脚本的过长默认 |
+| `recovery_submission.candidate_walltime` | `null` | 自动 recovery启用时必填的 workload估算 `HH:MM:SS`；应结合相邻实测选取尽可能短、但足以覆盖排队后启动波动、预期运行和完整收尾的值，每次 qsub显式传 `-l walltime=...`，避免继承通用脚本的过长默认。可靠跑完优先于进一步压缩请求 |
 
 ## liveness
 

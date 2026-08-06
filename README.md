@@ -6,6 +6,8 @@ Milestone 1 uses independent learners (one CUDA device each when available, with
 
 The implementation intentionally does not use `torch.distributed`, NCCL, RPC, Ray, DeepSpeed, FSDP, or PCCL for milestone 1 communication.
 
+Plan 02 Phase 1 (full-mode Syncer HA) is complete. The final clean-source Miyabi acceptance used one crash-injected syncer, an independently scheduled successor, and eight independent learner array elements; the successor repaired the post-DB/pre-control crash boundary and completed global versions 1–10. The completed Checker and matched performance gates both returned `PASS`. This validates recovery, coordination, and control-plane performance, not training quality; exact jobs and retained artifacts are listed in [Operations](docs/07-operations.md#4-miyabi-pbs-%E6%89%B9%E4%BD%9C%E4%B8%9A).
+
 ## Layout
 
 - `fs_diloco/core/`: configuration and shared identifiers.
@@ -56,7 +58,10 @@ scripts/local/run_tiny_2proc_smoke.sh
 Miyabi 1-node debug batch:
 
 ```bash
-qsub scripts/miyabi/run_1node_debug.pbs
+# First run bash -n on every PBS script and verify literal group IDs.
+# Replace HH:MM:SS with the shortest evidence-based estimate that still
+# includes sufficient startup, runtime, and teardown margin.
+qsub -l walltime=HH:MM:SS scripts/miyabi/run_1node_debug.pbs
 ```
 
 Inspect a completed run:

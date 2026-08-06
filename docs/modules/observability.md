@@ -18,6 +18,11 @@ JSONL 事件日志、CSV 指标、learner 资源采样与 W&B 遥测。资源读
 - **`LEARNER_METRIC_FIELDS`** — `learner_metrics.csv` 字段:timestamp、learner_id、local_step、global_version、global_merge_event、fragment_id、base_fragment_version、train_loss、tokens、tokens_per_sec、update_write_seconds、`local_cycle_elapsed_seconds`、param_norm、fragment_norm、last_loaded_fragment_versions_json、fragment_adopt_count、learning_rate、scheduler_total_steps、phase，以及全训练/上一个 local cycle 的资源峰值、cycle 平均 step 时间、step 数和有效资源样本数。
 - **`UPDATE_MANIFEST_FIELDS`** — `update_manifest.csv` 的精确字段为 timestamp、update_id、learner_id、update_kind、fragment_id、base_fragment_version、base_global_merge_event、base_global_version、local_step_start/end、tokens_this_update、tensor_dtype、file_path、file_size_bytes、sha256；full/fragment 各自不适用的列留空。
 
+## observability/phase1_performance.py — 冻结的 Phase 1 性能门禁
+
+- 格式版本固定为1。business transaction门禁要求baseline/observer各至少400个样本，以25个样本为一块做细粒度AB/BA交错；checkpoint publication门禁要求legacy/HA各至少100个交替样本。
+- 两项上限都按`baseline_p99 × 1.25 + 0.002s`计算。`nearest_rank_percentile(samples, quantile)`使用`ceil(q×n)-1`的nearest-rank索引；`matched_p99_limit(...)`只组合冻结ratio和filesystem timing jitter，不从本次结果自适应放宽阈值。
+
 ## observability/resource_monitor.py — learner 资源采样
 
 - **`_bounded_percent(value)`** — 转 float、拒绝非有限值并 clamp 到 `[0,100]`;None 保持 None。

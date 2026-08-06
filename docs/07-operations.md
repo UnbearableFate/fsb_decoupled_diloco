@@ -82,17 +82,16 @@ qsub -l walltime=00:02:00 -r y -J 0-7 -v "$vars" scripts/miyabi/run_static_learn
 
 syncer异常退出后，只需用相同 descriptor变量重新 `qsub` 一个 `run_syncer_candidate.pbs`。不要删除 fixed cache、DB或旧 epoch目录；successor从 DB恢复并修复 canonical control。异常 leader可能留下 canonical `error` generation，它是诊断记录而不是最终 stop，learner会继续等待/reconcile，successor可将它推进为更高 generation的正常终态。若旧 process暂停在 write transaction内并持续持有 SQLite lock，先通过 operator确认并终止那个旧 job，再提交/等待 successor；系统不会自动 `qdel`。`coordination.recovery_submission.enabled` 默认false，开启后 learner只能去重并提交 candidate，candidate仍必须竞争 lease。
 
-completed run先在compute node生成与该run descriptor绑定的matched性能artifact，再用只读 Checker验收。两次PBS提交都应根据最近实测显式覆盖最短可行walltime：
+completed run先在compute node生成与该run descriptor绑定的matched性能artifact，再用只读 Checker验收。两次PBS提交都应根据最近实测显式覆盖成尽可能短、但为启动波动、预期运行和完整收尾保留充分余量的walltime：
 
 ```bash
-qsub -l walltime=00:01:00 \
+matched_job=$(qsub -l walltime=00:01:00 \
   -v "FS_DILOCO_SHARED_ROOT=/shared/runs/my_ha_run,OUTPUT=/absolute/report/path/phase1-matched-performance_pass.json" \
-  scripts/miyabi/run_plan02_phase1_matched_performance.pbs
+  scripts/miyabi/run_plan02_phase1_matched_performance.pbs)
 
-python scripts/miyabi/check_plan02_phase1.py \
-  --run-root /shared/runs/my_ha_run --mode phase1-completed \
-  --matched-performance /absolute/report/path/phase1-matched-performance_pass.json \
-  --output /absolute/report/path/phase1-completed-checker_pass.json
+qsub -l walltime=00:00:15 -W "depend=afterok:${matched_job}" \
+  -v "FS_DILOCO_SHARED_ROOT=/shared/runs/my_ha_run,MATCHED_PERFORMANCE_ARTIFACT=/absolute/report/path/phase1-matched-performance_pass.json,OUTPUT=/absolute/report/path/phase1-completed-checker_pass.json" \
+  scripts/miyabi/run_plan02_phase1_checker.pbs
 ```
 
 matched artifact在同一shared filesystem上用细粒度AB/BA配对块交错比较健康leader只读candidate observer与静默baseline的fenced transaction p99，并用SQLite trace核验candidate没有尝试writer transaction；checkpoint门禁从目标配置构建同一model/seed/tensor，交替比较HA publication与Plan 01 legacy baseline。completed Checker会复算冻结阈值、核对每块采样/观察证据，并要求artifact的run/descriptor/source/config identity全部与被验收run一致；缺失、错配或性能回归都返回`BLOCKED`。
@@ -129,8 +128,8 @@ scripts/local/clean_run.sh --delete --keep-latest-global runs/fs_diloco
 | `run_9node_fragment_gpt2_wikitext2_50x10.pbs` / `run_9node_no_fragment_gpt2_wikitext2_50x10.pbs` | 9 节点 | 8 learner、inner steps=50、outer steps=10 的 fragment/no-fragment 对照实验 |
 | `run_1node_lm_eval.pbs` | 1 节点 | checkpoint 导出 + lm-eval |
 | `run_1node_validation_eval.pbs` | 1 节点 | 使用 run resolved config 的专用 validation loss/ppl；校验非空 token、有限指标、checkpoint/source identity 并原子附加 summary |
-| `run_syncer_candidate.pbs` / `run_static_learner.pbs` | 各 1 节点独立 job | HA full候选和 static learner array；两者在 runtime import前校验 descriptor/source identity，提交时应覆盖成 workload所需的短 walltime |
-| `run_plan02_phase1_{tests,smoke,faults,lock,acceptance_launcher,matched_performance,checker}.pbs` | 1或2节点 | Phase 1关联测试、故障矩阵、SQLite lock边界、独立 1+8 launcher、matched性能门禁和只读 completed Checker；验证脚本使用秒/分钟级短walltime |
+| `run_syncer_candidate.pbs` / `run_static_learner.pbs` | 各 1 节点独立 job | HA full候选和 static learner array；两者在 runtime import前校验 descriptor/source identity，提交时应覆盖成 workload所需且留有充分完成余量的短 walltime |
+| `run_plan02_phase1_{tests,smoke,faults,lock,acceptance_launcher,matched_performance,checker}.pbs` | 1或2节点 | Phase 1关联测试、故障矩阵、SQLite lock边界、独立 1+8 launcher、matched性能门禁和只读 completed Checker；验证脚本使用由相邻实测估算、留有充分完成余量的秒/分钟级短walltime |
 
 2026-08-06 的最终 Phase 1 正式验收绑定clean commit `36762854bfcbbc23b71ab838913023d64cf37b5e`，在 Miyabi 上以1个syncer job和8个独立learner array element运行：epoch 1 syncer在v0 DB提交后的failpoint被`SIGKILL`，依赖job取得epoch 2并恢复，随后连续提交v1–v10；8个learner分别位于独立GPU节点并正常停止。最终terminal generation为2、5120 seen tokens、120次lease renew和457次business transaction均无失败，stale epoch commit与canonical adoption错误均为0，completed Checker返回`PASS`且无runtime failure event。matched门禁另以400+400个business样本和100+100个checkpoint样本通过两项p99阈值，并验证健康candidate writer transaction attempt为0。该workload每个learner约执行200以上local steps且完成10个global merge，超过50-local-step × 10-global-step文档同步基线；证据为PBS `2499329/2499331/2499332/2499333[]/2499345/2499349`及`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-1624_phase1-completed-checker_pass.json`。这是恢复、协议和控制面性能验证，不是训练质量结论。
 

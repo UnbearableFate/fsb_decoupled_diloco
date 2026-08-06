@@ -28,7 +28,7 @@ Run 分析方法和实验结果不放在系统文档中,统一维护在 [reports
 | [modules/storage.md](modules/storage.md) | `fs_diloco/storage/` — 原子 I/O、safetensors 编解码、路径、持久 SQLite、归档与引用驱动 GC |
 | [modules/protocol.md](modules/protocol.md) | `fs_diloco/protocol/` — 合并选择、liveness、fragment 索引/编解码/调度 |
 | [modules/modeling.md](modules/modeling.md) | `fs_diloco/modeling/` — 模型、数据、参数索引、外层优化器 |
-| [modules/observability.md](modules/observability.md) | `fs_diloco/observability/` — JSONL 日志、CSV 指标、W&B |
+| [modules/observability.md](modules/observability.md) | `fs_diloco/observability/` — JSONL 日志、CSV 指标、W&B 与 Phase 1 性能门禁常量 |
 | [modules/runtime-learner.md](modules/runtime-learner.md) | `fs_diloco/runtime/learner.py` + `failure_sim.py` — learner 进程 |
 | [modules/runtime-syncer.md](modules/runtime-syncer.md) | `fs_diloco/runtime/syncer.py` — syncer 进程 |
 | [modules/tools.md](modules/tools.md) | `fs_diloco/tools/` + `cli.py` — run 检查与 LM Eval Harness 工具 |
@@ -44,4 +44,4 @@ Run 分析方法和实验结果不放在系统文档中,统一维护在 [reports
 
 ## 文档对应的代码版本
 
-本组文档已按 2026-07-22 的 `master` 代码重新核对。协议事实以 `runtime/`、`storage/schema.sql` 和 `core/config.py` 为最终依据；实验结论只引用仓库中已经保留的报告证据。模块参考同时覆盖公开入口和会影响协议行为的私有 helper。
+本组文档已按2026-08-06的Plan 02 Phase 1最终实现重新核对：可执行source commit为`36762854bfcbbc23b71ab838913023d64cf37b5e`，最终不可变审查证据target为`fefef86b68aa346afee93680ad9c494657412074`。协议事实以`runtime/`、`storage/schema.sql`和`core/config.py`为最终依据；实验结论只引用仓库中已经保留的报告证据。模块参考同时覆盖公开入口和会影响协议行为的私有helper。

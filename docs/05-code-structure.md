@@ -7,17 +7,22 @@ fsb_decoupled_diloco/
 ├── fs_diloco/                     # Python 包
 │   ├── core/                      # 最底层:配置与常量,不依赖其他子包
 │   │   ├── config.py              #   YAML → dataclass 配置,resolve/校验/序列化
-│   │   └── constants.py           #   格式版本、状态常量、文件名模板、learner id 编解码
+│   │   ├── constants.py           #   格式版本、状态常量、文件名模板、learner id 编解码
+│   │   └── run_descriptor.py      #   immutable run/source/config identity的构建与启动前校验
 │   ├── storage/                   # 文件系统与元数据持久化
 │   │   ├── atomic_io.py           #   原子写(bytes/text/json/writer)、safe_read_json、sha256
 │   │   ├── paths.py               #   RunPaths:共享目录布局的唯一定义;prepare_run_dirs
 │   │   ├── tensor_codec.py        #   safetensors 存取:全局权重/外层状态/update 向量
 │   │   ├── sqlite_store.py        #   持久 SQLite:update/learner/version/事务状态机
 │   │   ├── schema.sql             #   数据库 schema(随包分发)
+│   │   ├── schema_bootstrap.py    #   HA唯一initializer与bootstrap-complete publication
+│   │   ├── leader_lease.py        #   monotonic epoch lease、renew/release与本地安全预算
+│   │   ├── fenced_store.py        #   token绑定、事务内fence校验和business transaction遥测
 │   │   └── maintenance.py         #   crash-safe JSONL 归档、DB 剪枝、引用驱动 GC
 │   ├── protocol/                  # 协议逻辑(纯函数为主,不做 I/O 或仅薄封装)
 │   │   ├── merge.py               #   staleness、加权、每 learner 选一、加权平均
 │   │   ├── liveness.py            #   心跳校验/摄取、active/stale/dead 分类、无进展超时
+│   │   ├── control_epoch.py        #   epoch canonical control发布、读取、修复与history
 │   │   ├── fragment_index.py      #   分片索引构建(full/balanced_tensor)与严格校验
 │   │   ├── fragment_codec.py      #   分片抽取/scatter/materialize、分片 safetensors 存取
 │   │   └── fragment_scheduler.py  #   round-robin 调度与期望版本推算
@@ -29,14 +34,22 @@ fsb_decoupled_diloco/
 │   ├── observability/             # 观测
 │   │   ├── logging_utils.py       #   JsonlLogger、未捕获异常钩子
 │   │   ├── metrics.py             #   CSV 追加与三张表的字段清单
+│   │   ├── phase1_performance.py  #   matched p99门禁的冻结采样数/公式
 │   │   ├── resource_monitor.py    #   /proc CPU、CUDA utilization、step/cycle 资源统计
 │   │   └── wandb_logging.py       #   W&B 命名/标签/config/选中更新统计
 │   ├── runtime/                   # 进程实现(组装以上全部)
 │   │   ├── adoption.py            #   full learner 的 replace/rebase/predict 策略状态机
 │   │   ├── learner.py             #   learner 主循环(全量 + fragment 两套)
 │   │   ├── syncer.py              #   syncer 主循环(全量 + fragment 两套)、初始化/恢复/发布
+│   │   ├── syncer_ha.py           #   leader-bound store、lease renewer、epoch bootstrap/repair
+│   │   ├── pbs_scheduler.py       #   qsub/qstat adapter、job分类与request fingerprint
+│   │   ├── launch_outbox.py       #   learner recovery claim、全局reservation与重试预算
 │   │   └── failure_sim.py         #   故障注入:随机睡眠/跳过上传/崩溃
 │   ├── tools/                     # 离线工具
+│   │   ├── init_run.py            #   HA run唯一initializer CLI
+│   │   ├── launch_independent_run.py # initializer + 独立syncer/learner qsub
+│   │   ├── launch_phase1_acceptance.py # crash/successor/learner验收提交与durable receipts
+│   │   ├── phase1_matched_performance.py # completed Checker所需matched性能artifact
 │   │   ├── analysis.py            #   run 摘要与断言(读共享目录 + 持久 DB/archive,不依赖 torch)
 │   │   ├── compare_event_traces.py #  profile-driven actor 事件轨迹比较
 │   │   ├── eval_lm_harness.py     #   checkpoint 解析/导出为 HF 目录/lm-eval 结果转 CSV
@@ -110,6 +123,10 @@ core  ←  storage  ←  protocol / modeling / observability  ←  runtime  ← 
 | `python -m fs_diloco.syncer` | `runtime/syncer.py: main` |
 | `python -m fs_diloco.analysis` | `tools/analysis.py: main`(`summary` / `assert-fragment-smoke` / `assert-fragment-5000` 子命令) |
 | `python -m fs_diloco.eval_lm_harness` | `tools/eval_lm_harness.py: main`(`resolve-checkpoint` / `export-checkpoint` / `results-to-csv`) |
+| `python -m fs_diloco.tools.init_run` | `tools/init_run.py: main`(创建immutable HA run) |
+| `python -m fs_diloco.tools.launch_independent_run` | `tools/launch_independent_run.py: main`(生成或提交独立syncer/learner作业) |
+| `python -m fs_diloco.tools.launch_phase1_acceptance` | `tools/launch_phase1_acceptance.py: main`(提交crash/successor/learner验收作业并持久化receipts) |
+| `python -m fs_diloco.tools.phase1_matched_performance` | `tools/phase1_matched_performance.py: main`(生成Phase 1 completed门禁artifact) |
 | `fs-diloco-syncer` / `fs-diloco-learner` | 由 `pyproject.toml` 直接映射到两个 `runtime.*:main` |
 | `fs-diloco-inspect` | `tools/analysis.py: main` |
 | `fs-diloco-lm-eval` | `tools/eval_lm_harness.py: main` |
