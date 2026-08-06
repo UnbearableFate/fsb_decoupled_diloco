@@ -1,4 +1,5 @@
 import json
+import importlib.util
 import sqlite3
 import subprocess
 import sys
@@ -7,6 +8,14 @@ from pathlib import Path
 
 
 SCRIPT = Path("scripts/miyabi/sqlite_shared_fs_probe.py")
+
+
+def _load_probe_module():
+    spec = importlib.util.spec_from_file_location("sqlite_shared_fs_probe", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_sqlite_stress_probe_and_kill_reopen(tmp_path):
@@ -134,3 +143,27 @@ def test_sqlite_contender_connection_waits_for_existing_writer(tmp_path):
     result = json.loads(output.read_text(encoding="utf-8"))
     assert result["committed_transactions"] == 1
     assert result["integrity_check"] == ["ok"]
+
+
+def test_clock_offset_interval_bounds_asymmetric_observation_delay():
+    module = _load_probe_module()
+    lower, upper = module._clock_offset_interval(
+        local_sent_wall_ns=1_000,
+        local_received_wall_ns=1_300,
+        remote_received_wall_ns=1_125,
+        remote_sent_wall_ns=1_140,
+    )
+    assert (lower, upper) == (-160, 125)
+    assert lower <= 100 <= upper
+
+
+def test_verify_readonly_does_not_initialize_missing_database(tmp_path):
+    missing = tmp_path / "missing.sqlite3"
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "verify-readonly", "--db", str(missing)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode != 0
+    assert not missing.exists()

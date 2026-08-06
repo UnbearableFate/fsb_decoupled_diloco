@@ -192,3 +192,94 @@ Artifacts:
 
 - `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-011600_phase0-feasibility_pass.json`.
 - `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-011600_phase0-pbs.log`.
+
+## 2026-08-06T09:24:46+09:00 — Phase 0 dual-review remediation evidence PASS
+
+### Facts
+
+- The independent reviews of review target `f04697be5e94a25d611db4a00a49b212882a7fc6` against branch point `c1c61153548ff7b2543d3ce1bc764c19432b138e` both returned `CHANGES_REQUIRED`. Their immutable reports are:
+  - `reports/DOING/code_review/fsb_decoupled_diloco_plan_02/phase-0/gpt-5.6-sol_f04697be5e94a25d611db4a00a49b212882a7fc6.md`;
+  - `reports/DOING/code_review/fsb_decoupled_diloco_plan_02/phase-0/claude-opus-5_f04697be5e94a25d611db4a00a49b212882a7fc6.md`.
+- Focused remediation tests ran on compute node `mg0038` in PBS job `2497257.opbs`:
+
+  ```text
+  .venv/bin/python -m pytest -q tests/test_plan02_feasibility.py tests/test_sqlite_probe.py tests/test_capture_source_identity.py tests/test_source_identity.py
+  ```
+
+- Result: `20 passed in 8.12s`.
+- Final static validation passed from the Miyabi login/control plane:
+
+  ```text
+  bash -n scripts/miyabi/*.pbs
+  rg -n '#PBS -W group_list=<group_id>' scripts/miyabi/*.pbs
+  .venv/bin/ruff check scripts/miyabi/sqlite_shared_fs_probe.py scripts/miyabi/plan02_fault_probe.py scripts/miyabi/plan02_source_gate.py scripts/miyabi/plan02_pbs_capability.py scripts/miyabi/plan02_phase0_aggregate.py scripts/miyabi/check_plan02_feasibility.py tests/test_sqlite_probe.py tests/test_plan02_feasibility.py
+  .venv/bin/python -m py_compile scripts/miyabi/sqlite_shared_fs_probe.py scripts/miyabi/plan02_fault_probe.py scripts/miyabi/plan02_source_gate.py scripts/miyabi/plan02_pbs_capability.py scripts/miyabi/plan02_phase0_aggregate.py scripts/miyabi/check_plan02_feasibility.py tests/test_sqlite_probe.py tests/test_plan02_feasibility.py
+  git diff --check
+  ```
+
+- The placeholder search produced no matches; every Phase 0 PBS script retains the literal group ID `xg24i002`.
+- The authoritative remediated two-node run was submitted with:
+
+  ```text
+  qsub -o /work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-092200_phase0-remediation_review.log -v PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,STAMP=20260806-092200 scripts/miyabi/run_plan02_phase0_feasibility.pbs
+  ```
+
+- Parent PBS job `2497282.opbs` used `debug-g`, `select=2:mpiprocs=4`, hosts `mg0004` and `mg0005`, finished in 41 seconds with `Exit_status=0`, and printed both `PHASE0_CHECKER=PASS` and `PLAN02_PHASE0_COMPLETE=.../20260806-092200_phase0-feasibility_pass.json`.
+- The resolved settings were two hosts, 8 contention writers, 50 transactions per writer, `busy_timeout_ms=10`, `retry_timeout_seconds=60`, 5 ms lock hold, 20 two-way clock rounds, and a 2-second maximum absolute clock-offset bound.
+- FEAS-01 through FEAS-05 all returned `PASS`. The two-way interval intersection was `[-0.003513105, 0.003404724]` seconds, giving an absolute upper bound of `0.003513105` seconds. Cross-node contention committed `400/400` transactions with 1,521 handled busy events, zero starvation, 38 acquire and 362 renew actions, a 2.945-second maximum wait, `journal_mode=DELETE`, `synchronous=FULL`, and integrity `ok`.
+- Scheduler evidence contains real `queued`, `prologue`, `running`, and `finished` observations. Scalar child `2497284.opbs` and array physical incarnations `2497285[0].opbs` and `2497285[1].opbs` all have terminal `Exit_status=0` and `run_count=1`; both array children record `Rerunable=True`. Only allowlisted qstat fields and the `PLAN02_REQUEST_FINGERPRINT` variable are retained.
+- Source pinning independently rejects commit, dirty fingerprint, resolved config, descriptor, protocol, schema, and run-ID mismatches before runtime import and before business writes. The Checker now retains the failing source input in structured `_blocked.json` evidence.
+- Artifact SHA-256 is `c7a0fc831b87f0b6017aa5e11f55028e8a05ef91d435e4d1e2533ff14c8edb7a`. The artifact records dirty source fingerprint `sha256:d4f466082cbc69c95fd8053d53dfa05c413668c8a115091595237fa6b77f93ac` over commit `d9fea98ae527cdf64f56edabce0f8525909d1e13`.
+- The successful job removed its job-scoped work directory. After the replacement PASS artifact was persisted, the exact finished attempt-1 raw directory `work_20260806-090551_2497224` was inventoried at 788 KiB and deleted as redundant probe-only telemetry. The retained `_blocked.json` and complete remediation log preserve the failure, root cause, and Checker behavior; the deleted raw directory is not recoverable from the workspace.
+- Two superseded successful reruns (`20260806-091226_*` and `20260806-091643_*`, 195,397 bytes total) were also deleted after the final artifact subsumed their evidence. They are not recoverable from the workspace; the authoritative `20260806-092200_*` JSON/log pair is retained.
+- Correction to the append-only record: the sentence near the top of `failures.md` saying no Phase 0 failure had been recorded was an obsolete placeholder. The subsequent timestamped entries are authoritative. Earlier progress timestamps were recorded out of execution order; this entry uses the actual terminal time and does not rewrite prior append-only records.
+
+### Finding dispositions
+
+Codex report:
+
+- `Medium — FEAS-02 canonical adoption`: **fixed**. The probe discovers, selects, and validates the highest epoch independently for `latest`, `stop`, and `summary`; exact discovery, pollution, and repair maps are Checker-enforced and regression-tested.
+- `Medium — child marker versus scheduler completion`: **fixed**. A marker is insufficient; scalar/array completion requires terminal history plus `Exit_status=0`, with a regression showing that a marker followed by exit 7 remains incomplete.
+- `Medium — independent protocol/schema/run expectation`: **fixed**. The pre-import gate accepts independent expected values and has mutually consistent descriptor/marker mismatch cases for protocol, schema, and run ID.
+- `Medium — clock method`: **fixed**. The one-way midpoint comparison was replaced by 20 filesystem two-way exchanges with nonnegative-delay offset intervals, an intersection, and an explicit absolute upper bound checked against configuration.
+- `Low — qstat environment retention`: **fixed**. qstat persistence uses an allowlist and extracts only the Plan 02 request fingerprint; a sanitization regression is present and the final artifact contains no `Variable_List` or inherited environment.
+- `Low — artifact result suffix`: **deferred-with-justification**. Historical append-only `*_phase0-pbs.log` filenames remain immutable because renaming would break recorded evidence links; every new remediation log uses the required `_review.log` result suffix. Owner: future Plan 02 experiment authors.
+
+Claude report:
+
+- `H1 — real queued/finished scheduler evidence`: **fixed**. A future-start scalar produces deterministic `W/Q` evidence, polling continues through terminal history, `no_record` and query failure are distinct, and the final run proves queued/prologue/running/finished plus exit-zero completion.
+- `M1 — empty repair map fail-open`: **fixed**. The Checker requires the exact three cache kinds, epoch 2 values, and nonempty per-kind discovery counts.
+- `M2 — constant booleans`: **fixed**. FEAS-01/02/05 booleans and business-write counts are derived from retained observations and independently checked.
+- `M3 — contention and starvation not falsifiable`: **fixed**. The Checker requires two hosts, exact DB/event/request/commit count equality, every writer represented, `busy_errors > 0`, both acquire and renew, and zero explicit starvation; contention workers emit starvation evidence and fail nonzero on timeout.
+- `M4 — no blocked artifact after stage failure`: **fixed**. The PBS script has a job-level `ERR` path that atomically creates structured failure input, invokes the Checker, emits `BLOCKED`, and retains raw evidence. Remediation attempt 1 exercised this path.
+- `M5 — rerunable incarnation semantics`: **fixed**. The research boundary and artifact record rerun semantics and per-physical-child `run_count`, `Rerunable`, and exit status; Phase 2 may not treat PBS job ID as an exactly-once physical identity.
+- `M6 — aggregate/source-gate direct coverage`: **fixed**. Direct tests cover the clock aggregate bound, independent source-gate values, terminal child failure, blocked-artifact retention, and PBS sanitization/command behavior.
+- `L1 — clock measurement wording`: **fixed** by the two-way interval method and explicit bound above.
+- `L2 — restart capability naming`: **fixed**. The probe now distinguishes `scheduler_query_supported` and `manual_independent_job_supported`; an unverified restart claim is not emitted, and restart execution remains explicitly deferred to Phase 1.
+- `L3 — artifact hygiene`: **fixed** by qstat allowlisting and final-artifact secret/environment scanning.
+- `L4 — contradictory failure header`: **rejected-with-evidence** as an immutable historical line under the append-only rule; the correction in this entry establishes which timestamped records are authoritative without rewriting history.
+- `L5 — nonmonotonic historical timestamps`: **rejected-with-evidence** for the same append-only reason; subsequent records use actual execution timestamps.
+- `L6 — suspended state classification`: **fixed**. PBS `S` is classified separately as `suspended`.
+- `L7 — dead `killed` assignment`: **fixed**.
+- `L8 — brittle source-string tests`: **deferred-with-justification**. The qsub array assertion is now behavior-based. The remaining literal assertion protects the exact destructive cleanup primitive in a PBS shell script and complements resolved-prefix runtime guards; impact is limited to a possible false-positive test after an equivalent cleanup refactor. Owner: Phase 1 cleanup/tooling work.
+- `L9 — unrestricted STAMP`: **fixed** with a strict alphanumeric/hyphen allowlist before path construction.
+- `L10 — stopped holder outliving supervisor`: **deferred-with-justification**. PBS reaps the job process tree and the supervisor kills/reaps the holder on ordinary exceptions; an abrupt supervisor kill could retain the stopped holder until scheduler cleanup, but cannot outlive the PBS job. Owner: Phase 1 P1-L1 fault-supervisor hardening.
+- `L11 — transaction-outside boundary`: **deferred-with-justification**. The plan explicitly assigns the transaction-outside lease-expiry takeover branch to Phase 1 P1-L1; Phase 0 establishes only the writer-lock side and does not claim the production lease protocol exists. Owner: Phase 1 P1-L1.
+- `L12 — manifest fallback evidence link`: **fixed**. FEAS-04 now references both the authoritative array-capability artifact and the earlier real scheduler-rejection artifact that selected `independent_manifest`.
+- `L13 — writable cross-node verifier`: **fixed**. Cross-node visibility uses a SQLite URI `mode=ro` path that performs no DDL or writes; a regression verifies that readonly open cannot create a missing DB.
+
+### Inferences
+
+- The original High and all Medium review findings are remediated with executable regression coverage and new two-node evidence. Remaining deferrals are Low-severity historical-record or Phase 1 hardening items and do not weaken the Phase 0 feasibility conclusions.
+- Because remediation changed the source gate, clock evidence method, scheduler terminal contract, and Checker safety boundary, this is a new Phase 0 completion candidate rather than a phase-final result. A fresh review-target commit and repeated independent dual-model gate are required before Phase 1 begins.
+
+### Follow-up
+
+- Freeze the remediated tree in a new review-target commit, verify the committed source fingerprint matches this final artifact, and repeat the Phase 0 reviews against the plan branch point.
+
+Artifacts:
+
+- `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-092200_phase0-feasibility_pass.json`.
+- `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-092200_phase0-remediation_review.log`.
+- `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-090551_phase0-feasibility_blocked.json`.
+- `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-090551_phase0-remediation_review.log`.

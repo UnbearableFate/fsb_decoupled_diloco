@@ -18,6 +18,10 @@ PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 PLAN_ID="fsb_decoupled_diloco_plan_02"
 PLAN02_REPORT_DIR="$PROJECT_ROOT/reports/DOING/$PLAN_ID"
 STAMP="${STAMP:-$(date +%Y%m%d-%H%M%S)}"
+if [[ ! "$STAMP" =~ ^[0-9A-Za-z][0-9A-Za-z-]*$ ]]; then
+  echo "Invalid STAMP: $STAMP" >&2
+  exit 2
+fi
 JOB_ID_SHORT="${PBS_JOBID%%.*}"
 PLAN02_PHASE0_ARTIFACT_DIR="$PLAN02_REPORT_DIR/artifacts"
 PLAN02_PHASE0_WORK_DIR="$PLAN02_PHASE0_ARTIFACT_DIR/work_${STAMP}_${JOB_ID_SHORT}"
@@ -47,6 +51,68 @@ case "$RESOLVED_WORK_DIR" in
     exit 2
     ;;
 esac
+
+emit_phase0_blocked() {
+  local failed_line="$1"
+  local original_rc="$2"
+  trap - ERR
+  set +e
+  echo "[ERROR] Failed at line $failed_line (rc=$original_rc)" >&2
+  local failure_input="$PLAN02_PHASE0_WORK_DIR/phase0_failure_input.json"
+  local checker_output="$PLAN02_PHASE0_WORK_DIR/phase0_checker_blocked.json"
+  local final_artifact="${FINAL_PREFIX}_blocked.json"
+  "$PYTHON_BIN" - "$failure_input" "$failed_line" "$original_rc" <<'PY'
+import json
+import os
+from pathlib import Path
+import sys
+import tempfile
+import time
+
+path = Path(sys.argv[1])
+payload = {
+    "artifact_format_version": 1,
+    "probe_failure": {
+        "failed_line": int(sys.argv[2]),
+        "returncode": int(sys.argv[3]),
+        "recorded_at": time.time(),
+    },
+}
+descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+    json.dump(payload, handle, indent=2, sort_keys=True)
+    handle.write("\n")
+    handle.flush()
+    os.fsync(handle.fileno())
+os.replace(temporary, path)
+PY
+  "$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/check_plan02_feasibility.py" \
+    --input-json "$failure_input" \
+    --output-json "$checker_output" \
+    > "$PLAN02_PHASE0_WORK_DIR/checker_blocked.stdout"
+  "$PYTHON_BIN" - "$checker_output" "$final_artifact" <<'PY'
+import os
+from pathlib import Path
+import sys
+import tempfile
+
+source = Path(sys.argv[1])
+destination = Path(sys.argv[2])
+descriptor, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", dir=destination.parent)
+with os.fdopen(descriptor, "wb") as handle:
+    handle.write(source.read_bytes())
+    handle.flush()
+    os.fsync(handle.fileno())
+os.replace(temporary, destination)
+PY
+  if [[ -s "$final_artifact" ]]; then
+    printf 'PHASE0_CHECKER=BLOCKED\n'
+    printf 'PHASE0_ARTIFACT=%s\n' "$final_artifact"
+  fi
+  echo "Phase 0 blocked; retaining raw work at $PLAN02_PHASE0_WORK_DIR" >&2
+  exit "$original_rc"
+}
+trap 'emit_phase0_blocked "$LINENO" "$?"' ERR
 
 echo "PLAN_ID=$PLAN_ID"
 echo "PROJECT_ROOT=$PROJECT_ROOT"
@@ -117,7 +183,7 @@ PY
         sleep 0.01
       done
       test -s "$PLAN02_PHASE0_WORK_DIR/visibility_ready.json"
-      "$PYTHON_BIN" "$SQLITE_PROBE" verify --db "$SQLITE_DB" \
+      "$PYTHON_BIN" "$SQLITE_PROBE" verify-readonly --db "$SQLITE_DB" \
         > "$PLAN02_PHASE0_WORK_DIR/visibility_read.tmp"
       mv "$PLAN02_PHASE0_WORK_DIR/visibility_read.tmp" "$PLAN02_PHASE0_WORK_DIR/visibility_read.json"
     fi
@@ -142,41 +208,31 @@ mpirun "${MPI_COMMON[@]}" \
       > "$PLAN02_PHASE0_WORK_DIR/contend_${rank}.log"
   '
 
-CLOCK_MARKER="$PLAN02_PHASE0_WORK_DIR/clock_marker.json"
-rm -f -- "$CLOCK_MARKER"
+CLOCK_EXCHANGE_DIR="$PLAN02_PHASE0_WORK_DIR/clock_exchange"
+mkdir -p "$CLOCK_EXCHANGE_DIR"
 mpirun "${MPI_COMMON[@]}" \
   --map-by ppr:1:node \
   -np 2 \
-  /usr/bin/env "${MPI_ENV_ARGS[@]}" "CLOCK_MARKER=$CLOCK_MARKER" \
+  /usr/bin/env "${MPI_ENV_ARGS[@]}" "CLOCK_EXCHANGE_DIR=$CLOCK_EXCHANGE_DIR" \
   bash -lc '
     set -eEuo pipefail
     rank="${OMPI_COMM_WORLD_RANK:?missing OMPI_COMM_WORLD_RANK}"
-    "$PYTHON_BIN" "$SQLITE_PROBE" clock-sample \
-      --marker "$CLOCK_MARKER" \
+    if [[ "$rank" -eq 0 ]]; then
+      role=coordinator
+      output="$PLAN02_PHASE0_WORK_DIR/clock_exchange.json"
+    else
+      role=responder
+      output="$PLAN02_PHASE0_WORK_DIR/clock_responder.json"
+    fi
+    "$PYTHON_BIN" "$SQLITE_PROBE" clock-exchange \
+      --exchange-dir "$CLOCK_EXCHANGE_DIR" \
+      --role "$role" \
       --writer-id "rank${rank}" \
-      --output-json "$PLAN02_PHASE0_WORK_DIR/clock_${rank}.json" \
+      --rounds 20 \
+      --output-json "$output" \
       --timeout-seconds 30 \
-      > "$PLAN02_PHASE0_WORK_DIR/clock_${rank}.log"
-  ' &
-CLOCK_MPI_PID=$!
-sleep 1
-"$PYTHON_BIN" - "$CLOCK_MARKER" <<'PY'
-import json
-import os
-from pathlib import Path
-import sys
-import tempfile
-import time
-
-path = Path(sys.argv[1])
-descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-    json.dump({"written_time_ns": time.time_ns()}, handle)
-    handle.flush()
-    os.fsync(handle.fileno())
-os.replace(temporary, path)
-PY
-wait "$CLOCK_MPI_PID"
+      > "$PLAN02_PHASE0_WORK_DIR/clock_${role}.log"
+  '
 
 mkdir -p "$PLAN02_PHASE0_WORK_DIR/pbs"
 "$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/plan02_pbs_capability.py" \
@@ -191,6 +247,7 @@ mkdir -p "$PLAN02_PHASE0_WORK_DIR/pbs"
 AGGREGATE_ARGS=(
   --writer-lock "$PLAN02_PHASE0_WORK_DIR/writer_lock.json"
   --old-cache-writer "$PLAN02_PHASE0_WORK_DIR/old_cache_writer.json"
+  --clock-exchange "$PLAN02_PHASE0_WORK_DIR/clock_exchange.json"
   --sqlite-db "$SQLITE_DB"
   --visibility-write "$PLAN02_PHASE0_WORK_DIR/visibility_write.json"
   --visibility-read "$PLAN02_PHASE0_WORK_DIR/visibility_read.json"
@@ -203,9 +260,6 @@ AGGREGATE_ARGS=(
 )
 for host in "${HOSTS[@]}"; do
   AGGREGATE_ARGS+=(--host "$host")
-done
-for rank in 0 1; do
-  AGGREGATE_ARGS+=(--clock-sample "$PLAN02_PHASE0_WORK_DIR/clock_${rank}.json")
 done
 for rank in $(seq 0 7); do
   AGGREGATE_ARGS+=(--contention-result "$PLAN02_PHASE0_WORK_DIR/contend_${rank}.json")

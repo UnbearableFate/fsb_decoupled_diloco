@@ -65,6 +65,9 @@ def check_gate(
     project_root: Path,
     descriptor_path: Path,
     bootstrap_marker_path: Path,
+    expected_run_id: str,
+    expected_protocol_version: int,
+    expected_schema_version: int,
 ) -> dict[str, Any]:
     descriptor = _read_object(descriptor_path)
     marker = _read_object(bootstrap_marker_path)
@@ -109,6 +112,15 @@ def check_gate(
         if descriptor.get(key) != marker.get(key):
             mismatches.append(f"marker_{key}")
 
+    expected_identity = {
+        "run_id": expected_run_id,
+        "protocol_version": expected_protocol_version,
+        "schema_version": expected_schema_version,
+    }
+    for key, expected_value in expected_identity.items():
+        if descriptor.get(key) != expected_value:
+            mismatches.append(f"expected_{key}")
+
     return {
         "gate_format_version": 1,
         "status": "PASS" if not mismatches else "BLOCKED",
@@ -123,6 +135,7 @@ def check_gate(
             key: current_source.get(key)
             for key in ("git_commit", "git_dirty", "source_fingerprint")
         },
+        "expected_runtime_identity": expected_identity,
         "mismatches": sorted(set(mismatches)),
         "fs_diloco_imported": "fs_diloco" in __import__("sys").modules,
     }
@@ -134,6 +147,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--descriptor", type=Path, required=True)
     parser.add_argument("--bootstrap-marker", type=Path, required=True)
     parser.add_argument("--output-json", type=Path, required=True)
+    parser.add_argument("--expected-run-id", required=True)
+    parser.add_argument("--expected-protocol-version", type=int, required=True)
+    parser.add_argument("--expected-schema-version", type=int, required=True)
     return parser.parse_args()
 
 
@@ -144,6 +160,9 @@ def main() -> None:
             project_root=args.project_root,
             descriptor_path=args.descriptor,
             bootstrap_marker_path=args.bootstrap_marker,
+            expected_run_id=args.expected_run_id,
+            expected_protocol_version=args.expected_protocol_version,
+            expected_schema_version=args.expected_schema_version,
         )
     except BaseException as exc:
         payload = {

@@ -1,0 +1,28 @@
+Currently Loaded Modulefiles:
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9
+
+Key:
+(symbolic-version)
+PLAN_ID=fsb_decoupled_diloco_plan_02
+PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco
+PBS_JOBID=2497224.opbs
+PBS_NODEFILE=/var/spool/pbs/aux/2497224.opbs
+PLAN02_PHASE0_WORK_DIR=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-090551_2497224
+HOST mg0010
+HOST mg0011
+Traceback (most recent call last):
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/plan02_phase0_aggregate.py", line 176, in <module>
+    main()
+    ~~~~^^
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/plan02_phase0_aggregate.py", line 171, in main
+    payload = aggregate(args)
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/plan02_phase0_aggregate.py", line 112, in aggregate
+    contention = _contention_summary(args.contention_results, args.sqlite_db)
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/plan02_phase0_aggregate.py", line 84, in _contention_summary
+    hostnames = sorted({str(writer["hostname"]) for writer in writers})
+                            ~~~~~~^^^^^^^^^^^^
+KeyError: 'hostname'
+[ERROR] Failed at line 267 (rc=1)
+PHASE0_CHECKER=BLOCKED
+PHASE0_ARTIFACT=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-090551_phase0-feasibility_blocked.json
+Phase 0 blocked; retaining raw work at /work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-090551_2497224

@@ -18,6 +18,11 @@ from typing import Any
 
 
 FIXED_ARTIFACTS = ("latest.json", "stop.json", "summary.json")
+CANONICAL_PATTERNS = {
+    "latest": "e*_*/latest/head.json",
+    "stop": "e*_*/terminal/stop_g*.json",
+    "summary": "e*_*/terminal/summary_g*.json",
+}
 
 
 def _sha256_file(path: Path) -> str:
@@ -133,7 +138,6 @@ def writer_lock_probe(work_dir: Path) -> dict[str, Any]:
             str(ready_path),
         ]
     )
-    killed = False
     try:
         _wait_for(ready_path.is_file, timeout_seconds=10.0, description="lock holder readiness")
         os.kill(child.pid, signal.SIGSTOP)
@@ -156,9 +160,10 @@ def writer_lock_probe(work_dir: Path) -> dict[str, Any]:
         finally:
             conn.close()
         contender_elapsed = time.monotonic() - contender_started
-        if contender_error is None or not any(
+        contender_blocked = contender_error is not None and any(
             token in contender_error.lower() for token in ("locked", "busy")
-        ):
+        )
+        if not contender_blocked:
             raise RuntimeError(
                 f"contender unexpectedly acquired writer lock: error={contender_error!r}"
             )
@@ -174,7 +179,6 @@ def writer_lock_probe(work_dir: Path) -> dict[str, Any]:
             raise RuntimeError("uncommitted writer row became visible")
 
         os.kill(child.pid, signal.SIGKILL)
-        killed = True
         child_status = child.wait(timeout=10.0)
         conn = sqlite3.connect(db_path, timeout=5.0)
         try:
@@ -199,6 +203,9 @@ def writer_lock_probe(work_dir: Path) -> dict[str, Any]:
             conn.close()
         if rows != [["successor", "committed"]] or integrity != ["ok"]:
             raise RuntimeError(f"post-kill verification failed: rows={rows}, integrity={integrity}")
+        successor_acquired = rows == [["successor", "committed"]]
+        uncommitted_rolled_back = visible_before_kill == 0 and successor_acquired
+        holder_killed = child_status == -signal.SIGKILL
         return {
             "status": "PASS",
             "holder_pid": child.pid,
@@ -211,9 +218,9 @@ def writer_lock_probe(work_dir: Path) -> dict[str, Any]:
             "integrity_check": integrity,
             "pragmas": pragmas,
             "availability_boundary": {
-                "paused_writer_transaction_blocks_takeover": True,
-                "killing_holder_releases_lock": True,
-                "uncommitted_state_rolled_back": True,
+                "paused_writer_transaction_blocks_takeover": contender_blocked,
+                "killing_holder_releases_lock": holder_killed and successor_acquired,
+                "uncommitted_state_rolled_back": uncommitted_rolled_back,
             },
         }
     finally:
@@ -222,8 +229,6 @@ def writer_lock_probe(work_dir: Path) -> dict[str, Any]:
                 os.kill(child.pid, signal.SIGCONT)
             os.kill(child.pid, signal.SIGKILL)
             child.wait(timeout=10.0)
-        if not killed and child.returncode is not None:
-            killed = child.returncode == -signal.SIGKILL
 
 
 def _artifact_payload(kind: str, epoch: int, owner_id: str) -> dict[str, Any]:
@@ -288,10 +293,14 @@ def _stage_and_pause_old_cache_writer(
         os.replace(temp_name, control / filename)
 
 
-def _select_highest_epoch(control: Path) -> dict[str, Any]:
+def _select_highest_epoch(control: Path, kind: str) -> dict[str, Any]:
+    if kind not in CANONICAL_PATTERNS:
+        raise ValueError(f"unknown artifact kind: {kind}")
     candidates: list[dict[str, Any]] = []
-    for path in (control / "syncer_epochs").glob("e*_*/latest/head.json"):
+    for path in (control / "syncer_epochs").glob(CANONICAL_PATTERNS[kind]):
         payload = _read_object(path)
+        if payload.get("artifact_kind") != kind:
+            raise RuntimeError(f"canonical artifact kind mismatch at {path}: {payload}")
         payload["relative_path"] = str(path.relative_to(control.parent))
         candidates.append(payload)
     if not candidates:
@@ -347,8 +356,16 @@ def old_cache_writer_probe(work_dir: Path) -> dict[str, Any]:
         pollution_detected = all(
             int(payload["published_by_epoch"]) == 1 for payload in polluted.values()
         )
-        selected = _select_highest_epoch(control)
-        if not pollution_detected or int(selected["published_by_epoch"]) != 2:
+        selected = {
+            kind: _select_highest_epoch(control, kind) for kind in CANONICAL_PATTERNS
+        }
+        selected_current = all(
+            int(payload["published_by_epoch"]) == 2
+            and payload["artifact_kind"] == kind
+            for kind, payload in selected.items()
+        )
+        business_state_failed = not selected_current
+        if not pollution_detected or business_state_failed:
             raise RuntimeError(
                 f"old cache counterexample failed: pollution={polluted}, selected={selected}"
             )
@@ -369,15 +386,18 @@ def old_cache_writer_probe(work_dir: Path) -> dict[str, Any]:
                 for kind, payload in polluted.items()
             },
             "selected_canonical": selected,
-            "business_state_failed": False,
-            "cache_pollution_reported": True,
+            "business_state_failed": business_state_failed,
+            "cache_pollution_reported": pollution_detected,
             "repair_epochs": {
                 kind: int(payload["published_by_epoch"])
                 for kind, payload in repaired.items()
             },
-            "canonical_discovery_count": len(
-                list((control / "syncer_epochs").glob("e*_*/latest/head.json"))
-            ),
+            "canonical_discovery_counts": {
+                kind: len(
+                    list((control / "syncer_epochs").glob(pattern))
+                )
+                for kind, pattern in CANONICAL_PATTERNS.items()
+            },
         }
     finally:
         if child.poll() is None:
@@ -420,19 +440,22 @@ def _write_descriptor_and_marker(
     *,
     source: dict[str, Any],
     config_path: Path,
+    run_id: str = "plan02-source-probe",
+    protocol_version: int = 1,
+    schema_version: int = 2,
 ) -> tuple[Path, Path]:
     descriptor_path = case_dir / "run_descriptor.json"
     marker_path = case_dir / "bootstrap_complete.json"
     descriptor = {
         "descriptor_format_version": 1,
-        "run_id": "plan02-source-probe",
+        "run_id": run_id,
         "git_commit": source["git_commit"],
         "git_dirty": source["git_dirty"],
         "source_fingerprint": source["source_fingerprint"],
         "resolved_config_path": str(config_path.resolve()),
         "resolved_config_sha256": _sha256_file(config_path),
-        "protocol_version": 1,
-        "schema_version": 2,
+        "protocol_version": protocol_version,
+        "schema_version": schema_version,
     }
     _atomic_write_json(descriptor_path, descriptor)
     marker = {
@@ -487,6 +510,9 @@ def source_pinning_probe(project_root: Path, work_dir: Path) -> dict[str, Any]:
         "dirty_fingerprint_mismatch",
         "config_mismatch",
         "descriptor_mismatch",
+        "protocol_mismatch",
+        "schema_mismatch",
+        "run_id_mismatch",
     ):
         case_dir = work_dir / case_name
         case_dir.mkdir(parents=True, exist_ok=True)
@@ -498,8 +524,20 @@ def source_pinning_probe(project_root: Path, work_dir: Path) -> dict[str, Any]:
         elif case_name == "dirty_fingerprint_mismatch":
             case_source["git_dirty"] = not bool(source["git_dirty"])
             case_source["source_fingerprint"] = "sha256:" + "0" * 64
+        protocol_version = 2 if case_name == "protocol_mismatch" else 1
+        schema_version = 3 if case_name == "schema_mismatch" else 2
+        run_id = (
+            "plan02-source-probe-other"
+            if case_name == "run_id_mismatch"
+            else "plan02-source-probe"
+        )
         descriptor_path, marker_path = _write_descriptor_and_marker(
-            case_dir, source=case_source, config_path=config_path
+            case_dir,
+            source=case_source,
+            config_path=config_path,
+            run_id=run_id,
+            protocol_version=protocol_version,
+            schema_version=schema_version,
         )
         if case_name == "config_mismatch":
             config_path.write_text(
@@ -522,6 +560,12 @@ def source_pinning_probe(project_root: Path, work_dir: Path) -> dict[str, Any]:
                 str(marker_path),
                 "--output-json",
                 str(result_path),
+                "--expected-run-id",
+                "plan02-source-probe",
+                "--expected-protocol-version",
+                "1",
+                "--expected-schema-version",
+                "2",
             ],
             check=False,
             capture_output=True,
@@ -551,6 +595,9 @@ def source_pinning_probe(project_root: Path, work_dir: Path) -> dict[str, Any]:
         raise RuntimeError(f"source mismatch gate failed closed incorrectly: {mismatch_cases}")
     if db_before != db_after or any(db_after["counts"].values()):
         raise RuntimeError(f"source gate changed business DB: before={db_before}, after={db_after}")
+    mismatch_actor_business_writes = sum(db_after["counts"].values()) - sum(
+        db_before["counts"].values()
+    )
     return {
         "status": "PASS",
         "source_identity": {
@@ -559,7 +606,7 @@ def source_pinning_probe(project_root: Path, work_dir: Path) -> dict[str, Any]:
         "cases": cases,
         "business_db_before": db_before,
         "business_db_after": db_after,
-        "mismatch_actor_business_writes": 0,
+        "mismatch_actor_business_writes": mismatch_actor_business_writes,
     }
 
 

@@ -38,20 +38,19 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
         raise
 
 
-def _clock_summary(paths: list[Path], max_clock_skew_seconds: float) -> dict[str, Any]:
-    samples = [_read_object(path) for path in paths]
-    hostnames = sorted({str(sample["hostname"]) for sample in samples})
-    midpoints = [int(sample["midpoint_time_ns"]) for sample in samples]
-    span_seconds = (max(midpoints) - min(midpoints)) / 1_000_000_000.0
+def _clock_summary(path: Path, max_clock_skew_seconds: float) -> dict[str, Any]:
+    exchange = _read_object(path)
+    absolute_bound = exchange.get("absolute_offset_upper_bound_seconds")
+    within_bound = (
+        exchange.get("status") == "PASS"
+        and exchange.get("intersection_valid") is True
+        and isinstance(absolute_bound, (int, float))
+        and float(absolute_bound) <= max_clock_skew_seconds
+    )
     return {
-        "samples": samples,
-        "sample_count": len(samples),
-        "hostnames": hostnames,
-        "host_count": len(hostnames),
-        "observed_midpoint_span_seconds": span_seconds,
-        "measurement_includes_launch_and_shared_fs_observation_delay": True,
+        **exchange,
         "max_clock_skew_seconds": max_clock_skew_seconds,
-        "within_bound": span_seconds <= max_clock_skew_seconds,
+        "within_bound": within_bound,
     }
 
 
@@ -82,17 +81,22 @@ def _contention_summary(paths: list[Path], db_path: Path) -> dict[str, Any]:
         conn.close()
     requested = sum(int(writer["requested_transactions"]) for writer in writers)
     committed = sum(int(writer["committed_transactions"]) for writer in writers)
+    hostnames = sorted({str(writer["hostname"]) for writer in writers})
     return {
         "writers": writers,
         "writer_count": len(writers),
         "distinct_db_writers": distinct_writers,
+        "hostnames": hostnames,
+        "host_count": len(hostnames),
         "requested_transactions": requested,
         "committed_transactions": committed,
         "event_count": event_count,
         "busy_errors": sum(int(writer["busy_errors"]) for writer in writers),
         "starvation_count": sum(bool(writer["starved"]) for writer in writers),
         "maximum_writer_wait_seconds": max(
-            float(writer["wait_seconds"]["max"]) for writer in writers
+            float(writer["wait_seconds"]["max"])
+            for writer in writers
+            if writer["wait_seconds"]["max"] is not None
         ),
         "action_counts": action_counts,
         "integrity_check": integrity,
@@ -104,7 +108,7 @@ def _contention_summary(paths: list[Path], db_path: Path) -> dict[str, Any]:
 def aggregate(args: argparse.Namespace) -> dict[str, Any]:
     visibility_write = _read_object(args.visibility_write)
     visibility_read = _read_object(args.visibility_read)
-    clock = _clock_summary(args.clock_samples, args.max_clock_skew_seconds)
+    clock = _clock_summary(args.clock_exchange, args.max_clock_skew_seconds)
     contention = _contention_summary(args.contention_results, args.sqlite_db)
     visibility = {
         "writer": visibility_write,
@@ -141,7 +145,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--writer-lock", type=Path, required=True)
     parser.add_argument("--old-cache-writer", type=Path, required=True)
-    parser.add_argument("--clock-sample", dest="clock_samples", type=Path, action="append", required=True)
+    parser.add_argument("--clock-exchange", type=Path, required=True)
     parser.add_argument(
         "--contention-result",
         dest="contention_results",

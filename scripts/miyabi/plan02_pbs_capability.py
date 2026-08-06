@@ -16,6 +16,17 @@ from typing import Any
 
 
 TERMINAL_STATES = {"F", "X"}
+SAFE_QSTAT_FIELDS = {
+    "Job_Name",
+    "job_state",
+    "substate",
+    "Exit_status",
+    "run_count",
+    "Rerunable",
+    "array_indices_submitted",
+    "array_state_count",
+}
+REQUEST_VARIABLE_KEYS = {"PLAN02_REQUEST_FINGERPRINT"}
 
 
 def normalize_job_id(value: str) -> str:
@@ -41,7 +52,9 @@ def parse_qstat_full(output: str) -> dict[str, str]:
 
 def classify_scheduler_state(fields: dict[str, str] | None) -> str:
     if fields is None:
-        return "unknown"
+        return "query_failed"
+    if not fields:
+        return "no_record"
     state = fields.get("job_state", "").upper()
     substate_text = fields.get("substate", "")
     try:
@@ -50,13 +63,36 @@ def classify_scheduler_state(fields: dict[str, str] | None) -> str:
         substate = None
     if state in TERMINAL_STATES:
         return "finished"
-    if state in {"Q", "H", "W", "S"}:
+    if state in {"Q", "H", "W"}:
         return "queued"
+    if state == "S":
+        return "suspended"
     if state == "R" and substate is not None and substate < 42:
         return "prologue"
     if state in {"R", "E", "B"}:
         return "running"
     return "unknown"
+
+
+def _request_variables(value: str) -> dict[str, str]:
+    variables: dict[str, str] = {}
+    for item in value.split(","):
+        key, separator, variable_value = item.partition("=")
+        if separator and key in REQUEST_VARIABLE_KEYS:
+            variables[key] = variable_value
+    return variables
+
+
+def _safe_qstat_fields(fields: dict[str, str] | None) -> dict[str, Any] | None:
+    if fields is None:
+        return None
+    safe: dict[str, Any] = {
+        key: value for key, value in fields.items() if key in SAFE_QSTAT_FIELDS
+    }
+    request_variables = _request_variables(fields.get("Variable_List", ""))
+    if request_variables:
+        safe["request_variables"] = request_variables
+    return safe
 
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -87,7 +123,8 @@ def _query_job(job_id: str, *, historical: bool = False) -> dict[str, Any]:
         command = ["qstat", "-H", "-f"]
     command.append(job_id)
     completed = _run(command)
-    fields = parse_qstat_full(completed.stdout) if completed.returncode == 0 else None
+    parsed_fields = parse_qstat_full(completed.stdout) if completed.returncode == 0 else None
+    fields = _safe_qstat_fields(parsed_fields)
     return {
         "command": command,
         "returncode": completed.returncode,
@@ -104,6 +141,7 @@ def _submit_child(
     request_fingerprint: str,
     project_root: Path,
     array: bool,
+    start_delay_seconds: float = 0.0,
 ) -> dict[str, Any]:
     name = f"p02_{request_fingerprint[-10:]}_{'a' if array else 's'}"
     variables = ",".join(
@@ -114,6 +152,12 @@ def _submit_child(
         )
     )
     command = ["qsub", "-N", name, "-v", variables]
+    start_at: str | None = None
+    if start_delay_seconds > 0:
+        start_at = time.strftime(
+            "%Y%m%d%H%M.%S", time.localtime(time.time() + start_delay_seconds)
+        )
+        command.extend(("-a", start_at))
     if array:
         command.extend(("-r", "y", "-J", "0-1"))
     command.append(str(child_script))
@@ -126,6 +170,8 @@ def _submit_child(
         "job_name": name,
         "request_fingerprint": request_fingerprint,
         "array_requested": array,
+        "start_delay_seconds": start_delay_seconds,
+        "start_at": start_at,
     }
     if completed.returncode == 0 and completed.stdout.strip():
         result["job_id_raw"] = completed.stdout.strip().splitlines()[-1]
@@ -139,6 +185,7 @@ def _wait_for_child(
     probe_root: Path,
     expected_artifacts: int,
     timeout_seconds: float,
+    initial_observations: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if "job_id_raw" not in submission:
         return {
@@ -150,8 +197,10 @@ def _wait_for_child(
     job_id = str(submission["job_id_raw"])
     request = str(submission["request_fingerprint"])
     deadline = time.monotonic() + timeout_seconds
-    observations: list[dict[str, Any]] = []
+    observations: list[dict[str, Any]] = list(initial_observations or [])
     artifact_paths: list[Path] = []
+    historical: dict[str, Any] | None = None
+    terminal_query: dict[str, Any] | None = None
     while time.monotonic() < deadline:
         query = _query_job(job_id)
         observations.append(
@@ -163,18 +212,94 @@ def _wait_for_child(
             }
         )
         artifact_paths = sorted(probe_root.glob(f"child_{request}_*.json"))
+        if query["classification"] == "finished":
+            terminal_query = query
         if len(artifact_paths) >= expected_artifacts:
+            historical = _query_job(job_id, historical=True)
+            if historical["classification"] == "finished":
+                terminal_query = historical
+        if terminal_query is not None:
             break
-        time.sleep(1.0)
+        time.sleep(0.1)
     artifacts = [json.loads(path.read_text(encoding="utf-8")) for path in artifact_paths]
-    historical = _query_job(job_id, historical=True)
+    artifact_terminal_queries = {
+        str(artifact["pbs_job_id"]): _query_job(
+            str(artifact["pbs_job_id"]), historical=True
+        )
+        for artifact in artifacts
+        if isinstance(artifact, dict) and artifact.get("pbs_job_id")
+    }
+    if historical is None:
+        historical = _query_job(job_id, historical=True)
+    terminal_fields = terminal_query.get("fields") if terminal_query else None
+    exit_status_text = terminal_fields.get("Exit_status") if terminal_fields else None
+    try:
+        exit_status = int(exit_status_text)
+    except (TypeError, ValueError):
+        exit_status = None
+    workload_artifacts_complete = len(artifacts) == expected_artifacts
+    terminal_state_observed = terminal_query is not None
+    terminal_success = terminal_state_observed and exit_status == 0
     return {
-        "completed": len(artifacts) == expected_artifacts,
+        "completed": workload_artifacts_complete and terminal_success,
+        "workload_artifacts_complete": workload_artifacts_complete,
+        "terminal_state_observed": terminal_state_observed,
+        "terminal_success": terminal_success,
+        "exit_status": exit_status,
+        "terminal_query": terminal_query,
+        "artifact_terminal_queries": artifact_terminal_queries,
         "state_observations": observations,
         "historical_query": historical,
         "artifacts": artifacts,
         "artifact_paths": [str(path) for path in artifact_paths],
     }
+
+
+def _observe_queued(
+    submission: dict[str, Any], *, timeout_seconds: float
+) -> list[dict[str, Any]]:
+    observations: list[dict[str, Any]] = []
+    job_id = submission.get("job_id_raw")
+    if not isinstance(job_id, str):
+        return observations
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        query = _query_job(job_id)
+        observations.append(
+            {
+                "observed_at": time.time(),
+                "classification": query["classification"],
+                "returncode": query["returncode"],
+                "fields": query["fields"],
+            }
+        )
+        if query["classification"] == "queued":
+            break
+        time.sleep(0.1)
+    return observations
+
+
+def _scheduler_fingerprint_observed(
+    completion: dict[str, Any], *, request: str, job_name: str
+) -> bool:
+    queries = [
+        *completion.get("state_observations", []),
+        completion.get("terminal_query"),
+    ]
+    for query in queries:
+        if not isinstance(query, dict):
+            continue
+        fields = query.get("fields")
+        if not isinstance(fields, dict):
+            continue
+        variables = fields.get("request_variables", {})
+        if (
+            fields.get("Job_Name") == job_name
+            and isinstance(variables, dict)
+            and variables.get("PLAN02_REQUEST_FINGERPRINT") == request
+        ):
+            return True
+    return False
 
 
 def probe(args: argparse.Namespace) -> dict[str, Any]:
@@ -187,6 +312,9 @@ def probe(args: argparse.Namespace) -> dict[str, Any]:
         "running": classify_scheduler_state({"job_state": "R", "substate": "42"}),
         "finished": classify_scheduler_state({"job_state": "F", "substate": "92"}),
         "unknown": classify_scheduler_state({"job_state": "Z", "substate": ""}),
+        "suspended": classify_scheduler_state({"job_state": "S", "substate": "45"}),
+        "no_record": classify_scheduler_state({}),
+        "query_failed": classify_scheduler_state(None),
     }
     expected_classifications = {
         "queued": "queued",
@@ -194,6 +322,9 @@ def probe(args: argparse.Namespace) -> dict[str, Any]:
         "running": "running",
         "finished": "finished",
         "unknown": "unknown",
+        "suspended": "suspended",
+        "no_record": "no_record",
+        "query_failed": "query_failed",
     }
     classifier_validated = classifications == expected_classifications
 
@@ -206,15 +337,27 @@ def probe(args: argparse.Namespace) -> dict[str, Any]:
         "current_job_query": current_job,
         "state_classifier": classifications,
         "state_classifier_validated": classifier_validated,
-        "manual_independent_restart_supported": bool(
+        "scheduler_query_supported": bool(
             qstat_path and current_job and current_job["returncode"] == 0
         ),
+        "manual_independent_job_supported": bool(
+            qstat_path and current_job and current_job["returncode"] == 0
+        ),
+        "manual_independent_evidence": {
+            "operator_submitted_parent_job": True,
+            "parent_job_query_returncode": (
+                current_job["returncode"] if current_job is not None else None
+            ),
+            "restart_execution_deferred_to_phase_1": True,
+        },
         "automatic_submission_supported": False,
         "job_array_supported": False,
+        "terminal_state_query_supported": False,
+        "observed_scheduler_states": [],
         "initial_learner_orchestration": "independent_manifest",
         "submissions": {},
     }
-    if not classifier_validated or not result["manual_independent_restart_supported"]:
+    if not classifier_validated or not result["scheduler_query_supported"]:
         result["status"] = "BLOCKED"
         return result
     if not qsub_path:
@@ -228,12 +371,17 @@ def probe(args: argparse.Namespace) -> dict[str, Any]:
         request_fingerprint=scalar_request,
         project_root=args.project_root,
         array=False,
+        start_delay_seconds=5.0,
+    )
+    queued_observations = _observe_queued(
+        scalar, timeout_seconds=min(30.0, args.timeout_seconds)
     )
     scalar["completion"] = _wait_for_child(
         scalar,
         probe_root=args.probe_root,
         expected_artifacts=1,
         timeout_seconds=args.timeout_seconds,
+        initial_observations=queued_observations,
     )
     result["submissions"]["scalar"] = scalar
     scalar_artifacts = scalar["completion"]["artifacts"]
@@ -243,10 +391,19 @@ def probe(args: argparse.Namespace) -> dict[str, Any]:
         and len(scalar_artifacts) == 1
         and scalar_artifacts[0].get("request_fingerprint") == scalar_request
         and scalar_artifacts[0].get("job_name") == scalar["job_name"]
+        and _scheduler_fingerprint_observed(
+            scalar["completion"], request=scalar_request, job_name=scalar["job_name"]
+        )
     )
     result["automatic_submission_supported"] = scalar_supported
     if not scalar_supported:
-        result["automatic_submission_reason"] = "scalar child submission was not auditable"
+        if scalar["returncode"] == 0:
+            result["status"] = "BLOCKED"
+            result["automatic_submission_reason"] = (
+                "submitted scalar child did not complete successfully and audibly"
+            )
+        else:
+            result["automatic_submission_reason"] = "compute-node qsub was rejected"
         return result
 
     array_request = f"plan02-array-{normalize_job_id(args.parent_job_id)}"
@@ -271,9 +428,65 @@ def probe(args: argparse.Namespace) -> dict[str, Any]:
         array["returncode"] == 0
         and array["completion"]["completed"]
         and array_indices == {"0", "1"}
+        and _scheduler_fingerprint_observed(
+            array["completion"], request=array_request, job_name=array["job_name"]
+        )
     )
     if result["job_array_supported"]:
         result["initial_learner_orchestration"] = "pbs_job_array"
+    elif array["returncode"] == 0:
+        result["status"] = "BLOCKED"
+        result["job_array_reason"] = (
+            "submitted array child did not complete successfully and audibly"
+        )
+    completions = [scalar["completion"], array["completion"]]
+    result["observed_scheduler_states"] = sorted(
+        {
+            str(observation["classification"])
+            for completion in completions
+            for observation in [
+                *completion.get("state_observations", []),
+                completion.get("terminal_query"),
+            ]
+            if isinstance(observation, dict)
+            and observation.get("classification")
+            not in {"query_failed", "no_record"}
+        }
+    )
+    scalar_terminal_supported = (
+        scalar["completion"].get("terminal_state_observed") is True
+        and scalar["completion"].get("terminal_success") is True
+    )
+    array_terminal_supported = (
+        array["completion"].get("terminal_state_observed") is True
+        and array["completion"].get("terminal_success") is True
+    )
+    result["terminal_state_query_supported"] = scalar_terminal_supported and (
+        not result["job_array_supported"] or array_terminal_supported
+    )
+    rerunable_job_evidence: dict[str, dict[str, Any]] = {}
+    for name, completion in (
+        ("scalar", scalar["completion"]),
+        ("array", array["completion"]),
+    ):
+        terminal_query = completion.get("terminal_query")
+        fields = terminal_query.get("fields") if isinstance(terminal_query, dict) else None
+        rerunable_job_evidence[name] = {
+            key: fields.get(key) if isinstance(fields, dict) else None
+            for key in ("Rerunable", "run_count")
+        }
+        child_queries = completion.get("artifact_terminal_queries", {})
+        rerunable_job_evidence[name]["physical_incarnations"] = {
+            job_id: {
+                key: query.get("fields", {}).get(key)
+                if isinstance(query.get("fields"), dict)
+                else None
+                for key in ("Rerunable", "run_count", "Exit_status")
+            }
+            for job_id, query in child_queries.items()
+            if isinstance(query, dict)
+        }
+    result["rerunable_job_evidence"] = rerunable_job_evidence
     return result
 
 

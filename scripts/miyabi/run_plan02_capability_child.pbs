@@ -53,4 +53,7 @@ os.replace(temporary, output)
 PY
 
 test -s "$OUTPUT_PATH"
+# Keep the executable workload visible in qstat long enough for the parent probe
+# to observe a real running state before terminal history is queried.
+sleep 2
 printf 'PLAN02_CAPABILITY_CHILD_COMPLETE=%s\n' "$OUTPUT_PATH"

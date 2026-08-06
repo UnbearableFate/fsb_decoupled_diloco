@@ -103,6 +103,12 @@ def open_existing(
     return conn
 
 
+def open_readonly(path: Path) -> sqlite3.Connection:
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    return sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=60.0)
+
+
 def verify(conn: sqlite3.Connection) -> dict[str, Any]:
     integrity = [str(row[0]) for row in conn.execute("PRAGMA integrity_check").fetchall()]
     counter = int(
@@ -134,6 +140,10 @@ def _percentile(values: list[float], percentile: float) -> float:
     ordered = sorted(values)
     index = min(len(ordered) - 1, max(0, int((len(ordered) - 1) * percentile)))
     return ordered[index]
+
+
+def _percentile_or_none(values: list[float], percentile: float) -> float | None:
+    return _percentile(values, percentile) if values else None
 
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -219,6 +229,7 @@ def contend(
     busy_errors = 0
     acquire_count = 0
     renew_count = 0
+    starvation_error: str | None = None
     try:
         for sequence in range(count):
             transaction_started = time.monotonic()
@@ -234,12 +245,10 @@ def contend(
                     if owner_id == writer_id:
                         action = "renew"
                         renew_seq = int(renew_seq) + 1
-                        renew_count += 1
                     else:
                         action = "acquire"
                         epoch = int(epoch) + 1
                         renew_seq = 0
-                        acquire_count += 1
                     wait_seconds = acquired_at - transaction_started
                     conn.execute(
                         """
@@ -269,6 +278,10 @@ def contend(
                     if hold_milliseconds:
                         time.sleep(hold_milliseconds / 1000.0)
                     conn.commit()
+                    if action == "renew":
+                        renew_count += 1
+                    else:
+                        acquire_count += 1
                     wait_samples.append(wait_seconds)
                     break
                 except sqlite3.OperationalError as exc:
@@ -279,10 +292,13 @@ def contend(
                     busy_errors += 1
                     retries += 1
                     if time.monotonic() >= deadline:
-                        raise RuntimeError(
-                            f"writer {writer_id} starved at sequence {sequence}"
-                        ) from exc
+                        starvation_error = (
+                            f"writer {writer_id} starved at sequence {sequence}: {exc}"
+                        )
+                        break
                     time.sleep(rng.uniform(0.001, 0.010))
+            if starvation_error is not None:
+                break
         integrity = [str(row[0]) for row in conn.execute("PRAGMA integrity_check")]
         own_rows = int(
             conn.execute(
@@ -290,7 +306,9 @@ def contend(
                 (writer_id,),
             ).fetchone()[0]
         )
-        if integrity != ["ok"] or own_rows != count:
+        if integrity != ["ok"] or (
+            starvation_error is None and own_rows != count
+        ):
             raise RuntimeError(
                 f"contention verification failed: integrity={integrity}, own_rows={own_rows}"
             )
@@ -304,50 +322,180 @@ def contend(
         "acquire_count": acquire_count,
         "renew_count": renew_count,
         "busy_errors": busy_errors,
-        "starved": len(wait_samples) != count,
+        "starved": starvation_error is not None,
+        "starvation_error": starvation_error,
         "wait_seconds": {
             "samples": len(wait_samples),
-            "p50": _percentile(wait_samples, 0.50),
-            "p95": _percentile(wait_samples, 0.95),
-            "p99": _percentile(wait_samples, 0.99),
-            "max": max(wait_samples),
+            "p50": _percentile_or_none(wait_samples, 0.50),
+            "p95": _percentile_or_none(wait_samples, 0.95),
+            "p99": _percentile_or_none(wait_samples, 0.99),
+            "max": max(wait_samples) if wait_samples else None,
         },
         "integrity_check": integrity,
         "elapsed_seconds": time.monotonic() - started,
     }
 
 
-def clock_sample(
-    marker: Path,
+def _wait_for_json(path: Path, *, deadline: float) -> dict[str, Any]:
+    while True:
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            value = None
+        if isinstance(value, dict):
+            return value
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"clock exchange file did not appear: {path}")
+        time.sleep(0.001)
+
+
+def _clock_offset_interval(
     *,
+    local_sent_wall_ns: int,
+    local_received_wall_ns: int,
+    remote_received_wall_ns: int,
+    remote_sent_wall_ns: int,
+) -> tuple[int, int]:
+    lower_ns = remote_sent_wall_ns - local_received_wall_ns
+    upper_ns = remote_received_wall_ns - local_sent_wall_ns
+    return lower_ns, upper_ns
+
+
+def clock_exchange(
+    exchange_dir: Path,
+    *,
+    role: str,
     writer_id: str,
     output_json: Path,
+    rounds: int,
     timeout_seconds: float,
 ) -> dict[str, Any]:
+    if role not in {"coordinator", "responder"}:
+        raise ValueError(f"unknown clock exchange role: {role}")
+    if rounds < 3:
+        raise ValueError("clock exchange requires at least three rounds")
+    exchange_dir.mkdir(parents=True, exist_ok=True)
     deadline = time.monotonic() + timeout_seconds
-    while not marker.is_file():
-        if time.monotonic() >= deadline:
-            raise TimeoutError(f"clock marker did not appear: {marker}")
-        time.sleep(0.002)
-    before_read_ns = time.time_ns()
-    marker_payload = json.loads(marker.read_text(encoding="utf-8"))
-    after_read_ns = time.time_ns()
-    payload = {
-        "mode": "clock-sample",
-        "writer_id": writer_id,
-        "hostname": os.uname().nodename,
-        "pid": os.getpid(),
-        "before_read_time_ns": before_read_ns,
-        "after_read_time_ns": after_read_ns,
-        "midpoint_time_ns": (before_read_ns + after_read_ns) // 2,
-        "marker_written_time_ns": int(marker_payload["written_time_ns"]),
-        "marker_observation_delay_seconds": max(
-            0.0,
-            (after_read_ns - int(marker_payload["written_time_ns"])) / 1_000_000_000.0,
-        ),
-        "wall_clock_resolution_seconds": time.get_clock_info("time").resolution,
-        "monotonic_clock_resolution_seconds": time.get_clock_info("monotonic").resolution,
-    }
+    hostname = os.uname().nodename
+    observations: list[dict[str, Any]] = []
+    if role == "responder":
+        for round_index in range(rounds):
+            request_path = exchange_dir / f"request_{round_index:04d}.json"
+            response_path = exchange_dir / f"response_{round_index:04d}.json"
+            request = _wait_for_json(request_path, deadline=deadline)
+            remote_received_wall_ns = time.time_ns()
+            remote_received_monotonic_ns = time.monotonic_ns()
+            remote_sent_wall_ns = time.time_ns()
+            remote_sent_monotonic_ns = time.monotonic_ns()
+            _atomic_write_json(
+                response_path,
+                {
+                    "round": round_index,
+                    "request_nonce": request["request_nonce"],
+                    "responder_hostname": hostname,
+                    "remote_received_wall_ns": remote_received_wall_ns,
+                    "remote_received_monotonic_ns": remote_received_monotonic_ns,
+                    "remote_sent_wall_ns": remote_sent_wall_ns,
+                    "remote_sent_monotonic_ns": remote_sent_monotonic_ns,
+                },
+            )
+        payload = {
+            "mode": "clock-exchange",
+            "role": role,
+            "writer_id": writer_id,
+            "hostname": hostname,
+            "pid": os.getpid(),
+            "rounds_completed": rounds,
+            "status": "PASS",
+        }
+    else:
+        for round_index in range(rounds):
+            request_path = exchange_dir / f"request_{round_index:04d}.json"
+            response_path = exchange_dir / f"response_{round_index:04d}.json"
+            request_nonce = f"{os.getpid()}-{round_index}-{time.monotonic_ns()}"
+            local_sent_wall_ns = time.time_ns()
+            local_sent_monotonic_ns = time.monotonic_ns()
+            _atomic_write_json(
+                request_path,
+                {
+                    "round": round_index,
+                    "request_nonce": request_nonce,
+                    "coordinator_hostname": hostname,
+                    "local_sent_wall_ns": local_sent_wall_ns,
+                    "local_sent_monotonic_ns": local_sent_monotonic_ns,
+                },
+            )
+            response = _wait_for_json(response_path, deadline=deadline)
+            local_received_wall_ns = time.time_ns()
+            local_received_monotonic_ns = time.monotonic_ns()
+            if response.get("request_nonce") != request_nonce:
+                raise RuntimeError(f"clock response nonce mismatch at round {round_index}")
+            lower_ns, upper_ns = _clock_offset_interval(
+                local_sent_wall_ns=local_sent_wall_ns,
+                local_received_wall_ns=local_received_wall_ns,
+                remote_received_wall_ns=int(response["remote_received_wall_ns"]),
+                remote_sent_wall_ns=int(response["remote_sent_wall_ns"]),
+            )
+            wall_elapsed_ns = local_received_wall_ns - local_sent_wall_ns
+            monotonic_elapsed_ns = local_received_monotonic_ns - local_sent_monotonic_ns
+            observations.append(
+                {
+                    "round": round_index,
+                    "coordinator_hostname": hostname,
+                    "responder_hostname": str(response["responder_hostname"]),
+                    "local_sent_wall_ns": local_sent_wall_ns,
+                    "local_received_wall_ns": local_received_wall_ns,
+                    "remote_received_wall_ns": int(response["remote_received_wall_ns"]),
+                    "remote_sent_wall_ns": int(response["remote_sent_wall_ns"]),
+                    "round_trip_monotonic_seconds": monotonic_elapsed_ns / 1_000_000_000.0,
+                    "wall_monotonic_elapsed_delta_seconds": abs(
+                        wall_elapsed_ns - monotonic_elapsed_ns
+                    )
+                    / 1_000_000_000.0,
+                    "offset_lower_bound_seconds": lower_ns / 1_000_000_000.0,
+                    "offset_upper_bound_seconds": upper_ns / 1_000_000_000.0,
+                    "interval_valid": lower_ns <= upper_ns,
+                }
+            )
+        lower_bound = max(float(item["offset_lower_bound_seconds"]) for item in observations)
+        upper_bound = min(float(item["offset_upper_bound_seconds"]) for item in observations)
+        responder_hostnames = sorted(
+            {str(item["responder_hostname"]) for item in observations}
+        )
+        intersection_valid = lower_bound <= upper_bound
+        payload = {
+            "mode": "clock-exchange",
+            "method": "filesystem_two_way_offset_interval",
+            "role": role,
+            "writer_id": writer_id,
+            "hostname": hostname,
+            "pid": os.getpid(),
+            "hostnames": sorted({hostname, *responder_hostnames}),
+            "host_count": len({hostname, *responder_hostnames}),
+            "rounds_requested": rounds,
+            "rounds_completed": len(observations),
+            "observations": observations,
+            "intersection_valid": intersection_valid,
+            "offset_interval_seconds": {
+                "lower": lower_bound,
+                "upper": upper_bound,
+            },
+            "absolute_offset_upper_bound_seconds": (
+                max(abs(lower_bound), abs(upper_bound))
+                if intersection_valid
+                else None
+            ),
+            "maximum_round_trip_seconds": max(
+                float(item["round_trip_monotonic_seconds"]) for item in observations
+            ),
+            "maximum_wall_monotonic_elapsed_delta_seconds": max(
+                float(item["wall_monotonic_elapsed_delta_seconds"])
+                for item in observations
+            ),
+            "wall_clock_resolution_seconds": time.get_clock_info("time").resolution,
+            "monotonic_clock_resolution_seconds": time.get_clock_info("monotonic").resolution,
+            "status": "PASS" if intersection_valid else "BLOCKED",
+        }
     _atomic_write_json(output_json, payload)
     return payload
 
@@ -424,13 +572,14 @@ def parse_args() -> argparse.Namespace:
     for mode in (
         "stress",
         "verify",
+        "verify-readonly",
         "kill-reopen",
         "contend",
-        "clock-sample",
+        "clock-exchange",
         "_kill-once",
     ):
         sub = subparsers.add_parser(mode)
-        if mode != "clock-sample":
+        if mode != "clock-exchange":
             sub.add_argument("--db", type=Path, required=True)
         if mode in {"stress", "contend"}:
             sub.add_argument("--writer-id", required=True)
@@ -441,10 +590,12 @@ def parse_args() -> argparse.Namespace:
             sub.add_argument("--hold-milliseconds", type=float, default=5.0)
             sub.add_argument("--seed", type=int, default=1337)
             sub.add_argument("--output-json", type=Path)
-        elif mode == "clock-sample":
-            sub.add_argument("--marker", type=Path, required=True)
+        elif mode == "clock-exchange":
+            sub.add_argument("--exchange-dir", type=Path, required=True)
+            sub.add_argument("--role", choices=("coordinator", "responder"), required=True)
             sub.add_argument("--writer-id", required=True)
             sub.add_argument("--output-json", type=Path, required=True)
+            sub.add_argument("--rounds", type=int, default=20)
             sub.add_argument("--timeout-seconds", type=float, default=30.0)
         elif mode == "kill-reopen":
             sub.add_argument("--cycles", type=int, default=100)
@@ -469,13 +620,13 @@ def main() -> None:
             hold_milliseconds=args.hold_milliseconds,
             seed=args.seed,
         )
-        if args.output_json is not None:
-            _atomic_write_json(args.output_json, summary)
-    elif args.mode == "clock-sample":
-        summary = clock_sample(
-            args.marker,
+    elif args.mode == "clock-exchange":
+        summary = clock_exchange(
+            args.exchange_dir,
+            role=args.role,
             writer_id=args.writer_id,
             output_json=args.output_json,
+            rounds=args.rounds,
             timeout_seconds=args.timeout_seconds,
         )
     elif args.mode == "kill-reopen":
@@ -483,15 +634,25 @@ def main() -> None:
     elif args.mode == "_kill-once":
         kill_once(args.db, cycle=args.cycle, phase=args.phase)
         return
-    else:
+    elif args.mode == "verify":
         conn = connect(args.db)
         try:
             summary = dict(verify(conn), mode="verify")
         finally:
             conn.close()
+    else:
+        conn = open_readonly(args.db)
+        try:
+            summary = dict(verify(conn), mode="verify-readonly")
+        finally:
+            conn.close()
     summary.setdefault("hostname", os.uname().nodename)
     summary.setdefault("pid", os.getpid())
+    if args.mode == "contend" and args.output_json is not None:
+        _atomic_write_json(args.output_json, summary)
     print(json.dumps(summary, sort_keys=True))
+    if summary.get("starved") is True or summary.get("status") == "BLOCKED":
+        raise SystemExit(4)
 
 
 if __name__ == "__main__":

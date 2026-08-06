@@ -65,7 +65,7 @@ fragment 恢复比 full 更复杂，因为权威状态是 fragment version vecto
 
 恢复研究的范围可以保持务实：重点放在进程退出和批作业重启，不追求 exact replay 或完整 inner optimizer 复现。独立 PBS 角色启动和人工触发的 syncer restart 从 Plan 02 起纳入必做的系统恢复边界；自动 failover 提交仍默认关闭，只在显式启用时验证。节点断电级持久性可以作为代价与限制讨论，而不是让主系统过早承担复杂事务协议。
 
-2026-08-06 的 Plan 02 Phase 0 可行性门禁进一步冻结了这个范围：Miyabi 计算节点可以查询并提交标量作业，显式设为 rerunable 后也可提交 PBS job array，因而初始 learner 编排优先使用 array；自动 recovery/scaling 仍保持 opt-in。同时，旧 writer 若无限期暂停在 SQLite writer transaction 内，新候选者只能安全等待，不能仅靠 lease timeout 自动接管；此时仍需要有审计的 operator/scheduler 终止动作。详细证据见 `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-011600_phase0-feasibility_pass.json`。这些结论是后续 HA/dynamic 实现的可行性边界，不表示生产协议已经实现。
+2026-08-06 的 Plan 02 Phase 0 可行性门禁进一步冻结了这个范围：Miyabi 计算节点可以查询并提交标量作业，显式设为 rerunable 后也可提交 PBS job array，因而初始 learner 编排优先使用 array；自动 recovery/scaling 仍保持 opt-in。rerunable array 允许 scheduler 以同一个 PBS job ID 重新运行新的物理 incarnation，后续 admission/reconciliation 必须同时记录 `run_count` 或独立 incarnation ID，不能只把 job ID 当成 exactly-once 幂等键。同时，旧 writer 若无限期暂停在 SQLite writer transaction 内，新候选者只能安全等待，不能仅靠 lease timeout 自动接管；此时仍需要有审计的 operator/scheduler 终止动作。详细证据见 `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-092200_phase0-feasibility_pass.json`；array 不可用时的独立 manifest fallback 实测证据保留在 `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-011200_phase0-feasibility_pass.json`。这些结论是后续 HA/dynamic 实现的可行性边界，不表示生产协议已经实现。
 
 ### 4.4 Fragment 何时真正有收益
 
