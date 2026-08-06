@@ -433,6 +433,7 @@ def publish_global(
     roundtrip_metrics: dict[str, float] | None = None,
     during_checkpoint_wait: Callable[[], dict[str, int] | int | None] | None = None,
     checkpoint_poll_seconds: float = 0.2,
+    capacity_observation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     ha_store = store if isinstance(store, LeaderBoundSQLiteStore) else None
     publication_id = uuid.uuid4().hex if ha_store is not None else None
@@ -569,6 +570,11 @@ def publish_global(
             outer_optimizer=config.outer_optimizer.name,
             max_staleness_versions=config.sync.max_staleness_versions,
             before_commit=lambda: publication_failpoint("sqlite_transaction"),
+            **(
+                {"capacity_observation": capacity_observation}
+                if capacity_observation is not None
+                else {}
+            ),
             **publication_fields,
         )
     sqlite_commit_seconds = time.monotonic() - sqlite_start
@@ -731,12 +737,8 @@ def dynamic_maintenance_options(config: Config) -> dict[str, float | int]:
     if config.membership.mode != "dynamic":
         return {}
     return {
-        "dynamic_expired_retention_seconds": (
-            config.membership.expired_retention_seconds
-        ),
-        "dynamic_max_active_instance_records": (
-            config.membership.max_active_instance_records
-        ),
+        "dynamic_expired_retention_seconds": (config.membership.expired_retention_seconds),
+        "dynamic_max_active_instance_records": (config.membership.max_active_instance_records),
         "dynamic_capacity_observation_retention_count": (
             config.scaling.capacity_observation_retention_count
         ),
@@ -995,10 +997,7 @@ def resume_run(
         expected_learner_ids=(
             ()
             if config.membership.mode == "dynamic"
-            else (
-                learner_id_from_index(index)
-                for index in range(config.sync.num_learners)
-            )
+            else (learner_id_from_index(index) for index in range(config.sync.num_learners))
         ),
         heartbeat_fences=heartbeat_fences,
     )
@@ -1256,9 +1255,7 @@ def sync_liveness_and_metadata(
     heartbeat_fences: dict[str, str] | None = None,
 ) -> dict[str, int]:
     if config.membership.mode == "dynamic":
-        config_fingerprint = str(
-            store.get_run_state("dynamic_config_fingerprint") or ""
-        )
+        config_fingerprint = str(store.get_run_state("dynamic_config_fingerprint") or "")
         bootstrap_jobs = read_bootstrap_scheduler_jobs(
             paths,
             run_id=config.run.run_id or "",
@@ -1275,15 +1272,11 @@ def sync_liveness_and_metadata(
             job
             for job in bootstrap_jobs
             if launch_jobs.get(str(job["request_id"])) is None
-            or normalize_job_id(
-                str(launch_jobs[str(job["request_id"])])
-            )
+            or normalize_job_id(str(launch_jobs[str(job["request_id"])]))
             != normalize_job_id(str(job["pbs_job_id"]))
         ]
         external_launch_jobs = (
-            store.record_external_launch_jobs(jobs_to_record)
-            if jobs_to_record
-            else 0
+            store.record_external_launch_jobs(jobs_to_record) if jobs_to_record else 0
         )
         heartbeat_count = ingest_dynamic_heartbeats(
             store,
@@ -1299,15 +1292,11 @@ def sync_liveness_and_metadata(
             config_sha256=store.fenced_store.config_sha256,
             stream_pool_size=config.membership.stream_pool_size,
             desired_contributors=config.scaling.desired_contributors,
-            allow_unsolicited_registration=(
-                config.membership.allow_unsolicited_registration
-            ),
+            allow_unsolicited_registration=(config.membership.allow_unsolicited_registration),
             allow_healthy_placement_replacement=(
                 config.membership.allow_healthy_placement_replacement
             ),
-            reuse_stream_for_same_placement=(
-                config.membership.reuse_stream_for_same_placement
-            ),
+            reuse_stream_for_same_placement=(config.membership.reuse_stream_for_same_placement),
         )
         revoked = store.revoke_dead_instances(
             heartbeat_dead_after_seconds=config.membership.heartbeat_dead_after_seconds
@@ -1383,12 +1372,89 @@ def dynamic_non_target_close_request(
     if scale_count < int(config.scaling.max_total_launch_requests):
         return None
     active_scale_request = any(
-        str(row.get("reason")) == "scale_out"
-        for row in store.launch_requests(active_only=True)
+        str(row.get("reason")) == "scale_out" for row in store.launch_requests(active_only=True)
     )
     if active_scale_request:
         return None
     return "launch_budget_exhausted", timestamp
+
+
+def start_dynamic_drain(
+    config: Config,
+    store: Any,
+    paths: RunPaths,
+    *,
+    reason: str,
+    current_version: int,
+    requested_at: float | None = None,
+    logger: JsonlLogger | None = None,
+) -> dict[str, Any]:
+    """Persist and publish exactly one dynamic close generation."""
+
+    controller = store.controller_state()
+    if controller is None:
+        raise RuntimeError("dynamic controller state is missing")
+    if str(controller["state"]) != "open":
+        return controller
+    global_target = (
+        int(current_version)
+        if reason == "stop_after_global_tokens"
+        else config.sync.stop_after_outer_steps
+    )
+    controller = store.begin_dynamic_drain(
+        reason=reason,
+        current_version=current_version,
+        global_target=global_target,
+        max_terminal_merges=config.terminal.max_terminal_merges,
+        requested_at=requested_at,
+    )
+    DynamicTerminalPublisher(
+        paths,
+        store.fenced_store,
+        store.token,
+    ).publish_drain(controller)
+    if logger is not None:
+        logger.event(
+            "dynamic_drain_started",
+            close_generation=int(controller["generation"]),
+            max_terminal_version=int(controller["max_terminal_version"]),
+            reason=reason,
+        )
+    return controller
+
+
+def require_closed_dynamic_terminal(
+    store: Any,
+    *,
+    dynamic_mode: bool,
+    stop_reason: str,
+) -> None:
+    """Reject every normal dynamic terminal before admission input is closed."""
+
+    if not dynamic_mode or stop_reason == "error":
+        return
+    controller = store.controller_state()
+    if (
+        controller is None
+        or str(controller["state"]) != "closed"
+        or not bool(store.dynamic_input_closed())
+    ):
+        raise RuntimeError(
+            "normal dynamic terminal requires a closed controller with no open input"
+        )
+
+
+def resumed_dynamic_stop_reason(store: Any, *, default: str) -> str:
+    """Preserve the persisted close reason when a successor resumes a drain."""
+
+    controller = store.controller_state()
+    if (
+        controller is not None
+        and str(controller.get("state")) in {"draining", "closed"}
+        and controller.get("reason") not in (None, "")
+    ):
+        return str(controller["reason"])
+    return default
 
 
 def configured_grace_seconds(config: Config) -> float:
@@ -2140,9 +2206,7 @@ def repair_completed_ha_terminal(
     if config.membership.mode == "dynamic":
         controller = store.controller_state()
         if controller is None or str(controller["state"]) not in {"closed", "terminal"}:
-            raise RuntimeError(
-                "dynamic terminal repair requires a closed admission controller"
-            )
+            raise RuntimeError("dynamic terminal repair requires a closed admission controller")
         if str(controller["state"]) != "terminal":
             store.set_controller_state(
                 state="terminal",
@@ -3014,9 +3078,7 @@ def run_syncer(config: Config) -> None:
             bootstrap_requests = store.initialize_dynamic_membership(
                 stream_pool_size=config.membership.stream_pool_size,
                 bootstrap_instances=config.membership.bootstrap_instances,
-                config_fingerprint=str(
-                    loaded_descriptor.descriptor["descriptor_sha256"]
-                ),
+                config_fingerprint=str(loaded_descriptor.descriptor["descriptor_sha256"]),
             )
             MembershipPublisher(
                 paths,
@@ -3071,57 +3133,56 @@ def run_syncer(config: Config) -> None:
             descriptor_sha256=str(loaded_descriptor.descriptor["descriptor_sha256"]),
         )
 
-    def record_dynamic_capacity(
+    def dynamic_capacity_observation(
         *,
         observation_key: str,
         kind: str,
         observed_version: int,
         eligible_contributors: int,
         selected_rows: list[dict[str, Any]],
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any]:
         if not dynamic_mode:
-            return None
+            raise RuntimeError("capacity observations require dynamic membership")
         assert loaded_descriptor is not None
-        result = store.record_capacity_observation(
-            observation_key=observation_key,
-            kind=kind,
-            global_version=observed_version,
-            eligible_contributors=eligible_contributors,
-            selected_instance_ids=[
-                str(row["learner_instance_id"]) for row in selected_rows
-            ],
-            low_contributor_threshold=config.scaling.low_contributor_threshold,
-            consecutive_low_windows=config.scaling.consecutive_low_windows,
-            productive_window_count=config.scaling.productive_window_count,
-            startup_grace_seconds=config.scaling.startup_grace_seconds,
-            heartbeat_stale_after_seconds=config.membership.heartbeat_stale_after_seconds,
-            productive_upload_grace_factor=(
-                config.scaling.productive_upload_grace_factor
-            ),
-            productive_upload_grace_min_seconds=(
+        return {
+            "observation_key": observation_key,
+            "kind": kind,
+            "global_version": observed_version,
+            "eligible_contributors": eligible_contributors,
+            "selected_instance_ids": [str(row["learner_instance_id"]) for row in selected_rows],
+            "low_contributor_threshold": config.scaling.low_contributor_threshold,
+            "consecutive_low_windows": config.scaling.consecutive_low_windows,
+            "productive_window_count": config.scaling.productive_window_count,
+            "startup_grace_seconds": config.scaling.startup_grace_seconds,
+            "heartbeat_stale_after_seconds": (config.membership.heartbeat_stale_after_seconds),
+            "productive_upload_grace_factor": (config.scaling.productive_upload_grace_factor),
+            "productive_upload_grace_min_seconds": (
                 config.scaling.productive_upload_grace_min_seconds
             ),
-            productive_upload_grace_max_seconds=(
+            "productive_upload_grace_max_seconds": (
                 config.scaling.productive_upload_grace_max_seconds
             ),
-            desired_contributors=config.scaling.desired_contributors,
-            stream_pool_size=config.membership.stream_pool_size,
-            scaling_enabled=config.scaling.enabled,
-            initial_membership_deadline_seconds=(
+            "desired_contributors": config.scaling.desired_contributors,
+            "stream_pool_size": config.membership.stream_pool_size,
+            "scaling_enabled": config.scaling.enabled,
+            "initial_membership_deadline_seconds": (
                 config.membership.initial_membership_deadline_seconds
             ),
-            cooldown_seconds=config.scaling.cooldown_seconds,
-            max_pending_launch_requests=config.scaling.max_pending_launch_requests,
-            max_total_launch_requests=config.scaling.max_total_launch_requests,
-            launch_request_ttl_seconds=config.scaling.launch_request_ttl_seconds,
-            config_fingerprint=str(loaded_descriptor.descriptor["descriptor_sha256"]),
-        )
+            "cooldown_seconds": config.scaling.cooldown_seconds,
+            "max_pending_launch_requests": config.scaling.max_pending_launch_requests,
+            "max_total_launch_requests": config.scaling.max_total_launch_requests,
+            "launch_request_ttl_seconds": config.scaling.launch_request_ttl_seconds,
+            "config_fingerprint": str(loaded_descriptor.descriptor["descriptor_sha256"]),
+        }
+
+    def log_dynamic_capacity(result: dict[str, Any]) -> None:
+        observation = result["observation"]
         logger.event(
             "capacity_observation_recorded",
-            observation_key=observation_key,
+            observation_key=str(observation["observation_key"]),
             inserted=bool(result["inserted"]),
-            observation_seq=int(result["observation"]["observation_seq"]),
-            low_capacity=bool(result["observation"]["low_capacity"]),
+            observation_seq=int(observation["observation_seq"]),
+            low_capacity=bool(observation["low_capacity"]),
             consecutive_low_count=int(result.get("consecutive_low_count", 0)),
             launch_request_id=(
                 None
@@ -3129,7 +3190,6 @@ def run_syncer(config: Config) -> None:
                 else result["launch_request"]["request_id"]
             ),
         )
-        return result
 
     last_progress_time = time.time()
     cycle_started_monotonic = time.monotonic()
@@ -3138,6 +3198,8 @@ def run_syncer(config: Config) -> None:
     cycle_grace_seconds = 0.0
     cycle_quorum_trigger = "not_reached"
     stop_reason = "completed"
+    if dynamic_mode:
+        stop_reason = resumed_dynamic_stop_reason(store, default=stop_reason)
     terminal_grace_complete = False
     reported_lease_busy_retries = 0
     try:
@@ -3162,31 +3224,22 @@ def run_syncer(config: Config) -> None:
             target_reason = (
                 "stop_after_outer_steps"
                 if reached_outer_target
-                else "stop_after_global_tokens" if reached_token_target else None
+                else "stop_after_global_tokens"
+                if reached_token_target
+                else None
             )
             if target_reason is not None:
                 stop_reason = target_reason
                 if not dynamic_mode:
                     break
-                controller = store.controller_state()
-                if controller is not None and str(controller["state"]) == "open":
-                    controller = store.begin_dynamic_drain(
-                        reason=target_reason,
-                        current_version=version,
-                        global_target=config.sync.stop_after_outer_steps,
-                        max_terminal_merges=config.terminal.max_terminal_merges,
-                    )
-                    DynamicTerminalPublisher(
-                        paths,
-                        store.fenced_store,
-                        store.token,
-                    ).publish_drain(controller)
-                    logger.event(
-                        "dynamic_drain_started",
-                        close_generation=int(controller["generation"]),
-                        max_terminal_version=int(controller["max_terminal_version"]),
-                        reason=target_reason,
-                    )
+                controller = start_dynamic_drain(
+                    config=config,
+                    store=store,
+                    paths=paths,
+                    logger=logger,
+                    reason=target_reason,
+                    current_version=version,
+                )
 
             discovery_start = time.monotonic()
             sync_liveness_and_metadata(
@@ -3208,34 +3261,21 @@ def run_syncer(config: Config) -> None:
                     if close_request is not None:
                         close_reason, requested_at = close_request
                         stop_reason = close_reason
-                        controller = store.begin_dynamic_drain(
+                        controller = start_dynamic_drain(
+                            config=config,
+                            store=store,
+                            paths=paths,
+                            logger=logger,
                             reason=close_reason,
                             current_version=version,
-                            global_target=config.sync.stop_after_outer_steps,
-                            max_terminal_merges=config.terminal.max_terminal_merges,
                             requested_at=requested_at,
-                        )
-                        DynamicTerminalPublisher(
-                            paths,
-                            store.fenced_store,
-                            store.token,
-                        ).publish_drain(controller)
-                        logger.event(
-                            "dynamic_drain_started",
-                            close_generation=int(controller["generation"]),
-                            max_terminal_version=int(
-                                controller["max_terminal_version"]
-                            ),
-                            reason=close_reason,
                         )
                 if controller is not None and str(controller["state"]) in {
                     "draining",
                     "closed",
                 }:
                     controller = store.advance_dynamic_drain(
-                        drain_ack_timeout_seconds=(
-                            config.terminal.drain_ack_timeout_seconds
-                        ),
+                        drain_ack_timeout_seconds=(config.terminal.drain_ack_timeout_seconds),
                         registration_visibility_grace_seconds=(
                             config.terminal.registration_visibility_grace_seconds
                         ),
@@ -3250,10 +3290,7 @@ def run_syncer(config: Config) -> None:
                 controller = None
                 input_closed = all_expected_learners_stopped(store, config)
             cycle_discovery_seconds += time.monotonic() - discovery_start
-            if (
-                launch_outbox is not None
-                and time.monotonic() >= next_launch_reconcile_monotonic
-            ):
+            if launch_outbox is not None and time.monotonic() >= next_launch_reconcile_monotonic:
                 reconciled = launch_outbox.reconcile(store)
                 next_launch_reconcile_monotonic = time.monotonic() + float(
                     config.scaling.scheduler_reconcile_interval_seconds
@@ -3322,7 +3359,8 @@ def run_syncer(config: Config) -> None:
                     terminal_grace_complete = False
                     logger.event("terminal_input_reopened", version=version)
                 elif terminal_decision.state == "closed_empty":
-                    stop_reason = "input_exhausted"
+                    if not dynamic_mode:
+                        stop_reason = "input_exhausted"
                     logger.event("input_exhausted", version=version)
                     break
                 else:
@@ -3352,10 +3390,15 @@ def run_syncer(config: Config) -> None:
                         quorum_min=config.sync.quorum_min,
                         version=version,
                     )
-                    if dynamic_mode and controller is not None and str(controller["state"]) in {
-                        "draining",
-                        "closed",
-                    }:
+                    if (
+                        dynamic_mode
+                        and controller is not None
+                        and str(controller["state"])
+                        in {
+                            "draining",
+                            "closed",
+                        }
+                    ):
                         idle_start = time.monotonic()
                         time.sleep(config.membership.registration_scan_interval_seconds)
                         cycle_idle_seconds += time.monotonic() - idle_start
@@ -3373,9 +3416,7 @@ def run_syncer(config: Config) -> None:
                                 scan_interval_seconds=config.sync.scan_interval_seconds,
                                 **dynamic_maintenance_options(config),
                             )
-                            cycle_discovery_seconds += (
-                                time.monotonic() - maintenance_start
-                            )
+                            cycle_discovery_seconds += time.monotonic() - maintenance_start
                             next_dynamic_idle_maintenance_monotonic = (
                                 time.monotonic()
                                 + config.scaling.scheduler_reconcile_interval_seconds
@@ -3393,23 +3434,34 @@ def run_syncer(config: Config) -> None:
                                     "dynamic_state_maintenance_completed",
                                     **maintenance,
                                 )
-                        starvation_key = store.allocate_starvation_observation_key(
-                            interval_seconds=config.scaling.starvation_observation_seconds
-                        )
-                        if starvation_key is not None:
-                            record_dynamic_capacity(
-                                observation_key=starvation_key,
+                        starvation_result = store.record_starvation_capacity_observation(
+                            interval_seconds=(config.scaling.starvation_observation_seconds),
+                            capacity_observation=dynamic_capacity_observation(
+                                observation_key="starvation:pending",
                                 kind="starvation",
                                 observed_version=version,
                                 eligible_contributors=len(one_per_learner),
                                 selected_rows=[],
-                            )
+                            ),
+                        )
+                        if starvation_result is not None:
+                            log_dynamic_capacity(starvation_result)
                     if no_progress_timed_out(
                         last_progress_time,
                         config.liveness.no_progress_timeout_seconds,
                     ):
                         stop_reason = "no_progress_timeout"
                         logger.event("no_progress_timeout", version=version)
+                        if dynamic_mode:
+                            start_dynamic_drain(
+                                config=config,
+                                store=store,
+                                paths=paths,
+                                logger=logger,
+                                reason=stop_reason,
+                                current_version=version,
+                            )
+                            continue
                         break
                     idle_start = time.monotonic()
                     time.sleep(config.sync.scan_interval_seconds)
@@ -3579,13 +3631,22 @@ def run_syncer(config: Config) -> None:
                         0.2,
                         max(0.001, float(config.sync.scan_interval_seconds)),
                     ),
+                    capacity_observation=(
+                        dynamic_capacity_observation(
+                            observation_key=f"merge:{new_version}",
+                            kind="merge",
+                            observed_version=new_version,
+                            eligible_contributors=len(selected),
+                            selected_rows=selected,
+                        )
+                        if dynamic_mode
+                        else None
+                    ),
                 )
             except DynamicMembershipFenceError as exc:
                 if not dynamic_mode:
                     raise
-                store.reset_selected_to_pending(
-                    [str(row["update_id"]) for row in selected]
-                )
+                store.reset_selected_to_pending([str(row["update_id"]) for row in selected])
                 committed = store.latest_global_version()
                 if committed is None or int(committed["version"]) != version:
                     raise RuntimeError(
@@ -3621,13 +3682,11 @@ def run_syncer(config: Config) -> None:
                 )
                 continue
             first_seen.discard_many([row["update_id"] for row in selected])
-            record_dynamic_capacity(
-                observation_key=f"merge:{new_version}",
-                kind="merge",
-                observed_version=new_version,
-                eligible_contributors=len(selected),
-                selected_rows=selected,
-            )
+            capacity_result = publication.pop("_capacity_observation_result", None)
+            if dynamic_mode:
+                if not isinstance(capacity_result, dict):
+                    raise RuntimeError("dynamic global commit omitted its capacity observation")
+                log_dynamic_capacity(capacity_result)
             publish_seconds = time.monotonic() - publish_start
             sqlite_commit_seconds = float(publication["sqlite_commit_seconds"])
             publication_metrics = {
@@ -3766,6 +3825,11 @@ def run_syncer(config: Config) -> None:
         try:
             terminal_row = None
             if isinstance(store, LeaderBoundSQLiteStore):
+                require_closed_dynamic_terminal(
+                    store,
+                    dynamic_mode=dynamic_mode,
+                    stop_reason=stop_reason,
+                )
                 previous_terminal = store.terminal_state()
                 generation = (
                     1 if previous_terminal is None else int(previous_terminal["generation"]) + 1

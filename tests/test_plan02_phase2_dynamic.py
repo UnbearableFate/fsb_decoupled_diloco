@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -220,6 +219,43 @@ def heartbeat(admission: dict[str, Any], **overrides: Any) -> dict[str, Any]:
     return payload
 
 
+def capacity_parameters(
+    *,
+    key: str,
+    kind: str,
+    global_version: int,
+    eligible: int,
+    selected_instance_ids: list[str],
+    now: float,
+    max_total_launch_requests: int = 2,
+) -> dict[str, Any]:
+    return {
+        "observation_key": key,
+        "kind": kind,
+        "global_version": global_version,
+        "eligible_contributors": eligible,
+        "selected_instance_ids": selected_instance_ids,
+        "low_contributor_threshold": 1,
+        "consecutive_low_windows": 2,
+        "productive_window_count": 2,
+        "startup_grace_seconds": 1.0,
+        "heartbeat_stale_after_seconds": 10.0,
+        "productive_upload_grace_factor": 2.0,
+        "productive_upload_grace_min_seconds": 1.0,
+        "productive_upload_grace_max_seconds": 10.0,
+        "desired_contributors": 2,
+        "stream_pool_size": 2,
+        "scaling_enabled": True,
+        "initial_membership_deadline_seconds": 10.0,
+        "cooldown_seconds": 10.0,
+        "max_pending_launch_requests": 1,
+        "max_total_launch_requests": max_total_launch_requests,
+        "launch_request_ttl_seconds": 20.0,
+        "config_fingerprint": "descriptor",
+        "now": now,
+    }
+
+
 def test_dynamic_identity_cli_and_fixed_stream_mapping(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -236,7 +272,9 @@ def test_dynamic_identity_cli_and_fixed_stream_mapping(
     calls: list[tuple[int, int]] = []
     sentinel = object()
 
-    def fake_iterator(_config: Config, _tokenizer: object, *, learner_index: int, num_learners: int):
+    def fake_iterator(
+        _config: Config, _tokenizer: object, *, learner_index: int, num_learners: int
+    ):
         calls.append((learner_index, num_learners))
         return sentinel
 
@@ -266,9 +304,7 @@ def test_dynamic_identity_cli_and_fixed_stream_mapping(
     with pytest.raises(ValueError, match="rejects --learner-id"):
         learner_runtime.main(["--config", "unused", "--learner-id", "learner_000"])
     with pytest.raises(ValueError, match="rejects --num-learners"):
-        learner_runtime.main(
-            ["--config", "unused", "--num-learners", "8", "--bootstrap-slot", "0"]
-        )
+        learner_runtime.main(["--config", "unused", "--num-learners", "8", "--bootstrap-slot", "0"])
 
     paths = RunPaths(tmp_path / "discovery")
     prepare_authority_dirs(paths)
@@ -473,6 +509,167 @@ def test_bootstrap_registration_replay_rejection_and_authorized_replacement(
         lease.close()
 
 
+def test_registration_waits_for_scheduler_identity_binding(tmp_path: Path) -> None:
+    paths, lease, token, fenced, store = dynamic_store(tmp_path)
+    try:
+        launch = initialize_membership(store, pool=1, bootstrap=1)[0]
+        instance_id = new_learner_instance_id()
+        request_payload(
+            paths,
+            instance_id=instance_id,
+            launch_request_id=str(launch["request_id"]),
+            placement_id="host:gpu0",
+            pbs_job_id="123.opbs",
+        )
+
+        pending = ingest_registration_requests(
+            store,
+            paths,
+            token=token,
+            run_id=dynamic_identity().run_id,
+            source_fingerprint=dynamic_identity().source_fingerprint,
+            config_sha256=dynamic_identity().config_sha256,
+            stream_pool_size=1,
+            desired_contributors=1,
+            allow_unsolicited_registration=False,
+            allow_healthy_placement_replacement=False,
+            reuse_stream_for_same_placement=True,
+            now=100.0,
+        )
+        assert [row["state"] for row in pending] == ["pending_scheduler_authorization"], pending
+        assert paths.registration_request_path(instance_id).is_file()
+        assert store.current_instances() == []
+        assert [row["state"] for row in store.registration_requests()] == ["pending"]
+
+        assert (
+            store.record_external_launch_jobs(
+                [
+                    {
+                        "bootstrap_slot": 0,
+                        "request_id": str(launch["request_id"]),
+                        "pbs_job_id": "123.opbs",
+                    }
+                ],
+                observed_at=101.0,
+            )
+            == 1
+        )
+        admitted = ingest_registration_requests(
+            store,
+            paths,
+            token=token,
+            run_id=dynamic_identity().run_id,
+            source_fingerprint=dynamic_identity().source_fingerprint,
+            config_sha256=dynamic_identity().config_sha256,
+            stream_pool_size=1,
+            desired_contributors=1,
+            allow_unsolicited_registration=False,
+            allow_healthy_placement_replacement=False,
+            reuse_stream_for_same_placement=True,
+            now=101.0,
+        )
+        assert [row["state"] for row in admitted] == ["admitted"]
+        assert not paths.registration_request_path(instance_id).exists()
+        assert [row["state"] for row in store.registration_requests()] == ["admitted"]
+    finally:
+        fenced.close()
+        lease.close()
+
+
+def test_registration_rejects_wrong_scheduler_identity_after_binding(
+    tmp_path: Path,
+) -> None:
+    paths, lease, token, fenced, store = dynamic_store(tmp_path)
+    try:
+        launch = initialize_membership(store, pool=1, bootstrap=1)[0]
+        instance_id = new_learner_instance_id()
+        request_payload(
+            paths,
+            instance_id=instance_id,
+            launch_request_id=str(launch["request_id"]),
+            placement_id="host:gpu0",
+            pbs_job_id="999.opbs",
+        )
+        store.record_external_launch_jobs(
+            [
+                {
+                    "bootstrap_slot": 0,
+                    "request_id": str(launch["request_id"]),
+                    "pbs_job_id": "123.opbs",
+                }
+            ],
+            observed_at=100.0,
+        )
+        rejected = ingest_registration_requests(
+            store,
+            paths,
+            token=token,
+            run_id=dynamic_identity().run_id,
+            source_fingerprint=dynamic_identity().source_fingerprint,
+            config_sha256=dynamic_identity().config_sha256,
+            stream_pool_size=1,
+            desired_contributors=1,
+            allow_unsolicited_registration=False,
+            allow_healthy_placement_replacement=False,
+            reuse_stream_for_same_placement=True,
+            now=100.0,
+        )
+        assert [row["state"] for row in rejected] == ["rejected"]
+        assert "does not match" in str(rejected[0]["rejection_reason"])
+        assert store.current_instances() == []
+        assert not paths.registration_request_path(instance_id).exists()
+    finally:
+        fenced.close()
+        lease.close()
+
+
+def test_pending_scheduler_registration_rejects_changed_request(
+    tmp_path: Path,
+) -> None:
+    paths, lease, token, fenced, store = dynamic_store(tmp_path)
+    try:
+        launch = initialize_membership(store, pool=1, bootstrap=1)[0]
+        instance_id = new_learner_instance_id()
+        request_payload(
+            paths,
+            instance_id=instance_id,
+            launch_request_id=str(launch["request_id"]),
+            placement_id="host:gpu0",
+            pbs_job_id="123.opbs",
+        )
+        common = {
+            "token": token,
+            "run_id": dynamic_identity().run_id,
+            "source_fingerprint": dynamic_identity().source_fingerprint,
+            "config_sha256": dynamic_identity().config_sha256,
+            "stream_pool_size": 1,
+            "desired_contributors": 1,
+            "allow_unsolicited_registration": False,
+            "allow_healthy_placement_replacement": False,
+            "reuse_stream_for_same_placement": True,
+            "now": 100.0,
+        }
+        pending = ingest_registration_requests(store, paths, **common)
+        assert [row["state"] for row in pending] == ["pending_scheduler_authorization"]
+
+        request_payload(
+            paths,
+            instance_id=instance_id,
+            launch_request_id=str(launch["request_id"]),
+            placement_id="other:gpu0",
+            pbs_job_id="123.opbs",
+        )
+        rejected = ingest_registration_requests(store, paths, **common)
+        assert [row["state"] for row in rejected] == ["rejected"]
+        assert "checksum" in str(rejected[0]["rejection_reason"])
+        assert [row["state"] for row in store.registration_requests()] == ["rejected"]
+        assert store.current_instances() == []
+        assert not paths.registration_request_path(instance_id).exists()
+    finally:
+        fenced.close()
+        lease.close()
+
+
 def test_all_bootstrap_slots_admit_and_ninth_unsolicited_is_rejected(
     tmp_path: Path,
 ) -> None:
@@ -641,8 +838,7 @@ def test_acceptance_launcher_gates_victim_failure_on_admission(tmp_path: Path) -
 
     assert payload["status"] == "PASS"
     victim = next(
-        row for row in payload["submission_receipts"]
-        if row["role"] == "victim_bootstrap_0"
+        row for row in payload["submission_receipts"] if row["role"] == "victim_bootstrap_0"
     )
     variables = victim["command"][victim["command"].index("-v") + 1]
     assert "FS_DILOCO_TEST_TERMINATE_AFTER_ADMISSION_SECONDS=2" in variables
@@ -732,28 +928,34 @@ def test_conflicting_registration_replay_preserves_canonical_admission(
         assert results[0]["instance_id"] == admission["instance_id"]
         assert "admission_token" not in results[0]
         assert decision_path.read_bytes() == original_bytes
-        assert read_admission(
-            paths,
-            run_id=dynamic_identity().run_id,
-            instance_id=str(original_request["instance_id"]),
-        ) is not None
+        assert (
+            read_admission(
+                paths,
+                run_id=dynamic_identity().run_id,
+                instance_id=str(original_request["instance_id"]),
+            )
+            is not None
+        )
 
         invalid_path = paths.registration_requests / "not-an-instance.json"
         invalid_path.write_text("{}", encoding="utf-8")
-        assert ingest_registration_requests(
-            store,
-            paths,
-            token=token,
-            run_id=dynamic_identity().run_id,
-            source_fingerprint=dynamic_identity().source_fingerprint,
-            config_sha256=dynamic_identity().config_sha256,
-            stream_pool_size=1,
-            desired_contributors=1,
-            allow_unsolicited_registration=False,
-            allow_healthy_placement_replacement=False,
-            reuse_stream_for_same_placement=True,
-            now=103.0,
-        ) == []
+        assert (
+            ingest_registration_requests(
+                store,
+                paths,
+                token=token,
+                run_id=dynamic_identity().run_id,
+                source_fingerprint=dynamic_identity().source_fingerprint,
+                config_sha256=dynamic_identity().config_sha256,
+                stream_pool_size=1,
+                desired_contributors=1,
+                allow_unsolicited_registration=False,
+                allow_healthy_placement_replacement=False,
+                reuse_stream_for_same_placement=True,
+                now=103.0,
+            )
+            == []
+        )
         assert not invalid_path.exists()
     finally:
         fenced.close()
@@ -810,9 +1012,12 @@ def test_commit_revalidates_membership_and_selector_uniqueness(tmp_path: Path) -
             now=200.0,
         )
         assert [row["instance_id"] for row in revoked] == [member["instance_id"]]
-        assert store.insert_update_metadata(
-            update_metadata(member, update_id="stale-pointer-after-revoke")
-        ) is False
+        assert (
+            store.insert_update_metadata(
+                update_metadata(member, update_id="stale-pointer-after-revoke")
+            )
+            is False
+        )
         with pytest.raises(DynamicMembershipFenceError, match="not current"):
             store.commit_full_merge(
                 predecessor_version=0,
@@ -828,6 +1033,14 @@ def test_commit_revalidates_membership_and_selector_uniqueness(tmp_path: Path) -
                 publication_id="publication-v1",
                 weight_size_bytes=1,
                 optim_size_bytes=1,
+                capacity_observation=capacity_parameters(
+                    key="merge:1",
+                    kind="merge",
+                    global_version=1,
+                    eligible=1,
+                    selected_instance_ids=[member["instance_id"]],
+                    now=100.0,
+                ),
             )
         assert store.latest_global_version()["version"] == 0
 
@@ -874,29 +1087,15 @@ def capacity_observation(
     max_total_launch_requests: int = 2,
 ):
     return store.record_capacity_observation(
-        observation_key=key,
-        kind="starvation",
-        global_version=0,
-        eligible_contributors=eligible,
-        selected_instance_ids=[],
-        low_contributor_threshold=1,
-        consecutive_low_windows=2,
-        productive_window_count=2,
-        startup_grace_seconds=1.0,
-        heartbeat_stale_after_seconds=10.0,
-        productive_upload_grace_factor=2.0,
-        productive_upload_grace_min_seconds=1.0,
-        productive_upload_grace_max_seconds=10.0,
-        desired_contributors=2,
-        stream_pool_size=2,
-        scaling_enabled=True,
-        initial_membership_deadline_seconds=10.0,
-        cooldown_seconds=10.0,
-        max_pending_launch_requests=1,
-        max_total_launch_requests=max_total_launch_requests,
-        launch_request_ttl_seconds=20.0,
-        config_fingerprint="descriptor",
-        now=now,
+        **capacity_parameters(
+            key=key,
+            kind="starvation",
+            global_version=0,
+            eligible=eligible,
+            selected_instance_ids=[],
+            max_total_launch_requests=max_total_launch_requests,
+            now=now,
+        )
     )
 
 
@@ -921,15 +1120,6 @@ def test_capacity_observation_idempotency_hysteresis_and_limits(tmp_path: Path) 
         assert third["launch_request"] is None
         assert len(store.launch_requests(active_only=True)) == 1
 
-        assert store.allocate_starvation_observation_key(
-            interval_seconds=10.0, now=100.0
-        ) == "starvation:1"
-        assert store.allocate_starvation_observation_key(
-            interval_seconds=10.0, now=105.0
-        ) is None
-        assert store.allocate_starvation_observation_key(
-            interval_seconds=10.0, now=110.0
-        ) == "starvation:2"
     finally:
         fenced.close()
         lease.close()
@@ -994,9 +1184,7 @@ def test_launch_outbox_reconciles_qsub_windows_and_retains_scheduler_capacity(
     try:
         initialize_membership(store, pool=2, bootstrap=0)
         capacity_observation(store, key="low:1", now=100.0, eligible=0)
-        planned = capacity_observation(store, key="low:2", now=102.0, eligible=0)[
-            "launch_request"
-        ]
+        planned = capacity_observation(store, key="low:2", now=102.0, eligible=0)["launch_request"]
         assert planned is not None
 
         scheduler = MockScheduler()
@@ -1014,9 +1202,7 @@ def test_launch_outbox_reconciles_qsub_windows_and_retains_scheduler_capacity(
         )
         outbox.reconcile(store)
         row = next(
-            item
-            for item in store.launch_requests()
-            if item["request_id"] == planned["request_id"]
+            item for item in store.launch_requests() if item["request_id"] == planned["request_id"]
         )
         assert row["state"] == "submitted"
         assert row["pbs_job_id"] == "777"
@@ -1027,9 +1213,7 @@ def test_launch_outbox_reconciles_qsub_windows_and_retains_scheduler_capacity(
         scheduler.queried = PBSJobObservation("777", "unknown", {}, 0, "")
         outbox.reconcile(store)
         row = next(
-            item
-            for item in store.launch_requests()
-            if item["request_id"] == planned["request_id"]
+            item for item in store.launch_requests() if item["request_id"] == planned["request_id"]
         )
         assert row["state"] == "submitted"
         assert row["reservation_released_at"] is None
@@ -1037,9 +1221,7 @@ def test_launch_outbox_reconciles_qsub_windows_and_retains_scheduler_capacity(
         scheduler.queried = PBSJobObservation("777", "no_record", None, 1, "missing")
         outbox.reconcile(store)
         row = next(
-            item
-            for item in store.launch_requests()
-            if item["request_id"] == planned["request_id"]
+            item for item in store.launch_requests() if item["request_id"] == planned["request_id"]
         )
         assert row["state"] == "failed"
         assert row["reservation_released_at"] == 1000.0
@@ -1061,9 +1243,7 @@ def test_bootstrap_job_remains_reserved_until_scheduler_terminal(tmp_path: Path)
         ]
         store.record_external_launch_jobs(jobs, observed_at=100.0)
         scheduler = MockScheduler()
-        scheduler.queried = PBSJobObservation(
-            "321.opbs", "queued", {"job_state": "Q"}, 0, ""
-        )
+        scheduler.queried = PBSJobObservation("321.opbs", "queued", {"job_state": "Q"}, 0, "")
         outbox = LearnerLaunchOutbox(
             paths=paths,
             config=SimpleNamespace(
@@ -1076,15 +1256,17 @@ def test_bootstrap_job_remains_reserved_until_scheduler_terminal(tmp_path: Path)
             wall_clock=lambda: 10_000.0,
         )
         outbox.reconcile(store)
-        row = next(item for item in store.launch_requests() if item["request_id"] == launch["request_id"])
+        row = next(
+            item for item in store.launch_requests() if item["request_id"] == launch["request_id"]
+        )
         assert row["state"] == "submitted"
         assert row["reservation_released_at"] is None
 
-        scheduler.queried = PBSJobObservation(
-            "321.opbs", "no_record", None, 1, "missing"
-        )
+        scheduler.queried = PBSJobObservation("321.opbs", "no_record", None, 1, "missing")
         outbox.reconcile(store)
-        row = next(item for item in store.launch_requests() if item["request_id"] == launch["request_id"])
+        row = next(
+            item for item in store.launch_requests() if item["request_id"] == launch["request_id"]
+        )
         assert row["state"] == "failed"
         assert row["reservation_released_at"] == 10_000.0
     finally:
@@ -1111,9 +1293,7 @@ def test_dynamic_drain_ack_timeout_admission_fence_and_visibility(tmp_path: Path
         )
         assert controller["state"] == "draining"
         assert controller["max_terminal_version"] == 1
-        directive_path = DynamicTerminalPublisher(paths, fenced, token).publish_drain(
-            controller
-        )
+        directive_path = DynamicTerminalPublisher(paths, fenced, token).publish_drain(controller)
         assert directive_path.is_file()
         directive = read_current_drain(paths, run_id=dynamic_identity().run_id)
         assert directive is not None and directive["close_generation"] == 1
@@ -1161,9 +1341,7 @@ def test_dynamic_drain_ack_timeout_admission_fence_and_visibility(tmp_path: Path
         )
         assert closed["input_closed"] is False
         assert closed["pending_final_pointers"] == 1
-        assert store.insert_update_metadata(
-            update_metadata(member, update_id="final-update")
-        )
+        assert store.insert_update_metadata(update_metadata(member, update_id="final-update"))
         visibility = store.advance_dynamic_drain(
             drain_ack_timeout_seconds=10.0,
             registration_visibility_grace_seconds=2.0,
@@ -1203,12 +1381,15 @@ def test_manual_deadline_and_launch_budget_close_requests(tmp_path: Path) -> Non
         config.run.source_fingerprint = dynamic_identity().source_fingerprint
 
         config.terminal.admission_close_policy = "manual"
-        assert dynamic_non_target_close_request(
-            config,
-            store,
-            paths,
-            now=105.0,
-        ) is None
+        assert (
+            dynamic_non_target_close_request(
+                config,
+                store,
+                paths,
+                now=105.0,
+            )
+            is None
+        )
         written = write_dynamic_close_request(
             paths,
             run_id=dynamic_identity().run_id,
@@ -1216,12 +1397,15 @@ def test_manual_deadline_and_launch_budget_close_requests(tmp_path: Path) -> Non
             config_sha256=dynamic_identity().config_sha256,
             requested_at=104.0,
         )
-        assert read_dynamic_close_request(
-            paths,
-            run_id=dynamic_identity().run_id,
-            source_fingerprint=dynamic_identity().source_fingerprint,
-            config_sha256=dynamic_identity().config_sha256,
-        ) == written
+        assert (
+            read_dynamic_close_request(
+                paths,
+                run_id=dynamic_identity().run_id,
+                source_fingerprint=dynamic_identity().source_fingerprint,
+                config_sha256=dynamic_identity().config_sha256,
+            )
+            == written
+        )
         assert dynamic_non_target_close_request(
             config,
             store,
@@ -1231,12 +1415,15 @@ def test_manual_deadline_and_launch_budget_close_requests(tmp_path: Path) -> Non
 
         config.terminal.admission_close_policy = "deadline"
         config.terminal.deadline_seconds = 10.0
-        assert dynamic_non_target_close_request(
-            config,
-            store,
-            paths,
-            now=109.99,
-        ) is None
+        assert (
+            dynamic_non_target_close_request(
+                config,
+                store,
+                paths,
+                now=109.99,
+            )
+            is None
+        )
         assert dynamic_non_target_close_request(
             config,
             store,
@@ -1341,9 +1528,7 @@ def test_dynamic_state_is_bounded_after_1000_churn_cycles(tmp_path: Path) -> Non
         assert len(store.launch_requests()) <= 9
         assert sum(row["reason"] == "bootstrap" for row in store.launch_requests()) == 1
         assert len(list(paths.iter_registration_requests())) == 0
-        final_page_count = int(
-            fenced._connection.execute("PRAGMA page_count").fetchone()[0]
-        )
+        final_page_count = int(fenced._connection.execute("PRAGMA page_count").fetchone()[0])
         # Frozen RED threshold: after 100-cycle warm-up, 900 more churn cycles
         # may consume at most 32 additional reusable SQLite pages.
         assert final_page_count - page_count_after_warmup <= 32
@@ -1539,6 +1724,4 @@ def test_matched_launcher_uses_independent_learners_and_persists_receipts(
         config_sha256="dynamic-config",
         config_fingerprint="dynamic-descriptor",
     )
-    assert [row["pbs_job_id"] for row in manifest] == [
-        f"{1011 + index}.opbs" for index in range(8)
-    ]
+    assert [row["pbs_job_id"] for row in manifest] == [f"{1011 + index}.opbs" for index in range(8)]

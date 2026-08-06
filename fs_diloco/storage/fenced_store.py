@@ -280,6 +280,7 @@ class FencedSQLiteStore:
         self._business_transaction_seconds: deque[float] = deque(maxlen=10_000)
         self._business_transaction_count = 0
         self._business_transaction_failure_count = 0
+        self._inline_capacity_thread_id: int | None = None
         self._wall_clock = wall_clock
         self.gc_grace_seconds = float(gc_grace_seconds)
         self.max_retained_epoch_dirs = int(max_retained_epoch_dirs)
@@ -403,9 +404,7 @@ class FencedSQLiteStore:
         cutoff = float(now) - float(expired_retention_seconds)
         excess_instances = max(
             0,
-            int(
-                self._connection.execute("SELECT COUNT(*) FROM learner_instances").fetchone()[0]
-            )
+            int(self._connection.execute("SELECT COUNT(*) FROM learner_instances").fetchone()[0])
             - int(max_active_instance_records),
         )
         terminal_instances = self._connection.execute(
@@ -424,10 +423,7 @@ class FencedSQLiteStore:
             for index, row in enumerate(terminal_instances)
             if index < excess_instances
             or float(
-                row["expired_at"]
-                or row["stopped_at"]
-                or row["last_seen"]
-                or row["registered_at"]
+                row["expired_at"] or row["stopped_at"] or row["last_seen"] or row["registered_at"]
             )
             <= cutoff
         ]
@@ -468,9 +464,7 @@ class FencedSQLiteStore:
             """,
             (int(capacity_observation_retention_count),),
         ).fetchall()
-        registration_ids = {
-            str(row["instance_id"]) for row in (*instances, *registrations)
-        }
+        registration_ids = {str(row["instance_id"]) for row in (*instances, *registrations)}
         registration_publications: list[sqlite3.Row] = []
         for instance_id in sorted(registration_ids):
             registration_publications.extend(
@@ -488,9 +482,7 @@ class FencedSQLiteStore:
             "registration_requests": [dict(row) for row in registrations],
             "launch_requests": [dict(row) for row in launches],
             "capacity_observations": [dict(row) for row in observations],
-            "registration_publications": [
-                dict(row) for row in registration_publications
-            ],
+            "registration_publications": [dict(row) for row in registration_publications],
         }
 
     def delete_archived_dynamic_history(
@@ -519,12 +511,8 @@ class FencedSQLiteStore:
                 ).fetchone()
                 if referenced is not None:
                     raise RuntimeError("cannot archive an instance referenced by an update")
-                conn.execute(
-                    "DELETE FROM learner_instances WHERE instance_id=?", (instance_id,)
-                )
-                conn.execute(
-                    "DELETE FROM proposal_frontiers WHERE learner_id=?", (instance_id,)
-                )
+                conn.execute("DELETE FROM learner_instances WHERE instance_id=?", (instance_id,))
+                conn.execute("DELETE FROM proposal_frontiers WHERE learner_id=?", (instance_id,))
             for instance_id in registration_instance_ids:
                 conn.execute(
                     """
@@ -658,6 +646,22 @@ class FencedSQLiteStore:
                 self._connection.deactivate()
                 self._record_business_transaction(started_at, failed=failed)
 
+    def _record_capacity_observation_in_active_transaction(
+        self,
+        token: LeaderToken,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        if not self._connection.in_transaction:
+            raise RuntimeError("inline capacity observation requires an active transaction")
+        thread_id = threading.get_ident()
+        if self._inline_capacity_thread_id is not None:
+            raise RuntimeError("nested inline capacity observation is not supported")
+        self._inline_capacity_thread_id = thread_id
+        try:
+            return self.record_capacity_observation(token, **kwargs)
+        finally:
+            self._inline_capacity_thread_id = None
+
     def set_run_state(self, token: LeaderToken, key: str, value: Any) -> None:
         self._mutate(token, "set_run_state", key, value)
 
@@ -716,7 +720,28 @@ class FencedSQLiteStore:
         optim_size_bytes: int,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        return self._mutate(
+        capacity_observation = kwargs.pop("capacity_observation", None)
+        if self.dynamic_mode and capacity_observation is None:
+            raise RuntimeError("dynamic full merge requires an atomic capacity observation")
+        caller_before_commit = kwargs.pop("before_commit", None)
+        capacity_result: dict[str, Any] | None = None
+
+        def before_commit() -> None:
+            nonlocal capacity_result
+            if capacity_observation is not None:
+                if not self.dynamic_mode:
+                    raise RuntimeError("capacity observation cannot be attached to a static merge")
+                specification = dict(capacity_observation)
+                observed_at = float(specification.pop("now", self._wall_clock()))
+                capacity_result = self._record_capacity_observation_in_active_transaction(
+                    token,
+                    now=observed_at,
+                    **specification,
+                )
+            if caller_before_commit is not None:
+                caller_before_commit()
+
+        row = self._mutate(
             token,
             "commit_full_merge",
             commit_epoch=token.epoch,
@@ -725,8 +750,12 @@ class FencedSQLiteStore:
             weight_size_bytes=weight_size_bytes,
             optim_size_bytes=optim_size_bytes,
             require_membership_fence=self.dynamic_mode,
+            before_commit=before_commit,
             **kwargs,
         )
+        if capacity_result is None:
+            return row
+        return {**row, "_capacity_observation_result": capacity_result}
 
     def upsert_learner(self, token: LeaderToken, learner_id: str, **kwargs: Any) -> None:
         self._mutate(token, "upsert_learner", learner_id, **kwargs)
@@ -837,9 +866,7 @@ class FencedSQLiteStore:
             actual_streams = int(conn.execute("SELECT COUNT(*) FROM streams").fetchone()[0])
             if actual_streams != int(stream_pool_size):
                 raise RuntimeError("stream table does not match the immutable pool size")
-            controller = conn.execute(
-                "SELECT * FROM controller_state WHERE singleton=1"
-            ).fetchone()
+            controller = conn.execute("SELECT * FROM controller_state WHERE singleton=1").fetchone()
             if controller is None:
                 conn.execute(
                     """
@@ -897,6 +924,28 @@ class FencedSQLiteStore:
                 "SELECT * FROM registration_requests WHERE instance_id=?", (instance_id,)
             ).fetchone()
             if existing is not None and str(existing["request_sha256"]) != request_sha256:
+                if str(existing["state"]) == "pending":
+                    result = {
+                        "instance_id": instance_id,
+                        "placement_id": str(existing["placement_id"]),
+                        "launch_request_id": existing["launch_request_id"],
+                        "state": "rejected",
+                        "rejection_reason": reason,
+                    }
+                    conn.execute(
+                        """
+                        UPDATE registration_requests SET state='rejected',
+                            processed_by_epoch=?, rejection_reason=?, result_json=?
+                        WHERE instance_id=? AND state='pending'
+                        """,
+                        (
+                            token.epoch,
+                            reason,
+                            json.dumps(result, sort_keys=True),
+                            instance_id,
+                        ),
+                    )
+                    return result
                 # Never replace an already published canonical decision with a
                 # result derived from conflicting replay content.
                 result_json = existing["result_json"]
@@ -993,11 +1042,9 @@ class FencedSQLiteStore:
                 ):
                     raise RuntimeError("bootstrap scheduler receipt has no matching request")
                 existing_job_id = launch["pbs_job_id"]
-                if (
-                    existing_job_id is not None
-                    and _pbs_job_identity(existing_job_id)
-                    != _pbs_job_identity(pbs_job_id)
-                ):
+                if existing_job_id is not None and _pbs_job_identity(
+                    existing_job_id
+                ) != _pbs_job_identity(pbs_job_id):
                     raise RuntimeError("bootstrap launch request changed PBS job identity")
                 if str(launch["state"]) in {
                     "failed",
@@ -1063,15 +1110,17 @@ class FencedSQLiteStore:
                     "capacity_fulfilled",
                 }:
                     result_json = existing_request["result_json"]
-                    return json.loads(result_json) if result_json else {
-                        "instance_id": instance_id,
-                        "state": str(existing_request["state"]),
-                    }
+                    return (
+                        json.loads(result_json)
+                        if result_json
+                        else {
+                            "instance_id": instance_id,
+                            "state": str(existing_request["state"]),
+                        }
+                    )
             if timestamp > float(request["expires_at"]):
                 raise RuntimeError("registration request expired")
-            controller = conn.execute(
-                "SELECT * FROM controller_state WHERE singleton=1"
-            ).fetchone()
+            controller = conn.execute("SELECT * FROM controller_state WHERE singleton=1").fetchone()
             if controller is None or str(controller["state"]) != "open":
                 raise RuntimeError("dynamic admission is closed")
             launch = None
@@ -1084,15 +1133,11 @@ class FencedSQLiteStore:
             if launch is not None:
                 if launch["admitted_instance_id"] is not None:
                     if str(launch["admitted_instance_id"]) != instance_id:
-                        raise RuntimeError("logical launch request already admitted another instance")
+                        raise RuntimeError(
+                            "logical launch request already admitted another instance"
+                        )
                 launch_job_id = launch["pbs_job_id"]
                 request_job_id = request.get("pbs_job_id")
-                if (
-                    launch_job_id is not None
-                    and _pbs_job_identity(request_job_id or "")
-                    != _pbs_job_identity(launch_job_id)
-                ):
-                    raise RuntimeError("registration PBS job does not match launch request")
                 if str(launch["state"]) in {
                     "failed",
                     "expired",
@@ -1101,6 +1146,35 @@ class FencedSQLiteStore:
                     "completed",
                 }:
                     raise RuntimeError(f"launch request is terminal: {launch['state']}")
+                if launch_job_id is None and request_job_id is not None:
+                    conn.execute(
+                        """
+                        INSERT INTO registration_requests(
+                            instance_id, request_sha256, launch_request_id, placement_id,
+                            state, created_at, expires_at, processed_by_epoch,
+                            rejection_reason, result_json
+                        ) VALUES (?, ?, ?, ?, 'pending', ?, ?, NULL, NULL, NULL)
+                        ON CONFLICT(instance_id) DO NOTHING
+                        """,
+                        (
+                            instance_id,
+                            request_sha256,
+                            launch_request_id,
+                            placement_id,
+                            float(request["created_at"]),
+                            float(request["expires_at"]),
+                        ),
+                    )
+                    return {
+                        "instance_id": instance_id,
+                        "placement_id": placement_id,
+                        "launch_request_id": launch_request_id,
+                        "state": "pending_scheduler_authorization",
+                    }
+                if launch_job_id is not None and _pbs_job_identity(
+                    request_job_id or ""
+                ) != _pbs_job_identity(launch_job_id):
+                    raise RuntimeError("registration PBS job does not match launch request")
             current_count = int(
                 conn.execute(
                     """
@@ -1129,13 +1203,18 @@ class FencedSQLiteStore:
                     (*reserved_states, launch_request_id),
                 ).fetchone()[0]
             )
-            if launch is not None and str(launch["reason"]) not in {
-                "bootstrap",
-                "operator_replacement",
-            } and (
-                current_count >= int(desired_contributors)
-                or current_count + reserved >= int(desired_contributors)
-                or current_count + reserved >= int(stream_pool_size)
+            if (
+                launch is not None
+                and str(launch["reason"])
+                not in {
+                    "bootstrap",
+                    "operator_replacement",
+                }
+                and (
+                    current_count >= int(desired_contributors)
+                    or current_count + reserved >= int(desired_contributors)
+                    or current_count + reserved >= int(stream_pool_size)
+                )
             ):
                 result = {
                     "instance_id": instance_id,
@@ -1173,8 +1252,7 @@ class FencedSQLiteStore:
                 )
                 return result
             replacement_request = (
-                launch is not None
-                and str(launch["reason"]) == "operator_replacement"
+                launch is not None and str(launch["reason"]) == "operator_replacement"
             )
             if current_count >= int(stream_pool_size) and not replacement_request:
                 raise RuntimeError("stream pool is exhausted")
@@ -1254,9 +1332,7 @@ class FencedSQLiteStore:
                 "SELECT value FROM run_state WHERE key='admission_generation'"
             ).fetchone()
             admission_generation = (
-                1
-                if generation_row is None
-                else int(json.loads(generation_row["value"])) + 1
+                1 if generation_row is None else int(json.loads(generation_row["value"])) + 1
             )
             conn.execute(
                 """
@@ -1322,10 +1398,7 @@ class FencedSQLiteStore:
                 """,
                 (stream_epoch, instance_id, timestamp, stream_id),
             )
-            if (
-                previous_instance is not None
-                and int(previous_instance["stream_id"]) != stream_id
-            ):
+            if previous_instance is not None and int(previous_instance["stream_id"]) != stream_id:
                 conn.execute(
                     """
                     UPDATE streams SET current_instance_id=NULL, state='reusable', updated_at=?
@@ -1363,6 +1436,9 @@ class FencedSQLiteStore:
                     state, created_at, expires_at, processed_by_epoch,
                     rejection_reason, result_json
                 ) VALUES (?, ?, ?, ?, 'admitted', ?, ?, ?, NULL, ?)
+                ON CONFLICT(instance_id) DO UPDATE SET
+                    state='admitted', processed_by_epoch=excluded.processed_by_epoch,
+                    rejection_reason=NULL, result_json=excluded.result_json
                 """,
                 (
                     instance_id,
@@ -1372,7 +1448,10 @@ class FencedSQLiteStore:
                     float(request["created_at"]),
                     float(request["expires_at"]),
                     token.epoch,
-                    json.dumps({key: value for key, value in result.items() if key != "admission_token"}, sort_keys=True),
+                    json.dumps(
+                        {key: value for key, value in result.items() if key != "admission_token"},
+                        sort_keys=True,
+                    ),
                 ),
             )
             return result
@@ -1397,9 +1476,7 @@ class FencedSQLiteStore:
         timestamp = self._wall_clock() if now is None else float(now)
 
         def operation(conn: _FencedConnection) -> dict[str, Any]:
-            controller = conn.execute(
-                "SELECT * FROM controller_state WHERE singleton=1"
-            ).fetchone()
+            controller = conn.execute("SELECT * FROM controller_state WHERE singleton=1").fetchone()
             if controller is None or str(controller["state"]) != "open":
                 raise RuntimeError("dynamic admission is closed")
             placement = conn.execute(
@@ -1453,9 +1530,7 @@ class FencedSQLiteStore:
         encoded = f"{self.run_id}\0{self.config_sha256}\0{instance_id}\0{request_sha256}"
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
-    def _admission_result(
-        self, instance: dict[str, Any], *, request_sha256: str
-    ) -> dict[str, Any]:
+    def _admission_result(self, instance: dict[str, Any], *, request_sha256: str) -> dict[str, Any]:
         return {
             "state": "admitted",
             "instance_id": str(instance["instance_id"]),
@@ -1464,9 +1539,7 @@ class FencedSQLiteStore:
             "stream_id": int(instance["stream_id"]),
             "stream_epoch": int(instance["stream_epoch"]),
             "admission_generation": int(instance["admission_generation"]),
-            "admission_token": self._admission_token(
-                str(instance["instance_id"]), request_sha256
-            ),
+            "admission_token": self._admission_token(str(instance["instance_id"]), request_sha256),
             "launch_request_id": str(instance["launch_request_id"] or ""),
             "stream_restarted": bool(instance["stream_restarted"]),
         }
@@ -1523,14 +1596,11 @@ class FencedSQLiteStore:
             return False
         heartbeat_status = str(payload.get("status") or "active")
         if heartbeat_status == "drained":
-            controller = conn.execute(
-                "SELECT * FROM controller_state WHERE singleton=1"
-            ).fetchone()
+            controller = conn.execute("SELECT * FROM controller_state WHERE singleton=1").fetchone()
             if (
                 controller is None
                 or str(controller["state"]) not in {"draining", "closed"}
-                or int(payload.get("close_generation") or -1)
-                != int(controller["generation"])
+                or int(payload.get("close_generation") or -1) != int(controller["generation"])
             ):
                 return False
             next_status = "drained"
@@ -1659,9 +1729,7 @@ class FencedSQLiteStore:
         timestamp = self._wall_clock() if requested_at is None else float(requested_at)
 
         def operation(conn: _FencedConnection) -> dict[str, Any]:
-            current = conn.execute(
-                "SELECT * FROM controller_state WHERE singleton=1"
-            ).fetchone()
+            current = conn.execute("SELECT * FROM controller_state WHERE singleton=1").fetchone()
             if current is None:
                 raise RuntimeError("dynamic controller state is missing")
             if str(current["state"]) in {"draining", "closed", "terminal"}:
@@ -1669,12 +1737,10 @@ class FencedSQLiteStore:
             if str(current["state"]) != "open":
                 raise RuntimeError(f"cannot drain controller state {current['state']}")
             generation = int(current["generation"]) + 1
-            if reason in {"stop_after_outer_steps", "stop_after_global_tokens"}:
-                maximum = (
-                    int(global_target)
-                    if global_target is not None
-                    else int(current_version) + int(max_terminal_merges)
-                )
+            if reason == "stop_after_outer_steps":
+                maximum = int(global_target) if global_target is not None else int(current_version)
+            elif reason == "stop_after_global_tokens":
+                maximum = int(current_version)
             else:
                 requested_maximum = int(current_version) + int(max_terminal_merges)
                 maximum = (
@@ -1708,12 +1774,8 @@ class FencedSQLiteStore:
                 """,
                 (f"drain_generation={generation}",),
             )
-            conn.execute(
-                "DELETE FROM run_state WHERE key='drain_visibility_started_at'"
-            )
-            row = conn.execute(
-                "SELECT * FROM controller_state WHERE singleton=1"
-            ).fetchone()
+            conn.execute("DELETE FROM run_state WHERE key='drain_visibility_started_at'")
+            row = conn.execute("SELECT * FROM controller_state WHERE singleton=1").fetchone()
             assert row is not None
             return dict(row)
 
@@ -1731,9 +1793,7 @@ class FencedSQLiteStore:
         timestamp = self._wall_clock() if now is None else float(now)
 
         def operation(conn: _FencedConnection) -> dict[str, Any]:
-            controller = conn.execute(
-                "SELECT * FROM controller_state WHERE singleton=1"
-            ).fetchone()
+            controller = conn.execute("SELECT * FROM controller_state WHERE singleton=1").fetchone()
             if controller is None or str(controller["state"]) not in {"draining", "closed"}:
                 raise RuntimeError("dynamic drain is not active")
             generation = int(controller["generation"])
@@ -1870,9 +1930,7 @@ class FencedSQLiteStore:
                     """,
                     (token.epoch, token.owner_id, generation),
                 )
-            row = conn.execute(
-                "SELECT * FROM controller_state WHERE singleton=1"
-            ).fetchone()
+            row = conn.execute("SELECT * FROM controller_state WHERE singleton=1").fetchone()
             assert row is not None
             result = dict(row)
             result.update(
@@ -2080,19 +2138,13 @@ class FencedSQLiteStore:
             ).fetchall()
             productive = 0
             for instance in instances:
-                recent = (
-                    instance["last_contributed_observation_seq"] is not None
-                    and int(instance["last_contributed_observation_seq"])
-                    >= max(1, observation_seq - int(productive_window_count))
-                )
-                startup = timestamp - float(instance["admitted_at"]) <= float(
-                    startup_grace_seconds
-                )
-                heartbeat_fresh = (
-                    instance["last_seen"] is not None
-                    and timestamp - float(instance["last_seen"])
-                    <= float(heartbeat_stale_after_seconds)
-                )
+                recent = instance["last_contributed_observation_seq"] is not None and int(
+                    instance["last_contributed_observation_seq"]
+                ) >= max(1, observation_seq - int(productive_window_count))
+                startup = timestamp - float(instance["admitted_at"]) <= float(startup_grace_seconds)
+                heartbeat_fresh = instance["last_seen"] is not None and timestamp - float(
+                    instance["last_seen"]
+                ) <= float(heartbeat_stale_after_seconds)
                 upload_fresh = False
                 if (
                     heartbeat_fresh
@@ -2100,9 +2152,11 @@ class FencedSQLiteStore:
                     and instance["last_cycle_step_time_seconds_mean"] is not None
                     and instance["last_cycle_step_count"] is not None
                 ):
-                    grace = float(instance["last_cycle_step_time_seconds_mean"]) * max(
-                        1, int(instance["last_cycle_step_count"])
-                    ) * float(productive_upload_grace_factor)
+                    grace = (
+                        float(instance["last_cycle_step_time_seconds_mean"])
+                        * max(1, int(instance["last_cycle_step_count"]))
+                        * float(productive_upload_grace_factor)
+                    )
                     grace = min(
                         float(productive_upload_grace_max_seconds),
                         max(float(productive_upload_grace_min_seconds), grace),
@@ -2122,9 +2176,7 @@ class FencedSQLiteStore:
                 """,
                 ("consecutive_low_count", json.dumps(consecutive_low), timestamp),
             )
-            controller = conn.execute(
-                "SELECT * FROM controller_state WHERE singleton=1"
-            ).fetchone()
+            controller = conn.execute("SELECT * FROM controller_state WHERE singleton=1").fetchone()
             close_generation = 0 if controller is None else int(controller["generation"])
             conn.execute(
                 """
@@ -2162,8 +2214,8 @@ class FencedSQLiteStore:
             initialized = conn.execute(
                 "SELECT value FROM run_state WHERE key='dynamic_initialized_at'"
             ).fetchone()
-            initialized_at = timestamp if initialized is None else float(
-                json.loads(initialized["value"])
+            initialized_at = (
+                timestamp if initialized is None else float(json.loads(initialized["value"]))
             )
             bootstrap_open = int(
                 conn.execute(
@@ -2193,9 +2245,7 @@ class FencedSQLiteStore:
                 "SELECT value FROM run_state WHERE key='scale_launch_request_count'"
             ).fetchone()
             total_scale = (
-                0
-                if scale_count_row is None
-                else int(json.loads(scale_count_row["value"]))
+                0 if scale_count_row is None else int(json.loads(scale_count_row["value"]))
             )
             last_scale = conn.execute(
                 "SELECT value FROM run_state WHERE key='last_scale_launch_at'"
@@ -2282,18 +2332,29 @@ class FencedSQLiteStore:
                 "launch_request": launch_request,
             }
 
+        if self._inline_capacity_thread_id == threading.get_ident():
+            return operation(self._connection)
         return self._transaction(token, operation)
 
-    def allocate_starvation_observation_key(
+    def record_starvation_capacity_observation(
         self,
         token: LeaderToken,
         *,
         interval_seconds: float,
+        capacity_observation: Mapping[str, Any] | None = None,
         now: float | None = None,
-    ) -> str | None:
+        before_commit: Callable[[], None] | None = None,
+        **capacity_fields: Any,
+    ) -> dict[str, Any] | None:
+        """Allocate and record one starvation window in the same transaction."""
+
+        if not self.dynamic_mode:
+            raise RuntimeError("starvation observations require schema v3")
+        if float(interval_seconds) <= 0.0:
+            raise ValueError("starvation observation interval must be > 0")
         timestamp = self._wall_clock() if now is None else float(now)
 
-        def operation(conn: _FencedConnection) -> str | None:
+        def operation(conn: _FencedConnection) -> dict[str, Any] | None:
             next_row = conn.execute(
                 "SELECT value FROM run_state WHERE key='next_starvation_observation_at'"
             ).fetchone()
@@ -2317,7 +2378,27 @@ class FencedSQLiteStore:
                     """,
                     (key, json.dumps(value), timestamp),
                 )
-            return f"starvation:{generation}"
+            specification = dict(capacity_observation or {})
+            specification.update(capacity_fields)
+            specification.pop("observation_key", None)
+            specification.pop("kind", None)
+            specification.pop("now", None)
+            selected = specification.get("selected_instance_ids")
+            if selected not in (None, []):
+                raise ValueError("starvation observation cannot select contributors")
+            specification.update(
+                observation_key=f"starvation:{generation}",
+                kind="starvation",
+                selected_instance_ids=[],
+            )
+            result = self._record_capacity_observation_in_active_transaction(
+                token,
+                now=timestamp,
+                **specification,
+            )
+            if before_commit is not None:
+                before_commit()
+            return result
 
         return self._transaction(token, operation)
 
@@ -2343,15 +2424,11 @@ class FencedSQLiteStore:
             if row is None:
                 raise RuntimeError(f"unknown launch request: {request_id}")
             if str(row["state"]) not in expected_states:
-                raise RuntimeError(
-                    f"launch request {request_id} state changed: {row['state']}"
-                )
+                raise RuntimeError(f"launch request {request_id} state changed: {row['state']}")
             stored_job_id = row["pbs_job_id"]
             if pbs_job_id is not None and stored_job_id is not None:
                 if _pbs_job_identity(pbs_job_id) != _pbs_job_identity(stored_job_id):
-                    raise RuntimeError(
-                        f"launch request {request_id} changed PBS job identity"
-                    )
+                    raise RuntimeError(f"launch request {request_id} changed PBS job identity")
                 # Preserve the first auditable spelling (normally qsub's raw
                 # receipt) when qstat returns the same ID without its server
                 # suffix.
@@ -2904,7 +2981,6 @@ class FencedSQLiteStore:
 _BOUND_MUTATORS = {
     "admit_registration",
     "advance_dynamic_drain",
-    "allocate_starvation_observation_key",
     "begin_dynamic_drain",
     "authorize_placement_replacement",
     "claim_gc_candidate",
@@ -2930,6 +3006,7 @@ _BOUND_MUTATORS = {
     "prepare_full_resume",
     "record_control_publication",
     "record_capacity_observation",
+    "record_starvation_capacity_observation",
     "record_external_launch_jobs",
     "reject_registration",
     "revoke_dead_instances",
@@ -2990,9 +3067,7 @@ class ReadOnlySQLiteStore:
 
     @property
     def dynamic_mode(self) -> bool:
-        row = self._connection.execute(
-            "SELECT mode FROM schema_meta WHERE singleton=1"
-        ).fetchone()
+        row = self._connection.execute("SELECT mode FROM schema_meta WHERE singleton=1").fetchone()
         return row is not None and str(row["mode"]) == "full_dynamic"
 
     def current_instances(self) -> list[dict[str, Any]]:
@@ -3006,9 +3081,7 @@ class ReadOnlySQLiteStore:
         return [dict(row) for row in rows]
 
     def streams(self) -> list[dict[str, Any]]:
-        rows = self._connection.execute(
-            "SELECT * FROM streams ORDER BY stream_id"
-        ).fetchall()
+        rows = self._connection.execute("SELECT * FROM streams ORDER BY stream_id").fetchall()
         return [dict(row) for row in rows]
 
     def launch_requests(self, *, active_only: bool = False) -> list[dict[str, Any]]:
@@ -3023,9 +3096,7 @@ class ReadOnlySQLiteStore:
         ).fetchall()
         return [dict(row) for row in rows]
 
-    def registration_requests(
-        self, *, unresolved_only: bool = False
-    ) -> list[dict[str, Any]]:
+    def registration_requests(self, *, unresolved_only: bool = False) -> list[dict[str, Any]]:
         where = "WHERE state='pending'" if unresolved_only else ""
         rows = self._connection.execute(
             f"SELECT * FROM registration_requests {where} ORDER BY created_at, instance_id"
@@ -3043,9 +3114,7 @@ class ReadOnlySQLiteStore:
             return {}
         return {
             "current_instances": len(self.current_instances()),
-            "registration_requests": len(
-                self.registration_requests(unresolved_only=True)
-            ),
+            "registration_requests": len(self.registration_requests(unresolved_only=True)),
             "active_launch_requests": len(self.launch_requests(active_only=True)),
             "capacity_observations": len(self.capacity_observations()),
         }

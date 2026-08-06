@@ -8,6 +8,7 @@
 
 set -eEuo pipefail
 trap 'echo "[ERROR] Phase 2 evidence tests failed at line $LINENO" >&2' ERR
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
 
 : "${EVIDENCE_KIND:?EVIDENCE_KIND is required}"
 : "${EVIDENCE_OUTPUT:?EVIDENCE_OUTPUT is required}"
@@ -16,6 +17,10 @@ PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 IDENTITY_ROOT="${TMPDIR:?TMPDIR is required}/plan02_p2_test_identity"
 cd "$PROJECT_ROOT"
 
+hostname
+printf 'PBS_JOBID=%s\nPBS_NODEFILE=%s\nPROJECT_ROOT=%s\n' \
+  "${PBS_JOBID:-}" "${PBS_NODEFILE:-}" "$PROJECT_ROOT"
+module list 2>&1 | cat
 "$PYTHON_BIN" scripts/miyabi/capture_source_identity.py \
   --project-root "$PROJECT_ROOT" \
   --output-json "$IDENTITY_ROOT.json" \

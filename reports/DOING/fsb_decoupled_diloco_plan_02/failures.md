@@ -408,3 +408,62 @@ Attempt 3, `2497948.opbs`, submitted the short-walltime children and completed s
 - Clean-source run `plan02_phase2_g8_2501461` again admitted the victim and reached v12 normally; evidence `20260807-002057_phase2-g8_pass.json` returned `BLOCKED` because the two-second admission-gated helper still did not inject SIGTERM.
 - The helper correlated a PBS job to its learner by scanning the transient registration-request file and then locating its admission artifact. Registration ingestion removes the request publication quickly after processing; the polling helper missed that short-lived correlation even though admission succeeded. This is an observer race in the test helper, not a membership failure.
 - Disposition: have the learner atomically publish a test-only, job-local admission signal immediately after it validates its admission; make the wrapper wait on that exact signal before starting the two-second delay. Remove the transient-request polling helper and replace its test with a direct signal-publication regression.
+## 2026-08-07 01:11 JST — Phase 2 completion review found three blocking persistence/terminal defects
+
+- Review target `7feb09992b7f40b255e0858020a50d811a602b9c` was compared cumulatively against Phase 1 final `fefef86b68aa346afee93680ad9c494657412074`. The independent Codex report is `reports/DOING/code_review/fsb_decoupled_diloco_plan_02/phase-2/gpt-5.6-sol_7feb09992b7f40b255e0858020a50d811a602b9c.md` and returned `CHANGES_REQUIRED`.
+- Accepted High finding: dynamic `no_progress_timeout` breaks from an open controller and the unconditional finalizer can publish a normal terminal without `draining -> closed`, leaving terminal repair unable to recover. Planned RED coverage will require no-progress to enter the persisted drain and will make every non-error dynamic terminal fail closed unless the controller is closed.
+- Accepted High finding: merge capacity observation is committed in a second transaction after the global version, and starvation generation is allocated in a transaction before its observation. Either crash window loses a hysteresis input across takeover. Planned RED coverage will fail between those transaction boundaries; remediation will make merge/version and starvation-generation/observation atomic and extend completed checking to reject missing merge observations.
+- Accepted Medium finding: `stop_after_global_tokens` passes the unrelated outer-step target into `begin_dynamic_drain`; token-only runs can add the configured terminal merge, while combined targets can continue to the outer target after the token threshold. Planned RED coverage will freeze token-driven `max_terminal_version` at the current committed version.
+- External review command used verified model `claude-opus-5`, session `3498a066-5265-47cf-9e36-9d3a33a740b8`, exact base/target, and read-only instructions. The CLI returned explicit `429` session limit (`You've hit your session limit`, reset 06:00 Asia/Tokyo) before writing a report. Per `plans/AGENTS.md` this reviewer is `skipped-session-limit`, is not retried or treated as approval, and does not block Codex remediation.
+- This is the first remediation attempt for the completion-review experiment. No PBS job was submitted for the static review. The next verification sequence is RED unit tests, affected focused/full compute-node tests, a fresh clean-source Phase 2 runtime gate if the atomic protocol change affects formal behavior, documentation/evidence synchronization, and incremental dual review from target `7feb09992b7f40b255e0858020a50d811a602b9c`.
+
+## 2026-08-07 01:26 JST — Full remediation regression exposed an over-broad scheduler hold
+
+- PBS job `2501705.opbs` ran the full `tests` target with a 45-second request and exited 1 after 24 seconds: `10 failed, 470 passed in 21.39s`.
+- All ten failures have the same cause. The new scheduler-authorization branch returns `pending_scheduler_authorization` whenever the durable launch row has no PBS job ID, including the established direct/local path where the registration request also has no PBS job ID. Those tests then receive a pending result instead of an admission and fail in placement, heartbeat, membership-fence, drain, churn, and atomic-capacity setup assertions.
+- Disposition: narrow the transient hold to a physical registration that carries a PBS job ID while the matching launch row is not yet bound. Preserve admission when both identities are absent, as required by the accepted review finding, and rerun focused then full compute-node tests.
+
+## 2026-08-07 01:24 JST — Phase 2 review-remediation RED tests
+
+- PBS `2501684.opbs` ran the Phase 2 focused file with a `00:01:00` request and produced the expected pre-fix counterexamples: scheduler-unbound registration was admitted, no merge/starvation crash cursor existed, and no persisted no-progress drain helper existed. Result: `4 failed, 21 passed` in 7.40 seconds; log `fsdiloco_plan02_p2_tests.o2501684`.
+- PBS `2501687.opbs` ran `tests/test_plan02_phase2_review_remediation.py` with a `00:01:00` request. Result: the five independent RED cases failed on the merge/capacity rollback boundary, starvation allocation/observation rollback boundary, token terminal ceiling, open-controller no-progress terminal precondition, and completed-Checker merge-observation completeness; log `fsdiloco_plan02_p2_tests.o2501687`.
+- These are accepted behavioral defects from the frozen Codex review, not infrastructure failures. The remediation makes merge capacity state part of the global commit transaction, makes starvation generation and observation one transaction, blocks dynamic commits that omit capacity input, keeps physical registration pending until its scheduler identity is bound, routes no-progress through persisted drain, freezes token close at the committed head, and extends the Checker to require complete merge/starvation observation history.
+- A second `claude-opus-5` invocation was started concurrently by another Codex process in the same workspace while the first session-limit result was being recorded; both independently returned the same explicit HTTP 429 session-limit condition and neither wrote a report. No further retry is made, no result is treated as approval, and the only actionable review findings are the saved independent Codex reports.
+
+## 2026-08-07 01:25 JST — Phase 2 review-remediation full-suite attempt 1
+
+- PBS `2501705.opbs` ran `pytest -q tests` on compute node `mg0003` with a `00:00:45` request. It returned `10 failed, 470 passed in 21.39s`; the complete output is `fsdiloco_plan02_p2_tests.o2501705`.
+- Expected: scheduler-unbound handling should affect only a registration that carries a physical PBS identity while its logical launch row is not yet bound. Actual: the intermediate implementation treated every launch row with a null scheduler receipt as pending, including protocol-unit requests whose `pbs_job_id` is explicitly null. The ten failures were downstream consequences of those local/direct admissions returning `pending_scheduler_authorization` instead of a complete admission.
+- Confirmed cause: the transient-pending predicate omitted the required `request_job_id is not None` condition. The production requirement and review finding explicitly preserve the both-null local/direct path.
+- Next falsification: require pending only when the immutable registration carries a physical job identity and the launch row does not; retain the exact-ID-after-binding and wrong-ID-after-binding tests, then rerun the focused remediation group and the complete suite on a compute node.
+
+## 2026-08-07 01:28 JST — pending-registration immutability focused attempt 1
+
+- PBS `2501720.opbs` ran the 29-test Phase 2 focused/remediation set on `mg0003` with a `00:00:45` request and returned `1 failed, 28 passed in 7.24s`; full output is `fsdiloco_plan02_p2_tests.o2501720`.
+- The newly added pending-request immutability case observed a terminal rejection on its first ingest instead of the expected transient pending state. This job read the shared dirty worktree while another Codex process in the same recorded session was still applying the accepted remediation, so its imported production file was not a frozen source target.
+- No threshold or protocol behavior was relaxed. After the writer edits quiesced, PBS `2501725.opbs` reran exactly `test_pending_scheduler_registration_rejects_changed_request` on `mg0015` and passed in `3.83s` without a production-code change between diagnosis and rerun; the only test edit added the actual result as assertion context. This identifies the failed attempt as an unpinned dirty-worktree validation race, not sufficient completion evidence.
+- Next falsification: rerun the entire affected group, then the full suite; create a clean source commit before any formal Phase 2 runtime so descriptor fingerprinting prevents concurrent source drift.
+
+## 2026-08-07 01:31 JST — dirty-worktree full-suite attempt 2
+
+- PBS `2501728.opbs` ran `pytest -q tests` on `mg0003` with a `00:01:00` request and returned `7 failed, 474 passed in 24.14s`; full output is `fsdiloco_plan02_p2_tests.o2501728`.
+- Every failure imported an internally inconsistent intermediate test module: call sites passed a temporary `bind_jobs` keyword while the loaded helper signature did not accept it, and one call site referenced a temporary `bind_test_launch` helper that was absent. Those names were part of concurrent test-helper editing in the shared dirty worktree and are absent from the quiesced source before and after the job.
+- This is the second validation invalidated by running against a mutable dirty tree, but it is not a second failure of the same protocol invariant: the preceding frozen-source-equivalent groups `2501697`, `2501698`, and `2501704` had passed, and the current focused group `2501726` passed all 29 tests after edits quiesced. No production threshold or behavior changed in response.
+- Next action: stop using dirty-worktree full runs as completion evidence. Complete static checks, commit the remediation target, verify the clean tree/source identity, and run both focused and full compute tests without any intervening edit before launching formal G7/G8/G9/matched evidence.
+
+## 2026-08-07 01:27 JST — Focused remediation rerun collected a transient test helper
+
+- PBS job `2501706.opbs` ran the focused dynamic/remediation targets with a 25-second request and exited 1 after 9 seconds: `28 passed, 1 error in 7.62s`.
+- While the job was reading the shared workspace, the scheduler-identity test refactor briefly exposed its job-ID helper with a pytest-collectable `test_` name. Pytest attempted to inject a nonexistent `launch_request_id` fixture. The implementation tests themselves passed.
+- Disposition: keep the helper private as `_test_pbs_job_id`, complete the test refactor before submission, re-run static validation, and submit a stable focused rerun.
+
+## 2026-08-07 01:29 JST — Scheduler pending-checksum regression used a pre-bound launch
+
+- PBS job `2501718.opbs` ran the focused dynamic/remediation targets with a 25-second request and exited 1 after 9 seconds: `1 failed, 28 passed in 7.46s`.
+- The new checksum-conflict case expected its first registration to remain pending, but its setup used `initialize_membership()` with the new default that durably binds synthetic scheduler IDs. The request's deliberately different `123.opbs` identity was therefore correctly rejected immediately instead of entering the unbound state.
+- Disposition: initialize that specific case with `bind_jobs=False`, preserving the separately verified default bound-PBS test path, then rerun the stable focused group.
+
+## 2026-08-07 01:33 JST — Append-only external-review identity correction
+
+- The primary frozen-target `claude-opus-5` invocation used session `4df65150-9d55-4a70-9d78-d99c082e17ca` and returned the explicit HTTP 429 session-limit response. No valid Claude report was written.
+- The `3498a066-5265-47cf-9e36-9d3a33a740b8` and `380b37f9-3cd8-4bde-95f8-04ebf81d6e31` identifiers in earlier appended entries do not identify that primary invocation; this record supersedes them without altering the earlier append-only text. The disposition remains `skipped-session-limit`, not approval and not a blocker to Codex remediation.

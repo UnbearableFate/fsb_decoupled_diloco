@@ -72,6 +72,26 @@ def _dedupe_rows(
     return list(unique.values())
 
 
+def missing_merge_observation_versions(
+    versions: list[dict[str, Any]],
+    observations: list[dict[str, Any]],
+) -> list[int]:
+    """Return committed dynamic versions lacking their unique merge observation."""
+
+    committed = {int(row["version"]) for row in versions if int(row["version"]) > 0}
+    observed: set[int] = set()
+    for row in observations:
+        if str(row.get("kind")) != "merge":
+            continue
+        try:
+            version = int(row["global_version"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if str(row.get("observation_key")) == f"merge:{version}":
+            observed.add(version)
+    return sorted(committed - observed)
+
+
 def _query(connection: Any, sql: str, parameters: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
     return [dict(row) for row in connection.execute(sql, parameters).fetchall()]
 
@@ -159,9 +179,7 @@ def check_run(
         ("compatibility", compatibility),
         ("matched performance", matched),
     ):
-        errors.extend(
-            _artifact_identity_errors(payload, descriptor=descriptor, name=name)
-        )
+        errors.extend(_artifact_identity_errors(payload, descriptor=descriptor, name=name))
     expected_external = {
         "G7": (g7, "plan02_phase2_test_evidence", "g7"),
         "G8": (g8, "plan02_phase2_chaos_evidence", "g8"),
@@ -198,9 +216,7 @@ def check_run(
         synchronous = int(connection.execute("PRAGMA synchronous").fetchone()[0])
         page_count = int(connection.execute("PRAGMA page_count").fetchone()[0])
         freelist_count = int(connection.execute("PRAGMA freelist_count").fetchone()[0])
-        schema = dict(
-            connection.execute("SELECT * FROM schema_meta WHERE singleton=1").fetchone()
-        )
+        schema = dict(connection.execute("SELECT * FROM schema_meta WHERE singleton=1").fetchone())
         controller_row = connection.execute(
             "SELECT * FROM controller_state WHERE singleton=1"
         ).fetchone()
@@ -253,18 +269,14 @@ def check_run(
 
     configured_pool = int(config.membership.stream_pool_size)
     persisted_pool = (
-        None
-        if stream_pool_state is None
-        else int(json.loads(stream_pool_state["value"]))
+        None if stream_pool_state is None else int(json.loads(stream_pool_state["value"]))
     )
     stream_ids = [int(row["stream_id"]) for row in streams]
     if persisted_pool != configured_pool or stream_ids != list(range(configured_pool)):
         errors.append("fixed stream pool does not match config/run_state")
 
     current_instances = [
-        row
-        for row in instances
-        if str(row["status"]) in {"admitted", "draining", "drained"}
+        row for row in instances if str(row["status"]) in {"admitted", "draining", "drained"}
     ]
     placement_currents = [
         str(row["current_instance_id"])
@@ -272,9 +284,7 @@ def check_run(
         if row["current_instance_id"] is not None
     ]
     stream_currents = [
-        str(row["current_instance_id"])
-        for row in streams
-        if row["current_instance_id"] is not None
+        str(row["current_instance_id"]) for row in streams if row["current_instance_id"] is not None
     ]
     if len(placement_currents) != len(set(placement_currents)):
         errors.append("placement current instance mapping is not unique")
@@ -356,7 +366,9 @@ def check_run(
         if len(values) > 1
     }
     if duplicate_admissions:
-        errors.append(f"logical launch requests admitted multiple instances: {duplicate_admissions}")
+        errors.append(
+            f"logical launch requests admitted multiple instances: {duplicate_admissions}"
+        )
     bootstrap_slots = {
         int(row["bootstrap_slot"])
         for row in all_launches
@@ -379,8 +391,7 @@ def check_run(
     if len(bootstrap_scheduler_jobs) != expected_bootstrap_count:
         errors.append("bootstrap scheduler manifest does not cover every slot")
     manifest_jobs = {
-        str(row["request_id"]): str(row["pbs_job_id"])
-        for row in bootstrap_scheduler_jobs
+        str(row["request_id"]): str(row["pbs_job_id"]) for row in bootstrap_scheduler_jobs
     }
     for row in all_launches:
         if row.get("reason") != "bootstrap":
@@ -392,18 +403,14 @@ def check_run(
             or launch_job is None
             or normalize_job_id(manifest_job) != normalize_job_id(str(launch_job))
         ):
-            errors.append(
-                f"bootstrap request {row['request_id']} lacks its scheduler job identity"
-            )
+            errors.append(f"bootstrap request {row['request_id']} lacks its scheduler job identity")
     registration_hashes: dict[str, set[str]] = defaultdict(set)
     for row in all_registrations:
         registration_hashes[str(row["instance_id"])].add(str(row["request_sha256"]))
     if any(len(values) > 1 for values in registration_hashes.values()):
         errors.append("registration instance history contains conflicting accepted checksums")
 
-    lifetime_scale_requests = sum(
-        str(row.get("reason")) == "scale_out" for row in all_launches
-    )
+    lifetime_scale_requests = sum(str(row.get("reason")) == "scale_out" for row in all_launches)
     if int(run_state.get("scale_launch_request_count", -1)) != lifetime_scale_requests:
         errors.append("persisted lifetime scale launch count is inconsistent")
     maximum_admission_generation = max(
@@ -418,6 +425,60 @@ def check_run(
         errors.append("capacity observation sequences are not unique across active/history")
     if len(observations) > int(config.scaling.capacity_observation_retention_count):
         errors.append("active capacity observation retention bound exceeded")
+    committed_versions = {int(row["version"]) for row in all_versions if int(row["version"]) > 0}
+    merge_rows = [row for row in all_observations if str(row["kind"]) == "merge"]
+    expected_merge_keys = {f"merge:{version}" for version in committed_versions}
+    observed_merge_keys = [str(row["observation_key"]) for row in merge_rows]
+    missing_merge_versions = missing_merge_observation_versions(
+        all_versions,
+        all_observations,
+    )
+    if missing_merge_versions:
+        errors.append(
+            f"committed versions are missing merge capacity observations: {missing_merge_versions}"
+        )
+    extra_merge_keys = sorted(set(observed_merge_keys) - expected_merge_keys)
+    if extra_merge_keys:
+        errors.append(
+            f"merge capacity observations reference uncommitted versions: {extra_merge_keys}"
+        )
+    merge_version_counts: Counter[int] = Counter()
+    for row in merge_rows:
+        key = str(row["observation_key"])
+        try:
+            key_version = int(key.removeprefix("merge:"))
+            row_version = int(row["global_version"])
+        except (TypeError, ValueError):
+            errors.append(f"merge capacity observation key is invalid: {key}")
+            continue
+        merge_version_counts[row_version] += 1
+        if key != f"merge:{key_version}" or row_version != key_version:
+            errors.append(f"merge capacity observation version mismatch: {key}")
+    bad_merge_counts = sorted(
+        version for version in committed_versions if merge_version_counts[version] != 1
+    )
+    if bad_merge_counts:
+        errors.append(
+            "committed versions do not have exactly one merge capacity observation: "
+            f"{bad_merge_counts}"
+        )
+    starvation_generations: list[int] = []
+    for row in all_observations:
+        if str(row["kind"]) != "starvation":
+            continue
+        key = str(row["observation_key"])
+        try:
+            generation = int(key.removeprefix("starvation:"))
+        except ValueError:
+            errors.append(f"starvation capacity observation key is invalid: {key}")
+            continue
+        if key != f"starvation:{generation}" or generation < 1:
+            errors.append(f"starvation capacity observation key is invalid: {key}")
+            continue
+        starvation_generations.append(generation)
+    persisted_starvation_generation = int(run_state.get("starvation_generation") or 0)
+    if sorted(starvation_generations) != list(range(1, persisted_starvation_generation + 1)):
+        errors.append("starvation observation allocations are incomplete")
 
     updates_by_version: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for row in all_updates:
@@ -442,13 +503,13 @@ def check_run(
         errors.append("terminal final version does not match committed head")
     if controller is not None:
         generation = int(controller["generation"])
-        if any(
-            str(row["status"]) in {"admitted", "draining"}
-            for row in current_instances
-        ):
+        if any(str(row["status"]) in {"admitted", "draining"} for row in current_instances):
             errors.append("terminal controller retains undrained current instances")
         for row in current_instances:
-            if str(row["status"]) == "drained" and int(row["drained_generation"] or -1) != generation:
+            if (
+                str(row["status"]) == "drained"
+                and int(row["drained_generation"] or -1) != generation
+            ):
                 errors.append(f"instance {row['instance_id']} drain generation mismatch")
     if reserved:
         errors.append("terminal run retains launch capacity that can admit")
@@ -460,9 +521,7 @@ def check_run(
         if epoch_owners.get(int(row["commit_epoch"])) != str(row["commit_owner_id"]):
             errors.append(f"version {row['version']} has invalid epoch writer")
     for row in publications:
-        if epoch_owners.get(int(row["published_by_epoch"])) != str(
-            row["published_by_owner_id"]
-        ):
+        if epoch_owners.get(int(row["published_by_epoch"])) != str(row["published_by_owner_id"]):
             errors.append(f"control publication {row['kind']} has invalid epoch writer")
         artifact = paths.shared_root / str(row["relative_path"])
         if not artifact.is_file():
@@ -471,16 +530,12 @@ def check_run(
             errors.append(f"control publication checksum mismatch: {row['relative_path']}")
 
     ordered_versions = sorted(int(row["version"]) for row in all_versions)
-    terminal_final_version = (
-        None if terminal is None else int(terminal["final_version"])
-    )
+    terminal_final_version = None if terminal is None else int(terminal["final_version"])
     if terminal_final_version is None or ordered_versions != list(
         range(0, terminal_final_version + 1)
     ):
         errors.append("global version history is not complete and contiguous")
-    if int(config.training.inner_steps) <= 50 or int(
-        config.sync.stop_after_outer_steps or 0
-    ) <= 10:
+    if int(config.training.inner_steps) <= 50 or int(config.sync.stop_after_outer_steps or 0) <= 10:
         errors.append("G9 workload does not exceed the 50-local-step x 10-global-step baseline")
 
     discovery = {
@@ -546,8 +601,7 @@ def check_run(
             errors.append("dynamic control critical-path overhead is not below 5%")
 
     requirement_status = {
-        f"MEM-{index:02d}": "PASS" if not errors else "BLOCKED"
-        for index in range(1, 21)
+        f"MEM-{index:02d}": "PASS" if not errors else "BLOCKED" for index in range(1, 21)
     }
     return {
         "checker": "plan02_phase2",
@@ -599,12 +653,8 @@ def check_run(
         "capacity": {
             "active_observation_count": len(observations),
             "archived_observation_count": len(capacity_history),
-            "observation_kind_counts": dict(
-                Counter(str(row["kind"]) for row in all_observations)
-            ),
-            "scale_launch_request_count": run_state.get(
-                "scale_launch_request_count"
-            ),
+            "observation_kind_counts": dict(Counter(str(row["kind"]) for row in all_observations)),
+            "scale_launch_request_count": run_state.get("scale_launch_request_count"),
             "last_scale_launch_at": run_state.get("last_scale_launch_at"),
             "admission_generation": run_state.get("admission_generation"),
         },

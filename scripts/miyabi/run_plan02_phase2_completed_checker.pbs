@@ -8,6 +8,7 @@
 
 set -eEuo pipefail
 trap 'echo "[ERROR] Phase 2 completed checker failed at line $LINENO" >&2' ERR
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
 
 : "${PHASE2_RUN_ROOT:?PHASE2_RUN_ROOT is required}"
 : "${PHASE2_G7_EVIDENCE:?PHASE2_G7_EVIDENCE is required}"
@@ -20,6 +21,10 @@ PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 
 cd "$PROJECT_ROOT"
+hostname
+printf 'PBS_JOBID=%s\nPBS_NODEFILE=%s\nPROJECT_ROOT=%s\n' \
+  "${PBS_JOBID:-}" "${PBS_NODEFILE:-}" "$PROJECT_ROOT"
+module list 2>&1 | cat
 "$PYTHON_BIN" scripts/miyabi/check_plan02_phase2.py \
   --mode phase2-completed \
   --run-root "$PHASE2_RUN_ROOT" \

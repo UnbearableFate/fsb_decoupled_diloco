@@ -8,6 +8,7 @@
 
 set -eEuo pipefail
 trap 'echo "[ERROR] Phase 2 matched launcher failed at line $LINENO" >&2' ERR
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
 
 PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
@@ -19,6 +20,10 @@ RECEIPTS="$REPORT_ROOT/artifacts/${STAMP}_phase2-matched-launch_pass.json"
 OUTPUT="$REPORT_ROOT/artifacts/${STAMP}_phase2-matched-performance_pass.json"
 cd "$PROJECT_ROOT"
 
+hostname
+printf 'PBS_JOBID=%s\nPBS_NODEFILE=%s\nPROJECT_ROOT=%s\n' \
+  "${PBS_JOBID:-}" "${PBS_NODEFILE:-}" "$PROJECT_ROOT"
+module list 2>&1 | cat
 "$PYTHON_BIN" scripts/miyabi/capture_source_identity.py \
   --project-root "$PROJECT_ROOT" \
   --output-json "$IDENTITY_ROOT.json" \
