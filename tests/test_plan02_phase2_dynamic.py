@@ -43,6 +43,7 @@ from fs_diloco.storage.maintenance import archive_dynamic_history
 from fs_diloco.storage.paths import RunPaths, prepare_authority_dirs
 from fs_diloco.storage.schema_bootstrap import BootstrapIdentity, initialize_new_run
 from fs_diloco.storage.sqlite_store import DynamicMembershipFenceError
+from fs_diloco.tools.launch_phase2_acceptance import submit_jobs as submit_acceptance_jobs
 from fs_diloco.tools.launch_phase2_matched import submit_jobs as submit_matched_jobs
 from fs_diloco.tools.wait_for_dynamic_admission import find_admitted_instance
 
@@ -625,6 +626,52 @@ def test_fault_injection_waits_for_the_physical_jobs_admission(tmp_path: Path) -
     )
     assert find_admitted_instance(shared_root, pbs_job_id="123") == instance_id
     assert find_admitted_instance(shared_root, pbs_job_id="999.opbs") is None
+
+
+def test_acceptance_launcher_gates_victim_failure_on_admission(tmp_path: Path) -> None:
+    shared_root = tmp_path / "run"
+    (shared_root / "control").mkdir(parents=True)
+    commands: list[list[str]] = []
+
+    def qsub(command: list[str]) -> dict[str, Any]:
+        commands.append(command)
+        job_id = f"{1000 + len(commands)}.opbs"
+        return {
+            "command": command,
+            "job_id": job_id,
+            "returncode": 0,
+            "status": "submitted",
+            "stderr": "",
+            "stdout": job_id,
+        }
+
+    payload = submit_acceptance_jobs(
+        kind="g8",
+        project_root=tmp_path,
+        run_id="g8-run",
+        shared_root=shared_root,
+        descriptor_sha256="descriptor",
+        source_fingerprint="sha256:source",
+        config_sha256="config",
+        launcher_job_id="launcher.opbs",
+        crash_walltime="00:00:15",
+        syncer_walltime="00:02:30",
+        learner_walltime="00:02:00",
+        checker_walltime="00:00:20",
+        pending_artifact=tmp_path / "pending.json",
+        pass_artifact=tmp_path / "pass.json",
+        evidence_artifact=tmp_path / "evidence.json",
+        qsub_fn=qsub,
+    )
+
+    assert payload["status"] == "PASS"
+    victim = next(
+        row for row in payload["submission_receipts"]
+        if row["role"] == "victim_bootstrap_0"
+    )
+    variables = victim["command"][victim["command"].index("-v") + 1]
+    assert "FS_DILOCO_TEST_TERMINATE_AFTER_ADMISSION_SECONDS=2" in variables
+    assert "FS_DILOCO_TEST_TERMINATE_AFTER_SECONDS" not in variables
 
 
 def test_logical_launch_request_admits_at_most_one_instance(tmp_path: Path) -> None:
