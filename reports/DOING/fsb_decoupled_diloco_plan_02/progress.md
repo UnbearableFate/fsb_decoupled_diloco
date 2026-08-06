@@ -382,3 +382,22 @@ Artifacts:
 ### Inferences
 
 - The retained files are the smallest representative evidence set for the completed remediation while preserving the only failed-attempt log required for root-cause audit.
+
+## 2026-08-06T10:31:59+09:00 — Phase 0 completion gate PASS
+
+### Facts
+
+- The user changed the scoped completion rule in `plans/AGENTS.md`: a Codex-external reviewer that returns a verified session/usage quota exhaustion is recorded as `skipped-session-limit`; it produces no synthetic report, requires no retry, and does not block the current phase, plan, or subsequent work. Codex review remains mandatory. Ambiguous API errors, model/fallback mismatches, authentication failures, and permission-mode failures remain blocking.
+- The immutable Codex report for review target `f404fbd4831adcd9ffb8e6229a0004b1affe9f4e` against base `c1c61153548ff7b2543d3ce1bc764c19432b138e` is `reports/DOING/code_review/fsb_decoupled_diloco_plan_02/phase-0/gpt-5.6-sol_f404fbd4831adcd9ffb8e6229a0004b1affe9f4e.md`. It reviewed the complete cumulative Phase 0 diff, found no `Critical`, `High`, `Medium`, or `Low` issue, and returned `APPROVE`.
+- Claude attempts with sessions `4ca72c8d-7e52-4422-99f3-eb0dc04d1b0b` and `6f6f98ee-05b8-44f6-a2dc-de003438aa15` both returned explicit `You've hit your session limit` results. Machine-readable metadata verified actual/canonical model `claude-opus-5`, the requested session IDs, no fallback, and no permission denial; neither attempt created a report or changed the implementation tree. Under the new rule this reviewer is now `skipped-session-limit`, and the earlier append-only failure records remain as historical execution facts rather than current blockers.
+- Every finding from the two earlier completed review rounds was already dispositioned in the 09:24 and 09:59 progress entries. The final Codex review produced no new finding requiring disposition.
+- The authoritative Phase 0 artifact remains `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-095900_phase0-feasibility_pass.json`, SHA-256 `56056fdafed7b0f1bd7f472ca78771f876edb3204cb0989ff97cf1159d9cdc56`, with all FEAS-01 through FEAS-05 results `PASS`. The requirement matrix now marks those five rows `complete`.
+
+### Inferences
+
+- Phase 0 is complete under the current user-directed gate. The missing Claude report is an explicitly recorded quota skip, not an approval and not a source-quality claim.
+- Phase 1 may begin from the Phase 0 boundary frozen in the research plan: scheduler recovery remains opt-in, a stopped in-transaction writer requires audited termination, rerunable jobs require physical-incarnation identity, and the measured 7.37-second writer wait is a tuning input.
+
+### Follow-up
+
+- Create the Phase 0 final commit, then begin Phase 1 work units in strict requirement order without rerunning the skipped external review.

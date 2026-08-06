@@ -93,13 +93,13 @@ reports/DOING/01/
 针对同一 review-target commit 同时启动 Claude 和 Codex 审查。两者必须检查完整的范围内 diff，包括受影响的 `fs_diloco` 代码、测试、配置、PBS 脚本、launcher、Checker 和文档。
 
 1. Codex 从仓库根目录启动一个全新的 `claude --print`（`claude -p`）非交互进程。必须显式指定 Opus 5 的完整模型 ID、唯一的 `--session-id`、`--permission-mode bypassPermissions` 和 `--dangerously-skip-permissions`；不得使用 `--continue`、`--resume`、模型 fallback 或先前会话。调用应使用 `--output-format json`，以便从机器可读的返回元数据核验实际模型和 session ID。不得要求或依赖 Herdr、终端 pane 或交互式 Claude Code 会话。
-2. 启动前必须根据当前 `claude --help` 确认参数仍受支持。返回元数据中的实际模型必须明确属于 Opus 5，且 session ID 必须与本次新建 ID 一致；仅有命令行请求值或模型自述不足以完成核验。无法取得这些证据、实际模型不是 Opus 5、发生 fallback、认证失败或 bypass permission mode 不可用时，门禁标记为 blocked，不得替换其他模型或权限模式。
+2. 启动前必须根据当前 `claude --help` 确认参数仍受支持。返回元数据中的实际模型必须明确属于 Opus 5，且 session ID 必须与本次新建 ID 一致；仅有命令行请求值或模型自述不足以完成核验。无法取得这些证据、实际模型不是 Opus 5、发生 fallback、认证失败或 bypass permission mode 不可用时，门禁标记为 blocked，不得替换其他模型或权限模式。唯一例外是 Codex 之外的 reviewer 返回可核验的会话额度耗尽信息（例如明确的 session/usage limit exhausted，而不是含义不明的 API 错误）：将该 reviewer 记为 `skipped-session-limit`，保留不含秘密的调用、模型/session 和限额错误摘要，不创建或伪造审查报告，不要求重试，也不得因此阻断当前 phase、plan 或后续任务；Codex 审查仍为必做门禁。
 3. non-interactive prompt 必须包含 review-target 和 comparison-base 的完整 commit ID、完整审查范围、目标报告绝对路径，以及本节规定的全部报告字段。它必须明确限定 Claude 为 reviewer-only：除其唯一指定的 Claude 报告外，不得修改实现、测试、配置、计划、其他报告或 Git 状态，也不得提交或删除 scheduler job、删除 run 数据、commit、push、创建 PR、变更远程服务或使用任务范围之外的凭据。
-4. Codex 应在启动该独立进程后立即进行自己的审查，并在读取 Claude 报告或 Claude 的实质性结论前完成并保存 Codex 报告。可以等待 non-interactive 进程结束并检查不含审查结论的状态和模型/session 元数据；Claude 报告内容必须等 Codex 报告落盘后才能读取。两份审查必须针对同一 review-target commit 和 comparison base。
+4. Codex 应在启动该独立进程后立即进行自己的审查，并在读取 Claude 报告或 Claude 的实质性结论前完成并保存 Codex 报告。可以等待 non-interactive 进程结束并检查不含审查结论的状态和模型/session 元数据；Claude 报告内容必须等 Codex 报告落盘后才能读取。两份审查必须针对同一 review-target commit 和 comparison base；若 Claude 按第 2 条记为 `skipped-session-limit`，则只保留同一目标的 Codex 报告和追加式 skip 记录并继续门禁。
 5. bypass/full-permission 是工具权限设置，不是额外的任务授权。它不授权任一 reviewer 提交或删除 scheduler job、删除 run 数据、commit、push、创建 PR、变更远程服务、使用任务范围之外的凭据，或在审查期间进行报告之外的代码修改。
 6. Claude 完成后，核对除指定 Claude 报告外不存在工作树改动。报告中记录 invocation 方式为 `claude --print`、实际完整模型 ID、session ID、permission mode 和 review-target；不得记录 token、认证信息、完整环境变量或其他秘密。命令输出若包含敏感或无关运行元数据，不得直接纳入版本库。
 
-完成的报告写入：
+未被 `skipped-session-limit` 跳过的完成报告写入：
 
 ```text
 reports/DOING/code_review/<plan-id>/<phase_id>/<model_name>_<commit_id>.md
@@ -120,7 +120,7 @@ Claude 使用 `claude-opus-5`，Codex 使用能稳定标识实际模型的 slug�
 
 ### 处置问题并验证
 
-1. 只有两份报告都完成后，Codex 才能一起读取它们并修改代码。Codex 必须在对应的 `reports/DOING/<plan-id>/progress.md` 或 `failures.md` 中，将每个 finding 处置为 `fixed`、`rejected-with-evidence` 或 `deferred-with-justification`。
+1. 通常只有两份报告都完成后，Codex 才能一起读取它们并修改代码；若 Codex 之外的 reviewer 已按上文记为 `skipped-session-limit`，Codex 报告完成后即可继续。Codex 必须在对应的 `reports/DOING/<plan-id>/progress.md` 或 `failures.md` 中，将所有实际产生的 finding 处置为 `fixed`、`rejected-with-evidence` 或 `deferred-with-justification`，并记录被跳过 reviewer 的调用身份、可核验限额原因和不阻断结论。
 2. `Critical` 和 `High` findings 阻止完成，必须修复。`Medium` findings 必须修复，或在证据、影响和后续负责人明确的情况下延期。`Low` findings 可以记录为 follow-up。
 3. 对每个接受的行为缺陷，Codex 必须新增或更新一个在修复前会失败的测试，然后重新运行覆盖所有修复改动的测试。若修复触及 phase 的关键不变量，重新运行该 phase 的完整关联测试组。在 `reports/DOING/<plan-id>/` 下记录准确命令、解析后的配置、结果和保留的 artifact 路径。
 4. 修复和测试通过后，创建 phase-final 或 plan-final commit。审查修复 commit 不会递归触发另一轮完整双模型审查；但若修复改变公共接口、持久化格式、并发协议、安全边界或其他关键不变量，应创建新的 review-target commit，并针对它重复本门禁。
