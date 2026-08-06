@@ -12,35 +12,35 @@
 
 ### High — cleanup removes the authoritative update archive
 
-- Disposition: **fixed**, subject to the frozen-target validation below.
+- Disposition: **fixed**.
 - Evidence: `archive_and_prune()` fsyncs terminal update rows to `metrics/update_history.jsonl` before pruning them from SQLite, but the cleaner classified that history as raw telemetry. The already completed main G9 cleanup therefore irreversibly deleted this 2,563,263-byte archive; the retained completed artifact proves the pre-cleanup result, while the coherent detached formal run remains available for detailed rechecking.
 - RED: `test_clean_run_preserves_authority_and_one_learner_log` now requires the update archive to remain outside the deletion inventory. PBS `2501974.opbs` failed before the fix because the archive was still selected.
 - Fix: remove `update_history.jsonl` from cleanup candidates; document preservation of all fsync-before-prune histories and narrow deletable telemetry to reconstructable learner metrics/update manifest.
-- Verification: focused cleanup/remediation tests, full repository suite, and a dry-run against a completed retained run proving the archive is not a candidate. No further deletion is needed to validate this fix.
+- Verification: PBS `2501991.opbs` passed the 20-test cleanup/remediation/analysis group in `4.00s`; PBS `2501992.opbs` passed all 495 repository tests in `25.23s`. A corrected dry-run against completed G8 `plan02_phase2_g8_2501754` produced five candidates but no `metrics/update_history.jsonl` candidate, and the 26,811-byte archive remained present. No further deletion was used to validate this fix.
 
 ### Medium — direct PASS evidence is not terminal-version-bound
 
-- Disposition: **fixed**, subject to validation.
+- Disposition: **fixed**.
 - Evidence: direct evidence previously checked run/descriptor/source identity but did not compare its terminal version to the current stop/summary.
 - RED: parameterized missing/stale terminal bindings in `test_clean_run_requires_evidence_for_current_terminal_version`; both were accepted before the fix in PBS `2501974.opbs`.
 - Fix: recognize the direct Checker schemas' top-level `terminal.final_version`, `authority.terminal.final_version`, or `authority.final_version`; reject missing, invalid, conflicting, or nonmatching versions. Matched evidence retains its branch-summary check.
-- Verification: focused cleanup tests and a current completed-artifact dry-run.
+- Verification: missing/stale evidence cases and the current completed-artifact dry-run passed in PBS `2501991.opbs`; the G8 dry-run also proved the direct `authority.final_version=12` schema remains accepted when it matches the current summary.
 
 ### Medium — atomic merge observation can describe unrelated contributors
 
-- Disposition: **fixed**, subject to validation.
+- Disposition: **fixed**.
 - Evidence: the fenced merge boundary required exact kind/key/version but did not tie observation contributor IDs/count to `selected_updates`.
 - RED: missing contributor, duplicate contributor, and eligible-count mismatch cases in `test_merge_and_capacity_observation_share_one_rollback_boundary`; the first malformed call committed before the fix in PBS `2501974.opbs`.
 - Fix: require nonempty unique selected-update incarnation IDs, unique observation IDs with the same set, and `eligible_contributors == len(selected_updates)` before opening the merge mutation.
-- Verification: focused remediation tests, full suite, and existing formal positive-path evidence. The runtime already constructs the exact payload, so no format or merge-math change is expected.
+- Verification: all malformed contributor cases and the existing positive atomic merge passed in PBS `2501991.opbs`; the complete suite passed in `2501992.opbs`. The runtime already constructs the exact payload, so no format or merge-math change occurred.
 
 ### Medium — analysis authority database is opened read/write
 
-- Disposition: **fixed**, subject to validation.
+- Disposition: **fixed**.
 - Evidence: `fs_diloco.tools.analysis._db_summary()` used raw `sqlite3.connect(path)` rather than the shared enforced read-only opener.
 - RED: `test_analysis_opens_authority_database_query_only` spies on the opener, requires `PRAGMA query_only=1`, verifies DDL is rejected, and preserves normal summary behavior. PBS `2501969.opbs` failed before the fix because the analysis module had no `open_readonly` symbol.
 - Fix: use `storage.schema_bootstrap.open_readonly()` in `_db_summary()`.
-- Verification: full fragment-analysis module and full repository suite.
+- Verification: the full fragment-analysis module passed in PBS `2501971.opbs` (`2 passed in 0.16s`), and the final complete suite including all cleanup/observation additions passed in `2501992.opbs` (`495 passed in 25.23s`).
 
 No other Critical, High, Medium, or Low finding was produced by the available current-state report. `LeaderLeaseStore.assert_current()` is retained as a non-mutating diagnostic consistent with the active `LeaseSafetyTracker`, not as a competing writer boundary.
 
