@@ -764,3 +764,9 @@ Artifacts:
 - PBS `2501731.opbs` then ran `pytest -q tests` on `mg0003`; request `00:00:50`, actual 26 seconds, exit 0, `481 passed in 24.10s`. Logs are `fsdiloco_plan02_p2_tests.o2501730` and `fsdiloco_plan02_p2_tests.o2501731`.
 - Pre-submission validation passed `bash -n scripts/miyabi/*.pbs`, confirmed every PBS group directive is the literal `xg24i002`, and found no group placeholder. Python compilation, Ruff lint/format checks, and `git diff --check` also passed for the affected source, Checker, and tests.
 - This closes the associated unit/regression group. It does not yet prove clean-source multi-process takeover, scheduler launch, matched performance, or completed-Checker behavior after the atomic protocol changes; those remain the next formal work unit.
+
+## 2026-08-07 01:35 JST — Remediated clean-source G8 PASS
+
+- Frozen executable target `1a146cf403c33625d611eace0b421b606dd51300`, clean source fingerprint `sha256:cdf8f01bdb6f4bfd62dbe9a1103bca0a14f8b029ef3eaf12d8c77221aa94d0c0`. Launcher PBS `2501741.opbs` requested 15 seconds and submitted injected crash syncer `2501742`, successor `2501743`, admitted victim `2501744`, scheduler replacement `2501747`, and Checker `2501745` for run `plan02_phase2_g8_2501741`.
+- `artifacts/20260807-013357_phase2-g8_pass.json` is `PASS`: the injected post-DB-commit crash produced epoch takeover, the admitted victim was terminated, one scheduler-bound replacement was admitted, the placement reused its stream at epoch 1, drain acknowledgement completed, and the controller reached terminal v12. The successor used 31 seconds of its 150-second request; Checker exit 0.
+- This revalidates two-node independent jobs, crash recovery, scheduler authorization, replacement, stream fencing, atomic per-merge capacity history, and terminal closure on the remediated clean source. The 9-node scale/pause/duplicate gate remains separate.

@@ -451,6 +451,13 @@ Attempt 3, `2497948.opbs`, submitted the short-walltime children and completed s
 - This is the second validation invalidated by running against a mutable dirty tree, but it is not a second failure of the same protocol invariant: the preceding frozen-source-equivalent groups `2501697`, `2501698`, and `2501704` had passed, and the current focused group `2501726` passed all 29 tests after edits quiesced. No production threshold or behavior changed in response.
 - Next action: stop using dirty-worktree full runs as completion evidence. Complete static checks, commit the remediation target, verify the clean tree/source identity, and run both focused and full compute tests without any intervening edit before launching formal G7/G8/G9/matched evidence.
 
+## 2026-08-07 01:35 JST — clean-source formal evidence attempt invalidated by report edit
+
+- G8 launcher PBS `2501750.opbs` ran on `mg0006` with a `00:00:15` request and failed before creating a run or submitting any child job. `capture_source_identity.py` reported commit `1a146cf403c33625d611eace0b421b606dd51300` but `git_dirty=true`; `init_run` correctly rejected formal bootstrap with `formal HA bootstrap requires clean source`. The empty init output is `artifacts/20260807-0135_phase2-g8-init_pass.json`; no resumable run exists.
+- The only dirty tracked path was `reports/DOING/fsb_decoupled_diloco_plan_02/progress.md`, appended by concurrent completion-record activity after the source commit and after the clean-tree precheck. Executable source did not differ, but formal identity policy intentionally covers the complete tracked tree and therefore failed closed.
+- G7 PBS `2501748.opbs` captured the tree before that append and returned `PASS`; compatibility PBS `2501749.opbs` captured it afterward. Because the next commit must include the report append, neither artifact can be combined with the next G8/G9 descriptor even if the tests themselves pass.
+- Next action: wait for the test jobs to terminate, commit all append-only records, verify an empty worktree immediately before submission, and rerun the entire source-bound G7/compatibility/G8/G9/matched/completed set under the resulting single commit. Do not use `--allow-dirty-snapshot` for formal evidence.
+
 ## 2026-08-07 01:27 JST — Focused remediation rerun collected a transient test helper
 
 - PBS job `2501706.opbs` ran the focused dynamic/remediation targets with a 25-second request and exited 1 after 9 seconds: `28 passed, 1 error in 7.62s`.
