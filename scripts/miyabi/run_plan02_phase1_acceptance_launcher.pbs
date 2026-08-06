@@ -20,6 +20,9 @@ STAMP="${STAMP:-$(date +%Y%m%d-%H%M%S)}"
 ARTIFACT="$REPORT_ROOT/artifacts/${STAMP}_phase1-independent-launch_pass.json"
 INIT_STDOUT="$REPORT_ROOT/artifacts/${STAMP}_phase1-init-run_pass.json"
 IDENTITY_ROOT="${TMPDIR:?TMPDIR is required}/plan02_p1_acceptance_identity"
+CRASH_WALLTIME="${CRASH_WALLTIME:-00:00:20}"
+SUCCESSOR_WALLTIME="${SUCCESSOR_WALLTIME:-00:00:45}"
+LEARNER_WALLTIME="${LEARNER_WALLTIME:-00:00:45}"
 
 cd "$PROJECT_ROOT"
 mkdir -p "$REPORT_ROOT/artifacts"
@@ -46,12 +49,13 @@ PY
 BASE_VARS="FS_DILOCO_SHARED_ROOT=$SHARED_ROOT,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=$DESCRIPTOR_SHA,PROJECT_ROOT=$PROJECT_ROOT"
 CRASH_VARS="$BASE_VARS,FS_DILOCO_PUBLICATION_FAILPOINT=after_db_commit,FS_DILOCO_FAILPOINT_ACTION=kill"
 
-CRASH_JOB_ID="$(qsub -q debug-g -l walltime=00:01:00 -v "$CRASH_VARS" "$PROJECT_ROOT/scripts/miyabi/run_syncer_candidate.pbs")"
-SUCCESSOR_JOB_ID="$(qsub -q debug-g -l walltime=00:02:00 -W "depend=afterany:$CRASH_JOB_ID" -v "$BASE_VARS" "$PROJECT_ROOT/scripts/miyabi/run_syncer_candidate.pbs")"
-LEARNER_JOB_ID="$(qsub -q debug-g -l walltime=00:02:00 -r y -v "$BASE_VARS" -J 0-7 "$PROJECT_ROOT/scripts/miyabi/run_static_learner.pbs")"
+CRASH_JOB_ID="$(qsub -q debug-g -l "walltime=$CRASH_WALLTIME" -v "$CRASH_VARS" "$PROJECT_ROOT/scripts/miyabi/run_syncer_candidate.pbs")"
+SUCCESSOR_JOB_ID="$(qsub -q debug-g -l "walltime=$SUCCESSOR_WALLTIME" -W "depend=afterany:$CRASH_JOB_ID" -v "$BASE_VARS" "$PROJECT_ROOT/scripts/miyabi/run_syncer_candidate.pbs")"
+LEARNER_JOB_ID="$(qsub -q debug-g -l "walltime=$LEARNER_WALLTIME" -r y -v "$BASE_VARS" -J 0-7 "$PROJECT_ROOT/scripts/miyabi/run_static_learner.pbs")"
 
 "$PYTHON_BIN" - "$ARTIFACT" "$RUN_ID" "$SHARED_ROOT" "$DESCRIPTOR_SHA" \
-  "$CRASH_JOB_ID" "$SUCCESSOR_JOB_ID" "$LEARNER_JOB_ID" "${PBS_JOBID:-}" <<'PY'
+  "$CRASH_JOB_ID" "$SUCCESSOR_JOB_ID" "$LEARNER_JOB_ID" "${PBS_JOBID:-}" \
+  "$CRASH_WALLTIME" "$SUCCESSOR_WALLTIME" "$LEARNER_WALLTIME" <<'PY'
 import json
 import os
 import sys
@@ -67,6 +71,11 @@ payload = {
     "successor_syncer_job_id": sys.argv[6],
     "learner_array_job_id": sys.argv[7],
     "launcher_job_id": sys.argv[8],
+    "requested_walltimes": {
+        "crash_syncer": sys.argv[9],
+        "successor_syncer": sys.argv[10],
+        "learner_array": sys.argv[11],
+    },
     "takeover_injection": {
         "failpoint": "after_db_commit",
         "action": "SIGKILL",
