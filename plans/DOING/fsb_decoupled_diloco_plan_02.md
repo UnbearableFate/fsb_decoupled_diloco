@@ -1266,13 +1266,15 @@ BLOCKED
 
 ### Phase 0
 
-- [ ] `reports/DOING/fsb_decoupled_diloco_plan_02/{progress.md,failures.md,code_review.md,artifacts/}` 已按 `plans/AGENTS.md` 创建；
-- [ ] `miyabi-development` skill在进入计算节点工作前可用；
-- [ ] writer-lock pause边界有1/2节点证据；
-- [ ] fixed cache stale writer反例可重复；
-- [ ] reader只采用最高 epoch canonical；
-- [ ] clock/shared SQLite/PBS/source能力均有 structured evidence；
-- [ ] feasibility Checker `PASS`。
+- [x] `reports/DOING/fsb_decoupled_diloco_plan_02/{progress.md,failures.md,code_review.md,artifacts/}` 已按 `plans/AGENTS.md` 创建；
+- [x] `miyabi-development` skill在进入计算节点工作前可用；
+- [x] writer-lock pause边界有1/2节点证据；
+- [x] fixed cache stale writer反例可重复；
+- [x] reader只采用最高 epoch canonical；
+- [x] clock/shared SQLite/PBS/source能力均有 structured evidence；
+- [x] feasibility Checker `PASS`。
+
+Phase 0关闭依据：最终边界commit为`1ba9a1a70e4ede6fdd5edf066f11f6921f111da5`；权威artifact `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-095900_phase0-feasibility_pass.json`（SHA-256 `56056fdafed7b0f1bd7f472ca78771f876edb3204cb0989ff97cf1159d9cdc56`）的FEAS-01至FEAS-05及总状态均为`PASS`，requirement matrix对应五项均为`complete`。最终Codex审查target `f404fbd4831adcd9ffb8e6229a0004b1affe9f4e`返回`APPROVE`；Claude Opus 5因可核验session limit按`plans/AGENTS.md`记为`skipped-session-limit`，不构成审查通过声明，也不阻断Phase 0关闭。
 
 ### Phase 1
 
