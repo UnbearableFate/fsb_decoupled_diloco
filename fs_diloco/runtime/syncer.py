@@ -2573,6 +2573,27 @@ def run_fragment_syncer(
                 store.close()
 
 
+def stop_lease_renewer_for_final_metrics(
+    lease_renewer: LeaseRenewalThread | None,
+) -> dict[str, Any]:
+    """Stop the renewer before taking the completion-gate metric snapshot."""
+
+    if lease_renewer is None:
+        return {
+            "lease_renew_count": 0,
+            "lease_renew_failure_count": 0,
+            "lease_renew_busy_retry_count": 0,
+            "lease_renew_seconds": [],
+            "lease_renew_wall_seconds": 0.0,
+            "lease_renew_cpu_seconds": 0.0,
+            "heartbeat_publish_count": 0,
+            "heartbeat_publish_wall_seconds": 0.0,
+            "heartbeat_publish_cpu_seconds": 0.0,
+        }
+    lease_renewer.stop()
+    return lease_renewer.observation_metrics()
+
+
 def run_syncer(config: Config) -> None:
     run_started_at = time.time()
     run_start_monotonic = time.monotonic()
@@ -2583,6 +2604,7 @@ def run_syncer(config: Config) -> None:
     lease_store = None
     leader_token = None
     lease_renewer = None
+    lease_renewer_stop_attempted = False
     store = None
 
     def cleanup_acquired_leadership(startup_error: BaseException) -> None:
@@ -2624,12 +2646,10 @@ def run_syncer(config: Config) -> None:
                 "candidate config differs from the immutable resolved run descriptor"
             )
         try:
-            lease_store, leader_token, lease_safety_tracker, _candidate_logger = (
-                acquire_candidate(
-                    paths=paths,
-                    identity=loaded.identity,
-                    config=config,
-                )
+            lease_store, leader_token, lease_safety_tracker, _candidate_logger = acquire_candidate(
+                paths=paths,
+                identity=loaded.identity,
+                config=config,
             )
             store = open_leader_store(
                 paths=paths,
@@ -3328,25 +3348,20 @@ def run_syncer(config: Config) -> None:
                 wandb_run.summary["stop_reason"] = stop_reason
                 wandb_run.summary["final_version"] = version
                 wandb_run.summary["total_seen_tokens"] = total_seen_tokens
+            if lease_renewer is not None:
+                lease_renewer_stop_attempted = True
+                try:
+                    lease_metrics = stop_lease_renewer_for_final_metrics(lease_renewer)
+                except Exception:
+                    logger.exception("lease_renewer_stop_failed")
+                    raise
+            else:
+                lease_metrics = stop_lease_renewer_for_final_metrics(None)
             logger.event(
                 "process_exit",
                 reason=stop_reason,
                 version=version,
-                **(
-                    {
-                        "lease_renew_count": 0,
-                        "lease_renew_failure_count": 0,
-                        "lease_renew_busy_retry_count": 0,
-                        "lease_renew_seconds": [],
-                        "lease_renew_wall_seconds": 0.0,
-                        "lease_renew_cpu_seconds": 0.0,
-                        "heartbeat_publish_count": 0,
-                        "heartbeat_publish_wall_seconds": 0.0,
-                        "heartbeat_publish_cpu_seconds": 0.0,
-                    }
-                    if lease_renewer is None
-                    else lease_renewer.observation_metrics()
-                ),
+                **lease_metrics,
                 **(
                     {}
                     if not isinstance(store, LeaderBoundSQLiteStore)
@@ -3358,7 +3373,7 @@ def run_syncer(config: Config) -> None:
                 if wandb_run is not None:
                     wandb_run.finish(exit_code=1 if stop_reason == "error" else 0)
             finally:
-                if lease_renewer is not None:
+                if lease_renewer is not None and not lease_renewer_stop_attempted:
                     try:
                         lease_renewer.stop()
                     except Exception:

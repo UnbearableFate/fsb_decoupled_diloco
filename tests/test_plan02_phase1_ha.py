@@ -20,6 +20,16 @@ from fs_diloco.core.constants import (
     HA_SCHEMA_VERSION,
     SYNCER_HEARTBEAT_FORMAT_VERSION,
 )
+from fs_diloco.observability.phase1_performance import (
+    BUSINESS_TRANSACTION_MAX_P99_RATIO,
+    BUSINESS_TRANSACTION_MIN_SAMPLES,
+    BUSINESS_TRANSACTION_P99_JITTER_SECONDS,
+    CHECKPOINT_PUBLISH_MAX_P99_RATIO,
+    CHECKPOINT_PUBLISH_MIN_SAMPLES,
+    CHECKPOINT_PUBLISH_P99_JITTER_SECONDS,
+    MATCHED_PERFORMANCE_FORMAT_VERSION,
+    matched_p99_limit,
+)
 from fs_diloco.protocol.control_epoch import EpochControlPublisher, EpochControlReader
 from fs_diloco.runtime import pbs_scheduler as pbs_scheduler_module
 from fs_diloco.runtime import syncer as syncer_runtime
@@ -38,6 +48,7 @@ from fs_diloco.runtime.syncer_ha import (
     open_leader_store,
 )
 from fs_diloco.tools.launch_independent_run import _walltime_resource, launch
+from fs_diloco.tools.launch_phase1_acceptance import submit_acceptance_jobs
 from fs_diloco.tools.init_run import initialize_run as initialize_ha_run
 from fs_diloco.storage.fenced_store import FencedSQLiteStore, ReadOnlySQLiteStore
 from fs_diloco.storage.leader_lease import (
@@ -60,6 +71,12 @@ from fs_diloco.storage.schema_bootstrap import (
     open_readonly,
 )
 from fs_diloco.storage.sqlite_store import SQLiteStore
+from scripts.miyabi.check_plan02_phase1 import (
+    _blocking_failure_events,
+    _canonical_adoption_violations,
+    _matched_performance_errors,
+    _stale_business_commit_violations,
+)
 
 
 def identity() -> BootstrapIdentity:
@@ -201,6 +218,60 @@ def test_independent_launcher_preserves_syncer_receipt_when_learner_qsub_fails(
     assert result["syncer_submission"]["status"] == "submitted"
     assert result["learner_submission"]["status"] == "failed"
     assert "learner array rejected" in result["learner_submission"]["stderr"]
+
+
+@pytest.mark.parametrize("fail_role", ["successor_syncer", "learner_array"])
+def test_acceptance_launcher_persists_every_accepted_job_before_later_qsub_failure(
+    tmp_path: Path,
+    fail_role: str,
+) -> None:
+    roles = iter(("crash_syncer", "successor_syncer", "learner_array"))
+
+    def qsub(command: list[str]) -> dict[str, object]:
+        role = next(roles)
+        if role == fail_role:
+            return {
+                "status": "failed",
+                "returncode": 1,
+                "stdout": "",
+                "stderr": f"{role} rejected",
+                "command": command,
+            }
+        return {
+            "status": "submitted",
+            "returncode": 0,
+            "stdout": f"{role}.opbs",
+            "stderr": "",
+            "command": command,
+            "job_id": f"{role}.opbs",
+        }
+
+    pending = tmp_path / "acceptance_review.json"
+    passed = tmp_path / "acceptance_pass.json"
+    result = submit_acceptance_jobs(
+        project_root=tmp_path,
+        run_id="run",
+        shared_root=tmp_path / "run",
+        descriptor_sha256="descriptor",
+        launcher_job_id="launcher.opbs",
+        crash_walltime="00:00:15",
+        successor_walltime="00:00:30",
+        learner_walltime="00:00:25",
+        pending_artifact=pending,
+        pass_artifact=passed,
+        qsub_fn=qsub,
+    )
+
+    persisted = json.loads(pending.read_text(encoding="utf-8"))
+    assert result["status"] == "partial"
+    assert persisted == result
+    assert persisted["crash_syncer_job_id"] == "crash_syncer.opbs"
+    if fail_role == "learner_array":
+        assert persisted["successor_syncer_job_id"] == "successor_syncer.opbs"
+    else:
+        assert "successor_syncer_job_id" not in persisted
+    assert persisted["submission_receipts"][-1]["status"] == "failed"
+    assert not passed.exists()
 
 
 def test_syncer_releases_acquired_lease_when_leader_store_open_fails(
@@ -656,11 +727,7 @@ def test_candidate_retries_writer_lock_until_release_and_times_out_cleanly(
     thread = threading.Thread(target=run_candidate)
     thread.start()
     deadline = time.monotonic() + 1.0
-    candidate_log = (
-        paths.logs
-        / "candidates"
-        / f"{RunPaths.owner_short('writer-lock-retry')}.jsonl"
-    )
+    candidate_log = paths.logs / "candidates" / f"{RunPaths.owner_short('writer-lock-retry')}.jsonl"
     while time.monotonic() < deadline:
         if candidate_log.is_file() and "writer_lock_blocked" in candidate_log.read_text(
             encoding="utf-8"
@@ -743,6 +810,40 @@ def test_lease_renewer_retries_transient_sqlite_busy(tmp_path: Path) -> None:
     lease.close()
 
 
+def test_final_lease_metrics_are_observed_only_after_renewer_stop() -> None:
+    class FinalFailureRenewer:
+        def __init__(self) -> None:
+            self.stopped = False
+
+        def stop(self) -> None:
+            self.stopped = True
+
+        def observation_metrics(self) -> dict[str, object]:
+            return {
+                "lease_renew_count": 1,
+                "lease_renew_failure_count": int(self.stopped),
+            }
+
+    renewer = FinalFailureRenewer()
+    metrics = syncer_runtime.stop_lease_renewer_for_final_metrics(renewer)  # type: ignore[arg-type]
+    assert renewer.stopped
+    assert metrics["lease_renew_failure_count"] == 1
+
+
+def test_final_lease_metrics_propagate_stop_failure() -> None:
+    class StopFailureRenewer:
+        def stop(self) -> None:
+            raise RuntimeError("late renewal failure")
+
+        def observation_metrics(self) -> dict[str, object]:
+            raise AssertionError("metrics must not be sampled after a failed stop")
+
+    with pytest.raises(RuntimeError, match="late renewal failure"):
+        syncer_runtime.stop_lease_renewer_for_final_metrics(  # type: ignore[arg-type]
+            StopFailureRenewer()
+        )
+
+
 def test_all_fenced_public_mutators_require_token() -> None:
     names = {
         "set_run_state",
@@ -811,6 +912,10 @@ def test_fenced_store_rejects_raw_and_superseded_writes(tmp_path: Path) -> None:
         "WITH target AS (SELECT 1) UPDATE run_state SET value='bad' WHERE key='missing'",
         "/* hidden mutation */ UPDATE run_state SET value='bad' WHERE key='missing'",
         "PRAGMA user_version=999",
+        "PRAGMA journal_mode(WAL)",
+        "PRAGMA synchronous(OFF)",
+        "PRAGMA query_only(OFF)",
+        "PRAGMA busy_timeout(1)",
     ],
 )
 def test_fenced_connection_rejects_unrecognized_or_disguised_mutations(
@@ -1307,6 +1412,73 @@ def test_recovery_claim_has_one_mkdir_winner_and_queued_job_stays_outstanding(
     assert scheduler.submissions == 1
 
 
+def test_recovery_global_budget_is_atomic_across_distinct_observations(
+    tmp_path: Path,
+) -> None:
+    paths = RunPaths(tmp_path / "run")
+    prepare_authority_dirs(paths)
+    config = resolve_config(project_root=tmp_path).coordination.recovery_submission
+    config.enabled = True
+    config.max_outstanding_candidates = 1
+    scheduler = FakeScheduler()
+    first_entered = threading.Event()
+    release_first = threading.Event()
+
+    class SlowFirstManager(RecoveryClaimManager):
+        calls = 0
+        calls_lock = threading.Lock()
+
+        def _archive_expired_claims(self, **kwargs: object) -> int:
+            with self.calls_lock:
+                self.calls += 1
+                call = self.calls
+            if call == 1:
+                first_entered.set()
+                assert release_first.wait(timeout=2.0)
+            return super()._archive_expired_claims(**kwargs)
+
+    manager = SlowFirstManager(
+        paths=paths,
+        config=config,
+        scheduler=scheduler,  # type: ignore[arg-type]
+        descriptor_sha256="descriptor",
+    )
+    keys = [
+        recovery_observation_key(
+            run_id="run",
+            highest_epoch=1,
+            heartbeat_seq=index,
+            heartbeat_fingerprint=f"hb-{index}",
+        )
+        for index in (1, 2)
+    ]
+    first_result: list[object] = []
+    thread = threading.Thread(
+        target=lambda: first_result.append(
+            manager.maybe_submit(
+                observation_key=keys[0],
+                claimant_id="learner-1",
+                terminal_published=False,
+            )
+        )
+    )
+    thread.start()
+    assert first_entered.wait(timeout=2.0)
+    second = manager.maybe_submit(
+        observation_key=keys[1],
+        claimant_id="learner-2",
+        terminal_published=False,
+    )
+    release_first.set()
+    thread.join(timeout=2.0)
+
+    assert not thread.is_alive()
+    assert second.state == "reservation_busy"
+    assert len(first_result) == 1 and first_result[0].state == "submitted"
+    assert scheduler.submissions == 1
+    assert len(list(paths.syncer_launch_claims.glob("*/attempt_*.lock"))) == 1
+
+
 def test_eight_recovery_claimants_create_only_one_attempt_and_submission(
     tmp_path: Path,
 ) -> None:
@@ -1795,6 +1967,157 @@ def test_ha_gc_removes_only_unreferenced_superseded_epoch_orphans(
     second.release(token2)
     first.close()
     second.close()
+
+
+def test_phase1_checker_blocks_late_runtime_failures() -> None:
+    events = [
+        {"event_type": "process_exit"},
+        {"event_type": "lease_renewer_stop_failed", "actor": "syncer"},
+        {"event_type": "canonical_latest_wait_failed", "actor": "learner_000"},
+    ]
+    assert [event["event_type"] for event in _blocking_failure_events(events)] == [
+        "lease_renewer_stop_failed",
+        "canonical_latest_wait_failed",
+    ]
+
+
+def test_phase1_checker_derives_stale_writer_violations_from_persisted_rows() -> None:
+    violations = _stale_business_commit_violations(
+        versions=[
+            {"version": 0, "commit_epoch": 1, "commit_owner_id": "owner-1"},
+            {"version": 1, "commit_epoch": 1, "commit_owner_id": "stale-owner"},
+        ],
+        epochs=[{"epoch": 1, "owner_id": "owner-1"}],
+        updates=[
+            {
+                "update_id": "u1",
+                "status": "applied",
+                "applied_version": 1,
+                "applied_by_epoch": 2,
+            }
+        ],
+        controller={"updated_by_epoch": 1, "updated_by_owner_id": "owner-1"},
+        terminal={"finalized_by_epoch": 2, "finalized_by_owner_id": "owner-2"},
+        publications=[
+            {
+                "kind": "latest",
+                "logical_generation": 1,
+                "published_by_epoch": 1,
+                "published_by_owner_id": "stale-owner",
+            }
+        ],
+    )
+    assert any("version 1 writer" in violation for violation in violations)
+    assert any("update u1 has unknown applied_by_epoch=2" in violation for violation in violations)
+    assert any("terminal writer" in violation for violation in violations)
+    assert any("control publication latest/1" in violation for violation in violations)
+
+
+def test_phase1_checker_derives_canonical_adoption_errors_per_expected_learner() -> None:
+    violations = _canonical_adoption_violations(
+        learner_events=[
+            {
+                "event_type": "process_exit",
+                "actor": "learner_000",
+                "global_version": 9,
+                "status_reason": "syncer_unresponsive",
+            },
+            {
+                "event_type": "final_fragment_adoption_failed",
+                "actor": "learner_000",
+            },
+        ],
+        terminal={"final_version": 10},
+        expected_learner_ids={"learner_000", "learner_001"},
+    )
+    assert any("emitted final_fragment_adoption_failed" in item for item in violations)
+    assert any("exit identities mismatch" in item for item in violations)
+    assert any("status_reason=syncer_unresponsive" in item for item in violations)
+    assert any("does not match terminal 10" in item for item in violations)
+
+
+def _matched_performance_payload() -> tuple[dict[str, object], dict[str, object]]:
+    identity_payload: dict[str, object] = {
+        "run_id": "run",
+        "descriptor_sha256": "descriptor",
+        "git_commit": "commit",
+        "git_dirty": False,
+        "source_fingerprint": "sha256:source",
+        "config_sha256": "config",
+    }
+    business_baseline = 0.004
+    checkpoint_baseline = 0.003
+    payload: dict[str, object] = {
+        "checker": "plan02_phase1_matched_performance",
+        "format_version": MATCHED_PERFORMANCE_FORMAT_VERSION,
+        "status": "PASS",
+        "identity": dict(identity_payload),
+        "business_candidate_observer": {
+            "baseline_sample_count": BUSINESS_TRANSACTION_MIN_SAMPLES,
+            "observer_sample_count": BUSINESS_TRANSACTION_MIN_SAMPLES,
+            "baseline_p99_seconds": business_baseline,
+            "observer_p99_seconds": 0.0045,
+            "max_p99_ratio": BUSINESS_TRANSACTION_MAX_P99_RATIO,
+            "jitter_seconds": BUSINESS_TRANSACTION_P99_JITTER_SECONDS,
+            "allowed_observer_p99_seconds": matched_p99_limit(
+                business_baseline,
+                max_ratio=BUSINESS_TRANSACTION_MAX_P99_RATIO,
+                jitter_seconds=BUSINESS_TRANSACTION_P99_JITTER_SECONDS,
+            ),
+            "candidate_observation_count": 4,
+            "candidate_writer_transaction_attempt_count": 0,
+        },
+        "checkpoint_publish": {
+            "baseline_contract": "Plan 01 legacy SQLiteStore publication",
+            "matched_fields": "source/config/model/seed/tensor/dtype/filesystem",
+            "tensor_numel": 2048,
+            "publish_dtype": "float32",
+            "baseline_sample_count": CHECKPOINT_PUBLISH_MIN_SAMPLES,
+            "ha_sample_count": CHECKPOINT_PUBLISH_MIN_SAMPLES,
+            "baseline_p99_seconds": checkpoint_baseline,
+            "ha_p99_seconds": 0.0035,
+            "max_p99_ratio": CHECKPOINT_PUBLISH_MAX_P99_RATIO,
+            "jitter_seconds": CHECKPOINT_PUBLISH_P99_JITTER_SECONDS,
+            "allowed_ha_p99_seconds": matched_p99_limit(
+                checkpoint_baseline,
+                max_ratio=CHECKPOINT_PUBLISH_MAX_P99_RATIO,
+                jitter_seconds=CHECKPOINT_PUBLISH_P99_JITTER_SECONDS,
+            ),
+            "digest_mode": "off",
+        },
+    }
+    return payload, identity_payload
+
+
+def test_phase1_checker_accepts_only_identity_bound_frozen_matched_gates() -> None:
+    payload, expected_identity = _matched_performance_payload()
+    assert not _matched_performance_errors(payload, expected_identity=expected_identity)
+
+    payload["identity"]["git_commit"] = "other"  # type: ignore[index]
+    payload["business_candidate_observer"][  # type: ignore[index]
+        "candidate_writer_transaction_attempt_count"
+    ] = 1
+    payload["checkpoint_publish"]["max_p99_ratio"] = 99.0  # type: ignore[index]
+    errors = _matched_performance_errors(payload, expected_identity=expected_identity)
+    assert any("git_commit mismatch" in error for error in errors)
+    assert any("attempted a writer transaction" in error for error in errors)
+    assert any("checkpoint threshold definition changed" in error for error in errors)
+
+
+def test_phase1_checker_blocks_missing_or_regressed_matched_evidence() -> None:
+    _payload, expected_identity = _matched_performance_payload()
+    assert _matched_performance_errors(None, expected_identity=expected_identity) == [
+        "completed gate requires a matched performance artifact"
+    ]
+
+    payload, _expected_identity = _matched_performance_payload()
+    business = payload["business_candidate_observer"]  # type: ignore[assignment]
+    business["observer_p99_seconds"] = business["allowed_observer_p99_seconds"] + 0.001
+    checkpoint = payload["checkpoint_publish"]  # type: ignore[assignment]
+    checkpoint["ha_p99_seconds"] = checkpoint["allowed_ha_p99_seconds"] + 0.001
+    errors = _matched_performance_errors(payload, expected_identity=expected_identity)
+    assert any("candidate observer p99 regression" in error for error in errors)
+    assert any("HA checkpoint p99 regression" in error for error in errors)
 
 
 def test_epoch_history_compaction_keeps_active_rows_bounded(tmp_path: Path) -> None:

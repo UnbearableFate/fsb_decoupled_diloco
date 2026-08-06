@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import threading
 import time
@@ -35,6 +36,18 @@ _READ_ONLY_PRAGMAS = {
     "TABLE_INFO",
     "USER_VERSION",
 }
+_READ_ONLY_ARGUMENT_PRAGMAS = {
+    "FOREIGN_KEY_CHECK",
+    "INTEGRITY_CHECK",
+    "QUICK_CHECK",
+    "TABLE_INFO",
+}
+_PRAGMA_RE = re.compile(
+    r"^\s*PRAGMA\s+(?:(?:main|temp)\.)?"
+    r"(?P<name>[A-Za-z_][A-Za-z0-9_]*)"
+    r"(?:\s*\((?P<argument>[^()]*)\))?\s*;?\s*$",
+    re.IGNORECASE,
+)
 
 
 def _keyword(sql: str) -> str:
@@ -46,12 +59,16 @@ def _keyword(sql: str) -> str:
 
 
 def _read_only_pragma(sql: str) -> bool:
-    statement = sql.lstrip()
-    if "=" in statement:
+    if "=" in sql:
         return False
-    _, _, body = statement.partition(" ")
-    pragma_name = body.strip().split("(", 1)[0].strip().upper()
-    return pragma_name in _READ_ONLY_PRAGMAS
+    match = _PRAGMA_RE.fullmatch(sql)
+    if match is None:
+        return False
+    pragma_name = match.group("name").upper()
+    if pragma_name not in _READ_ONLY_PRAGMAS:
+        return False
+    argument = match.group("argument")
+    return argument is None or pragma_name in _READ_ONLY_ARGUMENT_PRAGMAS
 
 
 def _parameters(
@@ -122,9 +139,7 @@ class _FencedConnection:
         if keyword in _MUTATING_KEYWORDS:
             self._ensure_write_transaction()
             self._verify_token()
-        elif keyword not in _READ_KEYWORDS and not (
-            keyword == "PRAGMA" and _read_only_pragma(sql)
-        ):
+        elif keyword not in _READ_KEYWORDS and not (keyword == "PRAGMA" and _read_only_pragma(sql)):
             raise RuntimeError(f"unrecognized SQL statement is forbidden by the fence: {keyword}")
         return self._connection.execute(sql, _parameters(parameters))
 
@@ -337,9 +352,7 @@ class FencedSQLiteStore:
             samples = list(self._business_transaction_seconds)
             return {
                 "business_transaction_count": self._business_transaction_count,
-                "business_transaction_failure_count": (
-                    self._business_transaction_failure_count
-                ),
+                "business_transaction_failure_count": (self._business_transaction_failure_count),
                 "business_transaction_captured_count": len(samples),
                 "business_transaction_seconds": samples,
             }
@@ -1045,8 +1058,6 @@ class ReadOnlySQLiteStore:
         keyword = _keyword(sql)
         if keyword in _DDL_KEYWORDS or keyword in _MUTATING_KEYWORDS:
             raise sqlite3.OperationalError("ReadOnlySQLiteStore accepts queries only")
-        if keyword not in _READ_KEYWORDS and not (
-            keyword == "PRAGMA" and _read_only_pragma(sql)
-        ):
+        if keyword not in _READ_KEYWORDS and not (keyword == "PRAGMA" and _read_only_pragma(sql)):
             raise sqlite3.OperationalError("ReadOnlySQLiteStore rejects unrecognized SQL")
         return self._connection.execute(sql, _parameters(parameters))

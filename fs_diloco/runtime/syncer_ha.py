@@ -134,12 +134,8 @@ class LeaseRenewalThread:
                 "lease_renew_wall_seconds": sum(samples),
                 "lease_renew_cpu_seconds": self._renew_cpu_seconds,
                 "heartbeat_publish_count": self._heartbeat_publish_count,
-                "heartbeat_publish_wall_seconds": (
-                    self._heartbeat_publish_wall_seconds
-                ),
-                "heartbeat_publish_cpu_seconds": (
-                    self._heartbeat_publish_cpu_seconds
-                ),
+                "heartbeat_publish_wall_seconds": (self._heartbeat_publish_wall_seconds),
+                "heartbeat_publish_cpu_seconds": (self._heartbeat_publish_cpu_seconds),
             }
 
     def raise_if_failed(self) -> None:
@@ -226,9 +222,7 @@ class LeaseRenewalThread:
                     publisher.publish_heartbeat(row)
                     with self._metrics_lock:
                         self._heartbeat_publish_count += 1
-                        self._heartbeat_publish_wall_seconds += (
-                            time.monotonic() - heartbeat_started
-                        )
+                        self._heartbeat_publish_wall_seconds += time.monotonic() - heartbeat_started
                         self._heartbeat_publish_cpu_seconds += (
                             time.process_time() - heartbeat_cpu_started
                         )
@@ -321,6 +315,12 @@ def acquire_candidate(
             eligible = now_wall > (float(observed["lease_expires_at"]) + ha.max_clock_skew_seconds)
         if eligible:
             try:
+                candidate_logger.event(
+                    "candidate_writer_transaction_attempt",
+                    observed_epoch=None if observed is None else int(observed["epoch"]),
+                    observed_owner=None if observed is None else str(observed["owner_id"]),
+                    observed_state=None if observed is None else str(observed["state"]),
+                )
                 token = lease.acquire(
                     owner_id=owner_id,
                     hostname=hostname,
@@ -347,9 +347,7 @@ def acquire_candidate(
                     error=str(exc),
                     observed_epoch=None if observed is None else int(observed["epoch"]),
                     observed_owner=None if observed is None else str(observed["owner_id"]),
-                    observed_pbs_job_id=(
-                        None if observed is None else observed.get("pbs_job_id")
-                    ),
+                    observed_pbs_job_id=(None if observed is None else observed.get("pbs_job_id")),
                     observed_hostname=None if observed is None else observed.get("hostname"),
                     observed_pid=None if observed is None else observed.get("pid"),
                 )

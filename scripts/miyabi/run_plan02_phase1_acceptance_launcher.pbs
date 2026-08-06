@@ -18,6 +18,7 @@ CONFIG="$PROJECT_ROOT/configs/fs_diloco_tiny_ha_static_acceptance.yaml"
 REPORT_ROOT="$PROJECT_ROOT/reports/DOING/fsb_decoupled_diloco_plan_02"
 STAMP="${STAMP:-$(date +%Y%m%d-%H%M%S)}"
 ARTIFACT="$REPORT_ROOT/artifacts/${STAMP}_phase1-independent-launch_pass.json"
+PENDING_ARTIFACT="$REPORT_ROOT/artifacts/${STAMP}_phase1-independent-launch_review.json"
 INIT_STDOUT="$REPORT_ROOT/artifacts/${STAMP}_phase1-init-run_pass.json"
 IDENTITY_ROOT="${TMPDIR:?TMPDIR is required}/plan02_p1_acceptance_identity"
 CRASH_WALLTIME="${CRASH_WALLTIME:-00:00:20}"
@@ -45,47 +46,16 @@ import sys
 print(json.load(open(sys.argv[1], encoding="utf-8"))["descriptor_sha256"])
 PY
 )"
-BASE_VARS="FS_DILOCO_SHARED_ROOT=$SHARED_ROOT,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=$DESCRIPTOR_SHA,PROJECT_ROOT=$PROJECT_ROOT"
-CRASH_VARS="$BASE_VARS,FS_DILOCO_PUBLICATION_FAILPOINT=after_db_commit,FS_DILOCO_FAILPOINT_ACTION=kill"
-
-CRASH_JOB_ID="$(qsub -q debug-g -l "walltime=$CRASH_WALLTIME" -v "$CRASH_VARS" "$PROJECT_ROOT/scripts/miyabi/run_syncer_candidate.pbs")"
-SUCCESSOR_JOB_ID="$(qsub -q debug-g -l "walltime=$SUCCESSOR_WALLTIME" -W "depend=afterany:$CRASH_JOB_ID" -v "$BASE_VARS" "$PROJECT_ROOT/scripts/miyabi/run_syncer_candidate.pbs")"
-LEARNER_JOB_ID="$(qsub -q debug-g -l "walltime=$LEARNER_WALLTIME" -r y -W "depend=after:$SUCCESSOR_JOB_ID" -v "$BASE_VARS" -J 0-7 "$PROJECT_ROOT/scripts/miyabi/run_static_learner.pbs")"
-
-"$PYTHON_BIN" - "$ARTIFACT" "$RUN_ID" "$SHARED_ROOT" "$DESCRIPTOR_SHA" \
-  "$CRASH_JOB_ID" "$SUCCESSOR_JOB_ID" "$LEARNER_JOB_ID" "${PBS_JOBID:-}" \
-  "$CRASH_WALLTIME" "$SUCCESSOR_WALLTIME" "$LEARNER_WALLTIME" <<'PY'
-import json
-import os
-import sys
-from pathlib import Path
-
-output = Path(sys.argv[1])
-payload = {
-    "status": "PASS",
-    "run_id": sys.argv[2],
-    "shared_root": sys.argv[3],
-    "descriptor_sha256": sys.argv[4],
-    "crash_syncer_job_id": sys.argv[5],
-    "successor_syncer_job_id": sys.argv[6],
-    "learner_array_job_id": sys.argv[7],
-    "launcher_job_id": sys.argv[8],
-    "requested_walltimes": {
-        "crash_syncer": sys.argv[9],
-        "successor_syncer": sys.argv[10],
-        "learner_array": sys.argv[11],
-    },
-    "takeover_injection": {
-        "failpoint": "after_db_commit",
-        "action": "SIGKILL",
-        "successor_dependency": "afterany",
-        "learner_dependency": "after-successor-start",
-    },
-}
-output.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n")
-with output.open("rb") as handle:
-    os.fsync(handle.fileno())
-print(json.dumps(payload, sort_keys=True))
-PY
+"$PYTHON_BIN" -m fs_diloco.tools.launch_phase1_acceptance \
+  --project-root "$PROJECT_ROOT" \
+  --run-id "$RUN_ID" \
+  --shared-root "$SHARED_ROOT" \
+  --descriptor-sha256 "$DESCRIPTOR_SHA" \
+  --launcher-job-id "${PBS_JOBID:-}" \
+  --crash-walltime "$CRASH_WALLTIME" \
+  --successor-walltime "$SUCCESSOR_WALLTIME" \
+  --learner-walltime "$LEARNER_WALLTIME" \
+  --pending-artifact "$PENDING_ARTIFACT" \
+  --pass-artifact "$ARTIFACT"
 
 printf 'PLAN02_PHASE1_LAUNCH_ARTIFACT=%s\n' "$ARTIFACT"

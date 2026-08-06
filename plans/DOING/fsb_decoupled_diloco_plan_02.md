@@ -678,7 +678,7 @@ metrics/recovery_submission_history.jsonl
 - **G6**：9节点正式验收，1 syncer + 8 learner独立 job，至少一次真实跨job takeover、累计至少10个 committed merge；
 - **G6b**：若正式 workload超过 50 local steps × 10 global steps基线，按仓库指令同步验证结论文档。
 
-Phase 1 Checker：`scripts/miyabi/check_plan02_phase1.py --mode phase1-staged|phase1-completed`。
+Phase 1 Checker：`scripts/miyabi/check_plan02_phase1.py --mode phase1-staged|phase1-completed`。`phase1-completed`还必须传入与同一run descriptor精确绑定的`--matched-performance` artifact；staged模式不要求该artifact。
 
 ---
 
@@ -1117,8 +1117,8 @@ Phase 2 Checker：`scripts/miyabi/check_plan02_phase2.py --mode phase2-completed
 - takeover protocol latency从旧 lease过期边界到新 epoch DB commit，不含 PBS queue，门槛 `<= 2*renew_interval + 10s`；
 - transaction内 writer-lock pause单独报告，不计入自动 takeover latency；
 - lease/heartbeat控制面 CPU time和阻塞 critical-path wall time分别报告，不把后台重叠 wall time简单相加；
-- 健康leader存在时启动候选观察者，`sqlite_commit_seconds` p99相对无候选matched run回归门槛在P1-L1 RED测试冻结，candidate写transaction尝试数应为0；
-- checkpoint digest默认 `off`，publisher、resume和Checker均不得新增全量hash读取；`checker`模式单独报告离线hash wall time，`always`模式单独报告publish关键路径hash wall time；normal publish p99与Plan 01 matched baseline的允许回归在P1-L3 RED测试冻结；
+- 健康leader存在时启动候选观察者，candidate只执行production candidate采用的`terminal_state + observe`只读循环；相对无候选的interleaved matched batch，fenced business transaction（`sqlite_commit_seconds`边界）各至少400个样本，nearest-rank p99必须`<= baseline_p99 * 1.25 + 0.002s`，candidate写transaction尝试数严格为0；
+- checkpoint digest默认 `off`，publisher、resume和Checker均不得新增全量hash读取；`checker`模式单独报告离线hash wall time，`always`模式单独报告publish关键路径hash wall time；normal HA publish和Plan 01 legacy `SQLiteStore` baseline从目标配置构建同一model/seed/tensor并在同一filesystem以相同dtype交替采样，各至少100个样本，`publish_checkpoint_seconds` nearest-rank p99必须`<= baseline_p99 * 1.25 + 0.002s`；
 - fixed cache污染允许出现，但 current canonical adoption错误严格为0；
 - stale epoch业务 commit数严格为0。
 
@@ -1150,11 +1150,15 @@ fs_diloco/protocol/membership.py
 fs_diloco/protocol/dynamic_terminal.py
 fs_diloco/runtime/pbs_scheduler.py
 fs_diloco/runtime/launch_outbox.py
+fs_diloco/observability/phase1_performance.py
 fs_diloco/tools/init_run.py
 fs_diloco/tools/launch_independent_run.py
+fs_diloco/tools/launch_phase1_acceptance.py
+fs_diloco/tools/phase1_matched_performance.py
 scripts/miyabi/check_plan02_feasibility.py
 scripts/miyabi/check_plan02_phase1.py
 scripts/miyabi/check_plan02_phase2.py
+scripts/miyabi/run_plan02_phase1_matched_performance.pbs
 scripts/miyabi/run_syncer_candidate.pbs
 scripts/miyabi/run_dynamic_learner.pbs
 scripts/miyabi/run_2node_syncer_takeover_regression.pbs
@@ -1217,7 +1221,7 @@ PASS_WITH_FOLLOWUPS
 BLOCKED
 ```
 
-`PASS_WITH_FOLLOWUPS` 仅 Phase 1 staged允许。structured evidence至少包含：source/config/run descriptor identity、schema双版本/integrity/PRAGMA、31-method mutator inventory、epoch history、version→epoch、control manifest/hash、各递归discovery面的expected/observed数量、固定 cache污染、writer-lock边界、watchdog/recovery等待、claim/job/reserved map、membership/stream generation、bootstrap slots、capacity observations、terminal generation、active/physical boundedness和 failure event扫描。
+`PASS_WITH_FOLLOWUPS` 仅 Phase 1 staged允许。structured evidence至少包含：source/config/run descriptor identity、schema双版本/integrity/PRAGMA、31-method mutator inventory、epoch history、version→epoch、control manifest/hash、各递归discovery面的expected/observed数量、固定 cache污染、writer-lock边界、watchdog/recovery等待、claim/job/reserved map、与descriptor绑定的matched candidate/checkpoint性能artifact、membership/stream generation、bootstrap slots、capacity observations、terminal generation、active/physical boundedness和 failure event扫描。
 
 大型 checkpoint保留 run root；reports只保存manifest、路径、size、验证结果和必要快照；只有显式启用 `checker|always` 时才包含checkpoint checksum。
 

@@ -534,3 +534,78 @@ Artifacts:
 - 处置状态：Codex的post-renewer startup cleanup finding为`fixed`并由terminal-state startup failure精确资源释放回归覆盖。Claude H1、M1–M9、L1–L3、L5–L9及§11.1 telemetry gap均为`fixed`并由上述关联组覆盖。L4（未被production调用的`LeaderLeaseStore.assert_current`及其私有时间map）为`deferred-with-justification`：当前公开HA写路径只使用共享`LeaseSafetyTracker`，立即删除该无调用诊断API会制造无收益接口变更；负责人为本plan Phase 2存储surface整理，完成前重新确认无调用后删除或明确保留。Claude H2保持Phase 1 blocking，必须在clean phase-final target上重跑1+8独立job takeover与completed Checker后才能标记`fixed`。
 - 保留与清理：保留structured Checker/fault/lock artifacts、focused/full摘要、失败与replacement smoke日志；已核对并删除只属于已结束测试的`plan02_phase1_lock_2498878`及两次smoke run目录（约1.9 MiB，checkpoint/payload/W&B重复数据），不可恢复；没有删除报告、source/config或任何live/resumable run。
 - 后续：创建clean review target，重跑最终1+8 acceptance与completed Checker；completed性能门禁必须有≥100真实renew、0 renew/business failure、business/renew p99与takeover latency阈值均通过。由于本轮修改并发/持久化/GC关键不变量，final acceptance后还需针对新target重复双模型完成审查。
+
+## 2026-08-06 15:09 JST — Phase 1 final 1+8 acceptance and performance gate PASS
+
+### Facts
+
+- 最终clean实现为commit `831b1751c5572c39121113ac73099238f3fa9ed4`；run `plan02_phase1_final_831b175`的source fingerprint为`sha256:559daa3a650c9647781eb54bdfd19cbad32c836b10cd28a9418982ba506bb253`。在此前两次完整acceptance中，第一次暴露scheduler启动顺序导致的GPU slot死锁，第二次完成协议但business p99因过密采样超过门限；两项根因、修复和失败job均已完整追加到`failures.md`。
+- 第三次launcher `2499027.opbs`请求最短实用walltime `00:00:10`、实际1秒并成功提交全部独立job；crash syncer `2499028.opbs`请求`00:00:15`、实际5秒并按预期在`after_db_commit`以137退出；successor `2499029.opbs`请求`00:00:30`、实际23秒且exit 0；8节点learner array `2499030[0-7].opbs`各请求`00:00:25`、实际17–19秒且全部exit 0；completed Checker `2499051.opbs`请求`00:00:10`、实际5秒且exit 0。每个walltime均依据紧邻失败/成功实测加最小调度余量显式覆盖，而非沿用PBS脚本的较长默认值。
+- successor先获得GPU slot，epoch 1在提交v0后被杀死，epoch 2从DB恢复并连续提交v1–v10；最终terminal generation 2、5,120 tokens、leader released，canonical latest/stop/summary与DB一致。Checker返回`PASS`，errors/warnings/runtime failure均为0。
+- §11.1性能可靠性门禁全部通过：business transaction 475 samples、0 failure、p95 `0.010985s`、p99 `0.020734s`、max `0.034290s`，低于p99 `0.05s`门限；renew 116 samples、0 failure、1 busy retry、p95 `0.022382s`、p99 `0.038958s`、max `0.085846s`，低于p99 `3.75s`门限；takeover `1.012068s`，低于`10.2s`门限。
+- learner control reader覆盖8个进程、554次真实scan和9,450次cache hit，wall/CPU分别为`1.427571s`/`0.590398s`；heartbeat publication 114次；50次candidate observation产生0次writer transaction attempt；stale business commit和canonical adoption error均为0。boundedness为1个epoch目录、0 active claim、0 GC candidate row；7,188个runtime event中无failure。
+- 最终结构化证据为`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-1508_phase1-independent-launch_pass.json`（SHA-256 `17d126d44ed5cb075956459b8476d36bfe8138151b62acf1e16d0d3927cbfc2d`）、`20260806-1508_phase1-init-run_pass.json`（SHA-256 `d389db622af396e67ed504f86cb0dadf83424b76dbac770c69109d9bab4571bf`）及`20260806-1509_phase1-completed-checker_pass.json`（SHA-256 `cc1c956d5970b6ae181004addd5b50e79b34e7a1ecb7b3fdba085b74e730e20b`）。
+
+### Finding disposition
+
+- Claude review target `b21b29f83067dd36b4ff5ac295fe1f894da64e21`的`High — final acceptance predates reviewed source`现为`fixed`：本轮1+8、takeover和completed Checker全部直接运行于最终clean commit `831b1751c5572c39121113ac73099238f3fa9ed4`，且新性能门禁完整通过。
+- 由于为满足该finding而修改了launcher调度依赖与acceptance采样配置，最终commit是新的关键不变量target，仍必须重复Phase 1累计diff的Codex与fresh `claude -p`完成审查。
+
+### Follow-up
+
+- 以Phase 0 final `1ba9a1a70e4ede6fdd5edf066f11f6921f111da5`为comparison base，对`831b1751c5572c39121113ac73099238f3fa9ed4`执行最后一轮独立完成审查；门禁关闭前HA-01…HA-20保持`completion-candidate`。
+
+## 2026-08-06 15:26 JST — Phase 1 final-target review opened; Claude skipped-session-limit
+
+### Facts
+
+- 本轮目标为`831b1751c5572c39121113ac73099238f3fa9ed4`，comparison base为`1ba9a1a70e4ede6fdd5edf066f11f6921f111da5`。Codex在读取任何本轮Claude实质结论前保存不可变报告`reports/DOING/code_review/fsb_decoupled_diloco_plan_02/phase-1/gpt-5.6-sol_831b1751c5572c39121113ac73099238f3fa9ed4.md`，结论为`CHANGES_REQUIRED`。
+- 外部reviewer使用fresh `claude -p`，显式模型`claude-opus-5`、session `4b13f9d7-973d-4298-9752-e756f6cd8cc8`、JSON输出、`bypassPermissions`及`--dangerously-skip-permissions`，无resume/continue/fallback。机器元数据验证实际及canonical model均为`claude-opus-5`、session ID匹配、`permission_denials=[]`；79 turns后返回明确`You've hit your session limit · resets 6:40pm (Asia/Tokyo)`。进程没有创建Claude报告或修改实现树。
+- 按`plans/AGENTS.md`唯一限额例外，该外部reviewer记为`skipped-session-limit`；这不是approval，不创建或伪造报告，不要求重试，也不阻断当前finding处置和后续工作。Codex报告仍是必做门禁且已完成。
+
+### Codex finding disposition plan
+
+- `High — completed Checker fabricates strict-zero results and can miss shutdown renewal failure`：接受。把renewer最终停止与metrics snapshot排序收敛为可审计边界；Checker从DB epoch/owner映射和完整runtime failure vocabulary推导，而非写死canonical/stale零值；为非零/缺失/renewer-stop失败新增会使completed mode返回`BLOCKED`的RED测试。
+- `Medium — cross-observation global outstanding budget is not atomic`：接受。为recovery claims增加全局atomic reservation lock，使全局outstanding检查、per-observation attempt预留及durable pending receipt属于同一仲裁；新增两个不同observation key的并发RED回归。
+- `Medium — acceptance launcher loses partial qsub receipts`：接受。每次qsub后立即原子更新同一结构化artifact，partial失败保留全部已接受job ID、失败receipt与短walltime且非零退出，不自动qdel；新增可单测的提交编排回归。
+- `Medium — two matched §11.1 gates absent`：接受。新增独立matched microbenchmark artifact与completed Checker必填输入，分别验证健康leader candidate observer相对无candidate的business transaction p99回归及normal checkpoint publish相对matched legacy baseline；candidate writer attempt使用明确instrumentation而不是`writer_lock_blocked`事件替代。
+- `Low — parenthesized PRAGMA setter bypass`：接受。只允许无setter参数的显式只读PRAGMA及建模的只读参数形式，覆盖`journal_mode(WAL)`、`synchronous(OFF)`、`query_only(OFF)`和`busy_timeout(1)`。
+- `Low — universal recursive discovery`：维持`deferred-with-justification`至Phase 2 MEM-02/MEM-20，负责人和边界不变。
+
+### Follow-up
+
+- 先新增RED回归并修复上述行为，再运行完整关联测试。matched性能验证和任何需要qsub的replacement都根据紧邻实测显式估算最短实用walltime；修复涉及recovery并发协议与完成门禁，必须冻结新review target并按关键不变量规则再次审查。
+
+## 2026-08-06 15:56 JST — final-target review remediation regression PASS
+
+### Facts
+
+- Codex最后一轮finding已实现：renewer先停止再采集final metrics，stop/release及learner失败事件进入completed blocker；Checker从epoch/version/update/controller/terminal/control publication及每个预期learner的唯一process exit推导stale commit和canonical adoption结果，不再写死零值。
+- recovery submission在所有observation key之上新增共享filesystem atomic reservation，使全局outstanding检查、attempt mkdir和durable pending claim同属一次仲裁；两个不同observation的并发回归验证`max_outstanding_candidates=1`时只产生一个attempt和一次qsub。
+- acceptance launcher在第一次qsub之前建立pending artifact，并在每个crash/successor/learner qsub之后立即原子保存receipt；后续submission失败保留已经接受的job ID、失败receipt和显式短walltime，非零退出且不自动`qdel`。
+- §11.1新增descriptor/source/config绑定的matched性能artifact：健康leader candidate observer与无observer各至少400个interleaved business样本，HA与Plan 01 legacy各至少100个alternating checkpoint样本；两项nearest-rank p99门槛冻结为`baseline * 1.25 + 0.002s`。completed Checker复算门槛并要求candidate writer attempt严格为0。
+- fenced SQL proxy现在拒绝parenthesized setter形式的`journal_mode(WAL)`、`synchronous(OFF)`、`query_only(OFF)`和`busy_timeout(1)`；只保留显式建模的只读argument PRAGMA。
+- 静态验证通过：Ruff、`py_compile`、`bash -n scripts/miyabi/*.pbs`、literal group ID扫描和`git diff --check`均为0。
+- PBS `2499200.opbs`依据此前32秒实测请求`00:00:45`，实际33秒、`Exit_status=0`；focused Phase 1为`65 passed in 6.82s`，full tree为`446 passed in 23.95s`。artifact `20260806-155127_phase1-review-remediation-tests_pass.json`记录完整stdout SHA-256 `f16a68e15be6f764705b759ab4620567f32808bd12f33ec2985aa1ada5e70754`。
+- PBS `2499210.opbs`依据此前125秒实测请求`00:02:20`，实际124秒、exit 0，六个failpoint×10次全部PASS；artifact `20260806-155341_phase1-fault-matrix_pass.json` SHA-256为`f299c668ea37235d40678a2319538e307a155b28aece37353d8046f3f88c9cc9`。
+- 两节点lock PBS `2499211.opbs`依据此前7秒实测请求`00:00:15`，实际6秒、exit 0；artifact `20260806-155410_phase1-lock-boundary_pass.json` SHA-256为`38d9e4c138bd855839260cf1b1cb7ffb1435dcd627a25c5b656dcad0372b9f97`。
+- tiny HA smoke PBS `2499212.opbs`依据此前12秒实测请求`00:00:20`，实际13秒、exit 0；v2、terminal generation 2、leader released，staged Checker `PASS_WITH_FOLLOWUPS`。artifact `20260806-155353_phase1-smoke-checker_pass.json` SHA-256为`208a999d0ecae294701abb1b2093e5379229ac19772182c3e124582fccdfcc16`。
+- matched checkpoint probe改为从目标配置实际构建model/seed/tensor后，replacement PBS `2499241.opbs`仍按相邻33秒实测加充分余量请求`00:00:45`，实际34秒、exit 0；focused `65 passed in 6.75s`，full tree `446 passed in 24.10s`。artifact `20260806-160100_phase1-review-remediation-tests_pass.json`记录stdout SHA-256 `9be47591e5fe80a32b5a94f50b94882d5e3b8bde11ccf43dbdaa9cdd2b23d089`。
+- walltime规则按用户澄清收敛为“尽可能短且有充分余量”：估算必须覆盖启动波动、运行波动和完整收尾，以更快进入计算节点并可靠跑完为共同目标，不以压到易超时为目标；首次无实测的matched wrapper默认保守使用1分钟，取得实测后再缩短。
+
+### Finding disposition
+
+- Codex High及四个accepted Medium/Low implementation findings均为`fixed`，并有行为回归及replacement fault/lock/smoke证据。recursive discovery Low继续按前述边界`deferred-with-justification`到Phase 2 MEM-02/MEM-20。
+- 当前证据运行于dirty remediation source，只证明关联回归。必须提交clean review target后重跑1+8 takeover、matched性能job和completed Checker；matched性能实现首次正式运行也必须绑定该clean run descriptor。
+
+### Follow-up
+
+- 完成静态审计并创建新clean target；在该target上按紧邻实测并保留启动、运行和收尾余量，使用launcher `00:00:15`、crash `00:00:15`、successor `00:00:40`、learners `00:00:35`，随后根据matched预检实测选取有充分余量的短walltime并运行completed Checker。关键不变量改变，最终证据后仍需重复Codex完成审查；Claude本轮已经按规则记为`skipped-session-limit`，不重试且不阻断。
+
+## 2026-08-06 16:05 JST — matched performance compute-node preflight PASS
+
+- 目标：在冻结clean target前验证新增matched performance工具的真实model构建、100+100 checkpoint publication采样、400+400 business transaction采样和结构化输出路径；该预检使用当前dirty remediation source和旧clean run descriptor，因此只作为功能/时长预检，不能作为正式completed Checker输入。
+- 提交前静态门禁：`bash -n scripts/miyabi/*.pbs`通过，所有`#PBS -W group_list=...`均为字面`xg24i002`且无placeholder。
+- 运行环境与walltime：Miyabi `debug-g` compute node `mg0001`，PBS `2499251.opbs`；首次真实model matched运行保守请求`00:01:00`，实际`00:00:28`、`Exit_status=0`，为启动、运行波动和收尾保留了32秒余量。
+- 结果：business baseline/observer各400样本，candidate observation 20次且writer transaction attempt为0，observer p99 `0.010470s`低于允许值`0.040279s`；legacy/HA checkpoint各100样本，HA p99 `0.008285s`低于允许值`0.017494s`；目标tensor为2048个`float32`元素。非正式结构化输出为`artifacts/20260806-1604_phase1-matched-performance-dev_review.json`，SHA-256 `b924a4ea8f39adb2fcef720b92d885767fa690e13f2df48be100ca5c1bbe5853`。
+- 后续：正式clean-target matched job仍请求`00:01:00`。28秒实测尚不足以证明30或40秒在调度启动和共享文件系统波动下有可靠余量；一分钟仍是当前最短实用请求。

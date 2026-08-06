@@ -13,10 +13,33 @@ from typing import Any
 from safetensors import safe_open
 
 from fs_diloco.core.run_descriptor import load_run_descriptor
+from fs_diloco.observability.phase1_performance import (
+    BUSINESS_TRANSACTION_MAX_P99_RATIO,
+    BUSINESS_TRANSACTION_MIN_SAMPLES,
+    BUSINESS_TRANSACTION_P99_JITTER_SECONDS,
+    CHECKPOINT_PUBLISH_MAX_P99_RATIO,
+    CHECKPOINT_PUBLISH_MIN_SAMPLES,
+    CHECKPOINT_PUBLISH_P99_JITTER_SECONDS,
+    MATCHED_PERFORMANCE_FORMAT_VERSION,
+    matched_p99_limit,
+)
 from fs_diloco.protocol.control_epoch import EpochControlReader
 from fs_diloco.storage.atomic_io import safe_read_json, sha256_file
 from fs_diloco.storage.paths import RunPaths
 from fs_diloco.storage.schema_bootstrap import open_readonly
+
+
+_BLOCKING_EVENT_TYPES = {
+    "canonical_latest_wait_failed",
+    "error",
+    "final_fragment_adoption_failed",
+    "leader_release_failed",
+    "lease_renewer_stop_failed",
+    "no_progress_timeout",
+    "syncer_recovery_exhausted",
+    "syncer_unresponsive",
+    "uncaught_exception",
+}
 
 
 def _history(path: Path) -> list[dict[str, Any]]:
@@ -41,6 +64,20 @@ def _check(condition: bool, message: str, errors: list[str]) -> None:
         errors.append(message)
 
 
+def _integer(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+def _floating(value: Any, default: float = float("nan")) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
 def _jsonl_events(root: Path) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     if not root.is_dir():
@@ -58,12 +95,296 @@ def _percentile(samples: list[float], quantile: float) -> float | None:
     return ordered[index]
 
 
-def check_run(run_root: Path, *, mode: str) -> dict[str, Any]:
+def _blocking_failure_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        event
+        for event in events
+        if str(event.get("event_type", "")).lower() in _BLOCKING_EVENT_TYPES
+    ]
+
+
+def _stale_business_commit_violations(
+    *,
+    versions: list[dict[str, Any]],
+    epochs: list[dict[str, Any]],
+    updates: list[dict[str, Any]],
+    controller: dict[str, Any] | None,
+    terminal: dict[str, Any] | None,
+    publications: list[dict[str, Any]],
+) -> list[str]:
+    """Validate every persisted business writer against immutable epoch ownership."""
+
+    epoch_owners = {int(row["epoch"]): str(row["owner_id"]) for row in epochs}
+    version_epochs: dict[int, int] = {}
+    violations: list[str] = []
+    highest_version_epoch = 0
+    for row in sorted(versions, key=lambda value: int(value["version"])):
+        version = int(row["version"])
+        epoch = int(row.get("commit_epoch") or -1)
+        owner = str(row.get("commit_owner_id") or "")
+        version_epochs[version] = epoch
+        if epoch_owners.get(epoch) != owner:
+            violations.append(f"version {version} writer {epoch}/{owner} is not an epoch owner")
+        if epoch < highest_version_epoch:
+            violations.append(
+                f"version {version} moved writer epoch backwards: {epoch} < {highest_version_epoch}"
+            )
+        highest_version_epoch = max(highest_version_epoch, epoch)
+
+    for row in updates:
+        update_id = str(row.get("update_id", "<unknown>"))
+        for field in ("selected_by_epoch", "applied_by_epoch", "dropped_by_epoch"):
+            value = row.get(field)
+            if value is not None and int(value) not in epoch_owners:
+                violations.append(f"update {update_id} has unknown {field}={value}")
+        if row.get("status") == "applied":
+            applied_version = int(row.get("applied_version") or -1)
+            expected_epoch = version_epochs.get(applied_version)
+            observed_epoch = row.get("applied_by_epoch")
+            if (
+                expected_epoch is None
+                or observed_epoch is None
+                or int(observed_epoch) != expected_epoch
+            ):
+                violations.append(
+                    f"update {update_id} applied writer epoch {observed_epoch} "
+                    f"does not match version {applied_version} epoch {expected_epoch}"
+                )
+
+    if controller is not None:
+        epoch = int(controller.get("updated_by_epoch") or -1)
+        owner = str(controller.get("updated_by_owner_id") or "")
+        if epoch_owners.get(epoch) != owner:
+            violations.append(f"controller writer {epoch}/{owner} is not an epoch owner")
+    if terminal is not None:
+        epoch = int(terminal.get("finalized_by_epoch") or -1)
+        owner = str(terminal.get("finalized_by_owner_id") or "")
+        if epoch_owners.get(epoch) != owner:
+            violations.append(f"terminal writer {epoch}/{owner} is not an epoch owner")
+    for row in publications:
+        epoch = int(row.get("published_by_epoch") or -1)
+        owner = str(row.get("published_by_owner_id") or "")
+        if epoch_owners.get(epoch) != owner:
+            violations.append(
+                f"control publication {row.get('kind')}/{row.get('logical_generation')} "
+                f"writer {epoch}/{owner} is not an epoch owner"
+            )
+    return violations
+
+
+def _canonical_adoption_violations(
+    *,
+    learner_events: list[dict[str, Any]],
+    terminal: dict[str, Any] | None,
+    expected_learner_ids: set[str],
+) -> list[str]:
+    violations: list[str] = []
+    learner_errors = _blocking_failure_events(learner_events)
+    violations.extend(
+        f"learner {event.get('actor')} emitted {event.get('event_type')}"
+        for event in learner_errors
+    )
+    exits = [event for event in learner_events if event.get("event_type") == "process_exit"]
+    exits_by_actor: dict[str, list[dict[str, Any]]] = {}
+    for event in exits:
+        exits_by_actor.setdefault(str(event.get("actor") or ""), []).append(event)
+    observed_ids = set(exits_by_actor)
+    if observed_ids != expected_learner_ids:
+        violations.append(
+            f"learner exit identities mismatch: {sorted(observed_ids)} != "
+            f"{sorted(expected_learner_ids)}"
+        )
+    final_version = None if terminal is None else int(terminal["final_version"])
+    for learner_id, actor_exits in exits_by_actor.items():
+        if len(actor_exits) != 1:
+            violations.append(f"learner {learner_id} has {len(actor_exits)} process exits")
+            continue
+        event = actor_exits[0]
+        if event.get("status_reason") not in (None, ""):
+            violations.append(
+                f"learner {learner_id} exited with status_reason={event.get('status_reason')}"
+            )
+        if final_version is None or int(event.get("global_version", -1)) != final_version:
+            violations.append(
+                f"learner {learner_id} exit version {event.get('global_version')} "
+                f"does not match terminal {final_version}"
+            )
+    return violations
+
+
+def _matched_performance_errors(
+    payload: dict[str, Any] | None,
+    *,
+    expected_identity: dict[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    if payload is None:
+        return ["completed gate requires a matched performance artifact"]
+    _check(
+        payload.get("checker") == "plan02_phase1_matched_performance",
+        "matched performance checker identity mismatch",
+        errors,
+    )
+    _check(
+        payload.get("format_version") == MATCHED_PERFORMANCE_FORMAT_VERSION,
+        "matched performance format version mismatch",
+        errors,
+    )
+    _check(payload.get("status") == "PASS", "matched performance status is not PASS", errors)
+    identity = payload.get("identity")
+    if not isinstance(identity, dict):
+        errors.append("matched performance identity is missing")
+    else:
+        for field, expected in expected_identity.items():
+            _check(
+                identity.get(field) == expected,
+                f"matched performance identity {field} mismatch",
+                errors,
+            )
+
+    business = payload.get("business_candidate_observer")
+    if not isinstance(business, dict):
+        errors.append("matched candidate-observer evidence is missing")
+    else:
+        baseline_count = _integer(business.get("baseline_sample_count"))
+        observer_count = _integer(business.get("observer_sample_count"))
+        baseline_p99 = _floating(business.get("baseline_p99_seconds"))
+        observer_p99 = _floating(business.get("observer_p99_seconds"))
+        expected_limit = matched_p99_limit(
+            baseline_p99,
+            max_ratio=BUSINESS_TRANSACTION_MAX_P99_RATIO,
+            jitter_seconds=BUSINESS_TRANSACTION_P99_JITTER_SECONDS,
+        )
+        _check(
+            baseline_count >= BUSINESS_TRANSACTION_MIN_SAMPLES,
+            "matched business baseline sample count is too small",
+            errors,
+        )
+        _check(
+            observer_count >= BUSINESS_TRANSACTION_MIN_SAMPLES,
+            "matched candidate-observer sample count is too small",
+            errors,
+        )
+        _check(
+            _integer(business.get("candidate_observation_count")) > 0,
+            "matched candidate observer made no observations",
+            errors,
+        )
+        _check(
+            _integer(business.get("candidate_writer_transaction_attempt_count"), -1) == 0,
+            "healthy candidate observer attempted a writer transaction",
+            errors,
+        )
+        _check(
+            business.get("max_p99_ratio") == BUSINESS_TRANSACTION_MAX_P99_RATIO
+            and business.get("jitter_seconds") == BUSINESS_TRANSACTION_P99_JITTER_SECONDS,
+            "matched business threshold definition changed",
+            errors,
+        )
+        _check(
+            math.isclose(
+                _floating(business.get("allowed_observer_p99_seconds")),
+                expected_limit,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ),
+            "matched business allowed p99 was not derived from the frozen threshold",
+            errors,
+        )
+        _check(
+            math.isfinite(observer_p99) and observer_p99 <= expected_limit,
+            f"candidate observer p99 regression exceeded threshold: "
+            f"{observer_p99} > {expected_limit}",
+            errors,
+        )
+
+    checkpoint = payload.get("checkpoint_publish")
+    if not isinstance(checkpoint, dict):
+        errors.append("matched checkpoint publish evidence is missing")
+    else:
+        baseline_count = _integer(checkpoint.get("baseline_sample_count"))
+        ha_count = _integer(checkpoint.get("ha_sample_count"))
+        baseline_p99 = _floating(checkpoint.get("baseline_p99_seconds"))
+        ha_p99 = _floating(checkpoint.get("ha_p99_seconds"))
+        expected_limit = matched_p99_limit(
+            baseline_p99,
+            max_ratio=CHECKPOINT_PUBLISH_MAX_P99_RATIO,
+            jitter_seconds=CHECKPOINT_PUBLISH_P99_JITTER_SECONDS,
+        )
+        _check(
+            checkpoint.get("baseline_contract") == "Plan 01 legacy SQLiteStore publication",
+            "checkpoint baseline is not the frozen Plan 01 contract",
+            errors,
+        )
+        _check(
+            checkpoint.get("matched_fields") == "source/config/model/seed/tensor/dtype/filesystem",
+            "checkpoint matched-field contract changed",
+            errors,
+        )
+        _check(
+            _integer(checkpoint.get("tensor_numel")) > 0,
+            "matched checkpoint tensor is empty",
+            errors,
+        )
+        _check(
+            bool(checkpoint.get("publish_dtype")),
+            "matched checkpoint publish dtype is missing",
+            errors,
+        )
+        _check(checkpoint.get("digest_mode") == "off", "matched digest mode is not off", errors)
+        _check(
+            baseline_count >= CHECKPOINT_PUBLISH_MIN_SAMPLES,
+            "matched checkpoint baseline sample count is too small",
+            errors,
+        )
+        _check(
+            ha_count >= CHECKPOINT_PUBLISH_MIN_SAMPLES,
+            "matched HA checkpoint sample count is too small",
+            errors,
+        )
+        _check(
+            checkpoint.get("max_p99_ratio") == CHECKPOINT_PUBLISH_MAX_P99_RATIO
+            and checkpoint.get("jitter_seconds") == CHECKPOINT_PUBLISH_P99_JITTER_SECONDS,
+            "matched checkpoint threshold definition changed",
+            errors,
+        )
+        _check(
+            math.isclose(
+                _floating(checkpoint.get("allowed_ha_p99_seconds")),
+                expected_limit,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ),
+            "matched checkpoint allowed p99 was not derived from the frozen threshold",
+            errors,
+        )
+        _check(
+            math.isfinite(ha_p99) and ha_p99 <= expected_limit,
+            f"HA checkpoint p99 regression exceeded threshold: {ha_p99} > {expected_limit}",
+            errors,
+        )
+    return errors
+
+
+def check_run(
+    run_root: Path,
+    *,
+    mode: str,
+    matched_performance_path: Path | None = None,
+) -> dict[str, Any]:
     paths = RunPaths(run_root.resolve())
     loaded = load_run_descriptor(paths.shared_root)
     config = loaded.config
     errors: list[str] = []
     warnings: list[str] = []
+    matched_performance: dict[str, Any] | None = None
+    matched_performance_sha256: str | None = None
+    if matched_performance_path is not None:
+        try:
+            matched_performance = safe_read_json(matched_performance_path.resolve())
+            matched_performance_sha256 = sha256_file(matched_performance_path.resolve())
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            errors.append(f"matched performance artifact is unreadable: {exc!r}")
     inventory_path = (
         Path(__file__).resolve().parents[2] / "plans/artifacts/plan02_phase1_mutator_inventory.json"
     )
@@ -86,6 +407,9 @@ def check_run(run_root: Path, *, mode: str) -> dict[str, Any]:
         ]
         terminal_row = conn.execute("SELECT * FROM terminal_state WHERE singleton=1").fetchone()
         terminal = None if terminal_row is None else dict(terminal_row)
+        controller_row = conn.execute("SELECT * FROM controller_state WHERE singleton=1").fetchone()
+        controller = None if controller_row is None else dict(controller_row)
+        active_updates = [dict(row) for row in conn.execute("SELECT * FROM updates")]
         publications = [
             dict(row)
             for row in conn.execute(
@@ -255,24 +579,16 @@ def check_run(run_root: Path, *, mode: str) -> dict[str, Any]:
         return all(cache.get(key) == canonical.get(key) for key in identity_fields)
 
     runtime_events = _jsonl_events(paths.logs)
-    syncer_events = [
-        event
-        for path in paths.iter_syncer_logs()
-        for event in _history(path)
-    ]
-    syncer_exits = [
-        event for event in syncer_events if event.get("event_type") == "process_exit"
-    ]
+    learner_events = [event for path in paths.iter_learner_logs() for event in _history(path)]
+    syncer_events = [event for path in paths.iter_syncer_logs() for event in _history(path)]
+    syncer_exits = [event for event in syncer_events if event.get("event_type") == "process_exit"]
     learner_exits = [
         event
         for event in runtime_events
-        if event.get("event_type") == "process_exit"
-        and "control_scan_count" in event
+        if event.get("event_type") == "process_exit" and "control_scan_count" in event
     ]
     renew_samples = [
-        float(sample)
-        for event in syncer_exits
-        for sample in event.get("lease_renew_seconds", [])
+        float(sample) for event in syncer_exits for sample in event.get("lease_renew_seconds", [])
     ]
     business_samples = [
         float(sample)
@@ -323,11 +639,27 @@ def check_run(run_root: Path, *, mode: str) -> dict[str, Any]:
         performance_missing.append("publish_checkpoint_seconds")
     if not learner_exits or control_scan_count <= 0:
         performance_missing.append("learner_control_scan_metrics")
-    failure_events = [
-        event
-        for event in runtime_events
-        if str(event.get("event_type", "")).lower() in {"error", "uncaught_exception"}
-    ]
+    failure_events = _blocking_failure_events(runtime_events)
+    archived_updates = _history(paths.update_history_jsonl)
+    updates_by_id = {
+        str(row["update_id"]): row
+        for row in [*archived_updates, *active_updates]
+        if row.get("update_id")
+    }
+    stale_commit_violations = _stale_business_commit_violations(
+        versions=all_versions,
+        epochs=all_epochs,
+        updates=list(updates_by_id.values()),
+        controller=controller,
+        terminal=terminal,
+        publications=publications,
+    )
+    canonical_adoption_violations = _canonical_adoption_violations(
+        learner_events=learner_events,
+        terminal=terminal,
+        expected_learner_ids={f"learner_{index:03d}" for index in range(config.sync.num_learners)},
+    )
+    _check(not failure_events, "run recorded blocking runtime failure events", errors)
     latest_version = max(version_numbers, default=-1)
     completed_ready = (
         terminal is not None
@@ -338,6 +670,18 @@ def check_run(run_root: Path, *, mode: str) -> dict[str, Any]:
         and leader.get("state") == "released"
     )
     if mode == "phase1-completed":
+        matched_errors = _matched_performance_errors(
+            matched_performance,
+            expected_identity={
+                "run_id": loaded.identity.run_id,
+                "descriptor_sha256": loaded.descriptor["descriptor_sha256"],
+                "git_commit": loaded.descriptor["git_commit"],
+                "git_dirty": loaded.descriptor["git_dirty"],
+                "source_fingerprint": loaded.identity.source_fingerprint,
+                "config_sha256": loaded.identity.config_sha256,
+            },
+        )
+        errors.extend(matched_errors)
         _check(completed_ready, "completed gate requires terminal release and >=10 merges", errors)
         _check(
             len(active_versions) == 1,
@@ -357,6 +701,16 @@ def check_run(run_root: Path, *, mode: str) -> dict[str, Any]:
             errors,
         )
         _check(renew_failure_count == 0, "normal run recorded lease renew failures", errors)
+        _check(
+            not stale_commit_violations,
+            f"stale/invalid business commit evidence: {stale_commit_violations}",
+            errors,
+        )
+        _check(
+            not canonical_adoption_violations,
+            f"canonical learner adoption evidence failed: {canonical_adoption_violations}",
+            errors,
+        )
         if renew_p99 is not None:
             _check(
                 renew_p99 < config.coordination.syncer_ha.lease_duration_seconds / 4.0,
@@ -375,9 +729,7 @@ def check_run(run_root: Path, *, mode: str) -> dict[str, Any]:
                 errors,
             )
         if takeover_samples:
-            takeover_threshold = (
-                2.0 * config.coordination.syncer_ha.renew_interval_seconds + 10.0
-            )
+            takeover_threshold = 2.0 * config.coordination.syncer_ha.renew_interval_seconds + 10.0
             _check(
                 max(takeover_samples) <= takeover_threshold,
                 "takeover protocol latency exceeded threshold: "
@@ -506,8 +858,7 @@ def check_run(run_root: Path, *, mode: str) -> dict[str, Any]:
                 "sample_count": len(renew_samples),
                 "failure_count": renew_failure_count,
                 "busy_retry_count": sum(
-                    int(event.get("lease_renew_busy_retry_count", 0))
-                    for event in syncer_exits
+                    int(event.get("lease_renew_busy_retry_count", 0)) for event in syncer_exits
                 ),
                 "p95_seconds": _percentile(renew_samples, 0.95),
                 "p99_seconds": renew_p99,
@@ -516,22 +867,18 @@ def check_run(run_root: Path, *, mode: str) -> dict[str, Any]:
                     config.coordination.syncer_ha.lease_duration_seconds / 4.0
                 ),
                 "cpu_seconds": sum(
-                    float(event.get("lease_renew_cpu_seconds", 0.0))
-                    for event in syncer_exits
+                    float(event.get("lease_renew_cpu_seconds", 0.0)) for event in syncer_exits
                 ),
                 "wall_seconds": sum(
-                    float(event.get("lease_renew_wall_seconds", 0.0))
-                    for event in syncer_exits
+                    float(event.get("lease_renew_wall_seconds", 0.0)) for event in syncer_exits
                 ),
             },
             "heartbeat_publish": {
                 "sample_count": sum(
-                    int(event.get("heartbeat_publish_count", 0))
-                    for event in syncer_exits
+                    int(event.get("heartbeat_publish_count", 0)) for event in syncer_exits
                 ),
                 "cpu_seconds": sum(
-                    float(event.get("heartbeat_publish_cpu_seconds", 0.0))
-                    for event in syncer_exits
+                    float(event.get("heartbeat_publish_cpu_seconds", 0.0)) for event in syncer_exits
                 ),
                 "wall_seconds": sum(
                     float(event.get("heartbeat_publish_wall_seconds", 0.0))
@@ -576,12 +923,26 @@ def check_run(run_root: Path, *, mode: str) -> dict[str, Any]:
             "candidate_observation": {
                 "event_count": len(candidate_events),
                 "writer_transaction_attempt_count": sum(
-                    event.get("event_type") == "writer_lock_blocked"
+                    event.get("event_type") == "candidate_writer_transaction_attempt"
                     for event in candidate_events
                 ),
+                "writer_lock_blocked_count": sum(
+                    event.get("event_type") == "writer_lock_blocked" for event in candidate_events
+                ),
             },
-            "canonical_adoption_error_count": 0,
-            "stale_epoch_business_commit_count": 0,
+            "canonical_adoption_error_count": len(canonical_adoption_violations),
+            "canonical_adoption_errors": canonical_adoption_violations,
+            "stale_epoch_business_commit_count": len(stale_commit_violations),
+            "stale_epoch_business_commit_violations": stale_commit_violations,
+            "matched_performance": {
+                "path": (
+                    None
+                    if matched_performance_path is None
+                    else str(matched_performance_path.resolve())
+                ),
+                "sha256": matched_performance_sha256,
+                "evidence": matched_performance,
+            },
         },
         "failure_event_scan": {
             "event_count": len(runtime_events),
@@ -604,9 +965,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--mode", choices=("phase1-staged", "phase1-completed"), required=True)
+    parser.add_argument("--matched-performance", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    report = check_run(args.run_root, mode=args.mode)
+    report = check_run(
+        args.run_root,
+        mode=args.mode,
+        matched_performance_path=args.matched_performance,
+    )
     output = args.output
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")

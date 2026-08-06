@@ -72,7 +72,7 @@ python -m fs_diloco.tools.init_run \
   --project-root "$PWD"
 ```
 
-从 `control/run_descriptor.json` 读取 `descriptor_sha256`，然后分别提交角色。下面的 walltime只是 tiny示例；正式提交应根据 inner/global steps、已测单步和发布时间重新估算，并使用能覆盖预期运行和短收尾的最短值：
+从 `control/run_descriptor.json` 读取 `descriptor_sha256`，然后分别提交角色。下面的 walltime只是 tiny示例；正式提交应根据 inner/global steps、已测单步和发布时间重新估算，并使用能覆盖启动波动、预期运行和完整收尾的最短实用值。缩短请求是为了更快取得配额，前提是保留足够余量让测试可靠跑完：
 
 ```bash
 vars='FS_DILOCO_SHARED_ROOT=/shared/runs/my_ha_run,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=<sha>,PROJECT_ROOT=/absolute/project'
@@ -82,13 +82,20 @@ qsub -l walltime=00:02:00 -r y -J 0-7 -v "$vars" scripts/miyabi/run_static_learn
 
 syncer异常退出后，只需用相同 descriptor变量重新 `qsub` 一个 `run_syncer_candidate.pbs`。不要删除 fixed cache、DB或旧 epoch目录；successor从 DB恢复并修复 canonical control。异常 leader可能留下 canonical `error` generation，它是诊断记录而不是最终 stop，learner会继续等待/reconcile，successor可将它推进为更高 generation的正常终态。若旧 process暂停在 write transaction内并持续持有 SQLite lock，先通过 operator确认并终止那个旧 job，再提交/等待 successor；系统不会自动 `qdel`。`coordination.recovery_submission.enabled` 默认false，开启后 learner只能去重并提交 candidate，candidate仍必须竞争 lease。
 
-completed run用只读 Checker验收：
+completed run先在compute node生成与该run descriptor绑定的matched性能artifact，再用只读 Checker验收。两次PBS提交都应根据最近实测显式覆盖最短可行walltime：
 
 ```bash
+qsub -l walltime=00:01:00 \
+  -v "FS_DILOCO_SHARED_ROOT=/shared/runs/my_ha_run,OUTPUT=/absolute/report/path/phase1-matched-performance_pass.json" \
+  scripts/miyabi/run_plan02_phase1_matched_performance.pbs
+
 python scripts/miyabi/check_plan02_phase1.py \
   --run-root /shared/runs/my_ha_run --mode phase1-completed \
+  --matched-performance /absolute/report/path/phase1-matched-performance_pass.json \
   --output /absolute/report/path/phase1-completed-checker_pass.json
 ```
+
+matched artifact在同一shared filesystem上交错比较健康leader只读candidate observer与无observer的fenced transaction p99，并用目标配置构建同一model/seed/tensor交替比较HA checkpoint publication与Plan 01 legacy baseline。completed Checker会复算冻结阈值、校验零candidate writer attempt，并要求artifact的run/descriptor/source/config identity全部与被验收run一致；缺失、错配或性能回归都返回`BLOCKED`。
 
 ## 3. 本地冒烟(无 GPU、无外网)
 
@@ -105,7 +112,7 @@ scripts/local/clean_run.sh --delete --keep-latest-global runs/fs_diloco
 
 ## 4. Miyabi PBS 批作业
 
-任何 PBS 提交前必须先运行 `bash -n scripts/miyabi/*.pbs`，并逐个确认 `#PBS -W group_list=...` 是当前账户可用的**字面 group ID**，不能保留 `<group_id>` placeholder。还要按工作量、已有实测和收尾预算估算尽可能短的 walltime；若脚本默认明显过长，在命令行用 `qsub -l walltime=HH:MM:SS`覆盖。三项未完成时不要 `qsub`。
+任何 PBS 提交前必须先运行 `bash -n scripts/miyabi/*.pbs`，并逐个确认 `#PBS -W group_list=...` 是当前账户可用的**字面 group ID**，不能保留 `<group_id>` placeholder。还要按工作量、已有实测、启动/运行波动和收尾预算估算尽可能短但有充分余量的 walltime；目标是更快取得配额并可靠完成，而不是把时间压到容易超时。若脚本默认明显过长，在命令行用 `qsub -l walltime=HH:MM:SS`覆盖。三项未完成时不要 `qsub`。
 
 | 脚本 | 规模 | 用途 |
 |---|---|---|
@@ -123,7 +130,7 @@ scripts/local/clean_run.sh --delete --keep-latest-global runs/fs_diloco
 | `run_1node_lm_eval.pbs` | 1 节点 | checkpoint 导出 + lm-eval |
 | `run_1node_validation_eval.pbs` | 1 节点 | 使用 run resolved config 的专用 validation loss/ppl；校验非空 token、有限指标、checkpoint/source identity 并原子附加 summary |
 | `run_syncer_candidate.pbs` / `run_static_learner.pbs` | 各 1 节点独立 job | HA full候选和 static learner array；两者在 runtime import前校验 descriptor/source identity，提交时应覆盖成 workload所需的短 walltime |
-| `run_plan02_phase1_{tests,smoke,faults,lock,acceptance_launcher,checker}.pbs` | 1或2节点 | Phase 1关联测试、故障矩阵、SQLite lock边界、独立 1+8 launcher和只读 completed Checker；验证脚本使用分钟级 walltime |
+| `run_plan02_phase1_{tests,smoke,faults,lock,acceptance_launcher,matched_performance,checker}.pbs` | 1或2节点 | Phase 1关联测试、故障矩阵、SQLite lock边界、独立 1+8 launcher、matched性能门禁和只读 completed Checker；验证脚本使用秒/分钟级短walltime |
 
 2026-08-06 的 Phase 1 正式验收在 Miyabi 上以 1 个 syncer job、8 个独立 learner array element运行：epoch 1 syncer在 v0提交后的 failpoint被 `SIGKILL`，依赖 job取得 epoch 2并从 DB恢复，随后连续提交 v1–v10；8个 learner分别位于独立GPU节点并正常停止。最终 terminal generation为2，completed Checker返回`PASS`，无runtime failure event。该 workload每个 learner约执行200以上local steps且完成10个global merge，超过50-local-step × 10-global-step文档同步基线；证据为 PBS `2498481/2498482/2498483/2498484[]/2498521`及 `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-130015_phase1-completed-checker_pass.json`。这是恢复/协议验证，不是训练质量结论。
 

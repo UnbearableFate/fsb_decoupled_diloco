@@ -6,6 +6,9 @@ import hashlib
 import json
 import os
 import time
+import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -55,6 +58,75 @@ class RecoveryClaimManager:
         self.descriptor_sha256 = descriptor_sha256
         self._wall_clock = wall_clock
 
+    @contextmanager
+    def _global_reservation(self, *, claimant_id: str) -> Iterator[bool]:
+        """Serialize the global outstanding-budget decision across observations."""
+
+        root = self.paths.syncer_launch_claims
+        if not root.is_dir():
+            raise RuntimeError("recovery claim authority directory is missing")
+        lock_path = root / ".global_reservation.lock"
+        owner_id = f"{claimant_id}:{os.getpid()}:{uuid.uuid4()}"
+        acquired = False
+        try:
+            try:
+                lock_path.mkdir(exist_ok=False)
+                acquired = True
+            except FileExistsError:
+                scheduler_timeout = float(getattr(self.scheduler, "timeout_seconds", 0.0))
+                stale_after = max(
+                    float(self.config.claim_timeout_seconds),
+                    float(self.config.uncertainty_timeout_seconds),
+                    2.0 * scheduler_timeout + 5.0,
+                )
+                try:
+                    age = float(self._wall_clock()) - float(lock_path.stat().st_mtime)
+                except FileNotFoundError:
+                    age = -1.0
+                if age >= stale_after:
+                    stale_path = root / f".global_reservation.stale.{uuid.uuid4().hex}"
+                    try:
+                        lock_path.rename(stale_path)
+                    except (FileNotFoundError, OSError):
+                        pass
+                    else:
+                        for child in stale_path.iterdir():
+                            if child.is_file():
+                                child.unlink(missing_ok=True)
+                        try:
+                            stale_path.rmdir()
+                        except OSError:
+                            pass
+                    try:
+                        lock_path.mkdir(exist_ok=False)
+                        acquired = True
+                    except FileExistsError:
+                        pass
+            if not acquired:
+                yield False
+                return
+            atomic_write_json(
+                lock_path / "reservation.json",
+                {
+                    "format_version": 1,
+                    "owner_id": owner_id,
+                    "claimant_id": claimant_id,
+                    "pid": os.getpid(),
+                    "acquired_at": float(self._wall_clock()),
+                },
+            )
+            yield True
+        finally:
+            if acquired:
+                reservation_path = lock_path / "reservation.json"
+                reservation = safe_read_json(reservation_path) or {}
+                if reservation.get("owner_id") == owner_id:
+                    reservation_path.unlink(missing_ok=True)
+                    try:
+                        lock_path.rmdir()
+                    except OSError:
+                        pass
+
     def maybe_submit(
         self,
         *,
@@ -66,65 +138,68 @@ class RecoveryClaimManager:
             return RecoveryClaimResult("disabled", observation_key)
         if terminal_published:
             return RecoveryClaimResult("terminal", observation_key)
-        # The current observation can remain unchanged for arbitrarily long
-        # after a heartbeat stalls.  Keep its attempt directories until a
-        # strictly newer observation is seen so archival cannot reset the
-        # per-observation submission budget.
-        self._archive_expired_claims(
-            preserve_observation_key=observation_key,
-        )
-        root = self.paths.syncer_launch_claims / observation_key
-        attempts = self._attempts(root)
-        now = float(self._wall_clock())
-        outstanding = self._outstanding_attempts(self._all_attempts(), now=now)
-        if len(outstanding) >= self.config.max_outstanding_candidates:
-            latest = outstanding[-1]
-            receipt = safe_read_json(latest / "submission.json") or {}
-            return RecoveryClaimResult(
-                "outstanding",
-                observation_key,
-                attempt=self._attempt_number(latest),
-                attempt_dir=latest,
-                job_id=receipt.get("job_id_raw"),
+        with self._global_reservation(claimant_id=claimant_id) as reserved:
+            if not reserved:
+                return RecoveryClaimResult("reservation_busy", observation_key)
+            # The current observation can remain unchanged for arbitrarily long
+            # after a heartbeat stalls.  Keep its attempt directories until a
+            # strictly newer observation is seen so archival cannot reset the
+            # per-observation submission budget.
+            self._archive_expired_claims(
+                preserve_observation_key=observation_key,
             )
-        if attempts:
-            latest = attempts[-1]
-            claim = safe_read_json(latest / "claim.json") or {}
-            claimed_at = self._claimed_at(latest, claim, now=now)
-            if now - claimed_at < self.config.claim_timeout_seconds:
+            root = self.paths.syncer_launch_claims / observation_key
+            attempts = self._attempts(root)
+            now = float(self._wall_clock())
+            outstanding = self._outstanding_attempts(self._all_attempts(), now=now)
+            if len(outstanding) >= self.config.max_outstanding_candidates:
+                latest = outstanding[-1]
+                receipt = safe_read_json(latest / "submission.json") or {}
                 return RecoveryClaimResult(
-                    "claim_live",
+                    "outstanding",
                     observation_key,
                     attempt=self._attempt_number(latest),
                     attempt_dir=latest,
+                    job_id=receipt.get("job_id_raw"),
                 )
-            delay = min(
-                self.config.backoff_max_seconds,
-                self.config.backoff_initial_seconds
-                * (2 ** max(0, self._attempt_number(latest) - 1)),
-            )
-            if now - claimed_at < delay:
-                return RecoveryClaimResult("backoff", observation_key)
-        attempt = len(attempts) + 1
-        if attempt > self.config.max_attempts_per_observation:
-            return RecoveryClaimResult("budget_exhausted", observation_key)
-        attempt_dir = root / f"attempt_{attempt:06d}.lock"
-        try:
-            attempt_dir.mkdir(parents=True, exist_ok=False)
-        except FileExistsError:
-            return RecoveryClaimResult(
-                "lost_race", observation_key, attempt=attempt, attempt_dir=attempt_dir
-            )
-        claim = {
-            "format_version": 1,
-            "observation_key": observation_key,
-            "attempt": attempt,
-            "claimant_id": claimant_id,
-            "pid": os.getpid(),
-            "claimed_at": now,
-            "request_fingerprint": f"{observation_key}:{attempt}",
-        }
-        atomic_write_json(attempt_dir / "claim.json", claim)
+            if attempts:
+                latest = attempts[-1]
+                claim = safe_read_json(latest / "claim.json") or {}
+                claimed_at = self._claimed_at(latest, claim, now=now)
+                if now - claimed_at < self.config.claim_timeout_seconds:
+                    return RecoveryClaimResult(
+                        "claim_live",
+                        observation_key,
+                        attempt=self._attempt_number(latest),
+                        attempt_dir=latest,
+                    )
+                delay = min(
+                    self.config.backoff_max_seconds,
+                    self.config.backoff_initial_seconds
+                    * (2 ** max(0, self._attempt_number(latest) - 1)),
+                )
+                if now - claimed_at < delay:
+                    return RecoveryClaimResult("backoff", observation_key)
+            attempt = len(attempts) + 1
+            if attempt > self.config.max_attempts_per_observation:
+                return RecoveryClaimResult("budget_exhausted", observation_key)
+            attempt_dir = root / f"attempt_{attempt:06d}.lock"
+            try:
+                attempt_dir.mkdir(parents=True, exist_ok=False)
+            except FileExistsError:
+                return RecoveryClaimResult(
+                    "lost_race", observation_key, attempt=attempt, attempt_dir=attempt_dir
+                )
+            claim = {
+                "format_version": 1,
+                "observation_key": observation_key,
+                "attempt": attempt,
+                "claimant_id": claimant_id,
+                "pid": os.getpid(),
+                "claimed_at": now,
+                "request_fingerprint": f"{observation_key}:{attempt}",
+            }
+            atomic_write_json(attempt_dir / "claim.json", claim)
         submission = self.scheduler.submit_candidate(
             script=self.config.candidate_pbs_script,
             request_fingerprint=claim["request_fingerprint"],

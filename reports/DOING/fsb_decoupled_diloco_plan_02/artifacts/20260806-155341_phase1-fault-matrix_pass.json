@@ -1,0 +1,1155 @@
+{
+  "case_count": 60,
+  "cases": [
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "weight_temp",
+      "final_version": 2,
+      "iteration": 0,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 7,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.004723055986687541,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-weight_temp-00",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "weight_temp",
+      "final_version": 2,
+      "iteration": 1,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 7,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.004708558903075755,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-weight_temp-01",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "weight_temp",
+      "final_version": 2,
+      "iteration": 2,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 7,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.004701008088886738,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-weight_temp-02",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "weight_temp",
+      "final_version": 2,
+      "iteration": 3,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 7,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.004739696043543518,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-weight_temp-03",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "weight_temp",
+      "final_version": 2,
+      "iteration": 4,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 7,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.004751248983666301,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-weight_temp-04",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "weight_temp",
+      "final_version": 2,
+      "iteration": 5,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 7,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.004734064103104174,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-weight_temp-05",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "weight_temp",
+      "final_version": 2,
+      "iteration": 6,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 7,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.004600143060088158,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-weight_temp-06",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "weight_temp",
+      "final_version": 2,
+      "iteration": 7,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 7,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.004630862968042493,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-weight_temp-07",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "weight_temp",
+      "final_version": 2,
+      "iteration": 8,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 7,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0048660970060154796,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-weight_temp-08",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "weight_temp",
+      "final_version": 2,
+      "iteration": 9,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 7,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.004688848042860627,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-weight_temp-09",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_weight",
+      "final_version": 2,
+      "iteration": 0,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.00677035900298506,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_weight-00",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_weight",
+      "final_version": 2,
+      "iteration": 1,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.00595771602820605,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_weight-01",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_weight",
+      "final_version": 2,
+      "iteration": 2,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.006918582948856056,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_weight-02",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_weight",
+      "final_version": 2,
+      "iteration": 3,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.006826005992479622,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_weight-03",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_weight",
+      "final_version": 2,
+      "iteration": 4,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.006864886963739991,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_weight-04",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_weight",
+      "final_version": 2,
+      "iteration": 5,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0067982960026711226,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_weight-05",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_weight",
+      "final_version": 2,
+      "iteration": 6,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0057401800295338035,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_weight-06",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_weight",
+      "final_version": 2,
+      "iteration": 7,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0067822630517184734,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_weight-07",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_weight",
+      "final_version": 2,
+      "iteration": 8,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.006907031987793744,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_weight-08",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_weight",
+      "final_version": 2,
+      "iteration": 9,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.006843511015176773,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_weight-09",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_outer",
+      "final_version": 2,
+      "iteration": 0,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.005865459912456572,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_outer-00",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_outer",
+      "final_version": 2,
+      "iteration": 1,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.005831219023093581,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_outer-01",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_outer",
+      "final_version": 2,
+      "iteration": 2,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.005967892007902265,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_outer-02",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_outer",
+      "final_version": 2,
+      "iteration": 3,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.005851508001796901,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_outer-03",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_outer",
+      "final_version": 2,
+      "iteration": 4,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.005915700108744204,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_outer-04",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_outer",
+      "final_version": 2,
+      "iteration": 5,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0058939080918207765,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_outer-05",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_outer",
+      "final_version": 2,
+      "iteration": 6,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.005839699995703995,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_outer-06",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_outer",
+      "final_version": 2,
+      "iteration": 7,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.006777878967113793,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_outer-07",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_outer",
+      "final_version": 2,
+      "iteration": 8,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.006654198979958892,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_outer-08",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "after_outer",
+      "final_version": 2,
+      "iteration": 9,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.00581691600382328,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_outer-09",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "sqlite_transaction",
+      "final_version": 2,
+      "iteration": 0,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.006648501963354647,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-sqlite_transaction-00",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "sqlite_transaction",
+      "final_version": 2,
+      "iteration": 1,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0067165030632168055,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-sqlite_transaction-01",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "sqlite_transaction",
+      "final_version": 2,
+      "iteration": 2,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0068486949894577265,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-sqlite_transaction-02",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "sqlite_transaction",
+      "final_version": 2,
+      "iteration": 3,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.00682235904969275,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-sqlite_transaction-03",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "sqlite_transaction",
+      "final_version": 2,
+      "iteration": 4,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.006890231976285577,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-sqlite_transaction-04",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "sqlite_transaction",
+      "final_version": 2,
+      "iteration": 5,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.006889143027365208,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-sqlite_transaction-05",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "sqlite_transaction",
+      "final_version": 2,
+      "iteration": 6,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.006923608016222715,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-sqlite_transaction-06",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "sqlite_transaction",
+      "final_version": 2,
+      "iteration": 7,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.006893304060213268,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-sqlite_transaction-07",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "sqlite_transaction",
+      "final_version": 2,
+      "iteration": 8,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0068575909826904535,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-sqlite_transaction-08",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 0,
+      "failpoint": "sqlite_transaction",
+      "final_version": 2,
+      "iteration": 9,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 2,
+        "archived_versions": 2,
+        "deleted_artifacts": 8,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.006920631974935532,
+        "maintenance_scanned_rows": 2
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-sqlite_transaction-09",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_db_commit",
+      "final_version": 2,
+      "iteration": 0,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.003136618994176388,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_db_commit-00",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_db_commit",
+      "final_version": 2,
+      "iteration": 1,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.003160170977935195,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_db_commit-01",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_db_commit",
+      "final_version": 2,
+      "iteration": 2,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.003079531015828252,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_db_commit-02",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_db_commit",
+      "final_version": 2,
+      "iteration": 3,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0028201380046084523,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_db_commit-03",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_db_commit",
+      "final_version": 2,
+      "iteration": 4,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0032222819281741977,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_db_commit-04",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_db_commit",
+      "final_version": 2,
+      "iteration": 5,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0031783150043338537,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_db_commit-05",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_db_commit",
+      "final_version": 2,
+      "iteration": 6,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0031176109332591295,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_db_commit-06",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_db_commit",
+      "final_version": 2,
+      "iteration": 7,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.003087403019890189,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_db_commit-07",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_db_commit",
+      "final_version": 2,
+      "iteration": 8,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.00311540300026536,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_db_commit-08",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_db_commit",
+      "final_version": 2,
+      "iteration": 9,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0030918190022930503,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_db_commit-09",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_latest",
+      "final_version": 2,
+      "iteration": 0,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0031140269711613655,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_latest-00",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_latest",
+      "final_version": 2,
+      "iteration": 1,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0031896750442683697,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_latest-01",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_latest",
+      "final_version": 2,
+      "iteration": 2,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0031853229738771915,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_latest-02",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_latest",
+      "final_version": 2,
+      "iteration": 3,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0030941549921408296,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_latest-03",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_latest",
+      "final_version": 2,
+      "iteration": 4,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0031106659444049,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_latest-04",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_latest",
+      "final_version": 2,
+      "iteration": 5,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0031560109928250313,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_latest-05",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_latest",
+      "final_version": 2,
+      "iteration": 6,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0031602029921486974,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_latest-06",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_latest",
+      "final_version": 2,
+      "iteration": 7,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.0030750830192118883,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_latest-07",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_latest",
+      "final_version": 2,
+      "iteration": 8,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.003201834042556584,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_latest-08",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    },
+    {
+      "child_returncode": -9,
+      "db_version_after_crash": 1,
+      "failpoint": "after_latest",
+      "final_version": 2,
+      "iteration": 9,
+      "maintenance": {
+        "archived_epochs": 0,
+        "archived_updates": 1,
+        "archived_versions": 1,
+        "deleted_artifacts": 3,
+        "gc_pending_rows": 0,
+        "maintenance_scan_seconds": 0.003173195058479905,
+        "maintenance_scanned_rows": 1
+      },
+      "run_root": "/tmp/2499210.9987/plan02_phase1_faults_2499210/runs/ha-after_latest-09",
+      "stale_write_rejected": true,
+      "successor_epoch": 3
+    }
+  ],
+  "failpoints": [
+    "weight_temp",
+    "after_weight",
+    "after_outer",
+    "sqlite_transaction",
+    "after_db_commit",
+    "after_latest"
+  ],
+  "iterations_per_failpoint": 10,
+  "status": "PASS"
+}
