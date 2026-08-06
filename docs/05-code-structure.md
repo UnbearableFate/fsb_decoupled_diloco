@@ -23,6 +23,8 @@ fsb_decoupled_diloco/
 │   │   ├── merge.py               #   staleness、加权、每 learner 选一、加权平均
 │   │   ├── liveness.py            #   心跳校验/摄取、active/stale/dead 分类、无进展超时
 │   │   ├── control_epoch.py        #   epoch canonical control发布、读取、修复与history
+│   │   ├── membership.py          #   dynamic UUID、registration/admission、bootstrap manifest
+│   │   ├── dynamic_terminal.py    #   identity-bound manual close与canonical drain读写
 │   │   ├── fragment_index.py      #   分片索引构建(full/balanced_tensor)与严格校验
 │   │   ├── fragment_codec.py      #   分片抽取/scatter/materialize、分片 safetensors 存取
 │   │   └── fragment_scheduler.py  #   round-robin 调度与期望版本推算
@@ -42,14 +44,18 @@ fsb_decoupled_diloco/
 │   │   ├── learner.py             #   learner 主循环(全量 + fragment 两套)
 │   │   ├── syncer.py              #   syncer 主循环(全量 + fragment 两套)、初始化/恢复/发布
 │   │   ├── syncer_ha.py           #   leader-bound store、lease renewer、epoch bootstrap/repair
-│   │   ├── pbs_scheduler.py       #   qsub/qstat adapter、job分类与request fingerprint
-│   │   ├── launch_outbox.py       #   learner recovery claim、全局reservation与重试预算
+│   │   ├── pbs_scheduler.py       #   qsub/qstat adapter、job分类、candidate/dynamic提交
+│   │   ├── launch_outbox.py       #   recovery claim及dynamic scale outbox/reconciliation
 │   │   └── failure_sim.py         #   故障注入:随机睡眠/跳过上传/崩溃
 │   ├── tools/                     # 离线工具
 │   │   ├── init_run.py            #   HA run唯一initializer CLI
 │   │   ├── launch_independent_run.py # initializer + 独立syncer/learner qsub
 │   │   ├── launch_phase1_acceptance.py # crash/successor/learner验收提交与durable receipts
 │   │   ├── phase1_matched_performance.py # completed Checker所需matched性能artifact
+│   │   ├── launch_phase2_acceptance.py # G8/G9独立dynamic job提交与bootstrap manifest
+│   │   ├── launch_phase2_matched.py # static/dynamic同配置顺序隔离matched提交
+│   │   ├── phase2_{test,chaos,matched}_evidence.py # Phase 2结构化证据生成器
+│   │   ├── request_dynamic_close.py # identity-bound operator close CLI
 │   │   ├── analysis.py            #   run 摘要与断言(读共享目录 + 持久 DB/archive,不依赖 torch)
 │   │   ├── compare_event_traces.py #  profile-driven actor 事件轨迹比较
 │   │   ├── eval_lm_harness.py     #   checkpoint 解析/导出为 HF 目录/lm-eval 结果转 CSV
@@ -127,6 +133,9 @@ core  ←  storage  ←  protocol / modeling / observability  ←  runtime  ← 
 | `python -m fs_diloco.tools.launch_independent_run` | `tools/launch_independent_run.py: main`(生成或提交独立syncer/learner作业) |
 | `python -m fs_diloco.tools.launch_phase1_acceptance` | `tools/launch_phase1_acceptance.py: main`(提交crash/successor/learner验收作业并持久化receipts) |
 | `python -m fs_diloco.tools.phase1_matched_performance` | `tools/phase1_matched_performance.py: main`(生成Phase 1 completed门禁artifact) |
+| `python -m fs_diloco.tools.launch_phase2_acceptance` | `tools/launch_phase2_acceptance.py: main`(提交G8/G9 dynamic作业并持久化receipt/manifest) |
+| `python -m fs_diloco.tools.launch_phase2_matched` | `tools/launch_phase2_matched.py: main`(提交隔离的static/dynamic matched run与checker) |
+| `python -m fs_diloco.tools.request_dynamic_close` | `tools/request_dynamic_close.py: main`(发布认证manual close request) |
 | `fs-diloco-syncer` / `fs-diloco-learner` | 由 `pyproject.toml` 直接映射到两个 `runtime.*:main` |
 | `fs-diloco-inspect` | `tools/analysis.py: main` |
 | `fs-diloco-lm-eval` | `tools/eval_lm_harness.py: main` |

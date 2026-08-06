@@ -6,17 +6,17 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
 
 ## runtime/learner.py
 
-HA full启动先调用 `load_run_descriptor()` 和 bootstrap identity gate，再用 `prepare_learner_instance_dir()`只创建自身目录。`EpochControlReader`替代 fixed latest/stop读取且不打开 SQLite：它扫描 bounded epoch目录，只接受目录名、run/epoch/owner、自校验 heartbeat、head→immutable pointer SHA和 canonical stop自校验 SHA都一致的最高 epoch；reader在进程内保留最高epoch/owner、latest version和terminal generation水位，最高 epoch没有 head或已观察的更高epoch暂时不可见时不回退旧 epoch。低于最高合法epoch且正被maintenance删除的torn control会被跳过，current或更高epoch的损坏仍fail closed。learner以不超过stop poll/heartbeat周期的短缓存复用同一次目录扫描，并在退出事件报告scan count/cache hit/wall/CPU。canonical head缺失每超过一个`canonical_repair_wait_seconds`窗口增加`canonical_repair_wait_count`并记录事件；拒绝低epoch/control回退时增加`cache_rejected_lower_epoch_count`。learner及adoption strategy只把非空且非 `error` 的 canonical terminal视为最终 stop；polluted fixed stop与`error` generation都不终止训练，仍允许 recovery claim和 successor resume。learner watchdog区分普通无进展、current heartbeat陈旧、recovery claim/job仍 outstanding和 canonical repair窗口；后两者在配置预算内等待。`coordination.recovery_submission.enabled=false`时不执行 qsub。
+HA full启动先调用 `load_run_descriptor()` 和 bootstrap identity gate，再用 `prepare_learner_instance_dir()`只创建自身目录。static使用配置ID；dynamic每次进程启动生成新`learner_li_<uuid4>`，以bootstrap slot或scale launch request发布registration、等待leader admission，再以admitted stream ID和固定stream pool构建数据iterator。`EpochControlReader`替代 fixed latest/stop读取且不打开 SQLite：它扫描 bounded epoch目录，只接受目录名、run/epoch/owner、自校验 heartbeat、head→immutable pointer SHA和 canonical stop自校验 SHA都一致的最高 epoch；reader在进程内保留最高epoch/owner、latest version和terminal generation水位，最高 epoch没有 head或已观察的更高epoch暂时不可见时不回退旧 epoch。低于最高合法epoch且正被maintenance删除的torn control会被跳过，current或更高epoch的损坏仍fail closed。learner以不超过stop poll/heartbeat周期的短缓存复用同一次目录扫描，并在退出事件报告scan count/cache hit/wall/CPU。canonical head缺失每超过一个`canonical_repair_wait_seconds`窗口增加`canonical_repair_wait_count`并记录事件；拒绝低epoch/control回退时增加`cache_rejected_lower_epoch_count`。learner及adoption strategy只把非空且非 `error` 的 canonical terminal视为最终 stop；dynamic另读取自校验drain，并在cycle边界写final pointer和generation ack。polluted fixed stop与`error` generation都不终止训练，仍允许 recovery claim和 successor resume。learner watchdog区分普通无进展、current heartbeat陈旧、recovery claim/job仍 outstanding和 canonical repair窗口；后两者在配置预算内等待。`coordination.recovery_submission.enabled=false`时不执行 qsub。
 
 ### CLI 与入口
 
-- **`parse_args(argv)`** — `--config`(必填)、`--learner-id`(必填)、`--run-id`、`--shared-root`、`--num-learners`,以及与 syncer 对称的实验覆盖参数:`--training-seed`、`--scan-interval-seconds`、`--syncer-device`、`--syncer-publish-dtype`、`--staleness-lambda`、`--max-staleness-versions`、`--global-adoption-strategy`、`--completion-mode`、`--parallel-checkpoint-writes`、`--materialize-full-every-events`、`--ingest-during-publish`、`--capture-terminal-predecessor-for-eval`(launcher 把同一组覆盖传给两类进程,保证 resolved config 一致)。
+- **`parse_args(argv)`** — `--config`必填；static要求`--learner-id`并允许`--num-learners`兼容覆盖，dynamic拒绝两者且要求`--bootstrap-slot`或`--launch-request-id`恰好一个。其余是与syncer对称的实验覆盖参数：`--training-seed`、`--scan-interval-seconds`、`--syncer-device`、`--syncer-publish-dtype`、`--staleness-lambda`、`--max-staleness-versions`、`--global-adoption-strategy`、`--completion-mode`、`--parallel-checkpoint-writes`、`--materialize-full-every-events`、`--ingest-during-publish`、`--capture-terminal-predecessor-for-eval`。
 - **`main(argv)`** — `resolve_config` 后调 `run_learner`。
 - **`run_learner(config, learner_id)`** — 分派:`fragments.enabled` → `run_fragment_learner`,否则执行全量模式主循环(函数体内)。
 
 ### 共享文件交互
 
-- **`write_heartbeat(*, paths, config, learner_id, status, phase, last_loaded_global_version, last_local_step, last_update_id, tokens_per_sec=None, last_loaded_global_merge_event=None, last_loaded_fragment_versions=None, last_adopted_fragments=None, resource_metrics=None, learning_rate=None, scheduler_total_steps=None, status_reason=None)`** — 组装心跳 payload 原子覆盖 `heartbeats/<id>.json`;fragment 相关字段仅在传入时包含;心跳恒带当前 `learning_rate` 与 `scheduler_total_steps`;active update 心跳携带上一 local cycle 的资源指标,最终 stopped 心跳携带全训练资源峰值,watchdog 退出时附 `status_reason=syncer_unresponsive`。
+- **`write_heartbeat(...)`** — 组装心跳payload原子覆盖`heartbeats/<id>.json`；dynamic时追加instance、placement/stream epoch、admission generation/token、launch request与restart标记，final drain以`status=drained, phase=drain_ack`携带generation/final update。fragment字段只在传入时包含；心跳恒带当前LR/scheduler state和适用的资源统计。
 - **`wait_for_json(path, *, timeout_seconds=1800, poll_seconds=1)`** — 轮询直到 `safe_read_json` 成功;启动期等待 param_index/fragment_index/latest 用;超时抛 `TimeoutError`。
 - **`read_latest_if_newer(paths, last_loaded_global_version) -> dict | None`** — 读 `latest.json`,版本不高于已加载值时返回 None(全量模式轮询原语)。
 - **`read_fragment_latest_if_newer(paths, last_loaded_global_merge_event)`** — fragment 版:要求 `latest_kind == "fragment"` 且 `global_merge_event` 更大。
@@ -62,12 +62,12 @@ HA full启动先调用 `load_run_descriptor()` 和 bootstrap identity gate，再
 ### update 提交
 
 - **`MidCycleAdoptionTracker.reset/record/metadata`** — full runner 的区间局部计数器；reset 清零，record 要求 completed interval step≥1并增加次数/覆盖最近切换 step，metadata 返回两个 proposal 字段。只记录 replace inner-poll 成功采纳；每 cycle 重置。
-- **`write_update(*, ..., resource_metrics, mid_cycle_adoption_count, base_switched_at_step, flat) -> (update_id, tensor_path, pointer_path, metadata)`** — 全量模式提交:生成 `update_id = {learner}_{step:08d}_{uuid12}`;**先**原子写不可变 payload(dtype 按 `io.tensor_dtype`),可选 sha256,**后**原子替换 `updates/latest/<learner>.json` 固定 pointer(= 提交点)。metadata 记录 `tensor_dtype`、恒在的 mid-cycle 两字段，并携带全训练至今的 CPU/GPU 峰值、上一 local cycle 的 CPU/GPU 峰值和该 cycle 的平均每 step 时间。
+- **`write_update(*, ..., admission=None, ...)`** — 全量模式提交：生成`update_id = {learner}_{step:08d}_{uuid12}`；先写不可变payload，再原子替换instance固定pointer。dynamic metadata追加完整membership fence和token hash，供摄取及最终commit双重验证；static保持原字段。
 - **`write_fragment_update(*, ..., resource_metrics, fragment_id, base_fragment_version, base_global_merge_event, tokens_since_fragment_load, fragment_norm, fragment_tensor)`** — fragment 版,文件名与 update_id 带 `fXXX`,元数据带 `update_kind: "fragment"` 和同一组资源指标。
 
 ### 主循环
 
-- **`run_learner` 全量模式主体** — 启动(种子/设备/模型/索引校验/adopt v0/watchdog/优化器/首心跳/数据迭代器/资源监控)→ 循环:inner_steps 训练(带心跳、日志、可选中途采纳、每步 watchdog 检查)→ 故障注入 → 按 `io.tensor_dtype` flatten + `write_update`(不可变 payload 后原子替换固定 pointer)→ CSV/心跳 → 可选上传后采纳 → 可选注入崩溃;learner 不删除 proposal payload。只有启动完成并进入训练 `try` 后，finally 才会记录 stop 原因、写 `stopped` 心跳和 `process_exit`；更早的模型/index/latest/data 初始化异常不在该 finally 内。
+- **`run_learner` 全量模式主体** — dynamic先完成UUID registration/admission，static直接使用配置ID；随后启动模型/index/adoption/watchdog/optimizer/stream-aware iterator并进入原有训练/提交循环。dynamic每cycle检查canonical drain；命中后不再开启新cycle，finally写final pointer（如有）和幂等drain ack。proposal不由learner删除。只有启动完成并进入训练`try`后，finally才承诺终态heartbeat/process event。
 - **`run_fragment_learner(config, learner_id)`** — fragment 模式主体,差异:
   - 启动时还要等待并校验 fragment index;
   - 上传前 `select_fragment(local_update_index, K)` 选片、`extract_fragment_from_model` 直接抽取目标片,不先构造完整 flatten;

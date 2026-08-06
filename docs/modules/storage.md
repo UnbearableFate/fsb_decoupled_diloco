@@ -111,7 +111,7 @@ fragment 模式(与上面逐一对应,多了 fragment 维度):
 
 ### HA storage modules
 
-`storage/schema_bootstrap.py` 把 schema创建从普通连接中拆出：`initialize_new_run()` 在同目录临时 DB中一次性建完整 schema v2、写 identity/PRAGMA并原子发布 DB，最后写 bootstrap marker；`open_existing()` 只打开并核验完整 bootstrap，不执行 DDL/ALTER；`open_readonly()` 用 URI `mode=ro` + `query_only=ON`。
+`storage/schema_bootstrap.py` 把 schema创建从普通连接中拆出：`initialize_new_run()` 在同目录临时 DB中一次性建完整schema、写identity/PRAGMA并原子发布DB，最后写bootstrap marker；static HA为v2，dynamic HA为v3并追加`learner_instances/placements/streams/registration_requests/launch_requests/capacity_observations`及update membership fence列。`open_existing()`只打开并核验marker、`schema_meta`、`run_state.schema_version`和`PRAGMA user_version`三重一致，不执行DDL/ALTER；`open_readonly()`用URI `mode=ro` + `query_only=ON`。
 
 `storage/leader_lease.py` 定义不可变 `LeaderToken(run_id, epoch, owner_id)`、`make_owner_id()`、`LeaderLeaseStore`和线程安全的 `LeaseSafetyTracker`。acquire/renew/release都使用 `BEGIN IMMEDIATE`，epoch由 history最大值递增且不复用；renew和release必须 exact-owner匹配，过期 token抛 `StaleLeaderTokenError`。renew线程只在 DB renew提交成功后推进 tracker；每个业务 transaction在开始和 commit前同时检查 exact token、DB wall-clock安全边界与共享的本地 monotonic安全边界。
 
@@ -121,9 +121,9 @@ fragment 模式(与上面逐一对应,多了 fragment 维度):
 - `LeaderBoundSQLiteStore` 把固定 token绑定成 runtime兼容接口，不允许调用者切换 token。
 - `ReadOnlySQLiteStore` 只暴露查询，供 Checker和analysis使用；learner canonical control reader是纯 filesystem reader，不打开 SQLite。
 
-`RunPaths` 为 HA增加 descriptor/bootstrap、epoch weight/optim/control、candidate/epoch log、syncer heartbeat、launch claim和 HA history路径；`iter_epoch_*`、syncer/learner log、learner heartbeat与instance pointer/payload iterator统一递归发现，analysis、metrics、Checker和probe复用这些入口。`prepare_authority_dirs()`只供 initializer/leader，`prepare_learner_instance_dir()`只创建该 learner自己的 heartbeat/update/log目录。
+`RunPaths` 为 HA增加 descriptor/bootstrap、epoch weight/optim/control、candidate/epoch log、syncer heartbeat、launch claim和 HA history路径；dynamic再增加registration request、bootstrap scheduler manifest、manual close、epoch membership/admission/drain及五类history路径。`iter_epoch_*`、syncer/learner log、learner heartbeat与instance pointer/payload/registration iterator统一递归或mode-aware发现，analysis、metrics、Checker和probe复用这些入口。`prepare_authority_dirs()`只供initializer/leader，`prepare_learner_instance_dir()`只创建该learner自己的heartbeat/update/log目录。
 
-HA maintenance在归档 legacy active历史之外，还归档/压缩 `syncer_epochs`、逐项登记 `gc_candidates`、删除前重新验证 DB live引用，并删除旧 epoch无引用 orphan。任何 ledger或DB mutation都经过 current leader token；文件删除发生在 transaction外，下一轮以幂等 ledger完成。
+HA maintenance在归档 legacy active历史之外，还归档/压缩 `syncer_epochs`、逐项登记 `gc_candidates`、删除前重新验证 DB live引用，并删除旧 epoch无引用 orphan。dynamic maintenance另把expired instance/registration/launch request和retention窗口外capacity observation先append+fsync到独立JSONL，再以fenced transaction剪枝；active observation默认最多64，current/grace instance受配置上限约束。任何ledger或DB mutation都经过current leader token；文件删除发生在transaction外，下一轮以幂等ledger完成。
 
 - **`_append_jsonl_fsync()`** — 先 materialize rows，非空时逐行 JSON append、flush+fsync，返回行数；不做去重或原子替换。
 - **`_unlink()`** — 删除成功 true，不存在 false，其他错误传播；**`_resolved_paths()`** 对集合做 `resolve(strict=False)`；**`_pointer_state()`** 只读固定 pointer 的合法 `update_id/learner_id/file_path/fragment_id`，按 pair 保留最后扫描值。

@@ -2,7 +2,7 @@
 
 计划 ID：`fsb_decoupled_diloco_plan_02`
 
-状态：已综合两份审查完成设计修订，待 Phase 0 可行性门禁
+状态：Phase 0/1及Phase 2技术门禁已完成；Phase 2文档已同步，待双重代码审查与全计划current-state审查收口
 
 实施报告目录：`reports/DOING/fsb_decoupled_diloco_plan_02/`
 
@@ -1296,16 +1296,16 @@ Phase 0关闭依据：最终边界commit为`1ba9a1a70e4ede6fdd5edf066f11f6921f11
 
 ### Phase 2
 
-- [ ] stream pool固定、有界并与 iterator API一致；
-- [ ] initial bootstrap slots在无scale request时可admit且超预算拒绝；
-- [ ] dynamic CLI拒绝static learner-id/num-learners权威输入；
-- [ ] healthy placement不能被 duplicate驱逐；
-- [ ] registration TTL/replay/source gate完整；
-- [ ] final commit重验 membership/stream；
-- [ ] observation幂等和 low counter正确；
-- [ ] logical request最多一个 admission；
-- [ ] queued/running request超过TTL仍计reserved，admitted+reserved不超过stream pool；
-- [ ] healthy learner drain ack闭环完整；
-- [ ] 1000 churn逻辑/物理状态有界；
-- [ ] static full/fragment兼容回归通过；
-- [ ] Phase 2 Checker `PASS`。
+- [x] stream pool固定、有界并与 iterator API一致；
+- [x] initial bootstrap slots在无scale request时可admit且超预算拒绝；
+- [x] dynamic CLI拒绝static learner-id/num-learners权威输入；
+- [x] healthy placement不能被 duplicate驱逐；
+- [x] registration TTL/replay/source gate完整；
+- [x] final commit重验 membership/stream；
+- [x] observation幂等和 low counter正确；
+- [x] logical request最多一个 admission；
+- [x] queued/running request超过TTL仍计reserved，admitted+reserved不超过stream pool；
+- [x] healthy learner drain ack闭环完整；
+- [x] 1000 churn逻辑/物理状态有界；
+- [x] static full/fragment兼容回归通过；
+- [x] Phase 2 Checker `PASS`。

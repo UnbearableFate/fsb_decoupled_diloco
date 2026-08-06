@@ -4,7 +4,7 @@
 
 ## `tools/init_run.py` 与 `tools/launch_independent_run.py`
 
-- `init_run.initialize_run()` 是 HA新 run唯一 initializer。它拒绝 HA关闭、fragment、缺失 source identity、非显式允许的 dirty snapshot和任何已存在 run root；写 resolved config、source manifest、immutable descriptor后，以 `schema_bootstrap.initialize_new_run()`发布 schema v2 DB和 bootstrap marker。
+- `init_run.initialize_run()` 是 HA新 run唯一 initializer。它拒绝 HA关闭、fragment、缺失 source identity、非显式允许的 dirty snapshot和任何已存在 run root；写 resolved config、source manifest、immutable descriptor后，以 `schema_bootstrap.initialize_new_run()`发布static schema v2或dynamic schema v3 DB和 bootstrap marker。
 - `python -m fs_diloco.tools.init_run` 接受 `--config/--run-id/--shared-root/--project-root`；`--allow-dirty-snapshot`只用于受控验证，正式 run应从 clean source初始化。
 - `launch_independent_run.launch()` 组合 initializer与独立 syncer qsub、rerunable learner array qsub；默认只返回命令，显式 `--submit`才提交。`--submit`要求先提供按workload和相邻实测估算的`--syncer-walltime/--learner-walltime`：取尽可能短、但仍为启动、运行和收尾保留充分余量的值，并在创建immutable run root前完成格式校验。两个qsub都显式带`-l walltime=...`，不会继承通用PBS脚本的保守默认值。每次qsub立即返回结构化receipt；若syncer已提交而learner array被拒绝，结果为`submission_status=partial`并保留syncer job ID，CLI以非零退出且不会自动qdel。
 
@@ -19,6 +19,14 @@
 - `run_matched_performance(run_root)` 要求目标descriptor为clean source，在run同级临时目录执行两组matched门禁。business组用持久只读candidate observer和细粒度25-sample AB/BA块，分别收集400个静默baseline与400个observer下的fenced business transaction样本；SQLite trace要求observer尝试的`BEGIN IMMEDIATE/EXCLUSIVE`严格为0。
 - checkpoint组从目标descriptor重建相同config/model/training seed/tensor/dtype，在同一filesystem上交替执行100个Plan 01 legacy publication与100个HA publication样本。输出包含run/descriptor/source/config identity、原始块证据、nearest-rank p99、冻结阈值、tensor元素数和digest mode。
 - 两组都使用`observability.phase1_performance`冻结的`baseline p99 × 1.25 + 0.002s`上限；任一采样、observer活动、只读约束、identity或p99条件失败即返回`BLOCKED`。`main`用原子JSON写入`--output`，只有整体`PASS`时退出0。
+
+## Phase 2 launch与evidence工具
+
+- `launch_phase2_acceptance.submit_jobs()`提交G8/G9 crash leader、successor、独立dynamic bootstrap、可选duplicate和chaos checker。每次qsub后立即原子更新pending receipt，并逐slot重写identity-bound bootstrap scheduler manifest；中途失败返回partial且不自动qdel。
+- `launch_phase2_matched`顺序隔离同source/config/model/data/seed/target的static与dynamic 1+8 runs，再提交matched checker。因站点array约束，当前实现逐个提交8个learner job并显式传static index或dynamic bootstrap slot。
+- `phase2_test_evidence`聚合focused/full pytest结果；`phase2_chaos_evidence`从run DB/control/log/scheduler receipts验证G8/G9 takeover、replacement、duplicate、pause、node-cap和drain；`phase2_matched_evidence`按`max(0,dynamic-static)/static`执行冻结5%完整时间门禁。
+- `request_dynamic_close`加载并校验run descriptor，拒绝非dynamic run，然后以run/source/config identity发布带自摘要的manual close request。它不直接写drain、stop或DB controller state。
+- Phase 2最终completed Checker仍由`scripts/miyabi/check_plan02_phase2.py --mode phase2-completed`执行只读复核；上述工具artifact必须与同一descriptor/source/config绑定，不能跨run拼接。
 
 ## `tools/analysis.py`
 

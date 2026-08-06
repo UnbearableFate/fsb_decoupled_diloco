@@ -57,9 +57,9 @@ python -m fs_diloco.learner \
 `--require-resume-progress --resume-artifact <path>` 同时验证 DB/latest/checkpoint、旧 heartbeat
 fence、新代 active 与下一次 commit；stdout 仍只有三值结果。
 
-### 2.1 HA full：初始化、独立作业与人工接管
+### 2.1 HA full static：初始化、独立作业与人工接管
 
-HA 配置只支持 full + static membership。先在同一 source tree捕获 identity并运行唯一 initializer；run root必须不存在：
+本节是full + static membership路径。先在同一 source tree捕获 identity并运行唯一 initializer；run root必须不存在：
 
 ```bash
 python scripts/miyabi/capture_source_identity.py \
@@ -96,6 +96,31 @@ qsub -l walltime=00:00:15 -W "depend=afterok:${matched_job}" \
 
 matched artifact在同一shared filesystem上用细粒度AB/BA配对块交错比较健康leader只读candidate observer与静默baseline的fenced transaction p99，并用SQLite trace核验candidate没有尝试writer transaction；checkpoint门禁从目标配置构建同一model/seed/tensor，交替比较HA publication与Plan 01 legacy baseline。completed Checker会复算冻结阈值、核对每块采样/观察证据，并要求artifact的run/descriptor/source/config identity全部与被验收run一致；缺失、错配或性能回归都返回`BLOCKED`。
 
+### 2.2 HA full dynamic：bootstrap、扩容与关闭
+
+dynamic run同样先捕获source identity并执行唯一initializer，但配置必须同时满足`membership.mode=dynamic`、Syncer HA开启、fragment关闭。每个bootstrap learner必须取得唯一slot并由独立PBS job启动；每次进程启动自行生成`learner_li_<uuid4>`，不要传`--learner-id`或`--num-learners`。
+
+PBS正式启动还必须把每个已接受的bootstrap qsub job ID立刻写入identity-bound `control/bootstrap_scheduler_jobs.json`。这是admission与scheduler reconciliation的权威输入，不能先批量qsub、最后才补manifest，也不能只保留shell变量。仓库的Phase 2 launcher实现了“每次qsub后原子持久化receipt与manifest、失败保留partial artifact且不自动qdel”的完整顺序；正式动态验收应直接使用：
+
+```bash
+# 提交前：bash -n scripts/miyabi/*.pbs，确认literal group ID，并根据相邻实测覆盖walltime。
+qsub -l walltime=00:00:30 \
+  -v PHASE2_ACCEPTANCE_KIND=g9,RUN_ID=my_dynamic_run \
+  scripts/miyabi/run_plan02_phase2_acceptance_launcher.pbs
+```
+
+对自建launcher，角色命令必须保持与正式实现相同的identity和授权契约：syncer使用`run_syncer_candidate.pbs`；bootstrap learner使用`run_dynamic_learner.pbs`并传`BOOTSTRAP_SLOT=0...N-1`；scale replacement只能传leader创建的`FS_DILOCO_LAUNCH_REQUEST_ID`。`scaling.learner_walltime`在启用自动扩容时必填，`scaling.learner_queue`可显式选择目标队列；两者都在运行前冻结进descriptor。queued/running job即使超过request TTL仍占reserved capacity，不要手工删除DB/outbox记录。
+
+manual close必须使用identity-bound工具，不能手写半截drain/stop JSON：
+
+```bash
+python -m fs_diloco.tools.request_dynamic_close \
+  --shared-root /shared/runs/my_dynamic_run \
+  --expected-descriptor-sha256 '<descriptor_sha256>'
+```
+
+leader接收后在transaction中关闭admission并冻结terminal上限，发布canonical drain generation。健康learner会在cycle边界提交final pointer和drain ack；未响应实例只会在timeout后经membership fence撤销。operator应等待canonical terminal和Phase 2 completed Checker，不要通过删除registration/pointer或伪造heartbeat来催促闭合。
+
 ## 3. 本地冒烟(无 GPU、无外网)
 
 ```bash
@@ -130,8 +155,12 @@ scripts/local/clean_run.sh --delete --keep-latest-global runs/fs_diloco
 | `run_1node_validation_eval.pbs` | 1 节点 | 使用 run resolved config 的专用 validation loss/ppl；校验非空 token、有限指标、checkpoint/source identity 并原子附加 summary |
 | `run_syncer_candidate.pbs` / `run_static_learner.pbs` | 各 1 节点独立 job | HA full候选和 static learner array；两者在 runtime import前校验 descriptor/source identity，提交时应覆盖成 workload所需且留有充分完成余量的短 walltime |
 | `run_plan02_phase1_{tests,smoke,faults,lock,acceptance_launcher,matched_performance,checker}.pbs` | 1或2节点 | Phase 1关联测试、故障矩阵、SQLite lock边界、独立 1+8 launcher、matched性能门禁和只读 completed Checker；验证脚本使用由相邻实测估算、留有充分完成余量的秒/分钟级短walltime |
+| `run_dynamic_learner.pbs` | 1节点独立job | dynamic bootstrap或scale learner；pre-import校验descriptor/source，要求唯一`BOOTSTRAP_SLOT`或`FS_DILOCO_LAUNCH_REQUEST_ID` |
+| `run_plan02_phase2_{tests,evidence_tests,acceptance_launcher,chaos_checker,matched_launcher,matched_checker,completed_checker}.pbs` | 1至9个并发节点 | Phase 2 focused/full回归、G8/G9 crash/churn/duplicate/drain验收、static/dynamic v120 matched门禁和只读completed Checker；launcher逐job持久化receipt与bootstrap manifest |
 
 2026-08-06 的最终 Phase 1 正式验收绑定clean commit `36762854bfcbbc23b71ab838913023d64cf37b5e`，在 Miyabi 上以1个syncer job和8个独立learner array element运行：epoch 1 syncer在v0 DB提交后的failpoint被`SIGKILL`，依赖job取得epoch 2并恢复，随后连续提交v1–v10；8个learner分别位于独立GPU节点并正常停止。最终terminal generation为2、5120 seen tokens、120次lease renew和457次business transaction均无失败，stale epoch commit与canonical adoption错误均为0，completed Checker返回`PASS`且无runtime failure event。matched门禁另以400+400个business样本和100+100个checkpoint样本通过两项p99阈值，并验证健康candidate writer transaction attempt为0。该workload每个learner约执行200以上local steps且完成10个global merge，超过50-local-step × 10-global-step文档同步基线；证据为PBS `2499329/2499331/2499332/2499333[]/2499345/2499349`及`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-1624_phase1-completed-checker_pass.json`。这是恢复、协议和控制面性能验证，不是训练质量结论。
+
+2026-08-07 的最终 Phase 2 正式验收绑定clean commit `85febbaee653dcff04897eea35a15dd8f31172c2`和source fingerprint `sha256:b8684b5d90d22a341da3e30dfca375b6de4026103ee64769f2b71aae500fba69`。G9 launcher `2501510`及其独立syncer/bootstrap/duplicate/replacement/checker jobs在最多9个并发节点内完成v120：8个bootstrap slot恰好admit一次，永久终止一个成员后两个唯一low observation只创建一个scale request，replacement恢复8个current成员并复用stream 2的epoch 1，duplicate physical job被拒绝，暂停成员恢复，最后dynamic drain/ack闭合；完整训练约61.65秒、1,521,024 tokens，每cycle 51 local steps。completed Checker `2501559`返回`PASS`，确认MEM-01至MEM-20、schema v3 integrity、64条active observation上限与归档、有界launch/instance/stream状态及零blocking failure event；artifact为`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260807-003213_phase2-completed_pass.json`。同source/config/model/data/seed/v120 matched run的static为46.836秒、dynamic为46.421秒，冻结`max(0,dynamic-static)/static`为0，小于5%门槛；artifact为`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260807-002927_phase2-matched-performance_pass.json`。该51×120 workload超过50×10文档同步基线，但仍只验证恢复、成员、调度和控制面性能，不形成训练质量结论。
 
 提交与自定义(以 9 节点为例):
 

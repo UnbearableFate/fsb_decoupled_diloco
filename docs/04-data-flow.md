@@ -73,6 +73,26 @@ HA full在上述兼容布局之外增加以下权威面：
 
 大文件路径在 publication前即唯一确定且不复用；数据库只保存相对 run-root路径、size、publication ID和可选 digest。`syncer_leader` 是 current token，`syncer_epochs` 保留/归档 epoch历史，`control_publications` 把 canonical artifact路径及 JSON SHA绑定到 epoch和 logical generation。successor/Checker用这些 DB row；learner不打开 SQLite，而是验证最高合法 filesystem epoch的 heartbeat/head及 head内 pointer SHA。fixed `control/latest.json`、`stop.json`、`summary.json` 仍会 best-effort更新，但 HA reader和 completed Checker不以其内容作为权威。
 
+dynamic HA在同一布局再增加成员控制面：
+
+```text
+<shared_root>/
+├── control/
+│   ├── registration_requests/learner_li_<uuid4>.json
+│   ├── bootstrap_scheduler_jobs.json
+│   ├── dynamic_close_request.json
+│   └── syncer_epochs/eNNNNNN_<owner>/
+│       ├── membership/bootstrap_ready_g000001.json
+│       ├── membership/admissions/learner_li_<uuid4>.json
+│       └── terminal/drain_gNNNNNN.json
+├── updates/latest/learner_li_<uuid4>.json
+├── updates/payloads/learner_li_<uuid4>/...
+├── heartbeats/learner_li_<uuid4>.json
+└── metrics/{membership_event,learner_instance,registration,launch_request,capacity_observation}_history.jsonl
+```
+
+registration request是learner单写者的准入申请；epoch admission与drain是leader发布并登记SHA的canonical artifact。active DB行保持有界，已终态instance/request/observation先归档到上述JSONL再删除。dynamic discovery通过`RunPaths` mode-aware iterator扫描UUID路径，既不调用static learner白名单，也不递归扫描历史payload。
+
 `eval_checkpoints/` 只在显式研究开关开启且 input-closed terminal selection 低于
 `quorum_min` 时创建。manifest 的 source version/checksum/selected/quorum 是评估溯源；
 它是证据包提交点。manifest 前的 checkpoint 是可校验、可原子覆盖的未提交中间态；
@@ -231,13 +251,18 @@ syncer 停止后等待 learner 收尾,然后写入 `run_id, final_version, stop_
 | `learners` | 每 learner 最新快照 | `learner_id` 主键;last_seen、last_local_step、tokens_per_sec、status(+reason) |
 | `proposal_frontiers` | 全量固定 pointer 摄取水位 | `learner_id` 主键;最后观察到的 update_id/pointer_path |
 | `fragment_proposal_frontiers` | fragment 固定 pointer 摄取水位 | `(learner_id, fragment_id)` 主键;最后观察到的 update_id/pointer_path |
-| `updates` | 全量模式 update 生命周期 | `update_id` 主键;`UNIQUE(learner_id, local_step_end, base_global_version)` 幂等去重;status 索引;learner 资源指标列与 mid-cycle adoption 元数据列 |
+| `updates` | 全量模式 update 生命周期 | `update_id` 主键;`UNIQUE(learner_id, local_step_end, base_global_version)` 幂等去重;status 索引;learner 资源指标列与 mid-cycle adoption 元数据列；dynamic v3追加instance/placement/stream/admission/selection-generation fence |
 | `fragments` | fragment 定义 | `fragment_id` 主键;strategy、numel、slices_json |
 | `fragment_versions` | 每片每版本一行 | `(fragment_id, version)` 主键;global_merge_event 索引 |
 | `fragment_updates` | fragment 模式 update 生命周期 | `UNIQUE(learner_id, fragment_id, local_step_end, base_fragment_version)`;`(fragment_id, status, base_fragment_version)` 索引;learner 资源指标列 |
 | `gc_pending` | 已从活跃 update 表归档、但 payload 物理删除尚未确认的持久队列 | `file_path` 主键;`archived_at`；archive 后/删除前崩溃可继续回收 |
+| `learner_instances`（v3） | dynamic incarnation与current admission状态 | UUID主键；placement/stream epoch、token hash、launch request、PBS job、last proposal、drain/final/expired状态；current stream/placement部分唯一索引 |
+| `placements` / `streams`（v3） | 物理位置与固定virtual stream的current owner | placement主键保存current epoch/instance/reusable stream；stream ID主键保存current epoch/instance/state |
+| `registration_requests`（v3） | registration TTL、内容hash、幂等结果/tombstone | instance主键；request hash、launch request、state、expiry、处理epoch、rejection/result |
+| `launch_requests`（v3） | bootstrap/scale logical request和PBS outbox | request主键；bootstrap slot唯一；授权placement epoch、scheduler状态、job ID、reservation/admitted映射 |
+| `capacity_observations`（v3） | 幂等容量窗口与scale决策依据 | observation key主键、sequence唯一；eligible/selected/productive/reserved、low flag、close generation、writer epoch |
 
-全量 `v → v+1` 的事务同时校验唯一 committed 前驱、目标版本连续性、selected ID/learner 唯一性、future/stale 准入和归一化权重;随后插入唯一 committed `global_versions(v+1)`,记录 selected 的 applied version/staleness/effective weight,并终态化 `superseded/too_stale/future_base` pending 行。任一校验或 failpoint 异常都会 rollback 整个事务。fragment 的 version、latest 和 applied 状态不是同一个事务，不能据此推导同等级恢复保证。
+全量 `v → v+1` 的事务同时校验唯一 committed 前驱、目标版本连续性、selected ID/learner 唯一性、future/stale 准入和归一化权重;dynamic还逐项join并重验current instance、placement epoch、stream epoch、admission generation/token以及每stream/placement唯一性。随后插入唯一 committed `global_versions(v+1)`,记录 selected 的 applied version/staleness/effective weight,并终态化 `superseded/too_stale/future_base` pending 行。任一校验或 failpoint 异常都会 rollback整个事务。fragment的version、latest和applied状态不是同一个事务，不能据此推导同等级恢复保证。
 
 旧 run 的 `updates` 表缺少 mid-cycle 两列时，connect-time 幂等迁移补上 `mid_cycle_adoption_count INTEGER NOT NULL DEFAULT 0` 与 nullable `base_switched_at_step`；`fragment_updates` 不迁移这两列。
 

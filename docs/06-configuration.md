@@ -47,7 +47,7 @@
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
-| `num_learners` | 8 | learner 数;决定合法 learner_id 集与数据分片数 |
+| `num_learners` | 8 | static learner数、合法ID集与数据分片数；dynamic保留为merge/config兼容值，成员权威来自DB，数据分片分母来自`membership.stream_pool_size`，并拒绝CLI覆盖 |
 | `quorum_min` / `quorum_max` | 4 / 8 | 每次合并的 update 数下限/上限(每 learner 至多 1 份) |
 | `max_staleness_versions` | 2 | staleness 窗口;超过即丢弃 |
 | `staleness_lambda` | 0.25 | 加权公式中的 λ |
@@ -91,7 +91,7 @@ relative-L2 也未累积增长；但 checkpoint 字节减半的同时，测得�
 
 ## coordination — full-mode Syncer HA
 
-HA 默认关闭，只允许 `fragments.enabled=false`。`recovery_submission.enabled=true` 还要求 HA 已开启；它创建候选 job，不授予 leadership。
+HA 默认关闭，只允许 `fragments.enabled=false`；成员可为static或dynamic。`recovery_submission.enabled=true` 还要求 HA 已开启；它创建候选 job，不授予 leadership。
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
@@ -113,6 +113,61 @@ HA 默认关闭，只允许 `fragments.enabled=false`。`recovery_submission.ena
 | `recovery_submission.claim_retention_seconds` | 3600 | 已终态 claim的保留/归档窗口 |
 | `recovery_submission.candidate_pbs_script` | `scripts/miyabi/run_syncer_candidate.pbs` | qsub候选脚本；scheduler提交前仍执行 descriptor/source gate |
 | `recovery_submission.candidate_walltime` | `null` | 自动 recovery启用时必填的 workload估算 `HH:MM:SS`；应结合相邻实测选取尽可能短、但足以覆盖排队后启动波动、预期运行和完整收尾的值，每次 qsub显式传 `-l walltime=...`，避免继承通用脚本的过长默认。可靠跑完优先于进一步压缩请求 |
+
+## membership — full HA成员身份
+
+`mode=dynamic`要求full + Syncer HA，并拒绝fragment、`--learner-id`和`--num-learners`。static保持原有固定learner ID路径。
+
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `mode` | `static` | `static`或`dynamic`；run初始化后冻结 |
+| `stream_pool_size` | 8 | dynamic virtual stream固定池大小，也是data shard/RNG分母；必须≥bootstrap且≥quorum_max，不支持在线扩容 |
+| `bootstrap_instances` | 8 | initializer创建的确定性bootstrap launch request/slot数量 |
+| `initial_membership_deadline_seconds` | 1800 | bootstrap membership形成的总预算，必须覆盖registration TTL |
+| `registration_scan_interval_seconds` | 2 | leader扫描registration request的周期 |
+| `registration_request_ttl_seconds` | 120 | 未处理registration的有效期；处理结果/内容hash支持幂等replay与冲突拒绝 |
+| `heartbeat_stale_after_seconds` / `heartbeat_dead_after_seconds` | 120 / 300 | dynamic current instance的stale/dead阈值；dead必须严格大于stale |
+| `revocation_grace_seconds` | 60 | dead/replacement转入fenced revoke前的grace |
+| `expired_retention_seconds` | 600 | 已终态instance/request活跃保留时间，之后先archive再剪枝；必须覆盖revocation grace |
+| `max_active_instance_records` | 16 | current + grace状态的逻辑上限，必须≥stream pool；不是允许同时贡献的人数 |
+| `allow_unsolicited_registration` | `false` | false时registration必须绑定bootstrap或scale logical request |
+| `allow_healthy_placement_replacement` | `false` | 是否允许新instance驱逐仍健康的同placement current owner；正式路径保持false |
+| `reuse_stream_for_same_placement` | `true` | replacement优先复用placement记录的stream，同时严格提升stream epoch并标记restart |
+
+## scaling — dynamic capacity/outbox
+
+`enabled=true`只允许dynamic。scale-out由持久且去重的capacity observation驱动；qsub receipt和qstat状态只是outbox证据，最终admission仍由leader transaction决定。
+
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `enabled` | `false` | dynamic自动scale-out总开关 |
+| `desired_contributors` | 8 | 目标current productive contributor；必须在quorum_min和quorum_max之间 |
+| `low_contributor_threshold` | 6 | 低容量判定阈值，必须小于desired |
+| `consecutive_low_windows` | 2 | 创建request所需不同low observation数，至少2；重放同key不增加计数 |
+| `productive_window_count` | 2 | 判定近期有生产性的observation窗口数 |
+| `startup_grace_seconds` | 180 | 初始化后不触发scale的保护期 |
+| `productive_upload_grace_factor` / `productive_upload_grace_min_seconds` / `productive_upload_grace_max_seconds` | 2 / 60 / 600 | 根据近期cycle时间判定productive的乘数与上下界 |
+| `cooldown_seconds` | 300 | 创建scale request后的冷却期 |
+| `max_pending_launch_requests` / `max_total_launch_requests` | 2 / 16 | 同时pending和整个run scale request预算；pending不得超过total |
+| `launch_request_ttl_seconds` | 900 | 未提交/未知request的时效；已由scheduler确认queued/running的job即使超过TTL仍保留reservation |
+| `capacity_observation_retention_count` | 64 | 活跃observation有界窗口；更旧记录先archive |
+| `scheduler_reconcile_interval_seconds` | 30 | qstat reconciliation与outbox maintenance周期 |
+| `starvation_observation_seconds` | 120 | 无merge时形成唯一starvation observation的最小间隔 |
+| `learner_pbs_script` | `scripts/miyabi/run_dynamic_learner.pbs` | replacement job脚本；提交前仍经过descriptor/source gate |
+| `learner_walltime` | `null` | scaling启用时必填，按已测workload显式传给qsub的最短实用walltime |
+| `learner_queue` | `null` | 可选qsub `-q`覆盖；null继承脚本/站点默认，正式配置应按目标队列显式审查 |
+
+## terminal — dynamic close/drain
+
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `admission_close_policy` | `global_target_or_launch_budget` | dynamic admission关闭策略；支持global target，并可由认证manual request、deadline或有限launch budget触发 |
+| `deadline_seconds` | `null` | 相对训练开始的可选dynamic close deadline |
+| `drain_ack_timeout_seconds` | 300 | drain发布后健康instance ack等待预算；超时后以membership fence revoke |
+| `registration_visibility_grace_seconds` | 10 | input-closed前最后registration摄取/判定的可见性grace |
+| `proposal_visibility_grace_seconds` | 20 | final pointer进入frontier后的可见性grace |
+| `max_terminal_merges` | 1 | manual/budget/deadline close从current version起允许的最多额外merge；close transaction冻结最终上限 |
+| `allow_preclose_admission_during_drain` | `false` | 是否允许close前已授权但尚未admit的process在drain中进入；正式路径保持false |
 
 ## liveness
 
@@ -235,4 +290,4 @@ W&B run 命名规则见 `observability/wandb_logging.py: syncer_wandb_run_name()
 
 ## 校验边界
 
-`resolve_config()` 当前显式校验：scan interval 正数、staleness λ/最大陈旧度非负、syncer device/dtype 枚举、grace 模式与非负秒数、completion 模式及 `global_only` 的全局停止目标、可选 timeout 正数、scheduler/warmup/horizon/min-ratio 组合、fragment 策略/片数/调度/materialize/adoption 组合、采纳策略组合、发布后 wait/poll，以及 `training.block_size=data.block_size`。它**没有**为每个数值字段做统一范围校验，例如 quorum 的正数与顺序、训练 batch/step 数、liveness 阈值顺序、故障概率、`model.dtype`、`io.tensor_dtype`、selection policy 和外层优化器名会在各自消费点才报错；其中未知 `model.dtype` 甚至由 `model_dtype()` 静默当作 FP32。文档中的“未知键 fail-closed”不应被理解为所有语义都在解析期验证。
+`resolve_config()` 当前显式校验：scan interval 正数、staleness λ/最大陈旧度非负、syncer device/dtype 枚举、grace 模式与非负秒数、completion 模式及 `global_only` 的全局停止目标、可选 timeout 正数、scheduler/warmup/horizon/min-ratio 组合、HA/fragment/dynamic模式矩阵、stream/bootstrap/capacity关系、membership TTL/retention、scale hysteresis/budget/reconciliation/walltime以及terminal policy/grace/merge bound、fragment 策略/片数/调度/materialize/adoption 组合、采纳策略组合、发布后 wait/poll，以及 `training.block_size=data.block_size`。它**没有**为每个数值字段做统一范围校验，例如 static quorum 的正数与顺序、训练 batch/step 数、legacy liveness 阈值顺序、故障概率、`model.dtype`、`io.tensor_dtype`、selection policy 和外层优化器名会在各自消费点才报错；其中未知 `model.dtype` 甚至由 `model_dtype()` 静默当作 FP32。文档中的“未知键 fail-closed”不应被理解为所有语义都在解析期验证。

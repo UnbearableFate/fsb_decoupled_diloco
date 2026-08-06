@@ -23,6 +23,7 @@
 | `_batched_blocks()` | 零块报错。shuffle=false 时按索引取模无限循环；true 时先混合 global seed 与 learner ID，每个 epoch 用独立 `random.Random` 重排全体块，再按 `micro_batch_size` 取块构造 tensor。 |
 | `wikitext_batches()` | 先加载 train split，再 `dataset.shard(..., contiguous=True)`，物化 blocks，最后建立上述无限 iterator。即使 `data.streaming=true`，token/block 阶段仍物化全部块。 |
 | `build_batch_iterator()` | `data.dataset_name == "synthetic"` 才走 synthetic；否则一律走 WikiText 风格 text 管线。synthetic vocab 优先取 tokenizer 的 `vocab_size`。 |
+| `build_stream_batch_iterator()` | dynamic入口；严格要求`0 ≤ stream_id < stream_pool_size`，随后把stream ID映射为learner index、固定pool映射为num shards并复用同一synthetic/WikiText实现。active成员增减不改变shard或shuffle seed；replacement复用stream时数据映射保持不变，restart语义由membership stream epoch另行记录。 |
 
 ## `param_index.py`：模型/扁平向量契约
 

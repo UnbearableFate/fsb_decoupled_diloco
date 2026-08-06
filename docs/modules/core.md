@@ -8,8 +8,9 @@
 |---|---|
 | `FORMAT_VERSION` | `1`；param/fragment index、latest、proposal、heartbeat、stop、summary 等主 runtime JSON 的格式版本；source identity、评估结果等工具产物有各自 schema。 |
 | `PROTOCOL_VERSION` | `3`；写入 run identity，full resume/HA descriptor要求精确相等。 |
-| `HA_SCHEMA_VERSION` / `SYNCER_HEARTBEAT_FORMAT_VERSION` / `CONTROL_EPOCH_FORMAT_VERSION` | `2 / 1 / 1`；分别冻结 HA SQLite schema、syncer epoch heartbeat和 canonical control格式。 |
-| `DEFAULT_RUNS_DIR` / `LEARNER_ID_PREFIX` | `runs/fs_diloco` / `learner_`。 |
+| `HA_SCHEMA_VERSION` / `DYNAMIC_SCHEMA_VERSION` | `2 / 3`；分别冻结static HA与dynamic membership SQLite schema。 |
+| `SYNCER_HEARTBEAT_FORMAT_VERSION` / `CONTROL_EPOCH_FORMAT_VERSION` / `MEMBERSHIP_FORMAT_VERSION` | `1 / 1 / 1`；分别冻结syncer heartbeat、canonical control和membership artifact格式。 |
+| `DEFAULT_RUNS_DIR` / `LEARNER_ID_PREFIX` / `DYNAMIC_LEARNER_ID_PREFIX` | `runs/fs_diloco` / `learner_` / `learner_li_`。 |
 | `UPDATE_STATUS_PENDING`, `UPDATE_STATUS_SELECTED`, `UPDATE_STATUS_APPLIED`, `UPDATE_STATUS_DROPPED`, `UPDATE_STATUS_FAILED` | `pending/selected/applied/dropped/failed`；`failed` 目前没有运行时转入路径。 |
 | `LEARNER_STATUS_UNKNOWN`, `LEARNER_STATUS_ACTIVE`, `LEARNER_STATUS_STALE`, `LEARNER_STATUS_DEAD`, `LEARNER_STATUS_STOPPED` | `unknown/active/stale/dead/stopped`。 |
 | `GLOBAL_STATUS_WRITING`, `GLOBAL_STATUS_COMMITTED`, `GLOBAL_STATUS_ABANDONED` | `writing/committed/abandoned`；当前正常版本行使用 `committed`。 |
@@ -22,7 +23,7 @@
 
 ### 配置类型
 
-`Config` 组合 `RunSection`、`InitSection`、`ModelSection`、`DataSection`、`SyncSection`（内嵌 `GraceWindowSection`）、`SyncerSection`、`CoordinationSection`（内嵌 `SyncerHASection` 和 `RecoverySubmissionSection`）、`LivenessSection`、`TrainingSection`、`InnerOptimizerSection`、`OuterOptimizerSection`、`IOSection`、`LearnerSection`（内嵌 `PredictionSection`）、`FragmentSection`、`FailureSimSection`、`WandbSection`。这些 dataclass 本身只提供默认值；跨字段约束在 `resolve_config()` 执行。
+`Config` 组合 `RunSection`、`InitSection`、`ModelSection`、`DataSection`、`SyncSection`（内嵌 `GraceWindowSection`）、`SyncerSection`、`CoordinationSection`（内嵌 `SyncerHASection` 和 `RecoverySubmissionSection`）、`MembershipSection`、`ScalingSection`、`TerminalSection`、`LivenessSection`、`TrainingSection`、`InnerOptimizerSection`、`OuterOptimizerSection`、`IOSection`、`LearnerSection`（内嵌 `PredictionSection`）、`FragmentSection`、`FailureSimSection`、`WandbSection`。这些 dataclass 本身只提供默认值；跨字段约束在 `resolve_config()` 执行。
 
 ## `core/run_descriptor.py`
 
@@ -48,7 +49,7 @@
 1. `load_config()`；随后环境变量 `FS_DILOCO_GIT_COMMIT`、`FS_DILOCO_GIT_DIRTY`、`FS_DILOCO_SOURCE_FINGERPRINT` 覆盖 YAML identity。`FS_DILOCO_REQUIRE_SOURCE_IDENTITY=true` 时 commit 与 fingerprint 缺一即失败。
 2. CLI/调用方覆盖 `run_id`；否则取 `$RUN_ID`，再否则生成时间戳 ID。覆盖 `shared_root`；null 时使用 `<project_root 或 cwd>/runs/fs_diloco/<run_id>`，非空路径只做字面 `{run_id}` 替换。
 3. 依次应用 `num_learners`、training seed、scan/ingest、syncer device/publish dtype、staleness、adoption、terminal capture、completion、parallel write 和 materialize 覆盖。`num_learners` 只把两个 quorum 用 `min` 收紧，不建立下界或顺序。
-4. 规范化 syncer device 与 compute/publish dtype；后者只接受 FP32/BF16 别名。执行 grace、completion、timeout、scheduler 和 fragment 组合校验。
+4. 规范化 syncer device 与 compute/publish dtype；后者只接受 FP32/BF16 别名。执行 grace、completion、timeout、scheduler、HA/static/dynamic/fragment模式矩阵、stream/容量关系、registration/scale/terminal预算以及 fragment 组合校验。dynamic要求full + HA，scaling要求dynamic，并冻结`quorum_min ≤ desired ≤ quorum_max ≤ stream_pool_size`。
 5. 延迟导入 `runtime.adoption.validate_global_adoption_strategy()`，让选中的 replace/rebase/predict 类型校验自身前提；再校验 post-publish wait 非负、poll 正数。
 6. 最后强制 `training.block_size = data.block_size` 并返回。
 

@@ -11,6 +11,19 @@
 - 正常终态采用两阶段generation：先发布不带summary的early stop让learner排空；maintenance成功后DB generation递增，再成对发布最终stop/summary。successor修复不完整终态时也递增generation，因此generation表示一次不可变终态发布尝试，而不是用户stop decision计数。
 - `EpochControlReader` 不打开 SQLite；它扫描 bounded epoch目录，要求目录名、run/epoch/owner、自校验 heartbeat或 canonical head一致，以最高合法 epoch作为 current。低于最高合法epoch的torn目录可视为maintenance并发删除而跳过，同级或更高损坏fail closed；短TTL cache避免同一inner-step反复递归扫描，并累计scan/cache-hit/wall/CPU遥测。head精确绑定 immutable pointer相对路径和 SHA，canonical stop带排除自身字段计算的 `payload_sha256`并在采用前重算；最高 epoch尚无 head时返回未就绪而不回退。返回 latest时把相对 checkpoint路径解析到 run root；fixed cache和目录 mtime都不参与选择。
 
+## protocol/membership.py — dynamic identity与admission artifact
+
+- `new_learner_instance_id()`生成严格UUIDv4格式的`learner_li_<uuid>`；`validate_learner_instance_id()`、`placement_id()`分别约束incarnation和`hostname:CUDA identity`。instance、placement与stream不可互换。
+- `bootstrap_request_id()`把run、slot和descriptor/config fingerprint哈希成确定性logical request；`write_bootstrap_scheduler_jobs()`在每次qsub后原子发布slot→request→PBS job绑定，`read_bootstrap_scheduler_jobs()`复算identity、自摘要、唯一slot/request和job ID语法。
+- registration request绑定run/source/config、instance-owned path、launch request、placement、PBS job、进程identity、TTL和内容hash。reader对replay返回冻结结果，对同instance内容冲突fail closed。
+- `Admission`解析并复算leader发布artifact的SHA；内容包括placement/stream epoch、admission generation/token、launch request与restart标记。`MembershipPublisher`在leader epoch目录发布bootstrap-ready与每instance admission/rejection，并把相对path/SHA登记为control publication。
+
+## protocol/dynamic_terminal.py — manual close与drain
+
+- `write_dynamic_close_request()`用descriptor的run/source/config identity发布幂等、自摘要operator request；已存在的identity冲突拒绝，避免手写stop文件绕过controller。
+- `DynamicTerminalPublisher.publish_drain()`把DB中冻结的close generation/reason/requested time/max terminal version发布到current epoch terminal目录并登记control publication。
+- `read_current_drain()`只接受目录epoch/owner、run、format和payload SHA全部一致的artifact，并按`(epoch, generation)`选择最高者；learner不会采用lower-epoch或损坏drain。
+
 ---
 
 ## protocol/merge.py — 合并选择与 token/staleness 加权

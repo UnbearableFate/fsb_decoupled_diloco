@@ -40,7 +40,7 @@ fragment 模式(`initialize_fragment_run`)额外:构建并发布 `fragment_index
 
 HA full 不复用上面的 legacy `initialize_run/resume_run` 入口：
 
-1. operator/launcher 先运行 `python -m fs_diloco.tools.init_run`。它要求新 run root，冻结 source manifest、resolved config和 run descriptor，由 `initialize_new_run()` 创建完整 schema v2，最后写 `bootstrap_complete.json`；
+1. operator/launcher 先运行 `python -m fs_diloco.tools.init_run`。它要求新 run root，冻结 source manifest、resolved config和 run descriptor，由 `initialize_new_run()` 创建完整schema（static HA为v2，dynamic为v3），最后写 `bootstrap_complete.json`；
 2. `run_syncer_candidate.pbs` 和 `run_static_learner.pbs` 分别在独立 PBS job 中读取 descriptor，并在 import runtime 前比对 git commit、dirty状态和 source fingerprint；
 3. candidate用 `open_existing()` 验证 bootstrap后轮询 `LeaderLeaseStore.acquire()`。只有成功者获得 `LeaderToken`并打开 leader-bound fenced store，loser不初始化 W&B、不写业务表；
 4. 第一 epoch从模型创建 v0。successor从 SQLite current committed row恢复权重/outer/selected状态，校验文件 size及所选 digest模式，修复 DB已提交但 canonical control尚未发布的窗口；
@@ -49,14 +49,24 @@ HA full 不复用上面的 legacy `initialize_run/resume_run` 入口：
 
 learner启动时只创建自身 instance目录且不打开 SQLite。`EpochControlReader`从 bounded epoch目录选择含合法 self-check heartbeat或 canonical head的最高 epoch；head再绑定 immutable pointer path和 SHA，terminal必须位于同一 epoch/owner目录并通过自身 `payload_sha256`复算。最高 epoch暂缺 head时返回未就绪而不回退。fixed cache被旧 process覆盖、低于 current epoch或 identity不符时直接忽略。watchdog在 leader heartbeat陈旧但 recovery claim仍在排队/运行或 canonical repair窗口内时继续等待。learner-assisted qsub默认关闭；启用时也只有 claim/reconciliation能力，不会直接授予 leadership。同一 stale observation的 attempt目录在看到更新 observation前不会被归档，因此 retention不会重置每 observation预算；跨 observation的 outstanding上限按全部 active claim计算。
 
-### 1.5 learner 启动(`run_learner` / `run_fragment_learner`)
+### 1.5 dynamic membership bootstrap与admission
+
+dynamic只走HA full路径，并在加载模型前完成成员准入：
+
+1. initializer以`stream_pool_size`预建固定stream，并为`bootstrap_instances`建立确定性bootstrap launch request；operator把唯一`BOOTSTRAP_SLOT`传给各独立`run_dynamic_learner.pbs`，scale replacement则传`FS_DILOCO_LAUNCH_REQUEST_ID`；
+2. learner每次启动生成新的`learner_li_<uuid4>`，从hostname与CUDA identity构造placement，写identity/source/config/PBS-job绑定的registration request；它拒绝`--learner-id`和`--num-learners`，不能伪装成static成员或在线改写stream pool；
+3. leader扫描固定request目录，在fenced transaction中验证request TTL/replay、logical request、scheduler job identity、健康placement替换策略和容量预算，然后分配`placement_epoch/stream_id/stream_epoch/admission_generation/token`并发布instance-scoped admission artifact；
+4. learner只接受与自身request、descriptor、instance和token一致的admission。随后数据iterator使用`stream_id`作为shard/RNG identity、`stream_pool_size`作为固定分母；replacement复用stream时以新`stream_epoch`记录restart，但数据映射不随active数改变；
+5. leader把admitted heartbeat批量摄取到单个fenced transaction，周期记录幂等capacity observation。只有不同observation形成的连续low窗口才创建scale launch request；outbox在qsub后持久化receipt并用qstat reconciliation保持queued/running reservation，直到admission或已确认的scheduler终态。
+
+### 1.6 learner 启动(`run_learner` / `run_fragment_learner`)
 
 1. 建目录、开 JSONL 日志、按 `seed + learner_index` 设随机种子、选 GPU;
 2. 加载模型与 tokenizer(HF `gpt2` 等,或 `synthetic-tiny` 冒烟模型);
 3. **阻塞等待** `param_index.json`(fragment 模式还有 `fragment_index.json`),用本地模型重建 index 严格比对;
 4. **阻塞等待** `latest.json`,整体加载全局权重(fragment 模式:从各片权重 materialize 后加载),按累计本地步 0 建内层 AdamW + 可选 warmup/cosine 调度器。若 pointer 引用的 current-only 文件已被下一轮 GC 回收，learner 在有界预算内等待严格更新的 latest 并从整份新快照重试;
 5. 写第一份心跳(phase=`loaded_global` / `loaded_fragment_latest`);
-6. 构建数据迭代器:WikiText-2 按 learner 连续分片(`dataset.shard(num_shards=N, index=i, contiguous=True)`)，逐文本 tokenize、样本后加 EOS、拼接后切成不重叠整块并丢尾；`data.shuffle_blocks=true` 时每个 learner 用稳定 seed 在每个 epoch 重排块，false 时按原序无限循环。`streaming` 只控制 datasets 加载方式，随后仍会物化块列表。合成模式则生成无限随机 token 流。
+6. 构建数据迭代器:static WikiText-2按learner index/N连续分片；dynamic按admitted stream ID/固定stream pool连续分片。随后逐文本tokenize、样本后加EOS、拼接后切成不重叠整块并丢尾；`data.shuffle_blocks=true`时以同一固定identity生成每epoch稳定重排，false时按原序无限循环。`streaming`只控制datasets加载方式，随后仍会物化块列表。合成模式也以static learner index或dynamic stream ID隔离随机流。
 
 ## 2. learner 主循环(全量模式)
 
@@ -98,6 +108,7 @@ finally:
 - local-delta rebase 仅在发布后的第一次 latest 检查未发现新版时保留 `x_local,t`;发现首个新版并完成 `global_new+(local-x_local,t)` 后立即释放,直到下一次发布才可能重新建立。prediction、reference 和 reconcile 算术统一使用 `syncer.compute_dtype`,默认在 learner GPU 上执行；CUDA 安全余量不足或实际 OOM 时保持 dtype 回退 CPU,并把 placement、估算字节数和 fallback reason 写入 learner JSONL。
 - predict reconcile 的 wait 返回 `None` 后会重新检查 stop：stop 在场是正常 abandon 并清空 prediction state；没有 stop 才是 `TimeoutError`。该区分不靠延长 reconcile timeout。
 - learner 不自行删除 proposal;payload 生命周期由 syncer 根据 DB/指针引用统一回收。
+- dynamic proposal还携带instance、placement epoch、stream epoch、admission generation和token hash。摄取时验证一次，selection提交前在同一global commit transaction再次验证；被replacement/revoke越过的旧incarnation即使恢复写heartbeat或pointer也不能提交。
 - 心跳、日志、指标全部只追加/原子覆盖,不依赖任何锁。
 - `completion_mode=global_only` 到达 `max_local_steps` 时记录 `local_step_horizon_reached`,但继续执行完整训练/上传循环,直到 syncer 达到全局目标并发布 `stop.json`。
 - 首次加载 latest 后，full/fragment learner 都启动进展 watchdog。每个 optimizer step 后检查 deadline；触发前重读 latest/stop，确认 syncer 无进展后记录 `syncer_unresponsive`、写带同名 `status_reason` 的 stopped 心跳并以 0 退出。
@@ -181,6 +192,8 @@ tN++ syncer:末次摄取；若全部 stopped 则终态化未消费 proposal，�
 ```
 
 HA full 的差异是 `t0` 之前由独立 initializer完成 schema/descriptor；syncer/learner分别由不同 PBS job启动。任一时刻只有持 current token的 leader可提交。如果 leader在 vN DB commit后崩溃，successor先取得 epoch `e+1`，从 vN恢复并重发 current canonical head，再把下一次训练提交写成 vN+1，而不是从 fixed latest猜版本。
+
+dynamic HA在此基础上把`t0+`改为bootstrap registration/admission，并在运行中允许outbox补充replacement。进入close transaction后，admission关闭且`max_terminal_version`冻结，leader发布drain generation；健康learner在cycle边界写final pointer和ack，超时实例被revoke。所有request/registration可见性条件和ack/revoke条件都成立后才执行最后的有界merge并发布terminal control。
 
 ## 7. 运行期观测点
 

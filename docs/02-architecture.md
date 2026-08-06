@@ -6,7 +6,7 @@
 
 | 角色 | 数量 | GPU | 入口 | 关键本地状态 |
 |---|---|---|---|---|
-| learner | N(`sync.num_learners`) | `choose_device()` 有 CUDA 时选首张可见卡，否则 CPU；PBS 通常每进程隔离 1 张 | `python -m fs_diloco.learner --config ... --learner-id learner_000` | 模型副本、内层 AdamW、数据分片迭代器 |
+| learner | static为N(`sync.num_learners`)；dynamic由admission/outbox维护目标容量 | `choose_device()` 有 CUDA 时选首张可见卡，否则 CPU；PBS 通常每进程隔离 1 张 | static传`--learner-id learner_000`；dynamic传`--bootstrap-slot`或`--launch-request-id`并自行生成UUID | 模型副本、内层 AdamW、固定stream数据迭代器 |
 | syncer | 1 active；HA 模式可同时存在多个候选但只有一个 leader | `syncer.device=cuda` 时 1 张；也可用 CPU | `python -m fs_diloco.syncer --config ...` | 全局参数扁平向量 θ、外层优化器状态、共享 run 内的持久 SQLite、HA 模式的 `LeaderToken` |
 
 进程间没有任何直接连接。所有协调通过共享目录 `run.shared_root` 完成。dataclass 默认值是 `null`，解析时回退到 `<project_root 或 cwd>/runs/fs_diloco/<run_id>`；仓库随附的正式配置显式使用主工作树的绝对 `runs/fs_diloco/{run_id}` 模板，避免从其他 worktree 启动时把产物写散。
@@ -18,8 +18,8 @@
 1. **大张量一律 safetensors**(权重、外层优化器状态、update 向量、fragment)。
 2. **按介质选择一致性原语**:JSON pointer/control/heartbeat 与 safetensors 通过 `storage/atomic_io.py` 的“同目录临时文件 → 文件 fsync → chmod → `os.replace`”发布，读者只会看到旧文件或完整新文件；SQLite 用 rollback-journal 事务；每 actor JSONL、syncer CSV 和历史 JSONL 为单写者追加。`learner_metrics.csv` 与 `update_manifest.csv` 则由多个 learner 无锁共享追加，只是 best-effort 遥测，不是提交权威。atomic helper 不 fsync 父目录，保证的是运行期原子可见性，而不是断电后目录项必然持久。
 3. **proposal pointer 是提交标记**:learner 先写不可变张量 payload，再原子替换固定 pointer。全量模式为每 learner 一个 `updates/latest/learner_XXX.json`；fragment 模式为每 `(learner, fragment)` 一个 `updates/latest/learner_XXX_fNNN.json`。syncer 每轮只枚举 `N` 或 `N×K` 个固定路径，持久 frontier 在两种模式都防重放；只有 fragment 路径额外用进程内 stat signature 跳过未变化 pointer 的 JSON 解析。runtime 不扫描历史 payload metadata。
-4. **global pointer 按模式选择**。legacy full/fragment 的 learner 轮询 `control/latest.json`；HA full 的 learner不打开 SQLite，而是从 bounded `control/syncer_epochs/`选择最高合法 epoch，再校验该 epoch 的 canonical head、pointer path和 SHA。两者都不扫描权重目录；HA fixed cache 只是便利面，不是权威。
-5. **心跳 JSON 只是带代际边界的存活提示**,不参与训练版本权威链。`stopped` 只证明当前 syncer 代际的输入闭合；full resume 会 fence 旧 pointer 内容，直到 learner 原子发布不同内容的新心跳。
+4. **global pointer 按模式选择**。legacy full/fragment 的 learner 轮询 `control/latest.json`；HA full（static或dynamic）的 learner不打开 SQLite，而是从 bounded `control/syncer_epochs/`选择最高合法 epoch，再校验该 epoch 的 canonical head、pointer path和 SHA。两者都不扫描权重目录；HA fixed cache 只是便利面，不是权威。dynamic还读取自校验的admission与drain artifact。
+5. **心跳 JSON 只是带代际边界的存活提示**,不参与训练版本权威链。static `stopped` 只证明当前 syncer 代际的输入闭合；full resume 会 fence 旧 pointer 内容，直到 learner 原子发布不同内容的新心跳。dynamic heartbeat还必须匹配current instance/placement/stream/admission token，但已摄取proposal能否提交仍由最终DB transaction重验，不能由心跳单独决定。
 6. **SQLite 是共享目录中的持久提交记录**:`control/syncer_metadata.sqlite3`,使用 rollback journal(`journal_mode=DELETE`)和 `synchronous=FULL`。legacy 只有单 syncer writer；HA 候选先取得单调 epoch，leader 的每个业务 transaction 在 `BEGIN IMMEDIATE` 后校验 epoch/owner，旧 token随后不能 renew或提交。不同计算节点可以重开并恢复同一 run；不使用 WAL、节点本地副本或 DB dump。
 7. **learner 的 global adoption 由单一策略状态机决定**:`replace`/直接 adoption 整体覆盖并重置内层 optimizer moments；scheduler 对象可重建，但始终恢复到累计 local-step 相位。rebase/prediction reconcile 在合成尚未发布的本地差值后保留完整内层训练状态。不存在与此并行的配置布尔开关。
 8. **外层优化器是显式扁平向量实现**(`modeling/outer_optim.py`),不复用 `torch.optim`,以便把优化器状态精确序列化成 safetensors 并跨 resume 保持一致。
@@ -177,12 +177,20 @@ full 模式可为研究评估显式开启 `sync.capture_terminal_predecessor_for
 - **reference-driven GC**:只保留 DB 当前 global/fragment checkpoint、latest 引用的 materialized full、active update payload 和每 learner 固定 pointer。未发布孤儿经过至少两倍 heartbeat/scan 周期的 grace 后删除;已终态化引用由有界 `gc_pending` 立即回收，删除成功或文件已不存在后清行。
 - **learner 读侧 GC 竞态防护**：读取 latest 与打开其 weight/outer 文件之间若 syncer 已发布并回收旧 current，full direct/rebase/prediction 与 fragment initial/incremental 都等待严格更新的 pointer 并重跑整个加载回调；成功状态以实际加载版本为准，预算耗尽则保留 `FileNotFoundError` 链 fail closed。
 
-## 10. Full-mode Syncer HA
+## 10. Full-mode Syncer HA 与动态成员
 
-`coordination.syncer_ha.enabled=true` 只支持 full + static membership。启动顺序是 initializer → 独立 syncer candidate job → 独立 rerunable learner array。initializer 是唯一 DDL writer：它发布 resolved config、source manifest、run descriptor、schema v2 数据库和最后的 bootstrap-complete marker；candidate 与 learner 在 import runtime 前校验 descriptor/source/config identity，既有或不完整 run 均 fail closed。
+`coordination.syncer_ha.enabled=true` 只支持 full，成员可为 `static` 或 `dynamic`。启动顺序是 initializer → 独立 syncer candidate job → 独立 learner jobs。initializer 是唯一 DDL writer：它发布 resolved config、source manifest、run descriptor、数据库和最后的 bootstrap-complete marker；static使用schema v2，dynamic使用schema v3并预建固定stream pool和确定性bootstrap launch requests。candidate与learner在import runtime前校验descriptor/source/config identity，既有或不完整run均fail closed。
 
 `LeaderLeaseStore` 在同一个 SQLite 中分配不复用的 epoch。candidate acquire 成功后才得到 `FencedSQLiteStore` 的 leader-bound 写面；所有 HA business mutator 都必须携带 `LeaderToken(epoch, owner_id)`，并在持锁 transaction 内重验。旧 writer 在 transaction 外暂停时可在 lease 到期后接管；若它暂停在 SQLite write transaction 内，新 candidate 必须等待 scheduler/operator 终止旧 writer并释放锁。这是明确的可用性边界，不会以双 writer换取接管速度。
 
 每个 epoch 的 checkpoint 与 canonical `head/stop/summary` 使用互不冲突的目录。SQLite committed row和 `control_publications` manifest 是 successor/Checker恢复依据；successor 从 DB current version恢复，修复同 epoch缺失 control，再提交严格的 `N+1`。learner侧 `EpochControlReader`扫描有界 epoch目录，以自校验 heartbeat或 canonical head识别最高合法 epoch，并用 head内的 pointer path/SHA校验 immutable latest；若最高 epoch尚无 head则等待而不回退。fixed cache允许被旧 epoch覆盖。maintenance先以 fenced transaction登记候选，删除前重查引用，并压缩旧 epoch目录/history；默认 `io.checkpoint_digest_mode=off`，以唯一 path、必填 size和 safetensors loadability验证大文件。
 
 这一链路已在最终 clean-source 的独立 1-syncer + 8-learner Miyabi run 中验证。验收绑定 source commit `36762854bfcbbc23b71ab838913023d64cf37b5e`：epoch 1候选在v0 DB commit后、control publication前被`SIGKILL`，独立 successor取得epoch 2、修复canonical control并连续提交v1–v10；8个learner都在独立GPU节点贡献更新并正常停止。最终为5120 seen tokens，120次lease renew与457次business transaction均无失败，stale epoch commit与canonical adoption错误均为0；400+400个business样本和100+100个checkpoint样本也通过冻结的matched p99门禁，completed Checker返回`PASS`。精确PBS job和artifact见[运维文档](07-operations.md#4-miyabi-pbs-%E6%89%B9%E4%BD%9C%E4%B8%9A)。这是恢复、协调与控制面性能验证，不是训练质量结论。
+
+dynamic把成员权威放入同一个fenced SQLite：`learner_instances`、`placements`、`streams`、`registration_requests`、`launch_requests`和`capacity_observations`共同描述current incarnation。每次learner启动创建新的`learner_li_<uuid4>`，registration必须绑定source/config、path ownership、bootstrap slot或scale request以及实际PBS job identity。admission transaction分配placement epoch、stream ID/epoch、membership generation和一次性token；健康placement不能被普通duplicate驱逐，logical launch request最多fulfill一次。proposal摄取携带整套membership fence，最终global commit在同一transaction中重验instance、placement、stream和token，竞态失效的selection不会被提交。
+
+virtual stream pool在initializer后不可变。数据shard和shuffle seed使用`stream_id/stream_pool_size`，不使用瞬时active count；同placement replacement可按策略复用stream，但必须提升`stream_epoch`并记录restart。leader周期写唯一capacity observation，只有不同observation组成的连续low窗口才能创建scale request。pending/queued/running job始终占reserved capacity，直到scheduler确认终态并释放；cooldown、pending/total budget以及`admitted + reserved <= stream_pool_size`共同限制扩容。outbox把request、qsub receipt、qstat reconciliation和admission映射持久化，qsub本身不授予成员资格。
+
+dynamic收尾由持久controller state驱动。global target、认证manual close、deadline或耗尽的launch budget会在一个transaction中关闭admission、取消尚未提交的open request并冻结`close_generation/max_terminal_version`；leader发布自校验drain artifact。健康instance在cycle边界停止新proposal、写final pointer并ack该generation；超时未响应者被fenced revoke。registration/proposal visibility grace结束、所有logical request已终态且每个current instance都ack或revoke后，input才闭合，successor继续沿用同一冻结上限。
+
+Phase 2正式9节点dynamic验收完成v120：8个bootstrap成员稳定后永久终止一个learner，两个唯一low observation创建一个replacement request并恢复8个current contributor；duplicate physical job被拒绝，replacement复用stream并提升stream epoch，最终drain/ack闭合。每cycle为51 local steps，超过50×10文档同步基线；completed Checker和同source/config/model/data/seed/v120的static/dynamic matched门禁均为`PASS`，冻结公式下额外control-path overhead为0。精确作业和artifact见[运维文档](07-operations.md#4-miyabi-pbs-%E6%89%B9%E4%BD%9C%E4%B8%9A)；这些仍是恢复、成员与控制面结论，不是训练质量结论。

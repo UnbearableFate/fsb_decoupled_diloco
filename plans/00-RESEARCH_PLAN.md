@@ -39,7 +39,7 @@
 - BF16 upload 将 full 和 fragment 的文件 payload 基本减半，syncer 读取后仍以 FP32 聚合；
 - full 模式已经实现 DB-first resume、单事务 global commit、crash-matrix 恢复与引用驱动的 current-only retention；fragment resume 仍未实现；
 - 当前 fragment 采用 `balanced_tensor`，与旧设计中的 layer-aligned 连续分片不同；两者都可以保留为后续研究选项，不必立即把其中一种定义为唯一正确方案；
-- 当前 9 节点部署由一个 co-allocated MPI 作业启动，数据面不使用 MPI，但它还没有完整复现“多个独立 PBS 作业只能通过共享文件系统协作”的动机场景。
+- co-allocated MPI launcher仍用于既有实验，但Plan 02已经在9节点上复现“多个独立PBS作业只通过共享文件系统协作”：Syncer HA static验收完成故障接管，dynamic验收完成8个bootstrap成员、永久成员丢失后的scheduler replacement、duplicate拒绝、固定stream复用和drain closure。
 
 近期 50×10 对照是当前最有价值的性能信号。BF16 fragment 的平均 update payload 约为 63.2 MB，full 约为 248.9 MB；fragment 的 learner 写入和 syncer 读取都明显快于 full。然而 fragment 完整时间约为 198.9 秒，full 约为 150.4 秒，fragment 仍慢约 32%。新增的一节点 timing breakdown 显示，fragment cycle 的主要时间落在等待 latest 和 syncer 等待 quorum，而不是参数抽取、写文件、聚合或外层优化。这意味着后续 fragment 优化的中心应从“继续压缩文件写入”转向“减少协议等待和同步化行为”。持久状态改造后的九节点 full 50×10 又验证了 DB/current-only 路径：十次 merge 均 selected=8，SQLite commit p95 为 6.2 ms，commit+maintenance 仅占完整训练时间约 0.36%，结束时只剩 v10 checkpoint、固定 pointers 与持久 DB。
 
@@ -65,7 +65,9 @@ fragment 恢复比 full 更复杂，因为权威状态是 fragment version vecto
 
 恢复研究的范围可以保持务实：重点放在进程退出和批作业重启，不追求 exact replay 或完整 inner optimizer 复现。独立 PBS 角色启动和人工触发的 syncer restart 从 Plan 02 起纳入必做的系统恢复边界；自动 failover 提交仍默认关闭，只在显式启用时验证。节点断电级持久性可以作为代价与限制讨论，而不是让主系统过早承担复杂事务协议。
 
-2026-08-06 的 Plan 02 Phase 0 可行性门禁进一步冻结了这个范围：Miyabi 计算节点可以查询并提交标量作业，显式设为 rerunable 后也可提交 PBS job array，因而初始 learner 编排优先使用 array；自动 recovery/scaling 仍保持 opt-in。rerunable array 允许 scheduler 以同一个 PBS job ID 重新运行新的物理 incarnation，后续 admission/reconciliation 必须同时记录 `run_count` 或独立 incarnation ID，不能只把 job ID 当成 exactly-once 幂等键。同时，旧 writer 若无限期暂停在 SQLite writer transaction 内，新候选者只能安全等待，不能仅靠 lease timeout 自动接管；此时仍需要有审计的 operator/scheduler 终止动作。单节点和跨节点 `SIGSTOP`/`SIGKILL` writer-lock 边界、两向时钟区间、共享 SQLite 争抢、scheduler 终态、依赖锁指纹和 source-gated runtime write 的详细证据见 `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-095900_phase0-feasibility_pass.json`；array 不可用时的独立 manifest fallback 历史实测证据保留在 `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-011200_phase0-feasibility_pass.json`。这些结论是后续 HA/dynamic 实现的可行性边界，不表示生产协议已经实现。
+2026-08-06 的 Plan 02 Phase 0 可行性门禁进一步冻结了这个范围：Miyabi 计算节点可以查询并提交标量作业，显式设为 rerunable 后也可提交 PBS job array；自动 recovery/scaling保持opt-in。rerunable array允许scheduler以同一个PBS job ID重新运行新的物理incarnation，因此实现使用独立`learner_li_<uuid4>`和admission generation，不能只把job ID当作exactly-once键。同时，旧writer若无限期暂停在SQLite writer transaction内，新候选者只能安全等待，不能仅靠lease timeout自动接管；此时仍需要有审计的operator/scheduler终止动作。单节点和跨节点`SIGSTOP`/`SIGKILL` writer-lock边界、两向时钟区间、共享SQLite争抢、scheduler终态、依赖锁指纹和source-gated runtime write的详细证据见`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-095900_phase0-feasibility_pass.json`；array不可用时的独立manifest fallback历史实测证据保留在`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-011200_phase0-feasibility_pass.json`。
+
+2026-08-07 的Plan 02 Phase 2正式9节点验收进一步把上述可行性转为已验证协议：full HA dynamic使用schema v3、固定8-stream pool、fenced registration/admission、幂等capacity observation和PBS launch outbox；8个bootstrap成员中永久终止一个后，只由两个不同low observation创建一个replacement request并恢复8个current成员，duplicate physical job未获得第二次admission，最终generation-scoped drain/ack闭合到v120。该run每cycle执行51 local steps，完整训练约61.65秒并处理1,521,024 tokens；completed Checker对MEM-01至MEM-20返回`PASS`。相同source/config/model/data/seed/v120的static/dynamic matched run按冻结公式测得0正overhead，小于5%门槛。证据见`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260807-003213_phase2-completed_pass.json`和`20260807-002927_phase2-matched-performance_pass.json`。这些是恢复、动态成员和控制面性能结论，不是训练质量结论；自动recovery/scaling仍默认关闭，需显式配置和审查walltime/queue。
 
 ### 4.4 Fragment 何时真正有收益
 
