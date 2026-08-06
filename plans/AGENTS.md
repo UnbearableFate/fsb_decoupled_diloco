@@ -85,8 +85,9 @@ reports/DOING/01/
 
 1. 每个新 plan 必须在独立 Git branch 上执行。
 2. 实现和初始关联测试组通过后，创建 review-target commit。审查覆盖的源代码和测试树必须与该 commit 一致；记录并排除审查范围外的既有改动。
-3. 将 `git rev-parse HEAD` 的完整输出记录为 `<commit_id>`。comparison base 使用上一 phase-final commit；第一 phase 使用 plan branch point。plan-completion 审查覆盖从 plan branch point 开始的累计 diff。
-4. `<plan-id>` 使用不含 `.md` 的计划文件名；`<phase_id>` 使用计划中稳定的 phase 标识；整个 plan 的审查使用 `plan-complete`。
+3. 每份审查报告必须记录完整的`base commit ID`和`target commit ID`。同一phase或plan-completion审查流的首次审查，base使用上一phase-final commit；第一phase使用plan branch point，plan-completion使用plan branch point。后续新审查必须以上一次审查的target作为本次base，以当前最新冻结commit作为target，只审查这段连续增量；同一target的重试仍使用原base/target。
+4. 启动审查前确认base是target的ancestor；除同一target的显式重试外，禁止跳过、重叠或倒退审查范围。工作树中的未提交修改不属于target。
+5. `<plan-id>` 使用不含 `.md` 的计划文件名；`<phase_id>` 使用计划中稳定的 phase 标识；整个 plan 的审查使用 `plan-complete`。
 
 ### 使用 `claude -p` 运行双模型独立审查
 
@@ -99,7 +100,7 @@ claude -p \
   --permission-mode bypassPermissions \
   --dangerously-skip-permissions \
   --output-format json \
-  '审核当前仓库 commit id <base-commit> 到 <target-commit> 的代码修改，覆盖相关源代码、测试、配置、PBS脚本、launcher、Checker和文档。将审核结果写入 <absolute-repo>/reports/DOING/code_review/<plan-id>/<phase-id>/claude-opus-5_<target-commit>.md。按 Critical/High/Medium/Low 列出finding、证据、文件行号、修复建议和缺失测试，检查correctness、回归风险、错误处理、并发/持久化不变量、测试覆盖及plan验收条件，最后给出 APPROVE 或 CHANGES_REQUIRED；没有finding时列明检查范围。你是只读reviewer，除上述报告外不得修改任何文件或Git状态，不得qsub/qdel、删除run数据、commit、push或创建PR，也不得在报告中写入secret、token、凭据或完整环境变量。'
+  '以commit <base-commit>为基线，审核commit <target-commit>相对该基线的完整代码修改（等价于git diff <base-commit> <target-commit>），覆盖相关源代码、测试、配置、PBS脚本、launcher、Checker和文档。将审核结果写入 <absolute-repo>/reports/DOING/code_review/<plan-id>/<phase-id>/claude-opus-5_<target-commit>.md，并在报告开头记录完整的base和target commit ID。按 Critical/High/Medium/Low 列出finding、证据、文件行号、修复建议和缺失测试，检查correctness、回归风险、错误处理、并发/持久化不变量、测试覆盖及plan验收条件，最后给出 APPROVE 或 CHANGES_REQUIRED；没有finding时列明检查范围。你是只读reviewer，除上述报告外不得修改任何文件或Git状态，不得qsub/qdel、删除run数据、commit、push或创建PR，也不得在报告中写入secret、token、凭据或完整环境变量。'
 ```
 
 Codex同时独立审查同一`<base-commit>..<target-commit>`，并在读取Claude报告前保存自己的报告到同一目录。完成报告不可覆盖；重跑使用`-retryN`新文件。核验JSON中的实际模型和session ID；明确的Claude会话额度耗尽记为`skipped-session-limit`，不重试、不伪造报告且不阻断后续任务，Codex审查仍为必做门禁。其他模型/session/fallback/认证/权限错误均为`blocked`。
