@@ -67,7 +67,7 @@
 ## shell launcher 与清理脚本
 
 - **`local/run_tiny_2proc_smoke.sh`** — 默认 tiny full config、2 learners；先后台启 syncer，sleep 1s，再并发 learner。顺序 wait 各 learner 再 wait syncer，最后运行 analysis `--json`并写/打印 launcher log root 中的 summary。它不设置退出 trap 来清理已启动的子进程；某个 wait 失败会由 `set -e` 直接终止脚本。
-- **`local/clean_run.sh`** — 目标必须是 project `runs/` 本身或后代；递归匹配的只有 `*.safetensors`/`*.db`，默认 dry-run。`--keep-latest-global` 在**每个目录**以任意长十进制版本比较保留最大 `global_vN.safetensors`，同版本重名时保留路径字典序更大者。`--delete` 用 `rm -f`；它不匹配当前 `.sqlite3` DB。
+- **`local/clean_run.sh`** — legacy广域tensor清理脚本；目标必须是project `runs/`本身或后代，递归匹配的只有`*.safetensors`/`*.db`，默认dry-run。`--keep-latest-global`在**每个目录**以任意长十进制版本比较保留最大`global_vN.safetensors`，同版本重名时保留路径字典序更大者。`--delete`用`rm -f`；它不匹配当前`.sqlite3` DB，也没有`tools.clean_run`的completion-evidence/manifest门禁，因此正式实验优先使用Python工具。
 - **`local/prune_runs_without_5000.sh`** — 目标必须是 project `runs/` 的严格后代；只看直接子目录，名称不含字面 `5000` 的全部列为候选。默认 dry-run，`--delete` 用 `rm -rf` 递归删除整个 run。
 - **`miyabi/inspect_run.sh`** — 要求 shared root，可选 DB path，最后用 `exec` 替换自身运行 `python -m fs_diloco.analysis`；传 DB 时附 `--db`。
 - **`miyabi/submit_train_with_validation.sh`** — 以 `qsub -v` 提交 train，再以 `-W depend=afterok:<train_job_id>` 提交 validation。拒绝不存在的脚本和 run/shared/project 中的逗号；可选传递 `CONFIG` 和固定的 9 个具名实验覆盖，不通配传递所有环境变量。取 qsub stdout 第一行为 job id，仅检查非空，最后打印 run root 和两个 job id。
@@ -80,6 +80,6 @@ Plan 02 Phase 1新增 `run_syncer_candidate.pbs` 与 `run_static_learner.pbs`：
 
 `run_plan02_phase1_matched_performance.pbs` 在compute node生成与clean run descriptor绑定的matched性能artifact；`run_plan02_phase1_checker.pbs`/`check_plan02_phase1.py --mode phase1-completed`以只读方式核验run，并把该artifact作为completed门禁必需输入。其余tests/smoke/lock/fault脚本分别验证pytest、端到端tiny、双节点writer-lock和60-case crash matrix。提交任何PBS脚本时都应按workload和相邻实测估算尽可能短、但足以覆盖启动波动、预期运行和完整收尾的walltime，并以`qsub -l walltime=...`覆盖过长默认值；可靠跑完是首要目标。
 
-Plan 02 Phase 2新增`run_dynamic_learner.pbs`：它只接受`full_ha_dynamic` descriptor，在import runtime前复算source identity，并要求bootstrap slot或scale launch request恰好一种授权。`run_plan02_phase2_acceptance_launcher.pbs`初始化G8/G9 run后调用`tools.launch_phase2_acceptance`；后者逐个提交独立bootstrap job并在每次成功qsub后立即更新`bootstrap_scheduler_jobs.json`，避免launcher崩溃让queued capacity从leader视野消失。G9还提交同slot duplicate，运行中scale replacement由`LearnerLaunchOutbox`提交，最大并发节点证据由chaos checker结合receipts/DB核验。
+Plan 02 Phase 2新增`run_dynamic_learner.pbs`：它只接受`full_ha_dynamic` descriptor，在import runtime前复算source identity，并要求bootstrap slot或scale launch request恰好一种授权。`run_plan02_phase2_acceptance_launcher.pbs`初始化G8/G9 run后调用`tools.launch_phase2_acceptance`；后者逐个提交独立bootstrap job并在每次成功qsub后立即更新`bootstrap_scheduler_jobs.json`。即使learner先于manifest写registration，leader也会保持pending到精确receipt绑定出现，不会在receipt durability之前admit。G9还提交同slot duplicate，运行中scale replacement由`LearnerLaunchOutbox`提交，最大并发节点证据由chaos checker结合receipts/DB核验。
 
 `run_plan02_phase2_matched_launcher.pbs`先完整运行static 1+8，再完整运行dynamic 1+8，二者使用同source/model/data/seed/v120，最后由matched checker计算冻结5%门禁。`run_plan02_phase2_completed_checker.pbs`只读打开已完成dynamic run，要求外部G7/G8/G9/compatibility/matched artifacts同identity并核验MEM-01至MEM-20、schema v3、terminal generation、bounded active/physical state与failure scan。`tests/evidence_tests`脚本分别运行pytest和聚合测试证据；chaos/matched/completed checker stdout成功时只有`PASS`。

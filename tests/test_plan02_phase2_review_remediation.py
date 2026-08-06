@@ -204,6 +204,13 @@ def test_merge_and_capacity_observation_share_one_rollback_boundary(tmp_path: Pa
         }
         with pytest.raises(RuntimeError, match="atomic capacity observation"):
             store.commit_full_merge(**without_capacity)
+        for malformed in (
+            {**capacity, "kind": "synthetic"},
+            {**capacity, "observation_key": "merge:2"},
+            {**capacity, "global_version": 2},
+        ):
+            with pytest.raises(RuntimeError, match="exact merge capacity observation"):
+                store.commit_full_merge(**{**merge, "capacity_observation": malformed})
         with pytest.raises(RuntimeError, match="phase2-review-before-commit"):
             store.commit_full_merge(**merge, before_commit=_raise_before_commit)
         assert int(store.latest_global_version()["version"]) == 0
@@ -214,6 +221,39 @@ def test_merge_and_capacity_observation_share_one_rollback_boundary(tmp_path: Pa
         observations = store.capacity_observations()
         assert [row["observation_key"] for row in observations] == ["merge:1"]
         assert int(store.latest_global_version()["version"]) == 1
+    finally:
+        fenced.close()
+        lease.close()
+
+
+def test_merge_and_starvation_observations_reject_non_atomic_public_writes(
+    tmp_path: Path,
+) -> None:
+    _paths, lease, fenced, store = _dynamic_store(tmp_path)
+    try:
+        store.initialize_dynamic_membership(
+            stream_pool_size=1,
+            bootstrap_instances=0,
+            config_fingerprint="phase2-review-descriptor",
+            created_at=100.0,
+        )
+        for kind, key in (
+            ("merge", "merge:1"),
+            ("starvation", "starvation:1"),
+            ("synthetic", "merge:1"),
+            ("synthetic", "starvation:1"),
+        ):
+            with pytest.raises(RuntimeError, match="atomic state-transition API"):
+                store.record_capacity_observation(
+                    **_capacity_kwargs(
+                        observation_key=key,
+                        kind=kind,
+                        global_version=1,
+                        selected_instance_ids=[],
+                        eligible_contributors=0,
+                    )
+                )
+        assert store.capacity_observations() == []
     finally:
         fenced.close()
         lease.close()

@@ -100,7 +100,7 @@ matched artifact在同一shared filesystem上用细粒度AB/BA配对块交错比
 
 dynamic run同样先捕获source identity并执行唯一initializer，但配置必须同时满足`membership.mode=dynamic`、Syncer HA开启、fragment关闭。每个bootstrap learner必须取得唯一slot并由独立PBS job启动；每次进程启动自行生成`learner_li_<uuid4>`，不要传`--learner-id`或`--num-learners`。
 
-PBS正式启动还必须把每个已接受的bootstrap qsub job ID立刻写入identity-bound `control/bootstrap_scheduler_jobs.json`。这是admission与scheduler reconciliation的权威输入，不能先批量qsub、最后才补manifest，也不能只保留shell变量。仓库的Phase 2 launcher实现了“每次qsub后原子持久化receipt与manifest、失败保留partial artifact且不自动qdel”的完整顺序；正式动态验收应直接使用：
+PBS正式启动还必须把每个已接受的bootstrap qsub job ID立刻写入identity-bound `control/bootstrap_scheduler_jobs.json`。这是admission与scheduler reconciliation的权威输入，不能先批量qsub、最后才补manifest，也不能只保留shell变量。learner可能在manifest更新前已写registration，因此leader会把scheduler-bearing request持久化为pending、保留其文件，并仅在launch row出现精确job receipt绑定后重试admission；错误绑定会被拒绝。仓库的Phase 2 launcher实现了“每次qsub后原子持久化receipt与manifest、失败保留partial artifact且不自动qdel”的完整顺序；正式动态验收应直接使用：
 
 ```bash
 # 提交前：bash -n scripts/miyabi/*.pbs，确认literal group ID，并根据相邻实测覆盖walltime。
@@ -125,12 +125,19 @@ leader接收后在transaction中关闭admission并冻结terminal上限，发布c
 
 ```bash
 scripts/local/run_tiny_2proc_smoke.sh      # synthetic-tiny 模型 + 合成数据,CPU 上 1 syncer + 2 learner
+python -m fs_diloco.tools.clean_run runs/fs_diloco/<EXACT_RUN_ID> \
+  --evidence reports/DOING/<PLAN_ID>/artifacts/<COMPLETED_PASS>.json
+python -m fs_diloco.tools.clean_run runs/fs_diloco/<EXACT_RUN_ID> \
+  --evidence reports/DOING/<PLAN_ID>/artifacts/<COMPLETED_PASS>.json \
+  --delete --manifest-output reports/DOING/<PLAN_ID>/artifacts/<CLEANUP>.json
 scripts/local/clean_run.sh runs/fs_diloco  # 递归预览将清理的 safetensors 和 .db
 scripts/local/clean_run.sh --delete runs/fs_diloco
 scripts/local/clean_run.sh --delete --keep-latest-global runs/fs_diloco
 ```
 
-`clean_run.sh` 只扫描项目 `runs/` 内的目标目录；默认 dry-run，必须传 `--delete` 才删除。它的实际 glob 是递归 `*.safetensors` 和 `*.db`：当前权威库名为 `syncer_metadata.sqlite3`，**不会**被该 glob 删除，但 global/outer/update/fragment tensor 会被删掉，run 仍无法恢复。`--keep-latest-global` 只在每个目录保留编号最大的 `global_v<version>.safetensors`，不会保留匹配的 outer/fragment/update tensor，也不会把残留 DB+weight 变成可恢复证据。
+Python `clean_run`是已完成实验的首选收口工具：只接受project `runs/`下一个精确run目录、同run且无error的`PASS` completion artifact、匹配的terminal stop/summary和已停止的全部learner；authority SQLite sidecar存在时拒绝。默认只输出精确inventory。`--delete`还要求在`reports/`内创建新的manifest，保留authority DB、current weight/outer、control/config、syncer/candidate日志和一份代表性learner日志，只删除已由completion artifact覆盖的重复learner日志、terminal heartbeat/pointer、offline W&B cache和raw update telemetry；候选在inventory后变化会停止删除并把manifest标为`failed`。
+
+legacy `clean_run.sh`只扫描项目`runs/`内的目标目录；默认dry-run，必须传`--delete`才删除。它的实际glob是递归`*.safetensors`和`*.db`：当前权威库名为`syncer_metadata.sqlite3`，**不会**被该glob删除，但global/outer/update/fragment tensor会被删掉，run仍无法恢复。`--keep-latest-global`只在每个目录保留编号最大的`global_v<version>.safetensors`，不会保留匹配的outer/fragment/update tensor，也不会把残留DB+weight变成可恢复证据。它没有Python工具的completion-evidence和manifest门禁，不应替代正式实验清理。
 
 对应配置 `configs/fs_diloco_tiny_local.yaml` / `fs_diloco_tiny_fragment_local.yaml`。
 
@@ -160,7 +167,7 @@ scripts/local/clean_run.sh --delete --keep-latest-global runs/fs_diloco
 
 2026-08-06 的最终 Phase 1 正式验收绑定clean commit `36762854bfcbbc23b71ab838913023d64cf37b5e`，在 Miyabi 上以1个syncer job和8个独立learner array element运行：epoch 1 syncer在v0 DB提交后的failpoint被`SIGKILL`，依赖job取得epoch 2并恢复，随后连续提交v1–v10；8个learner分别位于独立GPU节点并正常停止。最终terminal generation为2、5120 seen tokens、120次lease renew和457次business transaction均无失败，stale epoch commit与canonical adoption错误均为0，completed Checker返回`PASS`且无runtime failure event。matched门禁另以400+400个business样本和100+100个checkpoint样本通过两项p99阈值，并验证健康candidate writer transaction attempt为0。该workload每个learner约执行200以上local steps且完成10个global merge，超过50-local-step × 10-global-step文档同步基线；证据为PBS `2499329/2499331/2499332/2499333[]/2499345/2499349`及`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-1624_phase1-completed-checker_pass.json`。这是恢复、协议和控制面性能验证，不是训练质量结论。
 
-2026-08-07 的最终 Phase 2 正式验收绑定clean commit `85febbaee653dcff04897eea35a15dd8f31172c2`和source fingerprint `sha256:b8684b5d90d22a341da3e30dfca375b6de4026103ee64769f2b71aae500fba69`。G9 launcher `2501510`及其独立syncer/bootstrap/duplicate/replacement/checker jobs在最多9个并发节点内完成v120：8个bootstrap slot恰好admit一次，永久终止一个成员后两个唯一low observation只创建一个scale request，replacement恢复8个current成员并复用stream 2的epoch 1，duplicate physical job被拒绝，暂停成员恢复，最后dynamic drain/ack闭合；完整训练约61.65秒、1,521,024 tokens，每cycle 51 local steps。completed Checker `2501559`返回`PASS`，确认MEM-01至MEM-20、schema v3 integrity、64条active observation上限与归档、有界launch/instance/stream状态及零blocking failure event；artifact为`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260807-003213_phase2-completed_pass.json`。同source/config/model/data/seed/v120 matched run的static为46.836秒、dynamic为46.421秒，冻结`max(0,dynamic-static)/static`为0，小于5%门槛；artifact为`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260807-002927_phase2-matched-performance_pass.json`。该51×120 workload超过50×10文档同步基线，但仍只验证恢复、成员、调度和控制面性能，不形成训练质量结论。
+2026-08-07 的Phase 2审查整改后最终验收绑定clean commit `61f571bbe4460b257abe8452c2ea63df79515b29`和source fingerprint `sha256:cdf8f01bdb6f4bfd62dbe9a1103bca0a14f8b029ef3eaf12d8c77221aa94d0c0`。G7/兼容回归PBS `2501753/2501752`与G8 launcher/checker链`2501754/2501758`均返回`PASS`。G9 launcher `2501765`及其独立crash/successor/bootstrap `2501767–2501776`、duplicate `2501777`和checker `2501778` jobs在最多9个并发节点内完成v120：8个bootstrap slot恰好admit一次，永久终止一个成员后两个唯一low observation只创建一个scale request，replacement恢复8个current成员并复用stream epoch 1，duplicate physical job被拒绝，暂停成员恢复，最后dynamic drain/ack闭合；总计1,516,128 tokens，每cycle 51 local steps。matched launcher/checker `2501807/2501826`的同source/config/model/data/seed/v120 static为101.949秒、dynamic为47.348秒，冻结`max(0,dynamic-static)/static`为0，小于5%门槛。completed Checker `2501846`返回`PASS`，确认MEM-01至MEM-20、每个v1–v120恰有一个对应`merge:<version>` observation、starvation generation连续、schema v3 integrity、64条active/59条archived observation、有界launch/instance/stream状态及零blocking failure event；artifact分别为`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260807-014345_phase2-completed_pass.json`和`20260807-014003_phase2-matched-performance_pass.json`。该51×120 workload超过50×10文档同步基线，但仍只验证恢复、成员、调度和控制面性能，不形成训练质量结论。
 
 提交与自定义(以 9 节点为例):
 

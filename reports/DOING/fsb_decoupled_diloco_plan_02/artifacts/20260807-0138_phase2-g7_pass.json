@@ -1,0 +1,36 @@
+{
+  "checker": "plan02_phase2_test_evidence",
+  "command": [
+    "/work/xg24i002/x10041/fsb_decoupled_diloco_phase2_formal/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/test_plan02_phase2_dynamic.py"
+  ],
+  "completed_at": 1786034290.4027855,
+  "contracts": {
+    "churn_cycles": 1000,
+    "mock_scheduler": true,
+    "sqlite_post_warmup_page_growth_limit": 32,
+    "synthetic_state_machine": true,
+    "uuid_generation_count": 1000
+  },
+  "environment": {
+    "hostname": "mg0005",
+    "pbs_job_id": "2501764.opbs",
+    "python": "3.13.13"
+  },
+  "identity": {
+    "git_commit": "61f571bbe4460b257abe8452c2ea63df79515b29",
+    "source_fingerprint": "sha256:60b49b8834f64459457e7cbaa9979df3d238ebe5b9930cc849e4a896b1fcb016"
+  },
+  "kind": "g7",
+  "returncode": 0,
+  "started_at": 1786034281.5824945,
+  "status": "PASS",
+  "stderr": "",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stdout": "........................                                                 [100%]\n24 passed in 7.75s\n",
+  "stdout_sha256": "320961fcde4b876709f436594cc867d89397709c23be63b235667fc87bc9a5de",
+  "target": "tests/test_plan02_phase2_dynamic.py"
+}

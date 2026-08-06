@@ -55,9 +55,9 @@ dynamic只走HA full路径，并在加载模型前完成成员准入：
 
 1. initializer以`stream_pool_size`预建固定stream，并为`bootstrap_instances`建立确定性bootstrap launch request；operator把唯一`BOOTSTRAP_SLOT`传给各独立`run_dynamic_learner.pbs`，scale replacement则传`FS_DILOCO_LAUNCH_REQUEST_ID`；
 2. learner每次启动生成新的`learner_li_<uuid4>`，从hostname与CUDA identity构造placement，写identity/source/config/PBS-job绑定的registration request；它拒绝`--learner-id`和`--num-learners`，不能伪装成static成员或在线改写stream pool；
-3. leader扫描固定request目录，在fenced transaction中验证request TTL/replay、logical request、scheduler job identity、健康placement替换策略和容量预算，然后分配`placement_epoch/stream_id/stream_epoch/admission_generation/token`并发布instance-scoped admission artifact；
+3. leader扫描固定request目录，在fenced transaction中验证request TTL/replay、logical request、scheduler job identity、健康placement替换策略和容量预算。scheduler-bearing request若尚无launch row精确job receipt绑定则持久化为pending并保留文件，后续扫描在绑定到达后重试；错绑拒绝。验证完成才分配`placement_epoch/stream_id/stream_epoch/admission_generation/token`并发布instance-scoped admission artifact；
 4. learner只接受与自身request、descriptor、instance和token一致的admission。随后数据iterator使用`stream_id`作为shard/RNG identity、`stream_pool_size`作为固定分母；replacement复用stream时以新`stream_epoch`记录restart，但数据映射不随active数改变；
-5. leader把admitted heartbeat批量摄取到单个fenced transaction，周期记录幂等capacity observation。只有不同observation形成的连续low窗口才创建scale launch request；outbox在qsub后持久化receipt并用qstat reconciliation保持queued/running reservation，直到admission或已确认的scheduler终态。
+5. leader把admitted heartbeat批量摄取到单个fenced transaction，周期记录幂等capacity observation。merge observation与对应global version同事务提交；starvation generation与对应observation也同事务提交。只有不同observation形成的连续low窗口才创建scale launch request；outbox在qsub后持久化receipt并用qstat reconciliation保持queued/running reservation，直到admission或已确认的scheduler终态。
 
 ### 1.6 learner 启动(`run_learner` / `run_fragment_learner`)
 
@@ -193,7 +193,7 @@ tN++ syncer:末次摄取；若全部 stopped 则终态化未消费 proposal，�
 
 HA full 的差异是 `t0` 之前由独立 initializer完成 schema/descriptor；syncer/learner分别由不同 PBS job启动。任一时刻只有持 current token的 leader可提交。如果 leader在 vN DB commit后崩溃，successor先取得 epoch `e+1`，从 vN恢复并重发 current canonical head，再把下一次训练提交写成 vN+1，而不是从 fixed latest猜版本。
 
-dynamic HA在此基础上把`t0+`改为bootstrap registration/admission，并在运行中允许outbox补充replacement。进入close transaction后，admission关闭且`max_terminal_version`冻结，leader发布drain generation；健康learner在cycle边界写final pointer和ack，超时实例被revoke。所有request/registration可见性条件和ack/revoke条件都成立后才执行最后的有界merge并发布terminal control。
+dynamic HA在此基础上把`t0+`改为bootstrap registration/admission，并在运行中允许outbox补充replacement。global、token、manual、deadline、budget或no-progress条件进入close transaction后，admission关闭且`max_terminal_version`冻结；token/no-progress在current version关门，不直接发布普通terminal。leader发布drain generation；健康learner在cycle边界写final pointer和ack，超时实例被revoke。所有request/registration可见性条件和ack/revoke条件都成立、`dynamic_input_closed`为真后才执行最后的有界merge并发布terminal control；successor恢复冻结reason和上限。
 
 ## 7. 运行期观测点
 

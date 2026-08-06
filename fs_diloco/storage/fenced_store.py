@@ -723,6 +723,22 @@ class FencedSQLiteStore:
         capacity_observation = kwargs.pop("capacity_observation", None)
         if self.dynamic_mode and capacity_observation is None:
             raise RuntimeError("dynamic full merge requires an atomic capacity observation")
+        if self.dynamic_mode:
+            specification = dict(capacity_observation)
+            try:
+                target_version = int(kwargs["target_version"])
+                observation_version = int(specification["global_version"])
+            except (KeyError, TypeError, ValueError):
+                target_version = -1
+                observation_version = -1
+            if (
+                str(specification.get("kind")) != "merge"
+                or str(specification.get("observation_key")) != f"merge:{target_version}"
+                or observation_version != target_version
+            ):
+                raise RuntimeError(
+                    "dynamic full merge requires its exact merge capacity observation"
+                )
         caller_before_commit = kwargs.pop("before_commit", None)
         capacity_result: dict[str, Any] | None = None
 
@@ -2088,6 +2104,22 @@ class FencedSQLiteStore:
     ) -> dict[str, Any]:
         if not self.dynamic_mode:
             raise RuntimeError("capacity observations require schema v3")
+        inline = self._inline_capacity_thread_id == threading.get_ident()
+        reserved_key = observation_key.startswith(("merge:", "starvation:"))
+        if not inline and (kind in {"merge", "starvation"} or reserved_key):
+            raise RuntimeError(
+                "merge/starvation capacity observations and key namespaces require their "
+                "atomic state-transition API"
+            )
+        if kind == "merge" and observation_key != f"merge:{int(global_version)}":
+            raise ValueError("merge capacity observation key/version mismatch")
+        if kind == "starvation":
+            try:
+                generation = int(observation_key.removeprefix("starvation:"))
+            except ValueError as exc:
+                raise ValueError("starvation capacity observation key is invalid") from exc
+            if generation < 1 or observation_key != f"starvation:{generation}":
+                raise ValueError("starvation capacity observation key is invalid")
         timestamp = self._wall_clock() if now is None else float(now)
 
         def operation(conn: _FencedConnection) -> dict[str, Any]:

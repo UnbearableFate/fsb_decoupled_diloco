@@ -1,0 +1,35 @@
+{
+  "checker": "plan02_phase2_test_evidence",
+  "command": [
+    "/work/xg24i002/x10041/fsb_decoupled_diloco_phase2_formal/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests"
+  ],
+  "completed_at": 1786034312.6092737,
+  "contracts": {
+    "fragment": true,
+    "full_repository_suite": true,
+    "historical_readonly": true,
+    "static_full": true
+  },
+  "environment": {
+    "hostname": "mg0009",
+    "pbs_job_id": "2501766.opbs",
+    "python": "3.13.13"
+  },
+  "identity": {
+    "git_commit": "61f571bbe4460b257abe8452c2ea63df79515b29",
+    "source_fingerprint": "sha256:60b49b8834f64459457e7cbaa9979df3d238ebe5b9930cc849e4a896b1fcb016"
+  },
+  "kind": "compatibility",
+  "returncode": 0,
+  "started_at": 1786034286.942499,
+  "status": "PASS",
+  "stderr": "",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stdout": "........................................................................ [ 14%]\n........................................................................ [ 29%]\n........................................................................ [ 44%]\n........................................................................ [ 59%]\n........................................................................ [ 74%]\n........................................................................ [ 89%]\n.................................................                        [100%]\n481 passed in 24.29s\n",
+  "stdout_sha256": "27046e1dfdcbb098d958db0f5f990bd101f97c44850797f415928f374d380118",
+  "target": "tests"
+}

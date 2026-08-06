@@ -91,7 +91,7 @@ dynamic HA在同一布局再增加成员控制面：
 └── metrics/{membership_event,learner_instance,registration,launch_request,capacity_observation}_history.jsonl
 ```
 
-registration request是learner单写者的准入申请；epoch admission与drain是leader发布并登记SHA的canonical artifact。active DB行保持有界，已终态instance/request/observation先归档到上述JSONL再删除。dynamic discovery通过`RunPaths` mode-aware iterator扫描UUID路径，既不调用static learner白名单，也不递归扫描历史payload。
+registration request是learner单写者的准入申请；携带scheduler job ID的请求在launch row尚无精确receipt绑定时保持DB pending且保留源文件，不能提前admit。epoch admission与drain是leader发布并登记SHA的canonical artifact。active DB行保持有界，已终态instance/request/observation先归档到上述JSONL再删除。dynamic discovery通过`RunPaths` mode-aware iterator扫描UUID路径，既不调用static learner白名单，也不递归扫描历史payload。
 
 `eval_checkpoints/` 只在显式研究开关开启且 input-closed terminal selection 低于
 `quorum_min` 时创建。manifest 的 source version/checksum/selected/quorum 是评估溯源；
@@ -258,11 +258,11 @@ syncer 停止后等待 learner 收尾,然后写入 `run_id, final_version, stop_
 | `gc_pending` | 已从活跃 update 表归档、但 payload 物理删除尚未确认的持久队列 | `file_path` 主键;`archived_at`；archive 后/删除前崩溃可继续回收 |
 | `learner_instances`（v3） | dynamic incarnation与current admission状态 | UUID主键；placement/stream epoch、token hash、launch request、PBS job、last proposal、drain/final/expired状态；current stream/placement部分唯一索引 |
 | `placements` / `streams`（v3） | 物理位置与固定virtual stream的current owner | placement主键保存current epoch/instance/reusable stream；stream ID主键保存current epoch/instance/state |
-| `registration_requests`（v3） | registration TTL、内容hash、幂等结果/tombstone | instance主键；request hash、launch request、state、expiry、处理epoch、rejection/result |
+| `registration_requests`（v3） | registration TTL、内容hash、pending/幂等结果/tombstone | instance主键；request hash、launch request、state、expiry、处理epoch、rejection/result；scheduler receipt未绑定时可持久pending |
 | `launch_requests`（v3） | bootstrap/scale logical request和PBS outbox | request主键；bootstrap slot唯一；授权placement epoch、scheduler状态、job ID、reservation/admitted映射 |
 | `capacity_observations`（v3） | 幂等容量窗口与scale决策依据 | observation key主键、sequence唯一；eligible/selected/productive/reserved、low flag、close generation、writer epoch |
 
-全量 `v → v+1` 的事务同时校验唯一 committed 前驱、目标版本连续性、selected ID/learner 唯一性、future/stale 准入和归一化权重;dynamic还逐项join并重验current instance、placement epoch、stream epoch、admission generation/token以及每stream/placement唯一性。随后插入唯一 committed `global_versions(v+1)`,记录 selected 的 applied version/staleness/effective weight,并终态化 `superseded/too_stale/future_base` pending 行。任一校验或 failpoint 异常都会 rollback整个事务。fragment的version、latest和applied状态不是同一个事务，不能据此推导同等级恢复保证。
+全量 `v → v+1` 的事务同时校验唯一 committed 前驱、目标版本连续性、selected ID/learner 唯一性、future/stale 准入和归一化权重;dynamic还逐项join并重验current instance、placement epoch、stream epoch、admission generation/token以及每stream/placement唯一性，并要求把唯一`merge:<v+1>` capacity observation与global row原子提交。随后插入唯一 committed `global_versions(v+1)`,记录 selected 的 applied version/staleness/effective weight,并终态化 `superseded/too_stale/future_base` pending 行。无merge时，新的starvation generation也与对应observation在一个transaction中分配。任一校验或 failpoint 异常都会rollback整个事务，不留下version或observation sequence缺口。fragment的version、latest和applied状态不是同一个事务，不能据此推导同等级恢复保证。
 
 旧 run 的 `updates` 表缺少 mid-cycle 两列时，connect-time 幂等迁移补上 `mid_cycle_adoption_count INTEGER NOT NULL DEFAULT 0` 与 nullable `base_switched_at_step`；`fragment_updates` 不迁移这两列。
 

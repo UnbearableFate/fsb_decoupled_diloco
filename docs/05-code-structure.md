@@ -56,6 +56,7 @@ fsb_decoupled_diloco/
 │   │   ├── launch_phase2_matched.py # static/dynamic同配置顺序隔离matched提交
 │   │   ├── phase2_{test,chaos,matched}_evidence.py # Phase 2结构化证据生成器
 │   │   ├── request_dynamic_close.py # identity-bound operator close CLI
+│   │   ├── clean_run.py           # completion-evidence门禁、dry-run inventory与可审计清理
 │   │   ├── analysis.py            #   run 摘要与断言(读共享目录 + 持久 DB/archive,不依赖 torch)
 │   │   ├── compare_event_traces.py #  profile-driven actor 事件轨迹比较
 │   │   ├── eval_lm_harness.py     #   checkpoint 解析/导出为 HF 目录/lm-eval 结果转 CSV

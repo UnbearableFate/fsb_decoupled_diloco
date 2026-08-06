@@ -474,3 +474,46 @@ Attempt 3, `2497948.opbs`, submitted the short-walltime children and completed s
 
 - The primary frozen-target `claude-opus-5` invocation used session `4df65150-9d55-4a70-9d78-d99c082e17ca` and returned the explicit HTTP 429 session-limit response. No valid Claude report was written.
 - The `3498a066-5265-47cf-9e36-9d3a33a740b8` and `380b37f9-3cd8-4bde-95f8-04ebf81d6e31` identifiers in earlier appended entries do not identify that primary invocation; this record supersedes them without altering the earlier append-only text. The disposition remains `skipped-session-limit`, not approval and not a blocker to Codex remediation.
+
+## 2026-08-07 01:42 JST — Isolated clean-source G9 successor walltime attempt 1
+
+- Formal launcher PBS `2501792.opbs` used detached clean source `61f571bbe4460b257abe8452c2ea63df79515b29`, fingerprint `sha256:60b49b8834f64459457e7cbaa9979df3d238ebe5b9930cc849e4a896b1fcb016`, and submitted successor `2501794.opbs` with a `00:02:00` request.
+- The successor reached global version 108 but PBS ended it with `Exit_status = -29` before the required v120 close. Its recorded wall clock included substantial startup/runtime variance beyond the earlier 61.65-second evidence, so the requested margin was insufficient for this clean isolated run. This is a test-harness walltime failure, not evidence of a protocol relaxation or failed invariant.
+- Disposition: retain the workload and all Phase 2 thresholds unchanged, allow the first attempt's Checker to finish, and rerun G9 from a new run root with a `00:03:00` successor and `00:02:30` learners. The longer request is based on the observed v108 progress plus orderly drain/Checker margin.
+
+## 2026-08-07 01:54 JST — cleanup/atomic-API focused test attempt 1
+
+- PBS `2501900.opbs` ran `tests/test_clean_run.py tests/test_plan02_phase2_dynamic.py tests/test_plan02_phase2_review_remediation.py` on compute node `mg0009` with a `00:00:30` request. Result: `1 failed, 38 passed in 7.09s`; log `fsdiloco_plan02_p2_tests.o2501900`.
+- The only failure was an exact diagnostic-text expectation in `test_clean_run_refuses_mismatched_evidence_and_broad_target`: the strengthened evidence check correctly refused a cross-run artifact earlier at the run-ID check with `completion evidence run identity does not match`, while the test still expected the older later-path phrase `different run`. No cleanup candidate was deleted and all production Phase 2 atomic-API tests passed.
+- Disposition: assert the invariant (`run identity does not match`) instead of the obsolete validation-order wording, then rerun the complete 39-test group. No cleanup authorization or production protocol threshold changes.
+
+## 2026-08-07 01:55 JST — cleanup/atomic-API focused test attempt 2
+
+- PBS `2501901.opbs` reran the same 39-test group on `mg0009` with a `00:00:30` request and returned `1 failed, 38 passed in 7.10s`; log `fsdiloco_plan02_p2_tests.o2501901`.
+- The cleaner had been refined to validate the evidence run-root before the direct evidence run-ID, so the same intentional cross-run negative case now failed closed with the earlier and more specific `completion evidence belongs to a different run`. The test-only regex changed in the opposite direction while this validation ordering was finalized; production deletion still did not begin, and all 38 other tests passed.
+- Disposition: stop coupling the assertion to validation order and accept either of the two correct cross-run refusal diagnostics. Rerun the unchanged behavior group once; this is attempt 2 of the cleanup diagnostic test, not a second protocol failure.
+
+## 2026-08-07 01:57 JST — mutable-worktree full-suite attempt 3
+
+- PBS `2501908.opbs` ran `pytest -q tests` on `mg0009` with a `00:01:00` request and returned `1 failed, 491 passed in 23.77s`; log `fsdiloco_plan02_p2_tests.o2501908`.
+- The only failure expected a failed cleanup manifest after a candidate changed between inventory and delete. During the job, another active Codex process in the shared repository changed the cleaner from its earlier validation order to a revalidation-first variant; pytest therefore imported a mixed mutable snapshot in which the refusal occurred before the manifest path used by the loaded assertion was created. File mtimes changed while the compute job was live. No formal run or user data was a cleanup target.
+- Disposition: do not treat another shared dirty-tree full run as frozen validation. Finalize the cleanup revalidation contract and its test, freeze the complete current target in Git, create an isolated detached worktree from that commit, and rerun focused/full tests there without edits. This is a source-snapshot race, not a third failure of one cleanup behavior; no fourth local retry is authorized from the mutable tree.
+
+## 2026-08-07 01:49 JST — Cleanup-tool focused test helper collision
+
+- PBS `2501884.opbs` requested `00:00:20` on `debug-g` and ran `tests/test_clean_run.py`; it exited 1 after one second with `1 failed, 6 passed in 0.22s`.
+- The failure occurred in test setup, not deletion logic: a second `_completed_run()` call tried to recreate the shared report artifact directory without `exist_ok=True`, raising `FileExistsError` before the mismatched-evidence assertion.
+- Disposition: make the test fixture's report-directory creation idempotent, keep production cleanup behavior and safety checks unchanged, then rerun the exact focused target before expanding validation.
+
+## 2026-08-07 01:52 JST — Full regression exposed two new-test assertion defects
+
+- PBS `2501894.opbs` requested `00:00:50` on `debug-g` and ran `pytest -q tests`; it exited 1 after 26 seconds with `2 failed, 489 passed in 24.37s`.
+- `test_clean_run_refuses_mismatched_evidence_and_broad_target` correctly observed fail-closed cleanup behavior, but its regex expected the later run-root diagnostic while the stronger run-identity check rejected the evidence first.
+- `test_merge_and_starvation_observations_reject_non_atomic_public_writes` called the existing `_dynamic_store` fixture helper without its leading underscore, raising `NameError` before exercising the new public-API guard.
+- Disposition: match the stable identity-mismatch diagnostic, correct the helper reference, keep both production safety guards unchanged, and rerun the focused cleanup/remediation tests followed by the full repository suite.
+
+## 2026-08-07 01:56 JST — concurrent cleanup-test stabilization attempts
+
+- PBS `2501895.opbs` ran the 30-test Phase 2 dynamic/remediation group while the newly added non-atomic-public-write case still referenced the wrong fixture helper; result `1 failed, 29 passed in 6.87s`. PBS `2501896.opbs` collected the same helper defect plus an intermediate cleanup diagnostic regex and returned `2 failed, 489 passed in 23.92s`.
+- After the helper correction, focused PBS `2501902.opbs` passed all 30 production Phase 2 tests in `7.26s`. Full PBS `2501903.opbs` returned `1 failed, 490 passed in 24.86s` because it collected a transient single-phrase diagnostic expectation while the cross-run cleanup refusal was being changed to accept either valid fail-closed validation order. No production invariant failed and no cleanup deletion began in any negative test.
+- Disposition: freeze the diagnostic assertion as `different run|run identity does not match`, add execution-time revalidation of completion evidence and the candidate inventory, then run one quiescent cleanup/dynamic/remediation group and one full suite. These failed dirty-tree attempts are not completion evidence.

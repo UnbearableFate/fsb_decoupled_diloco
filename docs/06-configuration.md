@@ -60,7 +60,7 @@
 | `grace_window.initial_seconds` | 10.0 | adaptive 模式的初始窗口;用 syncer 首见 update 的 monotonic 时钟估算最快下一上传，运行中只会缩短 |
 | `grace_window.max_seconds` | 60.0 | 初始/固定窗口的硬上限 |
 | `stop_after_outer_steps` | 20 | 外层步数(fragment:merge event 数)停止条件;null 不限 |
-| `stop_after_global_tokens` | `null` | 累计合并 token 停止条件；只在每轮开头检查，因此最后一次 merge 按整批提交，累计值可超过阈值 |
+| `stop_after_global_tokens` | `null` | 累计合并token停止条件；只在每轮开头检查，因此最后一次merge按整批提交，累计值可超过阈值。dynamic命中后以current version为冻结上限进入持久close/drain，不借用outer-step target |
 | `stop_file_poll_seconds` | 5.0 | learner 侧轮询 stop/latest 的间隔 |
 
 ## syncer — syncer 计算与发布
@@ -136,7 +136,7 @@ HA 默认关闭，只允许 `fragments.enabled=false`；成员可为static或dyn
 
 ## scaling — dynamic capacity/outbox
 
-`enabled=true`只允许dynamic。scale-out由持久且去重的capacity observation驱动；qsub receipt和qstat状态只是outbox证据，最终admission仍由leader transaction决定。
+`enabled=true`只允许dynamic。scale-out由持久且去重的capacity observation驱动；merge observation与global version同事务提交，starvation generation与其observation也原子分配。qsub receipt和qstat状态只是outbox证据，最终admission仍由leader transaction决定；携带scheduler job ID的registration在精确receipt绑定出现前保持pending。
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
@@ -176,7 +176,7 @@ HA 默认关闭，只允许 `fragments.enabled=false`；成员可为static或dyn
 | `heartbeat_interval_seconds` | 30.0 | learner 写心跳间隔 |
 | `stale_after_seconds` | 120.0 | 心跳超龄 → stale |
 | `dead_after_seconds` | 300.0 | 心跳超龄 → dead |
-| `no_progress_timeout_seconds` | 600.0 | syncer 无合并进展的停机超时；fragment learner 在有全局外层目标时的 final-progress wait 也用它。full learner 没有同类 final wait，syncer 等 learner 则使用下面的 shutdown timeout |
+| `no_progress_timeout_seconds` | 600.0 | syncer无合并进展的超时；legacy/fragment按既有停机语义处理，dynamic以`no_progress_timeout`原因在current version进入持久close/drain，并在controller closed且`dynamic_input_closed`前拒绝普通terminal。fragment learner在有全局外层目标时的final-progress wait也用它；full learner没有同类final wait，syncer等learner则使用下面的shutdown timeout |
 | `syncer_unresponsive_timeout_seconds` | `null` | learner 观察不到新版 latest 时的自保超时；`null` 沿用 `no_progress_timeout_seconds`，显式值必须 > 0 |
 | `learner_shutdown_timeout_seconds` | `null` | syncer 发布 stop 后等待 stopped 心跳的上限；`null` 为 `max(120, 2 × heartbeat_interval_seconds)`，大模型收尾更慢时可显式调大 |
 

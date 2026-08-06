@@ -4,7 +4,7 @@ syncer 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.md
 
 HA full仍只有一个 active合并/发布者，但允许多个独立 candidate process。入口先用 run descriptor/bootstrap gate选择 legacy或 HA路径；HA candidate只有 acquire单调 `LeaderToken`后才构造 leader-bound store、加载模型/DB state并初始化 W&B。successor从 DB current committed row恢复；每次 publish使用 epoch唯一 checkpoint path，fenced commit后发布 canonical control。正常或异常收尾都不会让 stale token写 terminal/maintenance状态；正常收尾先发布 early stop generation，完成 summary/maintenance 后再发布更高的完整 generation。若两阶段之间崩溃，successor取得新 epoch重建 latest/heartbeat/summary并重跑幂等 maintenance 后完成终态；异常生成的 `error` terminal可诊断但不阻止 successor acquire/resume，也不让 learner提前停止。
 
-dynamic HA复用同一leader/token/publication链，并增加schema v3 membership controller。first leader初始化固定stream pool和bootstrap requests；每轮批量摄取current heartbeat、registration和proposal，记录幂等capacity observation并驱动scale launch outbox。selection仍用既有staleness/token数学，但final commit在同一fenced transaction重验instance/placement/stream/admission generation。global/manual/deadline/budget close会冻结admission generation、close generation与max terminal version，发布drain并等待ack/revoke/visibility闭合。
+dynamic HA复用同一leader/token/publication链，并增加schema v3 membership controller。first leader初始化固定stream pool和bootstrap requests；每轮批量摄取current heartbeat、registration和proposal，记录幂等capacity observation并驱动scale launch outbox。selection仍用既有staleness/token数学，但final commit在同一fenced transaction重验instance/placement/stream/admission generation，并原子提交对应`merge:<version>` observation；starvation generation也只与其observation一起分配。global/token/manual/deadline/budget/no-progress close会冻结admission generation、close generation与max terminal version，发布drain并等待ack/revoke/visibility闭合。
 
 ## runtime/syncer_ha.py
 
@@ -33,7 +33,7 @@ HA正常收尾在写最终`process_exit`事件之前同步停止`LeaseRenewalThr
 ## 发布
 
 - **`latest_payload(...)`** — 全量 `latest.json` 同时写 `total_update_tokens` 与 `total_seen_tokens`，并携带按 `RunPaths` 生成的 weight/optim/param-index 路径、created_at、format/run/version；函数不额外调用 `resolve()`，路径是否绝对取决于 shared root。
-- **`publish_global(...)`** — 默认两个 worker 并发原子写 weight/outer，主线程确认双成功后才调用 v0 初始化事务或 `commit_full_merge`，最后原子写 latest。`num_updates` 形参在 merge commit 中不作权威计数，DB 取 selected 长度。串行模式保持 weight→outer 次序。只有并行 futures 尚未全部完成时才可能调用 during-wait ingestion；callback poll 上限为 `min(0.2, scan_interval)`，只做心跳/metadata，不做 selection/maintenance/version commit。返回 worker/墙钟/bytes/摄取/roundtrip 计时。DB commit 是版本边界，latest 是缓存。
+- **`publish_global(...)`** — 默认两个 worker 并发原子写 weight/outer，主线程确认双成功后才调用 v0 初始化事务或 `commit_full_merge`，最后原子写 latest。dynamic merge必须同时传入capacity observation，由同一事务提交global row和`merge:<version>` observation。`num_updates`形参在merge commit中不作权威计数，DB取selected长度。串行模式保持weight→outer次序。只有并行futures尚未全部完成时才可能调用during-wait ingestion；callback poll上限为`min(0.2, scan_interval)`，只做心跳/metadata，不做selection/maintenance/version commit。返回worker/墙钟/bytes/摄取/roundtrip计时。DB commit是版本边界，latest是缓存。
 - **`checkpoint_wait_ingestion_callback(config, callback)`** — `sync.ingest_during_publish=false` 时返回 None，true 时原样返回 callback，不再包装。pass/update/heartbeat/seconds 是 `publish_global` 调用它时累加的。串行 checkpoint 写入没有 futures wait，因此即便开关 true 也不会摄取。
 - **`fragment_latest_payload(*, ..., global_merge_event, fragment_versions, fragment_updated_events, materialized_weight_path)`** — fragment 布局的 latest 内容(`latest_kind: "fragment"`,每片版本/路径/最后更新事件)。
 - **`should_materialize_fragment_full(config, global_merge_event) -> bool`** — 是否本事件重拼完整权重:事件 0、达到 `stop_after_outer_steps`、或按显式正整数 `materialize_full_every_events` 取模；fragment 配置缺失/null/≤0 会在启动时 fail closed。
@@ -92,17 +92,17 @@ HA正常收尾在写最终`process_exit`事件之前同步停止`LeaseRenewalThr
 - 每次合并的 applied/`superseded`/`too_stale`/`future_base` 状态都由 `commit_full_merge` 与 global row 同事务提交;
 - 全部 stopped 后先等待一个 grace/reingest 周期并重新判断 closure；重新打开则复位 grace 并回常规 discovery，仍闭合时只有 `closed_empty` 产生 `input_exhausted`；input-closed 分支不再额外执行一遍未使用的常规 discovery;
 - fragment 主循环使用同一 input-closed 判定与 grace/reingest 生命周期；每次 terminal merge 推进 global event 后重新计算目标片，最终 pending/selected fragment proposal 由统一 shutdown 终态化。
-- 每次成功合并后刷新 `last_progress_time`;quorum 等待期间超过 `no_progress_timeout_seconds` 即停机;
+- 每次成功合并后刷新`last_progress_time`；legacy/fragment在quorum等待超过`no_progress_timeout_seconds`时按既有语义停机，dynamic则以该原因在current version启动持久drain，controller/input closure前不发布普通terminal；
 - 每次成功提交后执行 archive/GC,因此 active DB/checkpoint/proposal 面有界;
 - 一旦成功进入主循环，finally 序列为：HA先提交并发布 early stop generation（legacy直接 publish stop）→ 非 error 时等待 learner/末次摄取 → 只有全 stopped 才终态化未消费 proposal → summary → 非 error 的 archive/GC → HA以更高 generation成对发布最终 stop/summary；随后 W&B finish/关库。early generation、summary 或 maintenance 窗口崩溃都保持 terminal不完整，使 successor可执行幂等 repair。
 
 ### dynamic full控制器
 
 - `FencedSQLiteStore.initialize_dynamic_membership()`幂等建立stream/bootstrap controller state并发布bootstrap-ready；successor读取schema v3现状，不重新分配stream或logical request。
-- registration摄取验证TTL、内容hash、source/config/path/PBS job和logical request；admission transaction拒绝健康placement duplicate、超容量和已fulfill request，分配placement/stream/admission generation/token后发布instance artifact。
-- `record_capacity_observation()`以observation key/sequence去重，并在同一transaction维护连续low计数、cooldown和request预算；`LearnerLaunchOutbox`提交带request ID、walltime/queue的learner job并reconcile queued/running/finished/unknown状态，reserved capacity只在已证实终态时释放。
+- registration摄取验证TTL、内容hash、source/config/path/PBS job和logical request；scheduler-bearing request在launch row尚无精确receipt绑定时保存为pending并保留请求文件，绑定到达后重试，错绑拒绝。admission transaction拒绝健康placement duplicate、超容量和已fulfill request，分配placement/stream/admission generation/token后发布instance artifact。
+- `record_capacity_observation()`以observation key/sequence去重，并在同一transaction维护连续low计数、cooldown和request预算；merge路径改由`commit_full_merge()`原子写对应observation，无merge路径由原子starvation observation API同时推进generation。`LearnerLaunchOutbox`提交带request ID、walltime/queue的learner job并reconcile queued/running/finished/unknown状态，reserved capacity只在已证实终态时释放。
 - `commit_full_merge`的dynamic参数要求每个selected row在transaction内仍是current admitted incarnation，且同stream/placement不重复；selection之后发生replacement/revoke时整批不会错误应用旧成员。
-- close policy在一个transaction中关闭admission、取消open request并冻结`close_generation/max_terminal_version`。`DynamicTerminalPublisher`发布drain；`dynamic_input_closed`要求所有logical request/registration可见性收敛，current成员均ack或timeout revoke，final pointer均进入frontier。successor沿用冻结上限，terminal merge绝不超过它。
+- close policy在一个transaction中关闭admission、取消open request并冻结`close_generation/max_terminal_version`。token target使用current version作为上限，no-progress也进入该状态机。`DynamicTerminalPublisher`发布drain；`dynamic_input_closed`要求所有logical request/registration可见性收敛，current成员均ack或timeout revoke，final pointer均进入frontier。successor沿用冻结reason和上限，terminal merge绝不超过它；非error terminal要求controller closed且input closed。
 - dynamic maintenance把expired instance、registration、launch request和超出retention窗口的observation先append+fsync归档，再fenced删除active行；物理UUID pointer/payload仍由引用驱动GC处理。
 
 ### fragment 模式(`run_fragment_syncer`)

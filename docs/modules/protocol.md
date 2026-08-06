@@ -15,7 +15,7 @@
 
 - `new_learner_instance_id()`生成严格UUIDv4格式的`learner_li_<uuid>`；`validate_learner_instance_id()`、`placement_id()`分别约束incarnation和`hostname:CUDA identity`。instance、placement与stream不可互换。
 - `bootstrap_request_id()`把run、slot和descriptor/config fingerprint哈希成确定性logical request；`write_bootstrap_scheduler_jobs()`在每次qsub后原子发布slot→request→PBS job绑定，`read_bootstrap_scheduler_jobs()`复算identity、自摘要、唯一slot/request和job ID语法。
-- registration request绑定run/source/config、instance-owned path、launch request、placement、PBS job、进程identity、TTL和内容hash。reader对replay返回冻结结果，对同instance内容冲突fail closed。
+- registration request绑定run/source/config、instance-owned path、launch request、placement、PBS job、进程identity、TTL和内容hash。reader对replay返回冻结结果，对同instance内容冲突fail closed；leader对尚未获得launch row精确scheduler receipt绑定的请求返回持久pending并保留文件，绑定后再重试admission。
 - `Admission`解析并复算leader发布artifact的SHA；内容包括placement/stream epoch、admission generation/token、launch request与restart标记。`MembershipPublisher`在leader epoch目录发布bootstrap-ready与每instance admission/rejection，并把相对path/SHA登记为control publication。
 
 ## protocol/dynamic_terminal.py — manual close与drain

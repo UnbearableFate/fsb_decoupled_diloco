@@ -18,7 +18,7 @@ full + Syncer HA 还有两种成员模式。`static` 保留配置冻结的 `lear
 ## 设计目标
 
 1. **训练协调零网络通信依赖**:角色间协议只要求各节点挂载同一个共享目录,天然适配抢占式/机会式算力。真实 HF 模型/数据首次获取和可选 W&B online 上报仍可能访问外网；离线运行还需预先准备依赖与缓存。
-2. **异步容错**:learner 之间不直接等待；变慢、暂停或崩溃不会占住其他 learner。只要剩余贡献者仍能满足 `quorum_min`，syncer 就可继续进展；否则最终走 `no_progress_timeout`。syncer 通过心跳分类存活状态，通过 staleness 窗口丢弃过期更新。
+2. **异步容错**:learner 之间不直接等待；变慢、暂停或崩溃不会占住其他 learner。只要剩余贡献者仍能满足 `quorum_min`，syncer 就可继续进展；static/fragment最终可走`no_progress_timeout`，dynamic则把该条件持久化为close原因并先完成drain/input-closed闭环。syncer通过心跳分类存活状态，通过staleness窗口丢弃过期更新。
 3. **可审计**:每个被 syncer 摄取的 update 从 pending 到 applied/dropped 都有 SQLite + archive 记录；learner JSONL/CSV 提供产生侧证据。若同一固定 pointer 在 syncer 首次读取前已被下一 proposal 覆盖，旧 payload 从未入库，只会在 orphan grace 后回收，不能声称它有 DB 生命周期；共享 learner CSV 也只是无锁 best-effort 遥测。
 4. **崩溃一致性**:指针和张量快照用原子替换发布;全量 learner 先写不可变 payload,再原子替换自己的固定 proposal pointer;syncer 以共享目录中的持久 SQLite 提交记录为恢复权威,`latest.json` 只是可重建缓存。原子替换保证读者不会看到半文件；helper 并不 fsync 父目录，因此不宣称断电后的目录项持久性。
 5. **有界运行面**:长期 run 的活跃 DB、proposal 可见面、checkpoint 和单轮 discovery 工作量不随历史版本数增长;终态记录先 fsync 到 JSONL 历史再从活跃 DB 剪枝。
@@ -51,7 +51,7 @@ full + Syncer HA 还有两种成员模式。`static` 保留配置冻结的 `lear
 | **quorum** | 一次合并需要的 update 数下限 `quorum_min` / 上限 `quorum_max`(每个 learner 至多贡献 1 份)。 |
 | **grace window(宽限窗口)** | 达到 `quorum_min` 后,syncer 再等待一小段时间以收集更多 learner 的更新。`fixed` 使用固定时长;`adaptive_fastest_upload_eta` 从 `initial_seconds` 开始,并以已选 learner 中最快下一次上传的 ETA 为界只缩短、不延长;凑满 `quorum_max` 也会提前结束。 |
 | **terminal drain(末端排空)** | 所有预期 learner 都明确写出 `stopped` 最终心跳后,syncer 等一个 grace/reingest 周期,在严格 future/staleness 准入下放宽 quorum、按配置的选择策略合并剩余 proposal;合法输入耗尽时以 `input_exhausted` 停止。full/fragment 两条主循环都覆盖。 |
-| **dynamic drain** | leader 关闭 admission、冻结 `max_terminal_version` 并发布 close generation；current healthy instance在 cycle边界提交 final pointer和ack，dead instance经超时撤销。只有 request/registration可见性和全部ack/revoke条件同时满足，dynamic input才闭合。 |
+| **dynamic drain** | leader关闭admission、冻结`max_terminal_version`并发布close generation；global target、token target、manual/deadline/budget和no-progress都进入该持久状态机。current healthy instance在cycle边界提交final pointer和ack，dead instance经超时撤销。只有request/registration可见性和全部ack/revoke条件同时满足，dynamic input才闭合，正常terminal才可发布。 |
 | **latest.json / canonical head** | legacy learner轮询 fixed `latest.json`；HA learner从最高合法 syncer epoch读取 canonical head并校验 immutable pointer SHA。HA fixed cache只是可修复便利面。 |
 | **proposal pointer** | 全量模式每 learner 一份 `updates/latest/learner_XXX.json`；fragment 模式每 `(learner, fragment)` 一份 `learner_XXX_fNNN.json`。新 proposal 原子覆盖固定可见面，SQLite frontier 负责重放抑制和生命周期。 |
 | **heartbeat** | learner 周期性写入的存活信号 JSON,syncer 据此把 learner 分类为 active/stale/dead/stopped。 |

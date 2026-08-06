@@ -44,4 +44,4 @@ Run 分析方法和实验结果不放在系统文档中,统一维护在 [reports
 
 ## 文档对应的代码版本
 
-本组文档已按2026-08-07的Plan 02 Phase 2最终技术门禁重新核对：可执行source commit为`85febbaee653dcff04897eea35a15dd8f31172c2`，source fingerprint为`sha256:b8684b5d90d22a341da3e30dfca375b6de4026103ee64769f2b71aae500fba69`。协议事实以`runtime/`、`storage/schema_bootstrap.py`、`storage/schema.sql`和`core/config.py`为最终依据；实验结论只引用仓库中已经保留的报告证据。模块参考同时覆盖公开入口和会影响协议行为的私有helper。
+本组文档已按2026-08-07的Plan 02 Phase 2审查整改后技术门禁重新核对：可执行source commit为`61f571bbe4460b257abe8452c2ea63df79515b29`，source fingerprint为`sha256:cdf8f01bdb6f4bfd62dbe9a1103bca0a14f8b029ef3eaf12d8c77221aa94d0c0`。协议事实以`runtime/`、`storage/schema_bootstrap.py`、`storage/schema.sql`和`core/config.py`为最终依据；实验结论只引用仓库中已经保留的报告证据。模块参考同时覆盖公开入口和会影响协议行为的私有helper。

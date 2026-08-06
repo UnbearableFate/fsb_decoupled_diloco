@@ -24,9 +24,15 @@
 
 - `launch_phase2_acceptance.submit_jobs()`提交G8/G9 crash leader、successor、独立dynamic bootstrap、可选duplicate和chaos checker。每次qsub后立即原子更新pending receipt，并逐slot重写identity-bound bootstrap scheduler manifest；中途失败返回partial且不自动qdel。
 - `launch_phase2_matched`顺序隔离同source/config/model/data/seed/target的static与dynamic 1+8 runs，再提交matched checker。因站点array约束，当前实现逐个提交8个learner job并显式传static index或dynamic bootstrap slot。
-- `phase2_test_evidence`聚合focused/full pytest结果；`phase2_chaos_evidence`从run DB/control/log/scheduler receipts验证G8/G9 takeover、replacement、duplicate、pause、node-cap和drain；`phase2_matched_evidence`按`max(0,dynamic-static)/static`执行冻结5%完整时间门禁。
+- `phase2_test_evidence`聚合focused/full pytest结果；`phase2_chaos_evidence`从run DB/control/log/scheduler receipts验证G8/G9 takeover、replacement、duplicate、pause、node-cap和drain；`phase2_matched_evidence`按`max(0,dynamic-static)/static`执行冻结5%完整时间门禁。completed Checker还要求每个committed v>0恰有一个匹配的`merge:<version>` observation、没有额外merge key，并要求starvation generation连续。
 - `request_dynamic_close`加载并校验run descriptor，拒绝非dynamic run，然后以run/source/config identity发布带自摘要的manual close request。它不直接写drain、stop或DB controller state。
 - Phase 2最终completed Checker仍由`scripts/miyabi/check_plan02_phase2.py --mode phase2-completed`执行只读复核；上述工具artifact必须与同一descriptor/source/config绑定，不能跨run拼接。
+
+## `tools/clean_run.py`
+
+- `build_cleanup_plan()`要求目标是project `runs/`下的精确run目录，`control/stop.json`与`summary.json`的run ID/final version一致、全部learner已停止，并要求`reports/`内同run的error-free `PASS` evidence；SQLite WAL/SHM/journal存在、目标过宽、symlink或identity不符都fail closed。
+- dry-run输出逐文件relative path、size、mtime和原因。正式`--delete`必须指定新的report-side `--manifest-output`，先fsync planned inventory，逐文件重新核对size/mtime后unlink，再把manifest原子更新为`complete`；部分失败会记录已删除数量并标为`failed`。
+- cleaner保留authority DB、weight/outer checkpoint、control/config、syncer/candidate日志和一份代表性learner日志；候选仅包括重复成功learner日志、offline W&B cache、terminal heartbeat/pointer/payload、已由summary/DB/evidence覆盖的raw learner/update telemetry及临时文件。
 
 ## `tools/analysis.py`
 

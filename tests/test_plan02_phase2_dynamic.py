@@ -1089,7 +1089,7 @@ def capacity_observation(
     return store.record_capacity_observation(
         **capacity_parameters(
             key=key,
-            kind="starvation",
+            kind="synthetic",
             global_version=0,
             eligible=eligible,
             selected_instance_ids=[],
@@ -1483,7 +1483,7 @@ def test_dynamic_state_is_bounded_after_1000_churn_cycles(tmp_path: Path) -> Non
             )
             store.record_capacity_observation(
                 observation_key=f"churn:{cycle}",
-                kind="merge",
+                kind="synthetic",
                 global_version=cycle,
                 eligible_contributors=1,
                 selected_instance_ids=[current["instance_id"]],

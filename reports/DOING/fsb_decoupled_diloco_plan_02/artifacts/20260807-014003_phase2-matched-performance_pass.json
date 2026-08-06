@@ -1,0 +1,167 @@
+{
+  "checker": "plan02_phase2_matched_performance",
+  "dynamic": {
+    "complete_training_time_seconds": 47.348053850000724,
+    "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase2_matched_61f571b_20260807014003_dynamic",
+    "summary": {
+      "all_learners_stopped": true,
+      "complete_training_time_seconds": 47.348053850000724,
+      "epoch": 1,
+      "final_version": 120,
+      "format_version": 1,
+      "generation": 2,
+      "kind": "summary",
+      "learner_resources": {
+        "cpu_utilization_scope": "whole_node",
+        "gpu_utilization_scope": "learner_cuda_visible_device",
+        "per_learner": {
+          "learner_li_306bb22b-39ae-4a66-930c-a2886f379267": {
+            "last_local_step": 11016,
+            "status": "drained",
+            "training_cpu_utilization_peak_percent": 13.636363636363637,
+            "training_gpu_utilization_peak_percent": 4.0
+          },
+          "learner_li_3d474425-3562-4604-95b3-6235e32946e0": {
+            "last_local_step": 10608,
+            "status": "drained",
+            "training_cpu_utilization_peak_percent": 13.333333333333334,
+            "training_gpu_utilization_peak_percent": 4.0
+          },
+          "learner_li_656f5a43-3fea-4560-95e7-18ced68a9c78": {
+            "last_local_step": 11067,
+            "status": "drained",
+            "training_cpu_utilization_peak_percent": 14.285714285714286,
+            "training_gpu_utilization_peak_percent": 5.0
+          },
+          "learner_li_9b5c5a88-0aec-40eb-b8ec-a6615ec3dd4d": {
+            "last_local_step": 10710,
+            "status": "drained",
+            "training_cpu_utilization_peak_percent": 18.181818181818183,
+            "training_gpu_utilization_peak_percent": 4.0
+          },
+          "learner_li_a7340ca7-571e-47bf-bd99-ec1059ac6da4": {
+            "last_local_step": 10863,
+            "status": "drained",
+            "training_cpu_utilization_peak_percent": 20.0,
+            "training_gpu_utilization_peak_percent": 4.0
+          },
+          "learner_li_a7e239db-e232-44ae-b594-f627098dd44c": {
+            "last_local_step": 10608,
+            "status": "drained",
+            "training_cpu_utilization_peak_percent": 13.636363636363637,
+            "training_gpu_utilization_peak_percent": 4.0
+          },
+          "learner_li_adb4c973-e2aa-4549-b6a6-015a7fa7abe0": {
+            "last_local_step": 11016,
+            "status": "drained",
+            "training_cpu_utilization_peak_percent": 17.391304347826086,
+            "training_gpu_utilization_peak_percent": 5.0
+          },
+          "learner_li_cbe7c4c9-8258-41f8-8408-f4b83cca207e": {
+            "last_local_step": 11322,
+            "status": "drained",
+            "training_cpu_utilization_peak_percent": 17.391304347826086,
+            "training_gpu_utilization_peak_percent": 5.0
+          }
+        },
+        "training_cpu_utilization_peak_percent_max": 20.0,
+        "training_cpu_utilization_peak_percent_mean": 15.982025221155656,
+        "training_gpu_utilization_peak_percent_max": 5.0,
+        "training_gpu_utilization_peak_percent_mean": 4.375
+      },
+      "owner_id": "2501817.opbs:mg0009:66199:e8ce9086-2718-405b-a2a7-13548a715a38",
+      "run_id": "plan02_phase2_matched_61f571b_20260807014003_dynamic",
+      "stop_reason": "stop_after_outer_steps",
+      "total_seen_tokens": 1566720,
+      "training_completed_at": 1786034588.0108042,
+      "training_started_at": 1786034540.6627502
+    }
+  },
+  "dynamic_control_overhead_ratio": 0.0,
+  "errors": [],
+  "identity": {
+    "dynamic_descriptor_sha256": "e4a2c6de83c8cebf4ba1cca762190e52528add74bb7f81af2799dee32ef907aa",
+    "git_commit": "61f571bbe4460b257abe8452c2ea63df79515b29",
+    "source_fingerprint": "sha256:cdf8f01bdb6f4bfd62dbe9a1103bca0a14f8b029ef3eaf12d8c77221aa94d0c0",
+    "static_descriptor_sha256": "d6f2bbaa6b2774d6f49a83365a674455ae173c5adcc3a23b2ea205edd209969b"
+  },
+  "static": {
+    "complete_training_time_seconds": 101.94869541099979,
+    "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase2_matched_61f571b_20260807014003_static",
+    "summary": {
+      "all_learners_stopped": true,
+      "complete_training_time_seconds": 101.94869541099979,
+      "epoch": 1,
+      "final_version": 120,
+      "format_version": 1,
+      "generation": 2,
+      "kind": "summary",
+      "learner_resources": {
+        "cpu_utilization_scope": "whole_node",
+        "gpu_utilization_scope": "learner_cuda_visible_device",
+        "per_learner": {
+          "learner_000": {
+            "last_local_step": 26521,
+            "status": "stopped",
+            "training_cpu_utilization_peak_percent": 20.833333333333332,
+            "training_gpu_utilization_peak_percent": 5.0
+          },
+          "learner_001": {
+            "last_local_step": 26562,
+            "status": "stopped",
+            "training_cpu_utilization_peak_percent": 13.636363636363637,
+            "training_gpu_utilization_peak_percent": 5.0
+          },
+          "learner_002": {
+            "last_local_step": 25929,
+            "status": "stopped",
+            "training_cpu_utilization_peak_percent": 16.666666666666668,
+            "training_gpu_utilization_peak_percent": 4.0
+          },
+          "learner_003": {
+            "last_local_step": 26635,
+            "status": "stopped",
+            "training_cpu_utilization_peak_percent": 13.636363636363637,
+            "training_gpu_utilization_peak_percent": 4.0
+          },
+          "learner_004": {
+            "last_local_step": 25269,
+            "status": "stopped",
+            "training_cpu_utilization_peak_percent": 18.181818181818183,
+            "training_gpu_utilization_peak_percent": 4.0
+          },
+          "learner_005": {
+            "last_local_step": 26320,
+            "status": "stopped",
+            "training_cpu_utilization_peak_percent": 13.636363636363637,
+            "training_gpu_utilization_peak_percent": 4.0
+          },
+          "learner_006": {
+            "last_local_step": 23406,
+            "status": "stopped",
+            "training_cpu_utilization_peak_percent": 13.043478260869565,
+            "training_gpu_utilization_peak_percent": 4.0
+          },
+          "learner_007": {
+            "last_local_step": 0,
+            "status": "stopped",
+            "training_cpu_utilization_peak_percent": 0.8333333333333334,
+            "training_gpu_utilization_peak_percent": 0.0
+          }
+        },
+        "training_cpu_utilization_peak_percent_max": 20.833333333333332,
+        "training_cpu_utilization_peak_percent_mean": 13.808465085638998,
+        "training_gpu_utilization_peak_percent_max": 5.0,
+        "training_gpu_utilization_peak_percent_mean": 3.75
+      },
+      "owner_id": "2501808.opbs:mg0005:119051:c5deee48-6120-4be8-8920-29746d46d3f8",
+      "run_id": "plan02_phase2_matched_61f571b_20260807014003_static",
+      "stop_reason": "stop_after_outer_steps",
+      "total_seen_tokens": 1370880,
+      "training_completed_at": 1786034528.648625,
+      "training_started_at": 1786034426.6999292
+    }
+  },
+  "status": "PASS",
+  "threshold_ratio": 0.05
+}
