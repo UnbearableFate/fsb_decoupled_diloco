@@ -290,3 +290,12 @@ Attempt 3, `2497948.opbs`, submitted the short-walltime children and completed s
 - 清理动作：为避免已无可能通过的run继续占用配额，operator执行`qdel 2498987.opbs '2498988[].opbs'`；successor最终exit271，learner7 exit-29。没有删除run或失败证据。
 - 已确认根因：launcher同时释放successor和learner array，不能保证successor先获得一个节点；短learner walltime把scheduler queue/startup delay计入同一预算，形成“learners占资源等待successor、successor排队等待资源”的可用性死锁。
 - 下一轮：把learner array改为PBS `depend=after:<successor_job>`（successor开始运行即释放，而非等待其结束），保留successor自身`afterany:<crash_job>`。这先保证一个successor slot，再并发启动8 learners。依据无startup等待时此前learners约30秒实测，replacement使用45秒learner walltime；successor包含15秒lease等待与训练，使用40秒；crash继续15秒。新增launcher artifact记录该start dependency。相同completed gate只有8 learners、successor和Checker全部exit0且性能/可靠性指标通过才算PASS。
+
+## 2026-08-06 15:06 JST — phase1-final-1plus8 acceptance（连续失败 2）
+
+- 命令与环境：clean source commit `14aeef1691c20d843ad41766033a709046d4bc46`；launcher `2499014.opbs`请求10秒/实际1秒/exit0，crash syncer `2499016.opbs`请求15秒/实际6秒/预期exit137，successor `2499017.opbs`请求40秒/实际22秒/exit0，learner array `2499018[0-7]`各请求45秒/实际16–17秒/全部exit0。`depend=after:<successor>`使successor 15:05:02先运行，8 learners在15:05:04–05全部并发启动，上一轮调度死锁已修复。
+- 预期：completed Checker除authority/terminal/10-merge不变量外，§11.1 business transaction p99严格低于`renew_interval/2`并返回PASS。
+- 实际：runtime达到epoch2、v10、5120 tokens、terminal generation2、leader released；217个真实renew、0 renew failure、1.0188秒takeover latency均通过。Checker PBS `2499023.opbs`请求10秒/实际4秒/exit1，artifact `artifacts/20260806-1506_phase1-completed-checker_pass.json`返回`BLOCKED`，唯一错误为business transaction p99 `0.03049235s`高于当前0.025秒阈值；459个样本p95 `0.01338487s`、max `0.06030479s`、failure 0。
+- 原始证据：`artifacts/20260806-1503_phase1-independent-launch_pass.json`、`artifacts/20260806-1506_phase1-completed-checker_pass.json`、run root `runs/fs_diloco/plan02_phase1_final_14aeef1`及jobs的原始输出。
+- 已确认根因：为了在短acceptance runtime内取得≥100 renew样本，把acceptance专用`renew_interval`降到0.05秒；冻结门槛因此同步收紧到25ms，低于本次共享FS上正常业务transaction p99。结果不是transaction failure或锁饥饿，而是采样频率与性能阈值自相矛盾。
+- 下一轮：acceptance专用renew/heartbeat/candidate poll调整为0.1秒、lease busy timeout调整为100ms。按本轮217个样本线性估算仍约108个真实renew，满足≥100；business p99阈值恢复到50ms，高于已观察30.5ms但仍严格执行plan的`renew_interval/2`，不得修改Checker公式或事后放宽。重跑完整1+8；依据本轮实测使用crash15秒、successor30秒、learner25秒和Checker10秒的最短带余量walltime。
