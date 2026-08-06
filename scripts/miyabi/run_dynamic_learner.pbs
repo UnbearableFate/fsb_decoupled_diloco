@@ -82,16 +82,32 @@ if [[ -z "${FS_DILOCO_TEST_TERMINATE_AFTER_ADMISSION_SECONDS:-}" && \
   exec "${learner_command[@]}"
 fi
 
+admission_signal=""
+if [[ -n "${FS_DILOCO_TEST_TERMINATE_AFTER_ADMISSION_SECONDS:-}" ]]; then
+  admission_signal="${TMPDIR:?TMPDIR is required}/fsdiloco-admitted-${PBS_JOBID:?PBS_JOBID is required}.json"
+  export FS_DILOCO_TEST_ADMISSION_SIGNAL_PATH="$admission_signal"
+fi
+
 "${learner_command[@]}" &
 learner_pid=$!
 helper_pids=()
 
 if [[ -n "${FS_DILOCO_TEST_TERMINATE_AFTER_ADMISSION_SECONDS:-}" ]]; then
   (
-    if "$PYTHON_BIN" -m fs_diloco.tools.wait_for_dynamic_admission \
-      --shared-root "$FS_DILOCO_SHARED_ROOT" \
-      --pbs-job-id "${PBS_JOBID:?PBS_JOBID is required for admission-gated termination}" \
-      --timeout-seconds "${FS_DILOCO_TEST_ADMISSION_WAIT_TIMEOUT_SECONDS:-60}"; then
+    if "$PYTHON_BIN" - "$admission_signal" \
+      "${FS_DILOCO_TEST_ADMISSION_WAIT_TIMEOUT_SECONDS:-60}" <<'PY'
+import pathlib
+import sys
+import time
+
+signal_path = pathlib.Path(sys.argv[1])
+deadline = time.monotonic() + float(sys.argv[2])
+while not signal_path.is_file():
+    if time.monotonic() >= deadline:
+        raise SystemExit(1)
+    time.sleep(0.1)
+PY
+    then
       sleep "$FS_DILOCO_TEST_TERMINATE_AFTER_ADMISSION_SECONDS"
       kill -TERM "$learner_pid" 2>/dev/null || true
     fi

@@ -87,6 +87,20 @@ CUDA_COMPUTE_MIN_RESERVE_BYTES = 1 << 30
 CUDA_COMPUTE_RESERVE_FRACTION = 0.05
 
 
+def _publish_test_admission_signal(instance_id: str) -> None:
+    signal_path = os.environ.get("FS_DILOCO_TEST_ADMISSION_SIGNAL_PATH")
+    if not signal_path:
+        return
+    atomic_write_json(
+        Path(signal_path),
+        {
+            "instance_id": instance_id,
+            "state": "admitted",
+            "published_at": time.time(),
+        },
+    )
+
+
 @dataclass(frozen=True)
 class LearnerComputePlacement:
     device: torch.device
@@ -2412,6 +2426,7 @@ def run_learner(
             stream_epoch=admission.stream_epoch,
             stream_restarted=admission.stream_restarted,
         )
+        _publish_test_admission_signal(learner_id)
     control_reader = _epoch_control_reader(
         paths,
         run_id=config.run.run_id,

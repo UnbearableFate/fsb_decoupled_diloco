@@ -45,7 +45,6 @@ from fs_diloco.storage.schema_bootstrap import BootstrapIdentity, initialize_new
 from fs_diloco.storage.sqlite_store import DynamicMembershipFenceError
 from fs_diloco.tools.launch_phase2_acceptance import submit_jobs as submit_acceptance_jobs
 from fs_diloco.tools.launch_phase2_matched import submit_jobs as submit_matched_jobs
-from fs_diloco.tools.wait_for_dynamic_admission import find_admitted_instance
 
 
 def dynamic_identity() -> BootstrapIdentity:
@@ -590,42 +589,18 @@ def test_bootstrap_scheduler_manifest_reconciles_external_jobs(
         lease.close()
 
 
-def test_fault_injection_waits_for_the_physical_jobs_admission(tmp_path: Path) -> None:
-    shared_root = tmp_path / "run"
-    requests = shared_root / "control" / "registration_requests"
-    admissions = (
-        shared_root
-        / "control"
-        / "syncer_epochs"
-        / "e000002_owner"
-        / "membership"
-        / "admissions"
-    )
-    requests.mkdir(parents=True)
-    admissions.mkdir(parents=True)
+def test_fault_injection_publishes_admission_signal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signal_path = tmp_path / "admitted.json"
     instance_id = new_learner_instance_id()
-    (requests / f"{instance_id}.json").write_text(
-        json.dumps(
-            {
-                "instance_id": instance_id,
-                "pbs_job_id": "123.opbs",
-            }
-        ),
-        encoding="utf-8",
-    )
+    monkeypatch.setenv("FS_DILOCO_TEST_ADMISSION_SIGNAL_PATH", str(signal_path))
 
-    assert find_admitted_instance(shared_root, pbs_job_id="123") is None
-    (admissions / f"{instance_id}.json").write_text(
-        json.dumps(
-            {
-                "instance_id": instance_id,
-                "state": "admitted",
-            }
-        ),
-        encoding="utf-8",
-    )
-    assert find_admitted_instance(shared_root, pbs_job_id="123") == instance_id
-    assert find_admitted_instance(shared_root, pbs_job_id="999.opbs") is None
+    learner_runtime._publish_test_admission_signal(instance_id)
+
+    assert safe_read_json(signal_path)["instance_id"] == instance_id
+    assert safe_read_json(signal_path)["state"] == "admitted"
 
 
 def test_acceptance_launcher_gates_victim_failure_on_admission(tmp_path: Path) -> None:
