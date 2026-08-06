@@ -365,3 +365,9 @@ Attempt 3, `2497948.opbs`, submitted the short-walltime children and completed s
 - Result: 1 failed, 17 passed.
 - Failure: the immutable canonical artifact was now preserved correctly, but the new test incorrectly expected the DB replay result to reproduce the one-time plaintext admission token. Persisted `result_json` intentionally omits that secret and returns only the stable admitted fields.
 - Disposition: keep the production secret-redaction behavior and assert stable admission identity/state plus byte-for-byte preservation of the canonical artifact.
+
+### 2026-08-06 23:40 JST — Phase 2 formal compatibility attempt 1
+
+- PBS `2501185.opbs` ran the clean-source full suite for commit `8476bcf11ebcd415c293c49070cabaed66f99534` and returned 1 failed, 469 passed.
+- The only failure was the pre-existing nondeterministic tolerance assertion in `tests/test_learner_rebase.py::test_rebase_preserves_only_progress_after_each_published_reference`; the immediately preceding full-suite run `2501174.opbs` passed all 470 tests, and no Phase 2 contract failed.
+- Disposition: do not alter production behavior or relax a threshold from one stochastic failure. Persist this failure record, freeze a new clean source identity, and restart the formal G7/compatibility evidence set; repeated failure will trigger a focused reproducibility review.
