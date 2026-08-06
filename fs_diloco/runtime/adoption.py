@@ -111,6 +111,12 @@ class AdoptionContext:
         tuple[Any | None, dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None],
     ]
     load_or_refresh_latest_fn: Callable[..., Any] | None = None
+    terminal_published_fn: Callable[[Any], bool] | None = None
+
+    def terminal_published(self) -> bool:
+        if self.terminal_published_fn is None:
+            return bool(self.paths.stop_json.exists())
+        return bool(self.terminal_published_fn(self.paths))
 
     def read_newer_latest(self) -> dict[str, Any] | None:
         return self.read_latest_if_newer_fn(self.paths, self.last_loaded_global_version)
@@ -438,7 +444,7 @@ class RebaseGlobalAdoptionStrategy(GlobalAdoptionStrategy):
         maybe_latest = self._poll_after_publish(ctx, publish_result.update_id)
         if maybe_latest is not None:
             return self._direct_adoption(ctx, maybe_latest, update_id=publish_result.update_id)
-        if ctx.paths.stop_json.exists():
+        if ctx.terminal_published():
             ctx.logger.event(
                 "local_rebase_anchor_skipped_on_stop",
                 update_id=publish_result.update_id,
@@ -537,7 +543,7 @@ class PredictGlobalAdoptionStrategy(GlobalAdoptionStrategy):
             wait_seconds=ctx.config.learner.prediction.reconcile_timeout_seconds
         )
         if maybe_latest is None:
-            if ctx.paths.stop_json.exists():
+            if ctx.terminal_published():
                 self.on_stop(ctx)
                 return StrategyAction()
             raise TimeoutError("timed out waiting to reconcile predicted global before publication")
@@ -576,7 +582,7 @@ class PredictGlobalAdoptionStrategy(GlobalAdoptionStrategy):
         prepared_reference: Any | None = None
         prepared_stats: dict[str, Any] | None = None
         if maybe_latest is None:
-            if ctx.paths.stop_json.exists():
+            if ctx.terminal_published():
                 ctx.logger.event(
                     "global_prediction_start_skipped_on_stop",
                     update_id=publish_result.update_id,

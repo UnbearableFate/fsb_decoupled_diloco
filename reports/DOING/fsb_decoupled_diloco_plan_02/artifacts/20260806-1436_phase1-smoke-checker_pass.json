@@ -1,0 +1,330 @@
+{
+  "boundedness": {
+    "active_claim_dirs": 0,
+    "epoch_dirs": 1,
+    "gc_candidate_rows": 0,
+    "sqlite_freelist_count": 0,
+    "sqlite_page_count": 46
+  },
+  "checked_at": 1785994581.6875057,
+  "checker": "plan02_phase1",
+  "checkpoint_evidence": [
+    {
+      "active": false,
+      "artifact_kind": "weight",
+      "exists": false,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_review_final_2498885/weights/epochs/e000001/7873ec8c3d2a/global_v000000_p13a32caf78d4.safetensors",
+      "size_bytes": null,
+      "version": 0
+    },
+    {
+      "active": false,
+      "artifact_kind": "optim",
+      "exists": false,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_review_final_2498885/optim/epochs/e000001/7873ec8c3d2a/outer_v000000_p13a32caf78d4.safetensors",
+      "size_bytes": null,
+      "version": 0
+    },
+    {
+      "active": false,
+      "artifact_kind": "weight",
+      "exists": false,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_review_final_2498885/weights/epochs/e000001/7873ec8c3d2a/global_v000001_pef07ae9121d8.safetensors",
+      "size_bytes": null,
+      "version": 1
+    },
+    {
+      "active": false,
+      "artifact_kind": "optim",
+      "exists": false,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_review_final_2498885/optim/epochs/e000001/7873ec8c3d2a/outer_v000001_pef07ae9121d8.safetensors",
+      "size_bytes": null,
+      "version": 1
+    },
+    {
+      "active": true,
+      "artifact_kind": "weight",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_review_final_2498885/weights/epochs/e000001/7873ec8c3d2a/global_v000002_pf0317d4a07ce.safetensors",
+      "size_bytes": 8352,
+      "version": 2
+    },
+    {
+      "active": true,
+      "artifact_kind": "optim",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_review_final_2498885/optim/epochs/e000001/7873ec8c3d2a/outer_v000002_pf0317d4a07ce.safetensors",
+      "size_bytes": 16592,
+      "version": 2
+    }
+  ],
+  "control_publications": [
+    {
+      "created_at": 1785994574.750024,
+      "exists": true,
+      "kind": "latest",
+      "logical_generation": 0,
+      "observed_sha256": "c9cc2e20f38dc8a9a65f4fc60400610bbeb737bb9a08f77e81547e0ef36bc978",
+      "published_by_epoch": 1,
+      "published_by_owner_id": "2498882.opbs:mg0004:2845712:7cd4ed8f-1b1e-465d-a5ac-df211ccc5fe5",
+      "relative_path": "control/syncer_epochs/e000001_7873ec8c3d2a/latest/v000000.json",
+      "sha256": "c9cc2e20f38dc8a9a65f4fc60400610bbeb737bb9a08f77e81547e0ef36bc978"
+    },
+    {
+      "created_at": 1785994578.1975183,
+      "exists": true,
+      "kind": "latest",
+      "logical_generation": 1,
+      "observed_sha256": "6d026990f9bf9fc65f3ad2f26da4889e76ca4a9a085466d949a7e72022d88d9f",
+      "published_by_epoch": 1,
+      "published_by_owner_id": "2498882.opbs:mg0004:2845712:7cd4ed8f-1b1e-465d-a5ac-df211ccc5fe5",
+      "relative_path": "control/syncer_epochs/e000001_7873ec8c3d2a/latest/v000001.json",
+      "sha256": "6d026990f9bf9fc65f3ad2f26da4889e76ca4a9a085466d949a7e72022d88d9f"
+    },
+    {
+      "created_at": 1785994578.5622828,
+      "exists": true,
+      "kind": "latest",
+      "logical_generation": 2,
+      "observed_sha256": "96d429ebc977908291e3efd75deaa5a9c6fcc84e4b52d7204d308e2bcada3898",
+      "published_by_epoch": 1,
+      "published_by_owner_id": "2498882.opbs:mg0004:2845712:7cd4ed8f-1b1e-465d-a5ac-df211ccc5fe5",
+      "relative_path": "control/syncer_epochs/e000001_7873ec8c3d2a/latest/v000002.json",
+      "sha256": "96d429ebc977908291e3efd75deaa5a9c6fcc84e4b52d7204d308e2bcada3898"
+    },
+    {
+      "created_at": 1785994578.6735718,
+      "exists": true,
+      "kind": "stop",
+      "logical_generation": 1,
+      "observed_sha256": "60ce114901db1175c3b75da29621b7ffa9706cd91f4d4b92c03521f7540b579e",
+      "published_by_epoch": 1,
+      "published_by_owner_id": "2498882.opbs:mg0004:2845712:7cd4ed8f-1b1e-465d-a5ac-df211ccc5fe5",
+      "relative_path": "control/syncer_epochs/e000001_7873ec8c3d2a/terminal/stop_g000001.json",
+      "sha256": "60ce114901db1175c3b75da29621b7ffa9706cd91f4d4b92c03521f7540b579e"
+    },
+    {
+      "created_at": 1785994579.875514,
+      "exists": true,
+      "kind": "stop",
+      "logical_generation": 2,
+      "observed_sha256": "410dc9e719e27b67fbb8646dd63c9f117a1f3ca8badc57d7b2c7df638761db10",
+      "published_by_epoch": 1,
+      "published_by_owner_id": "2498882.opbs:mg0004:2845712:7cd4ed8f-1b1e-465d-a5ac-df211ccc5fe5",
+      "relative_path": "control/syncer_epochs/e000001_7873ec8c3d2a/terminal/stop_g000002.json",
+      "sha256": "410dc9e719e27b67fbb8646dd63c9f117a1f3ca8badc57d7b2c7df638761db10"
+    },
+    {
+      "created_at": 1785994579.8945262,
+      "exists": true,
+      "kind": "summary",
+      "logical_generation": 2,
+      "observed_sha256": "1e3313ff6bfb7984ace5b26368ef6319bb081fdf72d9286a2aba8a1d2b8bcf23",
+      "published_by_epoch": 1,
+      "published_by_owner_id": "2498882.opbs:mg0004:2845712:7cd4ed8f-1b1e-465d-a5ac-df211ccc5fe5",
+      "relative_path": "control/syncer_epochs/e000001_7873ec8c3d2a/terminal/summary_g000002.json",
+      "sha256": "1e3313ff6bfb7984ace5b26368ef6319bb081fdf72d9286a2aba8a1d2b8bcf23"
+    }
+  ],
+  "discovery": {
+    "epoch_optim": {
+      "expected_min": 1,
+      "observed": 1
+    },
+    "epoch_weights": {
+      "expected_min": 1,
+      "observed": 1
+    },
+    "instance_payloads": {
+      "expected_min": 0,
+      "observed": 0
+    },
+    "instance_pointers": {
+      "expected_min": 0,
+      "observed": 2
+    },
+    "syncer_heartbeats": {
+      "expected_min": 1,
+      "observed": 1
+    }
+  },
+  "epochs": [
+    {
+      "acquired_at": 1785994574.4555259,
+      "config_sha256": "049340a84a9373610795ad9303ae4fe3f3a5b76341e61715bbe950358db73a0b",
+      "epoch": 1,
+      "final_at": 1785994579.906828,
+      "final_state": "released",
+      "hostname": "mg0004",
+      "last_renewed_at": 1785994579.906828,
+      "owner_id": "2498882.opbs:mg0004:2845712:7cd4ed8f-1b1e-465d-a5ac-df211ccc5fe5",
+      "pbs_job_id": "2498882.opbs",
+      "pid": 2845712,
+      "source_fingerprint": "sha256:c55df0ed5224d337f3618916e2be1f3e20efba637379fc496ddfa7b3092fd5a7",
+      "superseded_by_epoch": null
+    }
+  ],
+  "errors": [],
+  "failure_event_scan": {
+    "event_count": 300,
+    "failure_count": 0,
+    "failure_events": []
+  },
+  "fixed_cache": {
+    "authoritative_reader": "epoch_control_filesystem",
+    "latest_matches_canonical_identity": true,
+    "latest_present": true,
+    "stop_matches_canonical_identity": true,
+    "stop_present": true
+  },
+  "identity": {
+    "config_sha256": "049340a84a9373610795ad9303ae4fe3f3a5b76341e61715bbe950358db73a0b",
+    "mode": "full",
+    "run_id": "plan02_phase1_review_final_2498885",
+    "source_fingerprint": "sha256:c55df0ed5224d337f3618916e2be1f3e20efba637379fc496ddfa7b3092fd5a7"
+  },
+  "leader": {
+    "acquired_at": 1785994574.4555259,
+    "epoch": 1,
+    "heartbeat_seq": 2,
+    "hostname": "mg0004",
+    "lease_expires_at": 1785994579.906828,
+    "owner_id": "2498882.opbs:mg0004:2845712:7cd4ed8f-1b1e-465d-a5ac-df211ccc5fe5",
+    "pbs_job_id": "2498882.opbs",
+    "pid": 2845712,
+    "renewed_at": 1785994579.906828,
+    "singleton": 1,
+    "state": "released"
+  },
+  "mode": "phase1-staged",
+  "mutator_inventory": {
+    "frozen_count": 31,
+    "observed_count": 31,
+    "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/plans/artifacts/plan02_phase1_mutator_inventory.json"
+  },
+  "performance_reliability": {
+    "aggregation": "nearest-rank across all retained process-exit samples",
+    "business_transaction": {
+      "failure_count": 0,
+      "max_seconds": 0.024206369067542255,
+      "p95_seconds": 0.006262144073843956,
+      "p99_seconds": 0.024206369067542255,
+      "sample_count": 72,
+      "threshold_p99_seconds": 2.5
+    },
+    "candidate_observation": {
+      "event_count": 1,
+      "writer_transaction_attempt_count": 0
+    },
+    "canonical_adoption_error_count": 0,
+    "checkpoint_publish": {
+      "digest_mode": "off",
+      "max_seconds": 0.004923193948343396,
+      "p95_seconds": 0.004923193948343396,
+      "p99_seconds": 0.004923193948343396,
+      "sample_count": 2
+    },
+    "heartbeat_publish": {
+      "cpu_seconds": 0.008354463999999062,
+      "sample_count": 5,
+      "wall_seconds": 0.02289016917347908
+    },
+    "learner_control_scan": {
+      "cache_hit_count": 231,
+      "cpu_seconds": 0.01103116800000059,
+      "process_count": 2,
+      "scan_count": 10,
+      "wall_seconds": 0.017254008795134723
+    },
+    "lease_renew": {
+      "busy_retry_count": 0,
+      "cpu_seconds": 0.001449855999999805,
+      "failure_count": 0,
+      "max_seconds": 0.005968351033516228,
+      "p95_seconds": 0.005968351033516228,
+      "p99_seconds": 0.005968351033516228,
+      "sample_count": 1,
+      "threshold_p99_seconds": 7.5,
+      "wall_seconds": 0.005968351033516228
+    },
+    "missing_core_fields": [
+      "takeover_protocol_seconds"
+    ],
+    "stale_epoch_business_commit_count": 0,
+    "takeover_protocol": {
+      "max_seconds": null,
+      "p95_seconds": null,
+      "p99_seconds": null,
+      "sample_count": 0,
+      "samples_seconds": [],
+      "threshold_max_seconds": 20.0,
+      "writer_lock_pause_included": false
+    },
+    "warm_up_samples": 0
+  },
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_review_final_2498885",
+  "schema": {
+    "created_at": 1785994570.5745952,
+    "integrity_check": [
+      "ok"
+    ],
+    "mode": "full",
+    "pragmas": {
+      "journal_mode": "delete",
+      "query_only": 1,
+      "synchronous": 2,
+      "user_version": 2
+    },
+    "protocol_version": 3,
+    "schema_version": 2,
+    "singleton": 1
+  },
+  "status": "PASS_WITH_FOLLOWUPS",
+  "terminal": {
+    "final_version": 2,
+    "finalized_at": 1785994579.875514,
+    "finalized_by_epoch": 1,
+    "finalized_by_owner_id": "2498882.opbs:mg0004:2845712:7cd4ed8f-1b1e-465d-a5ac-df211ccc5fe5",
+    "generation": 2,
+    "singleton": 1,
+    "stop_reason": "stop_after_outer_steps",
+    "total_seen_tokens": 256
+  },
+  "version_to_epoch": [
+    {
+      "epoch": 1,
+      "owner_id": "2498882.opbs:mg0004:2845712:7cd4ed8f-1b1e-465d-a5ac-df211ccc5fe5",
+      "publication_id": "13a32caf78d44ed2bff1ec318ebb2b35",
+      "version": 0
+    },
+    {
+      "epoch": 1,
+      "owner_id": "2498882.opbs:mg0004:2845712:7cd4ed8f-1b1e-465d-a5ac-df211ccc5fe5",
+      "publication_id": "ef07ae9121d8405eae603d13293d3fc4",
+      "version": 1
+    },
+    {
+      "epoch": 1,
+      "owner_id": "2498882.opbs:mg0004:2845712:7cd4ed8f-1b1e-465d-a5ac-df211ccc5fe5",
+      "publication_id": "f0317d4a07ce4d8a9e4374c9df7b93a2",
+      "version": 2
+    }
+  ],
+  "warnings": [
+    "run is internally consistent but has not met the completed workload gate"
+  ],
+  "watchdog_recovery": {
+    "candidate_wait_seconds": 35.0,
+    "canonical_repair_wait_seconds": 10.0,
+    "claims": [],
+    "heartbeat_stale_after_seconds": 5.0,
+    "learner_recovery_wait_seconds": 60.0,
+    "recovery_submission_enabled": false
+  }
+}

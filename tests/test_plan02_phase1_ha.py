@@ -14,6 +14,7 @@ import pytest
 import torch
 
 from fs_diloco.core.config import resolve_config
+from fs_diloco.core.run_descriptor import load_run_descriptor
 from fs_diloco.core.constants import (
     CONTROL_EPOCH_FORMAT_VERSION,
     HA_SCHEMA_VERSION,
@@ -31,7 +32,11 @@ from fs_diloco.runtime.learner import (
     read_authoritative_terminal,
 )
 from fs_diloco.runtime.pbs_scheduler import PBSJobObservation, PBSScheduler
-from fs_diloco.runtime.syncer_ha import acquire_candidate, open_leader_store
+from fs_diloco.runtime.syncer_ha import (
+    LeaseRenewalThread,
+    acquire_candidate,
+    open_leader_store,
+)
 from fs_diloco.tools.launch_independent_run import _walltime_resource, launch
 from fs_diloco.tools.init_run import initialize_run as initialize_ha_run
 from fs_diloco.storage.fenced_store import FencedSQLiteStore, ReadOnlySQLiteStore
@@ -118,6 +123,7 @@ def test_ha_config_defaults_and_artifact_versions(tmp_path: Path) -> None:
     assert not config.coordination.syncer_ha.enabled
     assert not config.coordination.recovery_submission.enabled
     assert config.io.checkpoint_digest_mode == "off"
+    assert config.coordination.syncer_ha.business_busy_timeout_ms == 60_000
     assert HA_SCHEMA_VERSION == 2
     assert SYNCER_HEARTBEAT_FORMAT_VERSION == 1
     assert CONTROL_EPOCH_FORMAT_VERSION == 1
@@ -311,12 +317,90 @@ def test_syncer_cleans_all_acquired_resources_when_renewer_start_fails(
     assert lease.closed
 
 
+def test_syncer_cleans_acquired_resources_when_post_renewer_startup_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = resolve_config(
+        "configs/fs_diloco_tiny_ha_static.yaml",
+        run_id="post-renewer-startup-failure",
+        shared_root=str(tmp_path / "run"),
+    )
+    token = SimpleNamespace(epoch=1, owner_id="owner")
+
+    class FakeLease:
+        def __init__(self) -> None:
+            self.released: list[object] = []
+            self.closed = False
+
+        def release(self, released_token: object) -> None:
+            self.released.append(released_token)
+
+        def close(self) -> None:
+            self.closed = True
+
+    class FakeStore:
+        fenced_store = object()
+        path = tmp_path / "state.sqlite"
+
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+        def terminal_state(self) -> None:
+            raise RuntimeError("terminal state startup failed")
+
+    class RunningRenewer:
+        instance: "RunningRenewer | None" = None
+
+        def __init__(self, **kwargs: object) -> None:
+            self.started = False
+            self.stopped = False
+            RunningRenewer.instance = self
+
+        def start(self) -> None:
+            self.started = True
+
+        def stop(self) -> None:
+            self.stopped = True
+
+    lease = FakeLease()
+    store = FakeStore()
+    monkeypatch.setattr(
+        syncer_runtime,
+        "load_run_descriptor",
+        lambda *args, **kwargs: SimpleNamespace(config=config, identity=identity()),
+    )
+    monkeypatch.setattr(
+        syncer_runtime,
+        "acquire_candidate",
+        lambda **kwargs: (lease, token, object(), object()),
+    )
+    monkeypatch.setattr(syncer_runtime, "open_leader_store", lambda **kwargs: store)
+    monkeypatch.setattr(syncer_runtime, "LeaseRenewalThread", RunningRenewer)
+
+    with pytest.raises(RuntimeError, match="terminal state startup failed"):
+        syncer_runtime.run_syncer(config)
+
+    assert RunningRenewer.instance is not None
+    assert RunningRenewer.instance.started and RunningRenewer.instance.stopped
+    assert store.closed
+    assert lease.released == [token]
+    assert lease.closed
+
+
 @pytest.mark.parametrize(
     "payload,match",
     [
         (
             "coordination:\n  syncer_ha:\n    renew_interval_seconds: 0\n",
             "renew_interval_seconds",
+        ),
+        (
+            "coordination:\n  syncer_ha:\n    business_busy_timeout_ms: 0\n",
+            "business_busy_timeout_ms",
         ),
         (
             "coordination:\n  syncer_ha:\n    enabled: true\nfragments:\n  enabled: true\n",
@@ -390,6 +474,69 @@ def test_ha_initializer_writes_identical_root_and_control_config(
     assert paths.resolved_config_yaml.read_bytes() == paths.run_root_config_yaml.read_bytes()
     with pytest.raises(FileExistsError, match="run root already exists"):
         initialize_ha_run(config, project_root=tmp_path)
+
+
+def test_run_descriptor_rejects_all_identity_tampering_without_lease_writes(
+    tmp_path: Path,
+) -> None:
+    def initialized(name: str) -> tuple[RunPaths, object]:
+        shared_root = tmp_path / name
+        config = resolve_config(
+            project_root=tmp_path,
+            run_id=name,
+            shared_root=str(shared_root),
+        )
+        config.coordination.syncer_ha.enabled = True
+        config.run.git_commit = "a" * 40
+        config.run.git_dirty = False
+        config.run.source_fingerprint = "sha256:source"
+        initialize_ha_run(config, project_root=tmp_path)
+        return RunPaths(shared_root), config
+
+    def assert_no_leadership_rows(paths: RunPaths) -> None:
+        conn = open_readonly(paths.sqlite_db)
+        try:
+            assert conn.execute("SELECT COUNT(*) FROM syncer_leader").fetchone()[0] == 0
+            assert conn.execute("SELECT COUNT(*) FROM syncer_epochs").fetchone()[0] == 0
+        finally:
+            conn.close()
+
+    paths, config = initialized("expected-dirty")
+    with pytest.raises(RuntimeError, match="identity mismatch"):
+        load_run_descriptor(
+            paths.shared_root,
+            expected_run_id=config.run.run_id,
+            expected_git_commit=config.run.git_commit,
+            expected_git_dirty=True,
+            expected_source_fingerprint=config.run.source_fingerprint,
+        )
+    assert_no_leadership_rows(paths)
+
+    paths, _config = initialized("descriptor-checksum")
+    descriptor = json.loads(paths.run_descriptor_json.read_text(encoding="utf-8"))
+    descriptor["run_id"] = "tampered"
+    paths.run_descriptor_json.write_text(json.dumps(descriptor), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="self-checksum"):
+        load_run_descriptor(paths.shared_root)
+    assert_no_leadership_rows(paths)
+
+    paths, _config = initialized("config-checksum")
+    paths.resolved_config_yaml.write_text(
+        paths.resolved_config_yaml.read_text(encoding="utf-8") + "# tampered\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="resolved config checksum"):
+        load_run_descriptor(paths.shared_root)
+    assert_no_leadership_rows(paths)
+
+    paths, _config = initialized("source-checksum")
+    paths.run_source_manifest_json.write_text(
+        paths.run_source_manifest_json.read_text(encoding="utf-8") + " ",
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="source manifest checksum"):
+        load_run_descriptor(paths.shared_root)
+    assert_no_leadership_rows(paths)
 
 
 def test_incomplete_or_pre_ha_database_fails_closed(tmp_path: Path) -> None:
@@ -473,6 +620,129 @@ def test_concurrent_first_acquire_has_exactly_one_winner(tmp_path: Path) -> None
     assert sum(state == "loser" for state, _epoch in results) == 7
 
 
+def test_candidate_retries_writer_lock_until_release_and_times_out_cleanly(
+    tmp_path: Path,
+) -> None:
+    paths = bootstrapped(tmp_path)
+    config = resolve_config(project_root=tmp_path)
+    config.coordination.syncer_ha.enabled = True
+    config.coordination.syncer_ha.lease_busy_timeout_ms = 10
+    config.coordination.syncer_ha.candidate_acquire_poll_seconds = 0.01
+    config.coordination.syncer_ha.candidate_wait_seconds = 1.0
+    blocker = sqlite3.connect(paths.sqlite_db, timeout=0.0)
+    blocker.execute("BEGIN IMMEDIATE")
+    outcome: dict[str, object] = {}
+    acquired_event = threading.Event()
+    cleanup_event = threading.Event()
+
+    def run_candidate() -> None:
+        try:
+            lease, token, _tracker, _logger = acquire_candidate(
+                paths=paths,
+                identity=identity(),
+                config=config,
+                owner_id="writer-lock-retry",
+            )
+            outcome["epoch"] = token.epoch
+            acquired_event.set()
+            if not cleanup_event.wait(timeout=2.0):
+                raise TimeoutError("test did not authorize candidate cleanup")
+            lease.release(token)
+            lease.close()
+            outcome["cleaned"] = True
+        except BaseException as exc:
+            outcome["error"] = exc
+
+    thread = threading.Thread(target=run_candidate)
+    thread.start()
+    deadline = time.monotonic() + 1.0
+    candidate_log = (
+        paths.logs
+        / "candidates"
+        / f"{RunPaths.owner_short('writer-lock-retry')}.jsonl"
+    )
+    while time.monotonic() < deadline:
+        if candidate_log.is_file() and "writer_lock_blocked" in candidate_log.read_text(
+            encoding="utf-8"
+        ):
+            break
+        time.sleep(0.01)
+    blocker.rollback()
+    blocker.close()
+    assert acquired_event.wait(timeout=2.0)
+    cleanup_event.set()
+    thread.join(timeout=2.0)
+    assert not thread.is_alive()
+    assert "error" not in outcome
+    assert outcome == {"epoch": 1, "cleaned": True}
+
+    blocker = sqlite3.connect(paths.sqlite_db, timeout=0.0)
+    blocker.execute("BEGIN IMMEDIATE")
+    config.coordination.syncer_ha.candidate_wait_seconds = 0.08
+    with pytest.raises(TimeoutError, match="wait deadline"):
+        acquire_candidate(
+            paths=paths,
+            identity=identity(),
+            config=config,
+            owner_id="writer-lock-timeout",
+        )
+    blocker.rollback()
+    blocker.close()
+
+
+def test_lease_renewer_retries_transient_sqlite_busy(tmp_path: Path) -> None:
+    paths = bootstrapped(tmp_path)
+    config = resolve_config(project_root=tmp_path)
+    ha = config.coordination.syncer_ha
+    ha.enabled = True
+    ha.lease_duration_seconds = 2.0
+    ha.renew_interval_seconds = 0.05
+    ha.max_clock_skew_seconds = 0.1
+    ha.heartbeat_interval_seconds = 0.05
+    ha.lease_busy_timeout_ms = 10
+    lease = LeaderLeaseStore(
+        paths.sqlite_db,
+        identity(),
+        marker_path=paths.bootstrap_complete_json,
+        lease_duration_seconds=ha.lease_duration_seconds,
+        max_clock_skew_seconds=ha.max_clock_skew_seconds,
+        busy_timeout_ms=ha.lease_busy_timeout_ms,
+    )
+    token = lease.acquire(owner_id="renew-busy", hostname="host", pid=1)
+    tracker = LeaseSafetyTracker(
+        token,
+        lease_duration_seconds=ha.lease_duration_seconds,
+        max_clock_skew_seconds=ha.max_clock_skew_seconds,
+    )
+    blocker = sqlite3.connect(paths.sqlite_db, timeout=0.0)
+    blocker.execute("BEGIN IMMEDIATE")
+    renewer = LeaseRenewalThread(
+        paths=paths,
+        identity=identity(),
+        config=config,
+        token=token,
+        fenced_store=object(),  # heartbeat publication stays disabled in this test
+        safety_tracker=tracker,
+    )
+    renewer.start()
+    deadline = time.monotonic() + 1.0
+    while renewer.busy_retry_count == 0 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    blocker.rollback()
+    blocker.close()
+    deadline = time.monotonic() + 1.0
+    while renewer.observation_metrics()["lease_renew_count"] == 0 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    renewer.stop()
+
+    metrics = renewer.observation_metrics()
+    assert metrics["lease_renew_busy_retry_count"] > 0
+    assert metrics["lease_renew_count"] > 0
+    assert metrics["lease_renew_failure_count"] == 0
+    lease.release(token)
+    lease.close()
+
+
 def test_all_fenced_public_mutators_require_token() -> None:
     names = {
         "set_run_state",
@@ -494,6 +764,9 @@ def test_all_fenced_public_mutators_require_token() -> None:
         "drop_superseded_updates",
         "delete_archived_rows",
         "clear_gc_pending_paths",
+        "register_orphan_gc_candidate",
+        "claim_gc_candidate",
+        "expedite_terminal_gc_candidates",
         "record_control_publication",
         "set_controller_state",
         "finalize_terminal_state",
@@ -530,6 +803,35 @@ def test_fenced_store_rejects_raw_and_superseded_writes(tmp_path: Path) -> None:
     second.release(token2)
     first.close()
     second.close()
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "WITH target AS (SELECT 1) UPDATE run_state SET value='bad' WHERE key='missing'",
+        "/* hidden mutation */ UPDATE run_state SET value='bad' WHERE key='missing'",
+        "PRAGMA user_version=999",
+    ],
+)
+def test_fenced_connection_rejects_unrecognized_or_disguised_mutations(
+    tmp_path: Path,
+    statement: str,
+) -> None:
+    paths = bootstrapped(tmp_path)
+    lease, token = acquire(paths, "owner")
+    store = fenced(paths, token)
+    store._connection.activate(token)
+    try:
+        with pytest.raises(RuntimeError, match="forbidden"):
+            store._connection.execute(statement)
+    finally:
+        if store._connection.in_transaction:
+            store._connection.rollback()
+        store._connection.deactivate()
+    assert store.get_run_state("missing") is None
+    store.close()
+    lease.release(token)
+    lease.close()
 
 
 def test_fenced_store_enforces_local_monotonic_lease_boundary(
@@ -719,6 +1021,59 @@ def test_epoch_control_ignores_fixed_cache_pollution_and_repairs_takeover(
     second.close()
 
 
+def test_epoch_reader_ignores_torn_lower_epoch_but_fails_on_current_torn_epoch(
+    tmp_path: Path,
+) -> None:
+    paths = bootstrapped(tmp_path)
+    first, token1 = acquire(paths, "owner-1")
+    store1 = fenced(paths, token1)
+    publisher1 = EpochControlPublisher(paths, store1, token1)
+    publisher1.publish_heartbeat(first.observe())
+    first.release(token1)
+    second, token2 = acquire(paths, "owner-2")
+    store2 = fenced(paths, token2)
+    publisher2 = EpochControlPublisher(paths, store2, token2)
+    publisher2.publish_heartbeat(second.observe())
+    paths.syncer_heartbeat_path(1, token1.owner_id).write_text("{torn", encoding="utf-8")
+
+    reader = EpochControlReader(paths, run_id="ha-test")
+    current = reader.current_leader()
+    assert current is not None and current["epoch"] == 2
+    assert reader.observation_metrics()["stale_epoch_scan_rejected_count"] == 1
+
+    paths.syncer_heartbeat_path(2, token2.owner_id).write_text("{torn", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="invalid epoch control"):
+        reader.current_leader()
+    store1.close()
+    store2.close()
+    second.release(token2)
+    first.close()
+    second.close()
+
+
+def test_epoch_reader_scan_cache_avoids_repeated_recursive_scans(tmp_path: Path) -> None:
+    paths = bootstrapped(tmp_path)
+    lease, token = acquire(paths, "owner")
+    store = fenced(paths, token)
+    publisher = EpochControlPublisher(paths, store, token)
+    publisher.publish_heartbeat(lease.observe())
+    reader = EpochControlReader(paths, run_id="ha-test")
+    reader.configure_scan_cache(1.0)
+
+    assert reader.current_leader(now_monotonic=0.0) is not None
+    paths.syncer_heartbeat_path(token.epoch, token.owner_id).unlink()
+    assert reader.current_leader(now_monotonic=0.5) is not None
+    assert reader.current_leader(now_monotonic=1.0) is None
+    metrics = reader.observation_metrics()
+    assert metrics["control_scan_count"] == 2
+    assert metrics["control_scan_cache_hit_count"] == 1
+    assert metrics["control_scan_wall_seconds"] >= 0.0
+    assert metrics["control_scan_cpu_seconds"] >= 0.0
+    store.close()
+    lease.release(token)
+    lease.close()
+
+
 def test_ha_watchdog_uses_heartbeat_progress_and_recovery_budget_not_model_merges(
     tmp_path: Path,
 ) -> None:
@@ -882,6 +1237,24 @@ def test_learner_directory_creation_does_not_create_authority(tmp_path: Path) ->
     prepare_authority_dirs(paths)
     instance = prepare_learner_instance_dir(paths, "learner_000")
     assert instance.is_dir()
+
+
+def test_run_paths_recursively_discovers_ha_runtime_surfaces(tmp_path: Path) -> None:
+    paths = RunPaths(tmp_path / "run")
+    syncer_log = paths.logs / "syncers" / "e000001_owner.jsonl"
+    learner_log = paths.logs / "instances" / "learner_li_example" / "events.jsonl"
+    heartbeat = paths.heartbeats / "instances" / "learner_li_example" / "heartbeat.json"
+    pointer = paths.updates_latest / "instances" / "learner_li_example" / "latest.json"
+    payload = paths.updates_payloads / "instances" / "learner_li_example" / "u1.safetensors"
+    for path in (syncer_log, learner_log, heartbeat, pointer, payload):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"{}\n")
+
+    assert list(paths.iter_syncer_logs()) == [syncer_log]
+    assert list(paths.iter_learner_logs()) == [learner_log]
+    assert list(paths.iter_learner_heartbeats()) == [heartbeat]
+    assert list(paths.iter_instance_pointers()) == [pointer]
+    assert list(paths.iter_instance_payloads()) == [payload]
 
 
 class FakeScheduler:
@@ -1107,6 +1480,30 @@ def test_pbs_scheduler_failures_are_nonfatal_observations(
     assert submission["returncode"] == -1
     assert "job_id_raw" not in submission
     assert scheduler.find_by_request_fingerprint("request-1") is None
+
+
+def test_pbs_scheduler_matches_exact_request_variable_not_substring(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = """Job Id: 10.server
+    job_state = Q
+    Variable_List = OTHER=x,FS_DILOCO_RECOVERY_REQUEST=request-10
+Job Id: 1.server
+    job_state = R
+    substate = 42
+    Variable_List = FS_DILOCO_RECOVERY_REQUEST=request-1,OTHER=y
+"""
+    monkeypatch.setattr(
+        pbs_scheduler_module.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0, output, ""),
+    )
+
+    observation = PBSScheduler().find_by_request_fingerprint("request-1")
+
+    assert observation is not None
+    assert observation.job_id == "1"
+    assert observation.classification == "running"
 
 
 def test_readonly_store_rejects_mutating_surface(tmp_path: Path) -> None:
@@ -1378,6 +1775,7 @@ def test_ha_gc_removes_only_unreferenced_superseded_epoch_orphans(
     first.release(token1)
     second, token2 = acquire(paths, "owner-2")
     store2 = fenced(paths, token2)
+    store2.gc_grace_seconds = 0.0
     current_epoch_orphan = paths.epoch_weight_path(2, token2.owner_id, 1, "staging")
     current_epoch_orphan.parent.mkdir(parents=True, exist_ok=True)
     current_epoch_orphan.write_bytes(b"staging")

@@ -8,7 +8,8 @@
 
 - `_publish_immutable_json()` 以 temp + fsync + hardlink实现 publish-once；目标已存在时只接受字节完全相同的幂等重试，冲突 fail closed。
 - `EpochControlPublisher` 只接受一个 `LeaderToken`：发布 epoch heartbeat；把 DB committed version重建为 immutable version pointer和 epoch head；在 fenced DB transaction登记 `control_publications`；最后 best-effort更新 fixed latest/stop/summary cache。canonical payload的 `published_at`来自稳定 DB row，以便同 epoch repair字节幂等。
-- `EpochControlReader` 不打开 SQLite；它扫描 bounded epoch目录，要求目录名、run/epoch/owner、自校验 heartbeat或 canonical head一致，以最高合法 epoch作为 current。head精确绑定 immutable pointer相对路径和 SHA，canonical stop带排除自身字段计算的 `payload_sha256`并在采用前重算；最高 epoch尚无 head时返回未就绪而不回退。返回 latest时把相对 checkpoint路径解析到 run root；fixed cache和目录 mtime都不参与选择。
+- 正常终态采用两阶段generation：先发布不带summary的early stop让learner排空；maintenance成功后DB generation递增，再成对发布最终stop/summary。successor修复不完整终态时也递增generation，因此generation表示一次不可变终态发布尝试，而不是用户stop decision计数。
+- `EpochControlReader` 不打开 SQLite；它扫描 bounded epoch目录，要求目录名、run/epoch/owner、自校验 heartbeat或 canonical head一致，以最高合法 epoch作为 current。低于最高合法epoch的torn目录可视为maintenance并发删除而跳过，同级或更高损坏fail closed；短TTL cache避免同一inner-step反复递归扫描，并累计scan/cache-hit/wall/CPU遥测。head精确绑定 immutable pointer相对路径和 SHA，canonical stop带排除自身字段计算的 `payload_sha256`并在采用前重算；最高 epoch尚无 head时返回未就绪而不回退。返回 latest时把相对 checkpoint路径解析到 run root；fixed cache和目录 mtime都不参与选择。
 
 ---
 

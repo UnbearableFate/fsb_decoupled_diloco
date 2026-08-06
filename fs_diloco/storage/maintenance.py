@@ -166,34 +166,28 @@ def collect_runtime_artifacts(
             shared_root=paths.shared_root,
         )
     )
-    latest = safe_read_json(paths.latest_json) or {}
-    materialized = latest.get("materialized_weight_path")
-    if materialized:
-        keep_checkpoints.add(Path(str(materialized)).resolve(strict=False))
+    if not hasattr(store, "token"):
+        latest = safe_read_json(paths.latest_json) or {}
+        materialized = latest.get("materialized_weight_path")
+        if materialized:
+            keep_checkpoints.add(Path(str(materialized)).resolve(strict=False))
 
     deleted = 0
-    if hasattr(store, "claim_ready_gc_candidates"):
-        candidates = store.claim_ready_gc_candidates(now=now)
+    if hasattr(store, "claim_gc_candidate"):
         allowed_roots = (
             paths.weight_epochs.resolve(strict=False),
             paths.optim_epochs.resolve(strict=False),
         )
-        for candidate in candidates:
-            relative_path = str(candidate["relative_path"])
-            target = (paths.shared_root / relative_path).resolve(strict=False)
-            if not any(target.is_relative_to(root) for root in allowed_roots):
-                raise RuntimeError(f"HA GC candidate escaped epoch roots: {target}")
-            if _unlink(target):
-                deleted += 1
-            store.complete_gc_candidate(relative_path, deleted_at=now)
-        if stats is not None:
-            stats["ha_gc_candidates"] = len(candidates)
         current_epoch = int(store.token.epoch)
         ledger_paths = {
             (paths.shared_root / relative).resolve(strict=False)
             for relative in store.ha_gc_candidate_paths()
         }
-        old_epoch_orphans = 0
+        registered_orphans = 0
+        orphan_registration_grace = max(
+            float(orphan_grace_seconds),
+            float(store.gc_grace_seconds),
+        )
         for artifact in (*paths.iter_epoch_weights(), *paths.iter_epoch_optim()):
             resolved = artifact.resolve(strict=False)
             if resolved in keep_checkpoints or resolved in ledger_paths:
@@ -209,13 +203,36 @@ def collect_runtime_artifacts(
                 age = now - artifact.stat().st_mtime
             except (FileNotFoundError, StopIteration, ValueError):
                 continue
-            if artifact_epoch >= current_epoch or age < orphan_grace_seconds:
+            if artifact_epoch >= current_epoch or age < orphan_registration_grace:
                 continue
-            if _unlink(artifact):
+            relative_path = paths.relative(artifact)
+            store.register_orphan_gc_candidate(
+                relative_path=relative_path,
+                artifact_kind=("weight" if artifact.is_relative_to(paths.weight_epochs) else "optim"),
+                owning_epoch=artifact_epoch,
+                publication_id=f"orphan:{artifact.stem}",
+                not_before=now,
+                recorded_at=now,
+            )
+            ledger_paths.add(resolved)
+            registered_orphans += 1
+        candidates = store.ready_gc_candidates(now=now)
+        claimed_count = 0
+        for candidate in candidates:
+            relative_path = str(candidate["relative_path"])
+            target = (paths.shared_root / relative_path).resolve(strict=False)
+            if not any(target.is_relative_to(root) for root in allowed_roots):
+                raise RuntimeError(f"HA GC candidate escaped epoch roots: {target}")
+            claimed = store.claim_gc_candidate(relative_path, now=now)
+            if claimed is None:
+                continue
+            claimed_count += 1
+            if _unlink(target):
                 deleted += 1
-                old_epoch_orphans += 1
+            store.complete_gc_candidate(relative_path, deleted_at=now)
         if stats is not None:
-            stats["ha_old_epoch_orphans"] = old_epoch_orphans
+            stats["ha_gc_candidates"] = claimed_count
+            stats["ha_old_epoch_orphans_registered"] = registered_orphans
     checkpoint_patterns = (
         (paths.weights, "global_v*.safetensors"),
         (paths.optim, "outer_v*.safetensors"),
@@ -313,6 +330,8 @@ def run_maintenance(
 ) -> dict[str, int | float]:
     archived = archive_and_prune(store, paths)
     archived_epochs = archive_ha_history(store, paths)
+    if input_closed and hasattr(store, "expedite_terminal_gc_candidates"):
+        store.expedite_terminal_gc_candidates()
     grace = (
         0.0 if input_closed else max(2.0 * heartbeat_interval_seconds, 2.0 * scan_interval_seconds)
     )

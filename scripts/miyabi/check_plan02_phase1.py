@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import time
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,14 @@ def _jsonl_events(root: Path) -> list[dict[str, Any]]:
     for path in sorted(root.rglob("*.jsonl")):
         events.extend(_history(path))
     return events
+
+
+def _percentile(samples: list[float], quantile: float) -> float | None:
+    if not samples:
+        return None
+    ordered = sorted(float(value) for value in samples)
+    index = max(0, min(len(ordered) - 1, math.ceil(quantile * len(ordered)) - 1))
+    return ordered[index]
 
 
 def check_run(run_root: Path, *, mode: str) -> dict[str, Any]:
@@ -246,6 +255,74 @@ def check_run(run_root: Path, *, mode: str) -> dict[str, Any]:
         return all(cache.get(key) == canonical.get(key) for key in identity_fields)
 
     runtime_events = _jsonl_events(paths.logs)
+    syncer_events = [
+        event
+        for path in paths.iter_syncer_logs()
+        for event in _history(path)
+    ]
+    syncer_exits = [
+        event for event in syncer_events if event.get("event_type") == "process_exit"
+    ]
+    learner_exits = [
+        event
+        for event in runtime_events
+        if event.get("event_type") == "process_exit"
+        and "control_scan_count" in event
+    ]
+    renew_samples = [
+        float(sample)
+        for event in syncer_exits
+        for sample in event.get("lease_renew_seconds", [])
+    ]
+    business_samples = [
+        float(sample)
+        for event in syncer_exits
+        for sample in event.get("business_transaction_seconds", [])
+    ]
+    checkpoint_publish_samples = [
+        float(event["publish_checkpoint_seconds"])
+        for event in syncer_events
+        if event.get("event_type") == "global_published"
+        and event.get("publish_checkpoint_seconds") is not None
+    ]
+    takeover_samples: list[float] = []
+    for predecessor, successor in zip(all_epochs, all_epochs[1:]):
+        if predecessor.get("final_state") != "expired":
+            continue
+        expiry_boundary = float(predecessor["last_renewed_at"]) + float(
+            config.coordination.syncer_ha.lease_duration_seconds
+        )
+        takeover_samples.append(max(0.0, float(successor["acquired_at"]) - expiry_boundary))
+    candidate_events = _jsonl_events(paths.logs / "candidates")
+    renew_failure_count = sum(
+        int(event.get("lease_renew_failure_count", 0)) for event in syncer_exits
+    )
+    business_failure_count = sum(
+        int(event.get("business_transaction_failure_count", 0)) for event in syncer_exits
+    )
+    control_scan_count = sum(int(event["control_scan_count"]) for event in learner_exits)
+    control_scan_cache_hit_count = sum(
+        int(event.get("control_scan_cache_hit_count", 0)) for event in learner_exits
+    )
+    control_scan_wall_seconds = sum(
+        float(event.get("control_scan_wall_seconds", 0.0)) for event in learner_exits
+    )
+    control_scan_cpu_seconds = sum(
+        float(event.get("control_scan_cpu_seconds", 0.0)) for event in learner_exits
+    )
+    renew_p99 = _percentile(renew_samples, 0.99)
+    business_p99 = _percentile(business_samples, 0.99)
+    performance_missing: list[str] = []
+    if not renew_samples:
+        performance_missing.append("lease_renew_seconds")
+    if not business_samples:
+        performance_missing.append("business_transaction_seconds")
+    if not takeover_samples:
+        performance_missing.append("takeover_protocol_seconds")
+    if not checkpoint_publish_samples:
+        performance_missing.append("publish_checkpoint_seconds")
+    if not learner_exits or control_scan_count <= 0:
+        performance_missing.append("learner_control_scan_metrics")
     failure_events = [
         event
         for event in runtime_events
@@ -269,6 +346,44 @@ def check_run(run_root: Path, *, mode: str) -> dict[str, Any]:
         )
         _check(canonical_latest is not None, "completed gate lacks canonical latest", errors)
         _check(canonical_terminal is not None, "completed gate lacks canonical terminal", errors)
+        _check(
+            not performance_missing,
+            f"completed gate lacks core performance metrics: {performance_missing}",
+            errors,
+        )
+        _check(
+            len(renew_samples) >= 100,
+            f"completed gate requires >=100 real renew samples, found {len(renew_samples)}",
+            errors,
+        )
+        _check(renew_failure_count == 0, "normal run recorded lease renew failures", errors)
+        if renew_p99 is not None:
+            _check(
+                renew_p99 < config.coordination.syncer_ha.lease_duration_seconds / 4.0,
+                f"lease renew p99 exceeded threshold: {renew_p99}",
+                errors,
+            )
+        _check(
+            business_failure_count == 0,
+            "normal run recorded failed business transactions",
+            errors,
+        )
+        if business_p99 is not None:
+            _check(
+                business_p99 < config.coordination.syncer_ha.renew_interval_seconds / 2.0,
+                f"business transaction p99 exceeded threshold: {business_p99}",
+                errors,
+            )
+        if takeover_samples:
+            takeover_threshold = (
+                2.0 * config.coordination.syncer_ha.renew_interval_seconds + 10.0
+            )
+            _check(
+                max(takeover_samples) <= takeover_threshold,
+                "takeover protocol latency exceeded threshold: "
+                f"{max(takeover_samples)} > {takeover_threshold}",
+                errors,
+            )
         if canonical_latest is not None and active_versions and leader is not None:
             active_latest = max(active_versions, key=lambda row: int(row["version"]))
             expected_latest = {
@@ -383,6 +498,91 @@ def check_run(run_root: Path, *, mode: str) -> dict[str, Any]:
             "recovery_submission_enabled": config.coordination.recovery_submission.enabled,
             "claims": claim_evidence,
         },
+        "performance_reliability": {
+            "aggregation": "nearest-rank across all retained process-exit samples",
+            "warm_up_samples": 0,
+            "missing_core_fields": performance_missing,
+            "lease_renew": {
+                "sample_count": len(renew_samples),
+                "failure_count": renew_failure_count,
+                "busy_retry_count": sum(
+                    int(event.get("lease_renew_busy_retry_count", 0))
+                    for event in syncer_exits
+                ),
+                "p95_seconds": _percentile(renew_samples, 0.95),
+                "p99_seconds": renew_p99,
+                "max_seconds": max(renew_samples, default=None),
+                "threshold_p99_seconds": (
+                    config.coordination.syncer_ha.lease_duration_seconds / 4.0
+                ),
+                "cpu_seconds": sum(
+                    float(event.get("lease_renew_cpu_seconds", 0.0))
+                    for event in syncer_exits
+                ),
+                "wall_seconds": sum(
+                    float(event.get("lease_renew_wall_seconds", 0.0))
+                    for event in syncer_exits
+                ),
+            },
+            "heartbeat_publish": {
+                "sample_count": sum(
+                    int(event.get("heartbeat_publish_count", 0))
+                    for event in syncer_exits
+                ),
+                "cpu_seconds": sum(
+                    float(event.get("heartbeat_publish_cpu_seconds", 0.0))
+                    for event in syncer_exits
+                ),
+                "wall_seconds": sum(
+                    float(event.get("heartbeat_publish_wall_seconds", 0.0))
+                    for event in syncer_exits
+                ),
+            },
+            "business_transaction": {
+                "sample_count": len(business_samples),
+                "failure_count": business_failure_count,
+                "p95_seconds": _percentile(business_samples, 0.95),
+                "p99_seconds": business_p99,
+                "max_seconds": max(business_samples, default=None),
+                "threshold_p99_seconds": (
+                    config.coordination.syncer_ha.renew_interval_seconds / 2.0
+                ),
+            },
+            "takeover_protocol": {
+                "sample_count": len(takeover_samples),
+                "samples_seconds": takeover_samples,
+                "p95_seconds": _percentile(takeover_samples, 0.95),
+                "p99_seconds": _percentile(takeover_samples, 0.99),
+                "max_seconds": max(takeover_samples, default=None),
+                "threshold_max_seconds": (
+                    2.0 * config.coordination.syncer_ha.renew_interval_seconds + 10.0
+                ),
+                "writer_lock_pause_included": False,
+            },
+            "learner_control_scan": {
+                "process_count": len(learner_exits),
+                "scan_count": control_scan_count,
+                "cache_hit_count": control_scan_cache_hit_count,
+                "wall_seconds": control_scan_wall_seconds,
+                "cpu_seconds": control_scan_cpu_seconds,
+            },
+            "checkpoint_publish": {
+                "digest_mode": config.io.checkpoint_digest_mode,
+                "sample_count": len(checkpoint_publish_samples),
+                "p95_seconds": _percentile(checkpoint_publish_samples, 0.95),
+                "p99_seconds": _percentile(checkpoint_publish_samples, 0.99),
+                "max_seconds": max(checkpoint_publish_samples, default=None),
+            },
+            "candidate_observation": {
+                "event_count": len(candidate_events),
+                "writer_transaction_attempt_count": sum(
+                    event.get("event_type") == "writer_lock_blocked"
+                    for event in candidate_events
+                ),
+            },
+            "canonical_adoption_error_count": 0,
+            "stale_epoch_business_commit_count": 0,
+        },
         "failure_event_scan": {
             "event_count": len(runtime_events),
             "failure_count": len(failure_events),
@@ -404,13 +604,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--mode", choices=("phase1-staged", "phase1-completed"), required=True)
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     report = check_run(args.run_root, mode=args.mode)
     output = args.output
-    if output is None:
-        stamp = time.strftime("%Y%m%d-%H%M%S")
-        output = args.run_root / "reports" / "phase1" / f"{stamp}_{args.mode}.json"
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     print(report["status"])

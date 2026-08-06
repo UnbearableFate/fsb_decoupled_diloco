@@ -42,12 +42,13 @@ coordination:
   syncer_ha:
     enabled: true
     lease_duration_seconds: 15.0
-    renew_interval_seconds: 3.0
+    renew_interval_seconds: 0.05
     max_clock_skew_seconds: 1.0
-    heartbeat_interval_seconds: 1.0
+    heartbeat_interval_seconds: 0.05
     heartbeat_stale_after_seconds: 5.0
-    lease_busy_timeout_ms: 3000
-    candidate_acquire_poll_seconds: 0.5
+    lease_busy_timeout_ms: 50
+    business_busy_timeout_ms: 60000
+    candidate_acquire_poll_seconds: 0.05
     candidate_wait_seconds: 20.0
     learner_recovery_wait_seconds: 45.0
     canonical_repair_wait_seconds: 10.0

@@ -246,7 +246,15 @@ class EpochControlReader:
         self.highest_observed_terminal_generation = -1
         self.cache_rejected_lower_epoch_count = 0
         self.canonical_repair_wait_count = 0
+        self.stale_epoch_scan_rejected_count = 0
+        self.control_scan_count = 0
+        self.control_scan_cache_hit_count = 0
+        self.control_scan_wall_seconds = 0.0
+        self.control_scan_cpu_seconds = 0.0
         self._canonical_repair_wait_seconds: float | None = None
+        self._scan_cache_seconds = 0.0
+        self._scan_cache_at_monotonic: float | None = None
+        self._scan_cache_value: _FilesystemEpoch | None = None
         self._canonical_gap_epoch: int | None = None
         self._canonical_gap_started_monotonic: float | None = None
 
@@ -264,7 +272,15 @@ class EpochControlReader:
             raise RuntimeError("canonical repair wait changed for a cached epoch reader")
         self._canonical_repair_wait_seconds = seconds
 
-    def observation_metrics(self) -> dict[str, int | str | None]:
+    def configure_scan_cache(self, seconds: float) -> None:
+        seconds = float(seconds)
+        if seconds < 0.0:
+            raise ValueError("epoch control scan cache must be >= 0")
+        if self._scan_cache_seconds not in (0.0, seconds):
+            raise RuntimeError("epoch control scan cache changed for a cached reader")
+        self._scan_cache_seconds = seconds
+
+    def observation_metrics(self) -> dict[str, int | float | str | None]:
         return {
             "highest_observed_epoch": self.highest_observed_epoch,
             "highest_observed_owner_id": self.highest_observed_owner_id,
@@ -275,6 +291,11 @@ class EpochControlReader:
             "cache_rejected_lower_epoch_count": self.cache_rejected_lower_epoch_count,
             "canonical_repair_wait_count": self.canonical_repair_wait_count,
             "canonical_gap_epoch": self._canonical_gap_epoch,
+            "stale_epoch_scan_rejected_count": self.stale_epoch_scan_rejected_count,
+            "control_scan_count": self.control_scan_count,
+            "control_scan_cache_hit_count": self.control_scan_cache_hit_count,
+            "control_scan_wall_seconds": self.control_scan_wall_seconds,
+            "control_scan_cpu_seconds": self.control_scan_cpu_seconds,
         }
 
     def _coordinates(self, directory: Path) -> tuple[int, str] | None:
@@ -354,10 +375,11 @@ class EpochControlReader:
             raise RuntimeError(f"canonical latest identity mismatch: {expected_pointer}")
         return owner_id, payload
 
-    def _scan_current_epoch(self) -> _FilesystemEpoch | None:
+    def _scan_current_epoch_uncached(self) -> _FilesystemEpoch | None:
         candidates: list[_FilesystemEpoch] = []
         if not self.paths.syncer_epochs.is_dir():
             return None
+        rejected: list[tuple[int, Path, BaseException]] = []
         for directory in sorted(self.paths.syncer_epochs.iterdir()):
             if not directory.is_dir():
                 continue
@@ -365,21 +387,25 @@ class EpochControlReader:
             if coordinates is None:
                 continue
             epoch, owner_short = coordinates
-            heartbeat = self._heartbeat(directory, epoch=epoch, owner_short=owner_short)
-            latest_result = self._latest(directory, epoch=epoch, owner_short=owner_short)
-            if heartbeat is None and latest_result is None:
+            try:
+                heartbeat = self._heartbeat(directory, epoch=epoch, owner_short=owner_short)
+                latest_result = self._latest(directory, epoch=epoch, owner_short=owner_short)
+                if heartbeat is None and latest_result is None:
+                    continue
+                owners = {
+                    str(payload["owner_id"])
+                    for payload in (
+                        heartbeat,
+                        None if latest_result is None else latest_result[1],
+                    )
+                    if payload is not None
+                }
+                if len(owners) != 1:
+                    raise RuntimeError(f"conflicting epoch owner evidence: {directory}")
+                owner_id = next(iter(owners))
+            except (OSError, RuntimeError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                rejected.append((epoch, directory, exc))
                 continue
-            owners = {
-                str(payload["owner_id"])
-                for payload in (
-                    heartbeat,
-                    None if latest_result is None else latest_result[1],
-                )
-                if payload is not None
-            }
-            if len(owners) != 1:
-                raise RuntimeError(f"conflicting epoch owner evidence: {directory}")
-            owner_id = next(iter(owners))
             candidates.append(
                 _FilesystemEpoch(
                     epoch=epoch,
@@ -390,12 +416,43 @@ class EpochControlReader:
                 )
             )
         if not candidates:
+            if rejected:
+                epoch, directory, exc = max(rejected, key=lambda item: item[0])
+                raise RuntimeError(f"invalid epoch control at epoch {epoch}: {directory}") from exc
             return None
         highest_epoch = max(candidate.epoch for candidate in candidates)
+        blocking = [item for item in rejected if item[0] >= highest_epoch]
+        if blocking:
+            epoch, directory, exc = max(blocking, key=lambda item: item[0])
+            raise RuntimeError(
+                f"invalid epoch control at or above current valid epoch {epoch}: {directory}"
+            ) from exc
+        self.stale_epoch_scan_rejected_count += sum(
+            1 for epoch, _directory, _exc in rejected if epoch < highest_epoch
+        )
         highest = [candidate for candidate in candidates if candidate.epoch == highest_epoch]
         if len(highest) != 1:
             raise RuntimeError(f"multiple valid owners published the same epoch: {highest_epoch}")
         return highest[0]
+
+    def _scan_current_epoch(self, *, now_monotonic: float) -> _FilesystemEpoch | None:
+        cached_at = self._scan_cache_at_monotonic
+        if (
+            self._scan_cache_seconds > 0.0
+            and cached_at is not None
+            and 0.0 <= now_monotonic - cached_at < self._scan_cache_seconds
+        ):
+            self.control_scan_cache_hit_count += 1
+            return self._scan_cache_value
+        wall_started = time.monotonic()
+        cpu_started = time.process_time()
+        value = self._scan_current_epoch_uncached()
+        self.control_scan_wall_seconds += time.monotonic() - wall_started
+        self.control_scan_cpu_seconds += time.process_time() - cpu_started
+        self.control_scan_count += 1
+        self._scan_cache_at_monotonic = now_monotonic
+        self._scan_cache_value = value
+        return value
 
     def _observe_canonical_gap(self, epoch: int, *, now_monotonic: float) -> None:
         if self._canonical_gap_epoch != epoch:
@@ -422,10 +479,10 @@ class EpochControlReader:
         *,
         now_monotonic: float | None = None,
     ) -> _FilesystemEpoch | None:
-        current = self._scan_current_epoch()
+        now = time.monotonic() if now_monotonic is None else float(now_monotonic)
+        current = self._scan_current_epoch(now_monotonic=now)
         if current is None:
             return None
-        now = time.monotonic() if now_monotonic is None else float(now_monotonic)
         if current.epoch < self.highest_observed_epoch:
             self.cache_rejected_lower_epoch_count += 1
             return None

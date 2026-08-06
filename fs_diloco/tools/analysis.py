@@ -16,6 +16,7 @@ from typing import Any
 from ..protocol.fragment_index import fragment_size_summary, load_fragment_index
 from ..protocol.fragment_scheduler import expected_fragment_versions_after_events
 from ..storage.atomic_io import safe_read_json
+from ..storage.paths import RunPaths
 
 
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
@@ -243,10 +244,10 @@ def _db_summary(path: Path | None, root: Path) -> dict[str, Any]:
 
 def _read_heartbeats(root: Path) -> dict[str, dict[str, Any]]:
     heartbeats: dict[str, dict[str, Any]] = {}
-    for path in sorted((root / "heartbeats").glob("learner_*.json")):
+    for path in RunPaths(root).iter_learner_heartbeats():
         payload = safe_read_json(path)
-        if payload:
-            heartbeats[path.stem] = payload
+        if payload and payload.get("learner_id"):
+            heartbeats[str(payload["learner_id"])] = payload
     return heartbeats
 
 
@@ -495,9 +496,7 @@ def _learner_adoption_pause(
             cycle_elapsed[learner_id] += value
 
     events_by_learner: dict[str, list[float | None]] = defaultdict(list)
-    for path in sorted((root / "logs").glob("learner_*.jsonl")):
-        learner_id = path.stem
-        learner_ids.add(learner_id)
+    for path in RunPaths(root).iter_learner_logs():
         with path.open("r", encoding="utf-8", errors="replace") as handle:
             for line in handle:
                 try:
@@ -509,6 +508,10 @@ def _learner_adoption_pause(
                     "fragments_adopted"
                 ):
                     continue
+                learner_id = str(
+                    event.get("learner_id") or event.get("actor") or path.stem
+                )
+                learner_ids.add(learner_id)
                 raw = event.get("adoption_pause_seconds")
                 try:
                     value = float(raw) if raw is not None else None
@@ -543,16 +546,18 @@ def _learner_adoption_pause(
 
 
 def _syncer_log_flags(root: Path) -> dict[str, bool]:
-    path = root / "logs" / "syncer.jsonl"
+    paths = list(RunPaths(root).iter_syncer_logs())
     flags = {
-        "exists": path.exists(),
+        "exists": bool(paths),
         "error": False,
         "no_progress_timeout": False,
         "uncaught_exception": False,
     }
-    if not path.exists():
+    if not paths:
         return flags
-    text = path.read_text(encoding="utf-8", errors="replace").lower()
+    text = "\n".join(
+        path.read_text(encoding="utf-8", errors="replace").lower() for path in paths
+    )
     flags["error"] = '"event_type": "error"' in text or '"event_type":"error"' in text
     flags["no_progress_timeout"] = "no_progress_timeout" in text
     flags["uncaught_exception"] = "traceback" in text or "uncaught" in text

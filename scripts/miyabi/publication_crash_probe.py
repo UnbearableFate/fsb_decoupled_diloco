@@ -353,11 +353,21 @@ def one_case(root: Path, failpoint: str, iteration: int) -> dict[str, Any]:
         raise RuntimeError(f"recovery ended at latest {latest.get('version')}, expected 2")
     if store.latest_global_version()["version"] != 2:
         raise RuntimeError("SQLite did not reach recovery version 2")
-    if len(list(paths.weights.glob("global_v*.safetensors"))) != 1:
+    weight_files = (
+        list(paths.iter_epoch_weights())
+        if paths.bootstrap_complete_json.is_file()
+        else list(paths.weights.glob("global_v*.safetensors"))
+    )
+    optim_files = (
+        list(paths.iter_epoch_optim())
+        if paths.bootstrap_complete_json.is_file()
+        else list(paths.optim.glob("outer_v*.safetensors"))
+    )
+    if len(weight_files) != 1:
         raise RuntimeError("weight GC did not converge to current-only")
-    if len(list(paths.optim.glob("outer_v*.safetensors"))) != 1:
+    if len(optim_files) != 1:
         raise RuntimeError("outer-state GC did not converge to current-only")
-    if list(paths.updates_payloads.glob("learner_*/*.safetensors")):
+    if list(paths.iter_instance_payloads()):
         raise RuntimeError("terminal proposal payloads remain after recovery")
     ids = history_ids(paths.update_history_jsonl)
     if ids.count("crash-u0") != 1:

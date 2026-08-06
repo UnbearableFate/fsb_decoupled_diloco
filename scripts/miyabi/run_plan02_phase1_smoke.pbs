@@ -28,6 +28,8 @@ PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 RUN_ID="${RUN_ID:-plan02_p1_smoke_${PBS_JOBID%%.*}}"
 SHARED_ROOT="${SHARED_ROOT:-$PROJECT_ROOT/runs/fs_diloco/$RUN_ID}"
+STAMP="${STAMP:-$(date +%Y%m%d-%H%M%S)}"
+CHECKER_OUTPUT="$PROJECT_ROOT/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/${STAMP}_phase1-smoke-checker_pass.json"
 CONFIG="$PROJECT_ROOT/configs/fs_diloco_tiny_ha_static.yaml"
 IDENTITY_ROOT="${TMPDIR:?TMPDIR is required}/plan02_source_identity"
 
@@ -126,6 +128,8 @@ PY
 
 "$PYTHON_BIN" scripts/miyabi/check_plan02_phase1.py \
   --run-root "$SHARED_ROOT" \
-  --mode phase1-staged
+  --mode phase1-staged \
+  --output "$CHECKER_OUTPUT"
+test -s "$CHECKER_OUTPUT"
 
 trap - EXIT

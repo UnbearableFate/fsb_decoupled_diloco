@@ -304,6 +304,7 @@ def _epoch_control_reader(
     *,
     run_id: str | None = None,
     canonical_repair_wait_seconds: float | None = None,
+    scan_cache_seconds: float | None = None,
 ) -> EpochControlReader | None:
     if not paths.bootstrap_complete_json.is_file():
         return None
@@ -321,6 +322,8 @@ def _epoch_control_reader(
         raise RuntimeError("cached HA epoch control reader run_id mismatch")
     if canonical_repair_wait_seconds is not None:
         reader.configure_canonical_repair_wait(canonical_repair_wait_seconds)
+    if scan_cache_seconds is not None:
+        reader.configure_scan_cache(scan_cache_seconds)
     return reader
 
 
@@ -758,7 +761,18 @@ def confirm_syncer_unresponsive(
     now_monotonic = time.monotonic() if now_monotonic is None else float(now_monotonic)
     reader = _epoch_control_reader(paths, run_id=None if config is None else config.run.run_id)
     if reader is not None:
-        heartbeat = reader.read_current_heartbeat()
+        if config is None:
+            raise ValueError("HA watchdog confirmation requires config")
+        heartbeat_signal = (
+            watchdog.last_heartbeat_monotonic
+            if watchdog.last_heartbeat_monotonic is not None
+            else watchdog.last_signal_monotonic
+        )
+        if max(0.0, now_monotonic - heartbeat_signal) < float(
+            config.coordination.syncer_ha.heartbeat_stale_after_seconds
+        ):
+            return False
+        heartbeat = reader.read_current_heartbeat(now_monotonic=now_monotonic)
         if heartbeat is not None:
             watchdog.observe_heartbeat(
                 heartbeat,
@@ -767,8 +781,6 @@ def confirm_syncer_unresponsive(
             )
         if read_authoritative_terminal(paths) is not None:
             return False
-        if config is None:
-            raise ValueError("HA watchdog confirmation requires config")
         heartbeat_signal = (
             watchdog.last_heartbeat_monotonic
             if watchdog.last_heartbeat_monotonic is not None
@@ -2158,6 +2170,9 @@ def build_adoption_context(
         snapshot_model_fn=snapshot_model_for_reconcile,
         prepare_prediction_fn=prepare_prediction_or_find_newer_latest,
         load_or_refresh_latest_fn=load_or_refresh_latest,
+        terminal_published_fn=lambda candidate_paths: (
+            read_authoritative_terminal(candidate_paths) is not None
+        ),
     )
 
 
@@ -2232,6 +2247,7 @@ def run_learner(config: Config, learner_id: str) -> None:
             paths.shared_root,
             expected_run_id=config.run.run_id,
             expected_git_commit=config.run.git_commit,
+            expected_git_dirty=config.run.git_dirty,
             expected_source_fingerprint=config.run.source_fingerprint,
             expected_descriptor_sha256=os.environ.get("FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256"),
         )
@@ -2248,6 +2264,14 @@ def run_learner(config: Config, learner_id: str) -> None:
         run_id=config.run.run_id,
         canonical_repair_wait_seconds=(
             config.coordination.syncer_ha.canonical_repair_wait_seconds
+            if config.coordination.syncer_ha.enabled
+            else None
+        ),
+        scan_cache_seconds=(
+            min(
+                config.sync.stop_file_poll_seconds,
+                config.coordination.syncer_ha.heartbeat_interval_seconds,
+            )
             if config.coordination.syncer_ha.enabled
             else None
         ),
@@ -2362,15 +2386,18 @@ def run_learner(config: Config, learner_id: str) -> None:
     mid_cycle_adoptions = MidCycleAdoptionTracker()
     reported_cache_rejections = 0
     reported_canonical_repair_waits = 0
+    reported_stale_scan_rejections = 0
 
     def log_control_observation_changes() -> None:
         nonlocal reported_cache_rejections
         nonlocal reported_canonical_repair_waits
+        nonlocal reported_stale_scan_rejections
         if control_reader is None:
             return
         metrics = control_reader.observation_metrics()
         cache_rejections = int(metrics["cache_rejected_lower_epoch_count"])
         repair_waits = int(metrics["canonical_repair_wait_count"])
+        stale_scan_rejections = int(metrics["stale_epoch_scan_rejected_count"])
         if cache_rejections > reported_cache_rejections:
             logger.event(
                 "cache_rejected_lower_epoch",
@@ -2387,6 +2414,14 @@ def run_learner(config: Config, learner_id: str) -> None:
                 **metrics,
             )
             reported_canonical_repair_waits = repair_waits
+        if stale_scan_rejections > reported_stale_scan_rejections:
+            logger.event(
+                "stale_epoch_scan_rejected",
+                count=stale_scan_rejections,
+                delta=stale_scan_rejections - reported_stale_scan_rejections,
+                **metrics,
+            )
+            reported_stale_scan_rejections = stale_scan_rejections
 
     def current_adoption_context() -> AdoptionContext:
         return build_adoption_context(
@@ -2580,7 +2615,11 @@ def run_learner(config: Config, learner_id: str) -> None:
                     )
                     logger.event(
                         watchdog_stop_reason,
-                        timeout_seconds=syncer_watchdog.timeout_seconds,
+                        timeout_seconds=(
+                            config.coordination.syncer_ha.learner_recovery_wait_seconds
+                            if config.coordination.syncer_ha.enabled
+                            else syncer_watchdog.timeout_seconds
+                        ),
                         seconds_since_signal=syncer_watchdog.seconds_since_signal(),
                         last_signal_at=syncer_watchdog.last_signal_wall,
                         last_observed_global_version=syncer_watchdog.last_observed_version,
@@ -2744,6 +2783,7 @@ def run_learner(config: Config, learner_id: str) -> None:
             local_step=local_step,
             global_version=last_loaded_global_version,
             status_reason=watchdog_stop_reason,
+            **({} if control_reader is None else control_reader.observation_metrics()),
             **training_resources,
         )
         close_epoch_control_reader(paths)

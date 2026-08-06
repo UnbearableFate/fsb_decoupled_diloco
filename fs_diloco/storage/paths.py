@@ -225,10 +225,31 @@ class RunPaths:
         if self.syncer_epochs.is_dir():
             yield from sorted(self.syncer_epochs.glob("e*_*/heartbeat.json"))
 
-    def iter_instance_heartbeats(self) -> Iterator[Path]:
-        yield from self.iter_syncer_heartbeats()
+    def iter_syncer_logs(self) -> Iterator[Path]:
+        legacy = self.logs / "syncer.jsonl"
+        if legacy.is_file():
+            yield legacy
+        epoch_logs = self.logs / "syncers"
+        if epoch_logs.is_dir():
+            yield from sorted(epoch_logs.glob("e*_*.jsonl"))
+
+    def iter_learner_logs(self) -> Iterator[Path]:
+        if not self.logs.is_dir():
+            return
+        syncer_logs = {path.resolve(strict=False) for path in self.iter_syncer_logs()}
+        for path in sorted(self.logs.rglob("*.jsonl")):
+            resolved = path.resolve(strict=False)
+            if resolved in syncer_logs or "candidates" in path.relative_to(self.logs).parts:
+                continue
+            yield path
+
+    def iter_learner_heartbeats(self) -> Iterator[Path]:
         if self.heartbeats.is_dir():
             yield from sorted(self.heartbeats.rglob("*.json"))
+
+    def iter_instance_heartbeats(self) -> Iterator[Path]:
+        yield from self.iter_syncer_heartbeats()
+        yield from self.iter_learner_heartbeats()
 
     def iter_instance_pointers(self) -> Iterator[Path]:
         if self.updates_latest.is_dir():

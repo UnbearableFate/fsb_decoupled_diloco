@@ -262,3 +262,21 @@ Attempt 3, `2497948.opbs`, submitted the short-walltime children and completed s
 
 - `collect_runtime_artifacts()`对`control/weights/optim/fragments`的atomic temp无条件删除；`input_closed=True`把一般orphan grace降为0，但HA lease renewer在final maintenance期间仍必须运行并可能发布heartbeat，因此“input closed等于authority writer closed”的假设错误。
 - 对HA authority temp使用至少`FencedSQLiteStore.gc_grace_seconds = lease_duration + max_clock_skew`的年龄门槛；保留learner已停止后的proposal temp终态清理语义。新增RED回归：current HA control temp在grace内必须保留，超过grace才删除；然后重跑完整tests与相同smoke。若修复正确，replacement日志不得出现`error`或`lease_renewer_stop_failed`。
+
+## 2026-08-06 14:32 JST — phase1-review-remediation-tests-2（连续失败 1）
+
+- 命令与环境：在 Miyabi compute node `mg0012` 由 PBS job `2498865.opbs` 执行 `qsub -l walltime=00:00:45 scripts/miyabi/run_plan02_phase1_tests.pbs`；显式 walltime 为基于上一轮 31 秒实测估算的 45 秒。脚本先运行 `.venv/bin/python -m pytest -q tests/test_plan02_phase1_ha.py`，随后才会运行全套 pytest。
+- 预期：新增 candidate writer-lock 回归在持锁者释放后取得 epoch，并完成清理；focused 与 full 测试组均通过。
+- 实际：focused 组 `50 passed, 1 failed in 6.09s`，在测试清理阶段由主线程调用一个在 worker thread 创建的 `LeaderLeaseStore.release()`，触发 Python sqlite3 的 same-thread `ProgrammingError`。生产路径已成功记录 `writer_lock_blocked` 并随后取得 epoch 1；失败不在 candidate retry 实现。
+- 原始证据：`fsdiloco_plan02_p1_tests.o2498865`；PBS stderr 合并到同一文件。该 job 在 focused failure 后按 `set -e` 退出，未运行 full suite。
+- 已确认根因：测试把 thread-affine sqlite connection 从 candidate worker thread返回主线程后再释放，违反 sqlite3 connection ownership；这是测试 teardown 缺陷，不是被验证的 writer-lock行为缺陷。
+- 下一轮：让 worker thread在写出取得结果后等待主线程信号，并在创建 connection的同一线程执行 exact-token release/close；新增断言确认worker完成清理。重新运行同一 focused + full PBS测试组。通过条件为 writer-lock retry/timeout断言成立、focused与full suite均为0 failure。
+
+## 2026-08-06 14:35 JST — phase1-review-final-smoke（连续失败 1）
+
+- 命令与环境：Miyabi `debug-g` node `mg0004`，PBS `2498879.opbs`；依据前两轮12–13秒实测，显式提交 `qsub -l walltime=00:00:20 -o reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-1435_phase1-review-smoke_pass.log -v PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,RUN_ID=plan02_phase1_review_final_2498876 scripts/miyabi/run_plan02_phase1_smoke.pbs`。实际walltime 12秒，scheduler `Exit_status=2`。
+- 预期：tiny HA runtime完成v2/terminal generation 2且staged Checker写入独立artifact并返回`PASS_WITH_FOLLOWUPS`。
+- 实际：runtime本身完整成功：leader released、final v2/generation 2、两个learner stopped、76个fenced business transaction无失败、lease renew无失败、无runtime error事件。随后launcher调用Checker时遗漏新必填的`--output`，argparse返回2，导致PBS失败。
+- 原始证据：`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-1435_phase1-review-smoke_pass.log`；run root `runs/fs_diloco/plan02_phase1_review_final_2498876`。
+- 已确认根因：review remediation把Checker默认写回live run目录的行为改为显式必填`--output`，但smoke PBS调用点未同步，属于launcher接口迁移遗漏。
+- 下一轮：给smoke脚本增加job/stamp唯一的report artifact路径并显式传`--output`，静态检查后用相同20秒最短walltime重跑。通过条件为runtime无error、Checker artifact存在且为`PASS_WITH_FOLLOWUPS`、PBS exit 0。

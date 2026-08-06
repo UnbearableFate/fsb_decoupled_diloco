@@ -107,6 +107,7 @@ class SyncerHASection:
     heartbeat_interval_seconds: float = 5.0
     heartbeat_stale_after_seconds: float = 30.0
     lease_busy_timeout_ms: int = 5000
+    business_busy_timeout_ms: int = 60_000
     candidate_acquire_poll_seconds: float = 5.0
     candidate_wait_seconds: float = 180.0
     learner_recovery_wait_seconds: float = 1800.0
@@ -573,6 +574,8 @@ def resolve_config(
             "coordination.syncer_ha.lease_busy_timeout_ms must be > 0 and <= "
             "renew_interval_seconds * 1000"
         )
+    if ha.business_busy_timeout_ms <= 0:
+        raise ValueError("coordination.syncer_ha.business_busy_timeout_ms must be > 0")
     if not 0.0 < ha.candidate_acquire_poll_seconds <= ha.renew_interval_seconds:
         raise ValueError(
             "coordination.syncer_ha.candidate_acquire_poll_seconds must be > 0 "

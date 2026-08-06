@@ -8,7 +8,7 @@ HA full仍只有一个 active合并/发布者，但允许多个独立 candidate 
 
 - `acquire_candidate()` 以 source/config identity创建 owner-scoped candidate日志，轮询 `LeaderLeaseStore`直到取得 token、terminal已完整发布或等待预算耗尽；只有 DB terminal 对应 generation 的 canonical stop/summary publication路径、owner、epoch与 SHA 均有效才视为完成，缺一时允许 successor取得 token执行 terminal repair；loser没有业务 mutator。
 - `open_leader_store()` 用已验证 bootstrap identity打开 `FencedSQLiteStore`并返回绑定 current token的 runtime store。
-- `LeaseRenewalThread` 周期 renew并用 `EpochControlPublisher`写 syncer heartbeat；连续异常被保留并由主线程检查，停止时只释放自己的 exact token。`run_syncer()`从acquire成功开始把store/logger/renew线程的部分初始化纳入同一cleanup ownership guard；任一步失败都会停止已启动线程、关闭store、尝试release精确token并关闭lease connection。renew线程启动超时先设置stop，不能稍后继续续租。
+- `LeaseRenewalThread` 周期 renew并用 `EpochControlPublisher`写 syncer heartbeat；短暂 `SQLITE_BUSY/locked` 在本地 monotonic lease安全预算内带抖动重试，其他异常或预算耗尽fail closed并由主线程检查。线程累计真实renew transaction、busy retry及heartbeat wall/CPU遥测。`run_syncer()`从acquire成功开始把store/logger/renew线程的部分初始化纳入同一cleanup ownership guard；任一步失败都会停止已启动线程、关闭store、尝试release精确token并关闭lease connection。renew线程启动超时先设置stop，不能稍后继续续租。
 
 `runtime/pbs_scheduler.py` 规范化 PBS job ID和 qstat字段，把 queued/prologue/running/suspended/finished/unknown分类；candidate qsub带唯一 request fingerprint、shared root、descriptor SHA和配置中显式估算的短 walltime。qstat/qsub命令缺失或 timeout被转成 `query_failed`/失败 receipt，不向上抛出并终止 learner。`runtime/launch_outbox.py` 用 deterministic observation key和 atomic mkdir选出单个 attempt winner，再按当前/历史 qstat结果、uncertainty窗口、指数 backoff、最大尝试和跨 observation的全局 outstanding预算 reconcile；mkdir后 claim.json尚未可见的窗口用 attempt目录mtime保守计作 live claim，submission receipt丢失时会先按 fingerprint查 scheduler，而不是立即重复 qsub。当前 stale observation的 attempts不会因 claim retention被归档并重置预算，只有看到新 observation后才允许把旧终态 claim写入 history。
 

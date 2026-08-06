@@ -13,6 +13,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable
 
+from ..storage.paths import RunPaths
+
 
 CSV_COLUMNS = [
     "run_id",
@@ -244,33 +246,34 @@ def _selection_fallback(
 ) -> dict[str, dict[str, int | str | None]]:
     full_versions, fragment_events = _committed_merge_versions(syncer_rows)
     selected: dict[str, dict[str, int | str | None]] = {}
-    for event in _read_jsonl(root / "logs" / "syncer.jsonl"):
-        event_type = event.get("event_type")
-        update_ids = event.get("update_ids")
-        if not isinstance(update_ids, list):
-            continue
-        if event_type == "updates_selected":
-            current = _as_int(event.get("version"))
-            target = None if current is None else current + 1
-            if full_versions and target not in full_versions:
+    for log_path in RunPaths(root).iter_syncer_logs():
+        for event in _read_jsonl(log_path):
+            event_type = event.get("event_type")
+            update_ids = event.get("update_ids")
+            if not isinstance(update_ids, list):
                 continue
-            for update_id in update_ids:
-                selected[str(update_id)] = {
-                    "kind": "full",
-                    "applied_version": target,
-                    "current_fragment_version": None,
-                }
-        elif event_type == "fragment_updates_selected":
-            current_event = _as_int(event.get("global_merge_event"))
-            target_event = None if current_event is None else current_event + 1
-            if fragment_events and target_event not in fragment_events:
-                continue
-            for update_id in update_ids:
-                selected[str(update_id)] = {
-                    "kind": "fragment",
-                    "applied_version": target_event,
-                    "current_fragment_version": _as_int(event.get("fragment_version")),
-                }
+            if event_type == "updates_selected":
+                current = _as_int(event.get("version"))
+                target = None if current is None else current + 1
+                if full_versions and target not in full_versions:
+                    continue
+                for update_id in update_ids:
+                    selected[str(update_id)] = {
+                        "kind": "full",
+                        "applied_version": target,
+                        "current_fragment_version": None,
+                    }
+            elif event_type == "fragment_updates_selected":
+                current_event = _as_int(event.get("global_merge_event"))
+                target_event = None if current_event is None else current_event + 1
+                if fragment_events and target_event not in fragment_events:
+                    continue
+                for update_id in update_ids:
+                    selected[str(update_id)] = {
+                        "kind": "fragment",
+                        "applied_version": target_event,
+                        "current_fragment_version": _as_int(event.get("fragment_version")),
+                    }
     return selected
 
 
@@ -297,7 +300,7 @@ def _loss_metrics(rows: list[dict[str, str]]) -> dict[str, Any]:
 
 def _local_steps(root: Path, learner_rows: list[dict[str, str]]) -> dict[str, int]:
     steps: dict[str, int] = {}
-    for path in sorted((root / "heartbeats").glob("learner_*.json")):
+    for path in RunPaths(root).iter_learner_heartbeats():
         heartbeat = _read_json(path)
         learner_id = str(heartbeat.get("learner_id") or path.stem)
         local_step = _as_int(heartbeat.get("last_local_step"))

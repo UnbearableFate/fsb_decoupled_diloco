@@ -11,6 +11,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from fs_diloco.storage.paths import RunPaths
+
 
 def read_json(path: Path) -> dict[str, Any]:
     with path.open(encoding="utf-8") as handle:
@@ -232,11 +234,29 @@ def check(args: argparse.Namespace) -> str:
                 raise RuntimeError("committed checkpoint mismatch")
         expected_weights = {Path(str(current["weight_path"])).resolve()}
         expected_optim = {Path(str(current["optim_path"])).resolve()}
-        actual_weights = {path.resolve() for path in (root / "weights").glob("*.safetensors")}
-        actual_optim = {path.resolve() for path in (root / "optim").glob("*.safetensors")}
+        paths = RunPaths(root)
+        ha_mode = paths.bootstrap_complete_json.is_file()
+        actual_weights = {
+            path.resolve()
+            for path in (
+                paths.iter_epoch_weights()
+                if ha_mode
+                else (root / "weights").glob("*.safetensors")
+            )
+        }
+        actual_optim = {
+            path.resolve()
+            for path in (
+                paths.iter_epoch_optim()
+                if ha_mode
+                else (root / "optim").glob("*.safetensors")
+            )
+        }
+        if not actual_weights or not actual_optim:
+            raise RuntimeError("checkpoint discovery returned an unexpected empty surface")
         if actual_weights != expected_weights or actual_optim != expected_optim:
             raise RuntimeError("checkpoint retention is not current-only")
-        pointer_count = len(list((root / "updates" / "latest").glob("learner_*.json")))
+        pointer_count = len(list(paths.iter_instance_pointers()))
         if pointer_count != args.expected_learners:
             raise RuntimeError("fixed proposal surface mismatch")
     if (root / "db_dumps").exists() or list(root.glob("**/*-wal")):
@@ -276,7 +296,10 @@ def check(args: argparse.Namespace) -> str:
         if not set(range(version)).issubset(archived_global_versions):
             raise RuntimeError("global version archive is incomplete")
 
-    events = read_jsonl(root / "logs" / "syncer.jsonl")
+    syncer_logs = list(RunPaths(root).iter_syncer_logs())
+    if not syncer_logs:
+        raise RuntimeError("syncer log discovery returned an unexpected empty surface")
+    events = [event for path in syncer_logs for event in read_jsonl(path)]
     event_types = {str(row.get("event_type")) for row in events}
     if event_types & {"error", "no_progress_timeout", "db_dumped"}:
         raise RuntimeError("failure or dump event exists")

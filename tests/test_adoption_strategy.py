@@ -35,6 +35,7 @@ def _context(
     load_or_refresh_latest=None,
     paths=None,
     snapshot_model=None,
+    terminal_published=None,
 ):
     logger = logger or RecordingLogger()
     reference = reference if reference is not None else torch.arange(4, dtype=torch.float32)
@@ -62,6 +63,7 @@ def _context(
         prepare_prediction_fn=prepare_prediction
         or (lambda **_kwargs: (reference, {"prediction_compute_device": "cpu"}, None, None)),
         load_or_refresh_latest_fn=load_or_refresh_latest,
+        terminal_published_fn=terminal_published,
     )
 
 
@@ -329,6 +331,49 @@ def test_rebase_after_publish_stop_skips_anchor_snapshot(tmp_path):
     assert action.adoption is None
     assert not strategy.wants_inner_poll(config)
     assert logger.events[-1][0] == "local_rebase_anchor_skipped_on_stop"
+
+
+@pytest.mark.parametrize(
+    "strategy_type,config_path",
+    [
+        (PredictGlobalAdoptionStrategy, "configs/fs_diloco_tiny_predict_local.yaml"),
+        (RebaseGlobalAdoptionStrategy, "configs/fs_diloco_tiny_rebase_local.yaml"),
+    ],
+)
+def test_ha_adoption_ignores_polluted_fixed_stop_without_authoritative_terminal(
+    tmp_path, strategy_type, config_path
+):
+    config = resolve_config(config_path)
+    paths = RunPaths(tmp_path)
+    atomic_write_json(paths.stop_json, {"reason": "polluted-lower-epoch-cache"})
+    calls = []
+
+    def prepare(**_kwargs):
+        calls.append("prepare")
+        return torch.zeros(4), {}, None, None
+
+    def snapshot(**_kwargs):
+        calls.append("snapshot")
+        return torch.zeros(4), {}
+
+    strategy = strategy_type()
+    action = strategy.on_after_publish(
+        _context(
+            config,
+            paths=paths,
+            prepare_prediction=prepare,
+            snapshot_model=snapshot,
+            terminal_published=lambda _paths: False,
+        ),
+        PublishResult(update_id="u1", base_global_version=1),
+    )
+
+    assert calls
+    assert action.reset_optimizer_reason == (
+        "global_prediction_started"
+        if strategy_type is PredictGlobalAdoptionStrategy
+        else None
+    )
 
 
 @pytest.mark.parametrize(

@@ -47,6 +47,7 @@ coordination:
     heartbeat_interval_seconds: 1.0
     heartbeat_stale_after_seconds: 5.0
     lease_busy_timeout_ms: 3000
+    business_busy_timeout_ms: 60000
     candidate_acquire_poll_seconds: 1.0
     candidate_wait_seconds: 35.0
     learner_recovery_wait_seconds: 60.0

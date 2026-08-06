@@ -201,9 +201,14 @@ class PBSScheduler:
             return None
         if completed.returncode != 0:
             return None
-        marker = f"FS_DILOCO_RECOVERY_REQUEST={request_fingerprint}"
         for job_id, fields in parse_qstat_jobs(completed.stdout):
-            if marker not in fields.get("Variable_List", ""):
+            variables = {
+                key: value
+                for item in fields.get("Variable_List", "").split(",")
+                for key, separator, value in (item.partition("="),)
+                if separator
+            }
+            if variables.get("FS_DILOCO_RECOVERY_REQUEST") != request_fingerprint:
                 continue
             return PBSJobObservation(
                 job_id=normalize_job_id(job_id),

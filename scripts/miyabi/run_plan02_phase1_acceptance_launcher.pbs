@@ -37,7 +37,6 @@ source "$IDENTITY_ROOT.env"
   --run-id "$RUN_ID" \
   --shared-root "$SHARED_ROOT" \
   --project-root "$PROJECT_ROOT" \
-  --allow-dirty-snapshot \
   > "$INIT_STDOUT"
 
 DESCRIPTOR_SHA="$($PYTHON_BIN - "$SHARED_ROOT/control/run_descriptor.json" <<'PY'

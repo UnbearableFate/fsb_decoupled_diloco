@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 import threading
 import time
+from collections import deque
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, Callable
@@ -19,6 +20,21 @@ LegacySQLiteStore = SQLiteStore
 
 _DDL_KEYWORDS = {"ALTER", "ATTACH", "CREATE", "DETACH", "DROP", "REINDEX", "VACUUM"}
 _MUTATING_KEYWORDS = {"DELETE", "INSERT", "REPLACE", "UPDATE"}
+_READ_KEYWORDS = {"EXPLAIN", "SELECT"}
+_TRANSACTION_KEYWORDS = {"BEGIN", "SAVEPOINT"}
+_READ_ONLY_PRAGMAS = {
+    "BUSY_TIMEOUT",
+    "FOREIGN_KEY_CHECK",
+    "FREELIST_COUNT",
+    "INTEGRITY_CHECK",
+    "JOURNAL_MODE",
+    "PAGE_COUNT",
+    "QUERY_ONLY",
+    "QUICK_CHECK",
+    "SYNCHRONOUS",
+    "TABLE_INFO",
+    "USER_VERSION",
+}
 
 
 def _keyword(sql: str) -> str:
@@ -27,6 +43,15 @@ def _keyword(sql: str) -> str:
         _, _, statement = statement.partition("\n")
         statement = statement.lstrip()
     return statement.split(None, 1)[0].upper() if statement else ""
+
+
+def _read_only_pragma(sql: str) -> bool:
+    statement = sql.lstrip()
+    if "=" in statement:
+        return False
+    _, _, body = statement.partition(" ")
+    pragma_name = body.strip().split("(", 1)[0].strip().upper()
+    return pragma_name in _READ_ONLY_PRAGMAS
 
 
 def _parameters(
@@ -89,7 +114,7 @@ class _FencedConnection:
         keyword = _keyword(sql)
         if keyword in _DDL_KEYWORDS:
             raise RuntimeError("DDL is forbidden after HA bootstrap")
-        if keyword in {"BEGIN", "SAVEPOINT"}:
+        if keyword in _TRANSACTION_KEYWORDS:
             self._require_active_token()
             cursor = self._connection.execute(sql, _parameters(parameters))
             self._verify_token()
@@ -97,6 +122,10 @@ class _FencedConnection:
         if keyword in _MUTATING_KEYWORDS:
             self._ensure_write_transaction()
             self._verify_token()
+        elif keyword not in _READ_KEYWORDS and not (
+            keyword == "PRAGMA" and _read_only_pragma(sql)
+        ):
+            raise RuntimeError(f"unrecognized SQL statement is forbidden by the fence: {keyword}")
         return self._connection.execute(sql, _parameters(parameters))
 
     def executemany(
@@ -226,6 +255,10 @@ class FencedSQLiteStore:
         self._legacy = legacy
         self._connection = guarded
         self._mutation_lock = threading.RLock()
+        self._business_metrics_lock = threading.Lock()
+        self._business_transaction_seconds: deque[float] = deque(maxlen=10_000)
+        self._business_transaction_count = 0
+        self._business_transaction_failure_count = 0
         self._wall_clock = wall_clock
         self.gc_grace_seconds = float(gc_grace_seconds)
         self.max_retained_epoch_dirs = int(max_retained_epoch_dirs)
@@ -287,6 +320,37 @@ class FencedSQLiteStore:
         rows = self._connection.execute("SELECT relative_path FROM gc_candidates").fetchall()
         return {str(row["relative_path"]) for row in rows}
 
+    def ready_gc_candidates(self, *, now: float | None = None) -> list[dict[str, Any]]:
+        timestamp = time.time() if now is None else float(now)
+        rows = self._connection.execute(
+            """
+            SELECT * FROM gc_candidates
+            WHERE state IN ('pending', 'deleting') AND not_before <= ?
+            ORDER BY recorded_at, relative_path
+            """,
+            (timestamp,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def business_transaction_metrics(self) -> dict[str, Any]:
+        with self._business_metrics_lock:
+            samples = list(self._business_transaction_seconds)
+            return {
+                "business_transaction_count": self._business_transaction_count,
+                "business_transaction_failure_count": (
+                    self._business_transaction_failure_count
+                ),
+                "business_transaction_captured_count": len(samples),
+                "business_transaction_seconds": samples,
+            }
+
+    def _record_business_transaction(self, started_at: float, *, failed: bool) -> None:
+        duration = max(0.0, time.monotonic() - started_at)
+        with self._business_metrics_lock:
+            self._business_transaction_count += 1
+            self._business_transaction_failure_count += int(failed)
+            self._business_transaction_seconds.append(duration)
+
     def _mutate(
         self,
         token: LeaderToken,
@@ -296,17 +360,22 @@ class FencedSQLiteStore:
     ) -> Any:
         if not isinstance(token, LeaderToken):
             raise TypeError("HA mutation requires a LeaderToken as its first argument")
+        started_at = time.monotonic()
+        failed = True
         with self._mutation_lock:
             self._connection.activate(token)
             try:
                 self._connection.preflight()
-                return getattr(self._legacy, method_name)(*args, **kwargs)
+                result = getattr(self._legacy, method_name)(*args, **kwargs)
+                failed = False
+                return result
             except Exception:
                 if self._connection.in_transaction:
                     self._connection.rollback()
                 raise
             finally:
                 self._connection.deactivate()
+                self._record_business_transaction(started_at, failed=failed)
 
     def _transaction(
         self,
@@ -315,12 +384,15 @@ class FencedSQLiteStore:
     ) -> Any:
         if not isinstance(token, LeaderToken):
             raise TypeError("HA mutation requires a LeaderToken as its first argument")
+        started_at = time.monotonic()
+        failed = True
         with self._mutation_lock:
             self._connection.activate(token)
             try:
                 self._connection.execute("BEGIN IMMEDIATE")
                 result = operation(self._connection)
                 self._connection.commit()
+                failed = False
                 return result
             except Exception:
                 if self._connection.in_transaction:
@@ -328,6 +400,7 @@ class FencedSQLiteStore:
                 raise
             finally:
                 self._connection.deactivate()
+                self._record_business_transaction(started_at, failed=failed)
 
     def set_run_state(self, token: LeaderToken, key: str, value: Any) -> None:
         self._mutate(token, "set_run_state", key, value)
@@ -585,6 +658,107 @@ class FencedSQLiteStore:
 
         return self._transaction(token, operation)
 
+    def register_orphan_gc_candidate(
+        self,
+        token: LeaderToken,
+        *,
+        relative_path: str,
+        artifact_kind: str,
+        owning_epoch: int,
+        publication_id: str,
+        not_before: float,
+        recorded_at: float,
+    ) -> None:
+        if int(owning_epoch) >= token.epoch:
+            raise RuntimeError("only a prior epoch artifact can be registered as an orphan")
+
+        def operation(conn: _FencedConnection) -> None:
+            referenced = conn.execute(
+                """
+                SELECT 1 FROM global_versions
+                WHERE weight_path = ? OR optim_path = ? LIMIT 1
+                """,
+                (relative_path, relative_path),
+            ).fetchone()
+            if referenced is not None:
+                raise RuntimeError(f"cannot register referenced GC path: {relative_path}")
+            conn.execute(
+                """
+                INSERT INTO gc_candidates(
+                    relative_path, artifact_kind, owning_epoch, publication_id,
+                    state, not_before, recorded_by_epoch, recorded_at
+                ) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
+                ON CONFLICT(relative_path) DO NOTHING
+                """,
+                (
+                    relative_path,
+                    artifact_kind,
+                    int(owning_epoch),
+                    publication_id,
+                    float(not_before),
+                    token.epoch,
+                    float(recorded_at),
+                ),
+            )
+
+        self._transaction(token, operation)
+
+    def claim_gc_candidate(
+        self,
+        token: LeaderToken,
+        relative_path: str,
+        *,
+        now: float | None = None,
+    ) -> dict[str, Any] | None:
+        timestamp = time.time() if now is None else float(now)
+
+        def operation(conn: _FencedConnection) -> dict[str, Any] | None:
+            row = conn.execute(
+                """
+                SELECT * FROM gc_candidates
+                WHERE relative_path=? AND state IN ('pending', 'deleting') AND not_before <= ?
+                """,
+                (relative_path, timestamp),
+            ).fetchone()
+            if row is None:
+                return None
+            referenced = conn.execute(
+                """
+                SELECT 1 FROM global_versions
+                WHERE weight_path = ? OR optim_path = ? LIMIT 1
+                """,
+                (relative_path, relative_path),
+            ).fetchone()
+            if referenced is not None:
+                raise RuntimeError(f"GC candidate became referenced: {relative_path}")
+            conn.execute(
+                "UPDATE gc_candidates SET state='deleting' WHERE relative_path=?",
+                (relative_path,),
+            )
+            return dict(row)
+
+        return self._transaction(token, operation)
+
+    def expedite_terminal_gc_candidates(
+        self,
+        token: LeaderToken,
+        *,
+        now: float | None = None,
+    ) -> int:
+        timestamp = time.time() if now is None else float(now)
+
+        def operation(conn: _FencedConnection) -> int:
+            cursor = conn.execute(
+                """
+                UPDATE gc_candidates SET not_before=?
+                WHERE state IN ('pending', 'deleting') AND not_before > ?
+                """,
+                (timestamp, timestamp),
+            )
+            return int(cursor.rowcount)
+
+        return int(self._transaction(token, operation))
+
     def complete_gc_candidate(
         self,
         token: LeaderToken,
@@ -786,6 +960,7 @@ class FencedSQLiteStore:
 
 
 _BOUND_MUTATORS = {
+    "claim_gc_candidate",
     "claim_ready_gc_candidates",
     "clear_gc_pending_paths",
     "commit_full_merge",
@@ -796,6 +971,7 @@ _BOUND_MUTATORS = {
     "drop_obsolete_updates",
     "drop_superseded_updates",
     "drop_updates",
+    "expedite_terminal_gc_candidates",
     "finalize_terminal_state",
     "finalize_unconsumed_updates",
     "initialize_full_run",
@@ -804,6 +980,7 @@ _BOUND_MUTATORS = {
     "mark_updates_selected",
     "prepare_full_resume",
     "record_control_publication",
+    "register_orphan_gc_candidate",
     "reset_all_selected_to_pending",
     "reset_selected_to_pending",
     "set_controller_state",
@@ -868,4 +1045,8 @@ class ReadOnlySQLiteStore:
         keyword = _keyword(sql)
         if keyword in _DDL_KEYWORDS or keyword in _MUTATING_KEYWORDS:
             raise sqlite3.OperationalError("ReadOnlySQLiteStore accepts queries only")
+        if keyword not in _READ_KEYWORDS and not (
+            keyword == "PRAGMA" and _read_only_pragma(sql)
+        ):
+            raise sqlite3.OperationalError("ReadOnlySQLiteStore rejects unrecognized SQL")
         return self._connection.execute(sql, _parameters(parameters))

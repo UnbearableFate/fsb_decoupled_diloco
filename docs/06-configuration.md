@@ -100,7 +100,8 @@ HA 默认关闭，只允许 `fragments.enabled=false`。`recovery_submission.ena
 | `syncer_ha.renew_interval_seconds` | 10.0 | active leader renew周期 |
 | `syncer_ha.max_clock_skew_seconds` | 2.0 | lease安全计算接受的跨节点时钟偏差上限 |
 | `syncer_ha.heartbeat_interval_seconds` / `heartbeat_stale_after_seconds` | 5.0 / 30.0 | syncer epoch heartbeat发布周期与 learner判陈旧门槛 |
-| `syncer_ha.lease_busy_timeout_ms` | 5000 | lease/fenced transaction等待 SQLite writer lock的上限；超时 fail closed，不绕过锁 |
+| `syncer_ha.lease_busy_timeout_ms` | 5000 | acquire/renew短连接单次等待 SQLite writer lock的上限；busy时candidate在总预算内轮询，renewer在本地lease安全边界内重试 |
+| `syncer_ha.business_busy_timeout_ms` | 60000 | fenced业务transaction等待 SQLite writer lock的上限；取得锁后仍重新校验DB token与本地monotonic安全边界 |
 | `syncer_ha.candidate_acquire_poll_seconds` / `candidate_wait_seconds` | 5.0 / 180.0 | loser candidate轮询周期与总等待预算 |
 | `syncer_ha.learner_recovery_wait_seconds` | 1800.0 | learner看到 syncer失去进展后允许 recovery claim/job完成的总预算 |
 | `syncer_ha.canonical_repair_wait_seconds` | 120.0 | DB commit已存在而 canonical control尚待 successor修复的等待预算 |

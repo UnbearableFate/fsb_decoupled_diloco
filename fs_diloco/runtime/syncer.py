@@ -2584,11 +2584,38 @@ def run_syncer(config: Config) -> None:
     leader_token = None
     lease_renewer = None
     store = None
+
+    def cleanup_acquired_leadership(startup_error: BaseException) -> None:
+        """Best-effort cleanup for every failure after a successful acquire."""
+        for cleanup_name, cleanup in (
+            (
+                "lease renewer stop",
+                None if lease_renewer is None else lease_renewer.stop,
+            ),
+            ("leader store close", None if store is None else store.close),
+            (
+                "leader lease release",
+                (
+                    None
+                    if lease_store is None or leader_token is None
+                    else lambda: lease_store.release(leader_token)
+                ),
+            ),
+            ("leader lease close", None if lease_store is None else lease_store.close),
+        ):
+            if cleanup is None:
+                continue
+            try:
+                cleanup()
+            except BaseException as cleanup_error:
+                startup_error.add_note(f"{cleanup_name} failed: {cleanup_error!r}")
+
     if ha_mode:
         loaded = load_run_descriptor(
             paths.shared_root,
             expected_run_id=config.run.run_id,
             expected_git_commit=config.run.git_commit,
+            expected_git_dirty=config.run.git_dirty,
             expected_source_fingerprint=config.run.source_fingerprint,
             expected_descriptor_sha256=os.environ.get("FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256"),
         )
@@ -2630,28 +2657,7 @@ def run_syncer(config: Config) -> None:
             # Leadership ownership starts at acquire(), not at the main-loop
             # try/finally below.  Every later setup boundary therefore belongs
             # to this partial-initialization cleanup guard.
-            for cleanup_name, cleanup in (
-                (
-                    "lease renewer stop",
-                    None if lease_renewer is None else lease_renewer.stop,
-                ),
-                ("leader store close", None if store is None else store.close),
-                (
-                    "leader lease release",
-                    (
-                        None
-                        if lease_store is None or leader_token is None
-                        else lambda: lease_store.release(leader_token)
-                    ),
-                ),
-                ("leader lease close", None if lease_store is None else lease_store.close),
-            ):
-                if cleanup is None:
-                    continue
-                try:
-                    cleanup()
-                except BaseException as cleanup_error:
-                    startup_error.add_note(f"{cleanup_name} failed: {cleanup_error!r}")
+            cleanup_acquired_leadership(startup_error)
             raise
     else:
         prepare_run_dirs(paths, config.sync.num_learners)
@@ -2663,23 +2669,33 @@ def run_syncer(config: Config) -> None:
         store = SQLiteStore(database_path)
         logger = JsonlLogger(paths.logs / "syncer.jsonl", "syncer")
     assert store is not None
-    log_uncaught_exception(logger)
-    hostname = socket.gethostname()
-    logger.event(
-        "process_start",
-        run_id=config.run.run_id,
-        shared_root=str(paths.shared_root),
-        sqlite_path=str(store.path),
-        hostname=hostname,
-        device=str(device),
-        compute_dtype=config.syncer.compute_dtype,
-        publish_dtype=config.syncer.publish_dtype,
-        leader_epoch=None if leader_token is None else leader_token.epoch,
-        leader_owner_id=None if leader_token is None else leader_token.owner_id,
-        cuda_visible_devices=os.environ.get("CUDA_VISIBLE_DEVICES"),
-    )
+    try:
+        log_uncaught_exception(logger)
+        hostname = socket.gethostname()
+        logger.event(
+            "process_start",
+            run_id=config.run.run_id,
+            shared_root=str(paths.shared_root),
+            sqlite_path=str(store.path),
+            hostname=hostname,
+            device=str(device),
+            compute_dtype=config.syncer.compute_dtype,
+            publish_dtype=config.syncer.publish_dtype,
+            leader_epoch=None if leader_token is None else leader_token.epoch,
+            leader_owner_id=None if leader_token is None else leader_token.owner_id,
+            cuda_visible_devices=os.environ.get("CUDA_VISIBLE_DEVICES"),
+        )
+        existing_terminal = store.terminal_state() if ha_mode else None
+    except BaseException as startup_error:
+        if ha_mode:
+            cleanup_acquired_leadership(startup_error)
+        else:
+            try:
+                store.close()
+            except BaseException as cleanup_error:
+                startup_error.add_note(f"store close failed: {cleanup_error!r}")
+        raise
     if ha_mode:
-        existing_terminal = store.terminal_state()
         if existing_terminal is not None and existing_terminal.get("stop_reason") not in (
             None,
             "",
@@ -2733,6 +2749,14 @@ def run_syncer(config: Config) -> None:
         )
         return
     try:
+        if not ha_mode:
+            wandb_run = init_wandb_run(
+                config=config,
+                paths=paths,
+                logger=logger,
+                device=device,
+                hostname=hostname,
+            )
         resume_requested = store.committed_global_count() > 0 if ha_mode else config.init.resume
         if resume_requested:
             version, theta, outer_state, param_index, total_seen_tokens = resume_run(
@@ -2760,13 +2784,14 @@ def run_syncer(config: Config) -> None:
             heartbeat_fences = {}
         if lease_renewer is not None:
             lease_renewer.enable_heartbeats()
-        wandb_run = init_wandb_run(
-            config=config,
-            paths=paths,
-            logger=logger,
-            device=device,
-            hostname=hostname,
-        )
+        if ha_mode:
+            wandb_run = init_wandb_run(
+                config=config,
+                paths=paths,
+                logger=logger,
+                device=device,
+                hostname=hostname,
+            )
     except Exception:
         if lease_renewer is not None:
             try:
@@ -2790,10 +2815,18 @@ def run_syncer(config: Config) -> None:
     cycle_quorum_trigger = "not_reached"
     stop_reason = "completed"
     terminal_grace_complete = False
+    reported_lease_busy_retries = 0
     try:
         while True:
             if lease_renewer is not None:
                 lease_renewer.raise_if_failed()
+                if lease_renewer.busy_retry_count > reported_lease_busy_retries:
+                    logger.event(
+                        "lease_renew_busy_retry",
+                        count=lease_renewer.busy_retry_count,
+                        delta=lease_renewer.busy_retry_count - reported_lease_busy_retries,
+                    )
+                    reported_lease_busy_retries = lease_renewer.busy_retry_count
             if (
                 config.sync.stop_after_outer_steps is not None
                 and version >= config.sync.stop_after_outer_steps
@@ -3295,7 +3328,31 @@ def run_syncer(config: Config) -> None:
                 wandb_run.summary["stop_reason"] = stop_reason
                 wandb_run.summary["final_version"] = version
                 wandb_run.summary["total_seen_tokens"] = total_seen_tokens
-            logger.event("process_exit", reason=stop_reason, version=version)
+            logger.event(
+                "process_exit",
+                reason=stop_reason,
+                version=version,
+                **(
+                    {
+                        "lease_renew_count": 0,
+                        "lease_renew_failure_count": 0,
+                        "lease_renew_busy_retry_count": 0,
+                        "lease_renew_seconds": [],
+                        "lease_renew_wall_seconds": 0.0,
+                        "lease_renew_cpu_seconds": 0.0,
+                        "heartbeat_publish_count": 0,
+                        "heartbeat_publish_wall_seconds": 0.0,
+                        "heartbeat_publish_cpu_seconds": 0.0,
+                    }
+                    if lease_renewer is None
+                    else lease_renewer.observation_metrics()
+                ),
+                **(
+                    {}
+                    if not isinstance(store, LeaderBoundSQLiteStore)
+                    else store.business_transaction_metrics()
+                ),
+            )
         finally:
             try:
                 if wandb_run is not None:

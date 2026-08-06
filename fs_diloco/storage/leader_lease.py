@@ -62,6 +62,16 @@ class LeaseSafetyTracker:
         if elapsed < 0.0 or elapsed > self.safe_duration_seconds:
             raise StaleLeaderTokenError("leader token crossed its local monotonic safety boundary")
 
+    def remaining_safe_seconds(self, token: LeaderToken) -> float:
+        """Return the local monotonic time left before this token is unsafe."""
+        self._check_token(token)
+        now = float(self._monotonic_clock())
+        with self._lock:
+            elapsed = now - self._last_successful_renew
+        if elapsed < 0.0:
+            return 0.0
+        return max(0.0, self.safe_duration_seconds - elapsed)
+
     def _check_token(self, token: LeaderToken) -> None:
         if token != self.token:
             raise StaleLeaderTokenError("lease safety tracker token mismatch")

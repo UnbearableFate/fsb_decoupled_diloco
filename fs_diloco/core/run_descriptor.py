@@ -22,6 +22,18 @@ def _sha256_json_without(payload: dict[str, Any], field: str) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _optional_environment_flag(name: str) -> bool | None:
+    value = os.environ.get(name)
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean flag")
+
+
 @dataclass(frozen=True)
 class LoadedRunDescriptor:
     paths: RunPaths
@@ -35,6 +47,7 @@ def load_run_descriptor(
     *,
     expected_run_id: str | None = None,
     expected_git_commit: str | None = None,
+    expected_git_dirty: bool | None = None,
     expected_source_fingerprint: str | None = None,
     expected_descriptor_sha256: str | None = None,
 ) -> LoadedRunDescriptor:
@@ -59,6 +72,8 @@ def load_run_descriptor(
         checks["run_id"] = expected_run_id
     if expected_git_commit is not None:
         checks["git_commit"] = expected_git_commit
+    if expected_git_dirty is not None:
+        checks["git_dirty"] = expected_git_dirty
     if expected_source_fingerprint is not None:
         checks["source_fingerprint"] = expected_source_fingerprint
     mismatches = {
@@ -91,6 +106,8 @@ def load_run_descriptor(
         raise RuntimeError("resolved config shared_root mismatch")
     if config.run.git_commit != descriptor.get("git_commit"):
         raise RuntimeError("resolved config git_commit mismatch")
+    if config.run.git_dirty != descriptor.get("git_dirty"):
+        raise RuntimeError("resolved config git_dirty mismatch")
     if config.run.source_fingerprint != descriptor.get("source_fingerprint"):
         raise RuntimeError("resolved config source fingerprint mismatch")
     identity = BootstrapIdentity(
@@ -110,6 +127,7 @@ def load_run_descriptor_from_environment() -> LoadedRunDescriptor:
         shared_root,
         expected_run_id=os.environ.get("FS_DILOCO_EXPECTED_RUN_ID"),
         expected_git_commit=os.environ.get("FS_DILOCO_EXPECTED_GIT_COMMIT"),
+        expected_git_dirty=_optional_environment_flag("FS_DILOCO_EXPECTED_GIT_DIRTY"),
         expected_source_fingerprint=os.environ.get("FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT"),
         expected_descriptor_sha256=os.environ.get("FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256"),
     )

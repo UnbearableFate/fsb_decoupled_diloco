@@ -1,0 +1,23 @@
+{
+  "status": "PASS",
+  "experiment_id": "phase1-review-remediation-tests-2",
+  "pbs_job_id": "2498869.opbs",
+  "hostname": "mg0012",
+  "requested_walltime": "00:00:45",
+  "used_walltime": "00:00:32",
+  "exit_status": 0,
+  "commands": [
+    ".venv/bin/python -m pytest -q tests/test_plan02_phase1_ha.py",
+    ".venv/bin/python -m pytest -q"
+  ],
+  "focused": {
+    "passed": 51,
+    "seconds": 5.87
+  },
+  "full": {
+    "passed": 432,
+    "seconds": 22.84
+  },
+  "retained_log": "reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-143412_phase1-review-fixes-tests_pass.log",
+  "retained_log_sha256": "6ecdf5c4f69de1b2e22d309af94956b5aa95ce6ae2435f09e03e7a5fd136ac16"
+}
