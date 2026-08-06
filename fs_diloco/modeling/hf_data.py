@@ -193,3 +193,25 @@ def build_batch_iterator(
         block_size=config.training.block_size,
         seed=config.training.seed,
     )
+
+
+def build_stream_batch_iterator(
+    config: Any,
+    tokenizer: Any,
+    *,
+    stream_id: int,
+    stream_pool_size: int,
+) -> Iterator[Batch]:
+    """Build one fixed virtual stream independent of current member count."""
+    stream_id = int(stream_id)
+    stream_pool_size = int(stream_pool_size)
+    if stream_pool_size < 1:
+        raise ValueError("stream_pool_size must be >= 1")
+    if not 0 <= stream_id < stream_pool_size:
+        raise ValueError("stream_id must be within the fixed stream pool")
+    return build_batch_iterator(
+        config,
+        tokenizer,
+        learner_index=stream_id,
+        num_learners=stream_pool_size,
+    )

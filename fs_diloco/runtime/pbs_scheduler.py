@@ -218,3 +218,95 @@ class PBSScheduler:
                 stderr="",
             )
         return None
+
+    def submit_learner(
+        self,
+        *,
+        script: str | Path,
+        launch_request_id: str,
+        shared_root: str | Path,
+        descriptor_sha256: str,
+        walltime: str,
+    ) -> dict[str, Any]:
+        if not launch_request_id or any(
+            character in launch_request_id for character in ",=\n\r"
+        ):
+            raise ValueError("launch_request_id contains an unsafe PBS variable character")
+        variables = ",".join(
+            (
+                f"FS_DILOCO_SHARED_ROOT={Path(shared_root).resolve()}",
+                f"FS_DILOCO_LAUNCH_REQUEST_ID={launch_request_id}",
+                f"FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256={descriptor_sha256}",
+            )
+        )
+        name = f"diloco_l_{launch_request_id[-10:]}"
+        command = [
+            self.qsub_binary,
+            "-N",
+            name,
+            "-l",
+            f"walltime={walltime}",
+            "-v",
+            variables,
+            str(Path(script)),
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout_seconds,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return {
+                "returncode": -1,
+                "stdout": "",
+                "stderr": repr(exc),
+                "job_name": name,
+                "launch_request_id": launch_request_id,
+            }
+        stdout = completed.stdout.strip()
+        result: dict[str, Any] = {
+            "returncode": completed.returncode,
+            "stdout": stdout,
+            "stderr": completed.stderr.strip(),
+            "job_name": name,
+            "launch_request_id": launch_request_id,
+        }
+        if completed.returncode == 0 and stdout:
+            raw = stdout.splitlines()[-1]
+            result["job_id_raw"] = raw
+            result["job_id_normalized"] = normalize_job_id(raw)
+        return result
+
+    def find_by_launch_request(self, launch_request_id: str) -> PBSJobObservation | None:
+        try:
+            completed = subprocess.run(
+                [self.qstat_binary, "-f"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout_seconds,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if completed.returncode != 0:
+            return None
+        for job_id, fields in parse_qstat_jobs(completed.stdout):
+            variables = {
+                key: value
+                for item in fields.get("Variable_List", "").split(",")
+                for key, separator, value in (item.partition("="),)
+                if separator
+            }
+            if variables.get("FS_DILOCO_LAUNCH_REQUEST_ID") != launch_request_id:
+                continue
+            return PBSJobObservation(
+                job_id=normalize_job_id(job_id),
+                classification=classify_scheduler_state(fields),
+                fields=fields,
+                returncode=0,
+                stderr="",
+            )
+        return None

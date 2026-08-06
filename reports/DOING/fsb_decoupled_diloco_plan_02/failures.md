@@ -323,3 +323,45 @@ Attempt 3, `2497948.opbs`, submitted the short-walltime children and completed s
 
 - 相同实现的16:05预检出现相反的时间偏差：baseline p99 `0.030623s`而observer p99 `0.010470s`。两次28秒运行中比例方向反转，说明当前只有8个100-transaction大块且每块重新启动observer线程的采样顺序，把共享文件系统的时间漂移和线程启动边界混入了candidate效果；单次通过或重跑碰巧通过都不能证明门禁。
 - 下一轮不放宽冻结的25%+2ms阈值。把400+400样本拆成更多细粒度AB/BA配对块，复用一个candidate线程并在baseline块确认其静默、在observer块确认至少一次完整`terminal_state + observe`循环，以降低跨时段漂移且保留production只读操作；artifact增加每块顺序/样本/observation证据。新增schedule和平衡/静默同步回归，运行focused+full关联测试，再在compute node重跑同一matched experiment。通过条件仍为原始冻结公式、每侧至少400样本、每个observer块有观察且writer attempt严格为0。
+
+## 2026-08-06 22:30 JST — phase2-focused-tests（连续失败 1）
+
+- 环境：Miyabi compute node `mg0016`，PBS `2500741.opbs`，显式 walltime `00:10:00`；运行 `pytest -q tests/test_plan02_phase2_dynamic.py`。
+- 预期：Phase 2 focused state-machine、outbox、drain和1000 churn测试全部通过。
+- 实际：`7 passed, 2 failed in 7.45s`。两个失败都是测试正则比实现错误消息更窄：分别期望 `outside` 但实现为 `stream_id must be within the fixed stream pool`，期望 `immutable pool` 但实现为 `stream_pool_size is immutable after initialization`。协议实现行为与断言目标一致，1000 churn和其余组已通过。
+- 原始证据：`fsdiloco_plan02_p2_tests.o2500741`。
+- 下一轮：只把两处测试匹配改为稳定语义 `fixed stream pool` / `immutable`，不改生产行为；重新运行同一 focused 组。
+
+## 2026-08-06 22:44 JST — Phase 2 G8 dynamic runtime preflight（连续失败 1）
+
+- 环境：dirty-source功能预检run `plan02_phase2_g8_2500783`；launcher `2500783.opbs`，crash syncer `2500784.opbs`按预期在v0 DB commit后SIGKILL，successor `2500785.opbs`取得epoch 2，bootstrap victim `2500786.opbs`在8秒注入点终止；请求walltime依次为20秒、15秒、150秒、120秒。
+- 预期：victim永久终止后旧pointer被membership fence拒绝但syncer继续，dead revoke释放stream，两个low observation创建replacement并最终drain。
+- 实际：successor在v7正确revoke victim后，再次扫描victim保留的latest pointer；`insert_update_metadata()`把“instance已非current”作为未捕获`RuntimeError`抛出，使syncer进入error terminal，G8失败。旧proposal没有被提交，membership安全性成立，但可用性行为错误。
+- 原始证据：run root `runs/fs_diloco/plan02_phase2_g8_2500783`、`fsdiloco_syncer_candidate.o2500785`及`artifacts/20260806-224349_phase2-g8-launch_pass.json`。
+- 根因与下一轮：proposal摄取API把正常的stale-incarnation拒绝建模为fatal异常；将membership absent/mismatch/stale/drained-nonfinal路径显式rollback并返回`False`，保留final commit的`DynamicMembershipFenceError`重试语义。新增focused stale-pointer断言并重跑tests与G8。
+
+## 2026-08-06 23:04 JST — Phase 2 matched runtime preflight（连续失败 1）
+
+- 环境与命令：提交前`bash -n scripts/miyabi/*.pbs`及literal `group_list=xg24i002`扫描通过；Miyabi launcher PBS `2500997.opbs`以`qsub -q debug-g -l walltime=00:00:20 -v PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,ALLOW_DIRTY_SNAPSHOT=1,STAMP=20260806-230358,RUN_PREFIX=plan02_phase2_matched_preflight scripts/miyabi/run_plan02_phase2_matched_launcher.pbs`运行，实际1秒、exit 1。static/dynamic config均为`fs_diloco_tiny_ha_dynamic_acceptance.yaml`，子job请求syncer `00:02:30`、learner `00:02:00`、checker `00:00:20`。
+- 预期：launcher提交顺序隔离的matched static与dynamic 1+8，并由checker比较相同source/config/model/data/seed/global target下的完整运行时间；动态额外控制面低于static完整时间5%。
+- 实际：static syncer `2500999.opbs`成功提交并开始运行，但`static_learner_array` qsub以255拒绝：`cannot submit non-rerunable Array Job` / `directive error: -r n -k oed`。launcher立即保留partial receipt并非零退出；没有dynamic或checker job被提交。static syncer没有learner，保持quorum wait并由其`00:02:30` walltime自然终止；按计划授权边界未执行`qdel`。
+- 原始证据：`artifacts/20260806-230358_phase2-matched-launch_pass.json`（内容状态`partial`，SHA-256 `f6603e3af8d7140f9e3d1a9de4eead453e8324616898c4ca0fefa8b0012031b0`）、`fsdiloco_p2_matched_launch.o2500997`和`fsdiloco_syncer_candidate.o2500999`；static run root为`runs/fs_diloco/plan02_phase2_matched_preflight_static`。
+- 已确认根因：Miyabi不允许当前`-r n -k oed` PBS learner脚本作为array job提交；G8/G9 launcher使用8个独立qsub，因此没有暴露该编排错误。下一轮把matched launcher的static/dynamic learner arrays改为8个独立、各带唯一index/bootstrap-slot的qsub，逐个持久化receipt，并补充mock qsub编排测试；继续保持static完整结束后才启动dynamic。通过条件为18个runtime jobs及checker均有可审计receipt、两组1+8正常terminal且matched artifact返回`PASS`。
+
+## 2026-08-06 23:11 JST — Phase 2 matched runtime preflight（连续失败 2）
+
+- 环境与编排：dirty source fingerprint `sha256:7cba6e2a88c34c876f7855b2ed1f1cdd8b75bde0df0917592a8f0115f1341040`；launcher `2501059.opbs`提交static syncer/8 learners `2501060`–`2501068`，随后提交dynamic syncer/8 learners `2501069`–`2501077`和checker `2501078`。两组配置、model、data、seed和v60 target相同，唯一配置差异为membership/scaling开关；所有runtime job正常terminal并exit 0，checker按预期因阈值失败exit 1。
+- 预期：dynamic额外控制面critical-path wall time严格小于matched static完整时间的5%。实际static为`25.554922s`，dynamic为`30.892285s`，额外`5.337364s`、ratio `20.8859%`，artifact返回`BLOCKED`。请求walltime为syncer`00:02:30`、learner`00:02:00`、checker`00:00:20`，实际syncer 32/37秒、learners 28/31秒、checker1秒，失败与walltime无关。
+- 原始证据：`artifacts/20260806-230929_phase2-matched-launch_pass.json`（SHA-256 `39f4b1cd210c61bb8a7f8b91fec866e4d06615c079466bd36b02aa029f235567`）、`artifacts/20260806-230929_phase2-matched-performance_pass.json`（内容`BLOCKED`，SHA-256 `ac3673efb5ce4a59f6ca00f745eccadf385f5ca7825823f5ca494fcc6694e2de`）和相应job logs；run roots为`runs/fs_diloco/plan02_phase2_matched_preflight2_{static,dynamic}`。
+- 已确认的首要实现差异：dynamic健康merge循环在公共post-merge maintenance之外，还在每轮discovery无条件执行一次完整`run_maintenance()`，因此每个global step重复扫描/归档/GC；static每轮只执行一次。这段额外维护不属于正确性所需的每轮critical path，健康run中也没有可归档dynamic history。下一轮移除健康merge路径的重复maintenance，仅在quorum/starvation等待路径按持久调度间隔维护，并保留公共post-merge及terminal维护；新增调用频率回归，不放宽5%阈值。若该单项优化仍不足，以breakdown metrics定位剩余动态事务成本，而不靠重复碰运气通过。
+### 2026-08-06 23:35 JST — Phase 2 focused test 2501165
+
+- Result: 1 failed, 17 passed.
+- Failure: conflicting registration replay correctly retained the admitted DB decision, but reconstructed replay output omitted a field present in the original canonical admission payload, so immutable publication collision detection blocked the republish.
+- Disposition: preserve the existing valid canonical artifact without attempting to republish a reconstructed result when the request checksum conflicts.
+
+### 2026-08-06 23:36 JST — Phase 2 focused test 2501167（连续失败 2）
+
+- Result: 1 failed, 17 passed.
+- Failure: the immutable canonical artifact was now preserved correctly, but the new test incorrectly expected the DB replay result to reproduce the one-time plaintext admission token. Persisted `result_json` intentionally omits that secret and returns only the stable admitted fields.
+- Disposition: keep the production secret-redaction behavior and assert stable admission identity/state plus byte-for-byte preservation of the canonical artifact.

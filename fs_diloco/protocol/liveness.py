@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core.constants import (
+    DYNAMIC_LEARNER_ID_PREFIX,
     FORMAT_VERSION,
     LEARNER_STATUS_ACTIVE,
     LEARNER_STATUS_DEAD,
@@ -16,6 +17,7 @@ from ..core.constants import (
     LEARNER_STATUS_STALE,
     learner_id_from_index,
 )
+from .membership import validate_learner_instance_id
 from ..storage.sqlite_store import SQLiteStore
 
 
@@ -38,6 +40,58 @@ def validate_heartbeat(
     if "timestamp" not in payload:
         return False, "timestamp"
     return True, None
+
+
+def validate_dynamic_heartbeat(
+    payload: dict[str, Any],
+    *,
+    run_id: str,
+    path: Path | None = None,
+) -> tuple[bool, str | None]:
+    if payload.get("format_version") != FORMAT_VERSION:
+        return False, "format_version"
+    if payload.get("run_id") != run_id:
+        return False, "run_id"
+    instance_id = str(payload.get("instance_id") or payload.get("learner_id") or "")
+    try:
+        validate_learner_instance_id(instance_id)
+    except ValueError:
+        return False, "instance_id"
+    if path is not None and path.name != f"{instance_id}.json":
+        return False, "path_ownership"
+    for field in (
+        "timestamp",
+        "placement_id",
+        "placement_epoch",
+        "stream_id",
+        "stream_epoch",
+        "admission_generation",
+        "admission_token",
+    ):
+        if payload.get(field) is None:
+            return False, field
+    return True, None
+
+
+def ingest_dynamic_heartbeats(
+    store: Any,
+    paths: Any,
+    *,
+    run_id: str,
+) -> int:
+    heartbeats: list[tuple[dict[str, Any], str]] = []
+    for path in paths.iter_learner_heartbeats():
+        if not path.name.startswith(DYNAMIC_LEARNER_ID_PREFIX):
+            continue
+        heartbeat = _read_heartbeat(path)
+        if heartbeat is None:
+            continue
+        payload, _fingerprint = heartbeat
+        ok, _reason = validate_dynamic_heartbeat(payload, run_id=run_id, path=path)
+        if not ok:
+            continue
+        heartbeats.append((payload, str(path)))
+    return int(store.update_instance_heartbeats(heartbeats))
 
 
 def _read_heartbeat(path: Path) -> tuple[dict[str, Any], str] | None:

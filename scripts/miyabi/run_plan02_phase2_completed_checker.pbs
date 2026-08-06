@@ -1,0 +1,31 @@
+#!/bin/bash
+#PBS -N fsdiloco_p2_done
+#PBS -q debug-g
+#PBS -W group_list=xg24i002
+#PBS -l select=1:mpiprocs=1
+#PBS -l walltime=00:00:30
+#PBS -j oe
+
+set -eEuo pipefail
+trap 'echo "[ERROR] Phase 2 completed checker failed at line $LINENO" >&2' ERR
+
+: "${PHASE2_RUN_ROOT:?PHASE2_RUN_ROOT is required}"
+: "${PHASE2_G7_EVIDENCE:?PHASE2_G7_EVIDENCE is required}"
+: "${PHASE2_G8_EVIDENCE:?PHASE2_G8_EVIDENCE is required}"
+: "${PHASE2_G9_EVIDENCE:?PHASE2_G9_EVIDENCE is required}"
+: "${PHASE2_COMPAT_EVIDENCE:?PHASE2_COMPAT_EVIDENCE is required}"
+: "${PHASE2_MATCHED_EVIDENCE:?PHASE2_MATCHED_EVIDENCE is required}"
+: "${PHASE2_COMPLETED_OUTPUT:?PHASE2_COMPLETED_OUTPUT is required}"
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+
+cd "$PROJECT_ROOT"
+"$PYTHON_BIN" scripts/miyabi/check_plan02_phase2.py \
+  --mode phase2-completed \
+  --run-root "$PHASE2_RUN_ROOT" \
+  --g7-evidence "$PHASE2_G7_EVIDENCE" \
+  --g8-evidence "$PHASE2_G8_EVIDENCE" \
+  --g9-evidence "$PHASE2_G9_EVIDENCE" \
+  --compatibility-evidence "$PHASE2_COMPAT_EVIDENCE" \
+  --matched-performance "$PHASE2_MATCHED_EVIDENCE" \
+  --output "$PHASE2_COMPLETED_OUTPUT"

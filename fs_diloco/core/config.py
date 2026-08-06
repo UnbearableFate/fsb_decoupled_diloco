@@ -139,6 +139,57 @@ class CoordinationSection:
 
 
 @dataclass
+class MembershipSection:
+    mode: str = "static"
+    stream_pool_size: int = 8
+    bootstrap_instances: int = 8
+    initial_membership_deadline_seconds: float = 1800.0
+    registration_scan_interval_seconds: float = 2.0
+    registration_request_ttl_seconds: float = 120.0
+    heartbeat_stale_after_seconds: float = 120.0
+    heartbeat_dead_after_seconds: float = 300.0
+    revocation_grace_seconds: float = 60.0
+    expired_retention_seconds: float = 600.0
+    max_active_instance_records: int = 16
+    allow_unsolicited_registration: bool = False
+    allow_healthy_placement_replacement: bool = False
+    reuse_stream_for_same_placement: bool = True
+
+
+@dataclass
+class ScalingSection:
+    enabled: bool = False
+    desired_contributors: int = 8
+    low_contributor_threshold: int = 6
+    consecutive_low_windows: int = 2
+    productive_window_count: int = 2
+    startup_grace_seconds: float = 180.0
+    productive_upload_grace_factor: float = 2.0
+    productive_upload_grace_min_seconds: float = 60.0
+    productive_upload_grace_max_seconds: float = 600.0
+    cooldown_seconds: float = 300.0
+    max_pending_launch_requests: int = 2
+    max_total_launch_requests: int = 16
+    launch_request_ttl_seconds: float = 900.0
+    capacity_observation_retention_count: int = 64
+    scheduler_reconcile_interval_seconds: float = 30.0
+    starvation_observation_seconds: float = 120.0
+    learner_pbs_script: str = "scripts/miyabi/run_dynamic_learner.pbs"
+    learner_walltime: str | None = None
+
+
+@dataclass
+class TerminalSection:
+    admission_close_policy: str = "global_target_or_launch_budget"
+    deadline_seconds: float | None = None
+    drain_ack_timeout_seconds: float = 300.0
+    registration_visibility_grace_seconds: float = 10.0
+    proposal_visibility_grace_seconds: float = 20.0
+    max_terminal_merges: int = 1
+    allow_preclose_admission_during_drain: bool = False
+
+
+@dataclass
 class LivenessSection:
     heartbeat_interval_seconds: float = 30.0
     stale_after_seconds: float = 120.0
@@ -245,6 +296,9 @@ class Config:
     sync: SyncSection = field(default_factory=SyncSection)
     syncer: SyncerSection = field(default_factory=SyncerSection)
     coordination: CoordinationSection = field(default_factory=CoordinationSection)
+    membership: MembershipSection = field(default_factory=MembershipSection)
+    scaling: ScalingSection = field(default_factory=ScalingSection)
+    terminal: TerminalSection = field(default_factory=TerminalSection)
     liveness: LivenessSection = field(default_factory=LivenessSection)
     training: TrainingSection = field(default_factory=TrainingSection)
     inner_optimizer: InnerOptimizerSection = field(default_factory=InnerOptimizerSection)
@@ -521,10 +575,162 @@ def resolve_config(
         raise ValueError("inner_optimizer.scheduler_total_steps must be > 0 when set")
     ha = config.coordination.syncer_ha
     recovery = config.coordination.recovery_submission
+    membership = config.membership
+    scaling = config.scaling
+    terminal = config.terminal
+    membership.mode = membership.mode.lower()
+    if membership.mode not in {"static", "dynamic"}:
+        raise ValueError("membership.mode must be one of: static, dynamic")
+    dynamic = membership.mode == "dynamic"
+    if dynamic and (not ha.enabled or config.fragments.enabled):
+        raise ValueError("dynamic membership requires full mode with syncer HA enabled")
+    if scaling.enabled and not dynamic:
+        raise ValueError("scaling.enabled requires membership.mode=dynamic")
     if ha.enabled and config.fragments.enabled:
         raise ValueError("coordination.syncer_ha is not supported with fragments")
     if recovery.enabled and not ha.enabled:
         raise ValueError("coordination.recovery_submission requires coordination.syncer_ha.enabled")
+    if membership.stream_pool_size < membership.bootstrap_instances:
+        raise ValueError("membership.stream_pool_size must be >= bootstrap_instances")
+    if membership.bootstrap_instances < 0:
+        raise ValueError("membership.bootstrap_instances must be >= 0")
+    if membership.stream_pool_size < 1:
+        raise ValueError("membership.stream_pool_size must be >= 1")
+    if dynamic and not (
+        config.sync.quorum_min
+        <= scaling.desired_contributors
+        <= config.sync.quorum_max
+        <= membership.stream_pool_size
+    ):
+        raise ValueError(
+            "dynamic capacity requires quorum_min <= desired_contributors <= "
+            "quorum_max <= stream_pool_size"
+        )
+    if membership.max_active_instance_records < membership.stream_pool_size:
+        raise ValueError(
+            "membership.max_active_instance_records must be >= stream_pool_size"
+        )
+    if membership.heartbeat_dead_after_seconds <= membership.heartbeat_stale_after_seconds:
+        raise ValueError("membership heartbeat_dead_after_seconds must exceed stale timeout")
+    if membership.expired_retention_seconds < membership.revocation_grace_seconds:
+        raise ValueError("membership expired_retention_seconds must cover revocation_grace_seconds")
+    if (
+        membership.initial_membership_deadline_seconds
+        < membership.registration_request_ttl_seconds
+    ):
+        raise ValueError(
+            "membership initial_membership_deadline_seconds must cover registration request TTL"
+        )
+    for field_name in (
+        "initial_membership_deadline_seconds",
+        "registration_scan_interval_seconds",
+        "registration_request_ttl_seconds",
+        "heartbeat_stale_after_seconds",
+        "heartbeat_dead_after_seconds",
+        "revocation_grace_seconds",
+        "expired_retention_seconds",
+    ):
+        if float(getattr(membership, field_name)) <= 0.0:
+            raise ValueError(f"membership.{field_name} must be > 0")
+    if scaling.max_pending_launch_requests > scaling.max_total_launch_requests:
+        raise ValueError("scaling max_pending_launch_requests must not exceed max_total")
+    if scaling.max_pending_launch_requests < 0 or scaling.max_total_launch_requests < 0:
+        raise ValueError("scaling launch request budgets must be non-negative")
+    if (
+        scaling.launch_request_ttl_seconds
+        < 2.0 * scaling.scheduler_reconcile_interval_seconds
+    ):
+        raise ValueError("scaling launch_request_ttl_seconds must cover two reconciliations")
+    if scaling.low_contributor_threshold >= scaling.desired_contributors:
+        raise ValueError("scaling low_contributor_threshold must be below desired_contributors")
+    if scaling.consecutive_low_windows < 2:
+        raise ValueError("scaling.consecutive_low_windows must be >= 2")
+    if (
+        scaling.capacity_observation_retention_count
+        < scaling.consecutive_low_windows + scaling.productive_window_count
+    ):
+        raise ValueError("scaling capacity observation retention is too small")
+    if scaling.productive_window_count < 1:
+        raise ValueError("scaling.productive_window_count must be >= 1")
+    if scaling.productive_upload_grace_min_seconds <= 0.0:
+        raise ValueError("scaling productive upload grace minimum must be > 0")
+    if (
+        scaling.productive_upload_grace_max_seconds
+        < scaling.productive_upload_grace_min_seconds
+    ):
+        raise ValueError("scaling productive upload grace maximum must cover minimum")
+    if scaling.enabled:
+        learner_walltime = scaling.learner_walltime
+        parts = [] if learner_walltime is None else learner_walltime.split(":")
+        if (
+            len(parts) != 3
+            or not all(part.isdigit() for part in parts)
+            or len(parts[0]) < 2
+            or len(parts[1]) != 2
+            or len(parts[2]) != 2
+            or int(parts[1]) >= 60
+            or int(parts[2]) >= 60
+            or all(int(part) == 0 for part in parts)
+        ):
+            raise ValueError(
+                "scaling.learner_walltime must be an explicit estimated HH:MM:SS "
+                "value when scaling is enabled"
+            )
+    for field_name in (
+        "startup_grace_seconds",
+        "productive_upload_grace_factor",
+        "cooldown_seconds",
+        "launch_request_ttl_seconds",
+        "scheduler_reconcile_interval_seconds",
+        "starvation_observation_seconds",
+    ):
+        if float(getattr(scaling, field_name)) <= 0.0:
+            raise ValueError(f"scaling.{field_name} must be > 0")
+    if terminal.admission_close_policy not in {
+        "global_target_or_launch_budget",
+        "global_target",
+        "manual",
+        "deadline",
+    }:
+        raise ValueError("unsupported terminal.admission_close_policy")
+    if terminal.deadline_seconds is not None and terminal.deadline_seconds <= 0.0:
+        raise ValueError("terminal.deadline_seconds must be > 0 when set")
+    if (
+        dynamic
+        and terminal.admission_close_policy == "deadline"
+        and terminal.deadline_seconds is None
+    ):
+        raise ValueError("terminal.deadline_seconds is required for deadline close policy")
+    has_global_target = (
+        config.sync.stop_after_outer_steps is not None
+        or config.sync.stop_after_global_tokens is not None
+    )
+    if (
+        dynamic
+        and terminal.admission_close_policy == "global_target"
+        and not has_global_target
+    ):
+        raise ValueError("global_target close policy requires a configured global target")
+    if (
+        dynamic
+        and terminal.admission_close_policy == "global_target_or_launch_budget"
+        and not (
+            has_global_target
+            or (scaling.enabled and scaling.max_total_launch_requests > 0)
+        )
+    ):
+        raise ValueError(
+            "global_target_or_launch_budget requires a global target or finite scale budget"
+        )
+    if terminal.max_terminal_merges < 0:
+        raise ValueError("terminal.max_terminal_merges must be >= 0")
+    for field_name in (
+        "drain_ack_timeout_seconds",
+        "registration_visibility_grace_seconds",
+        "proposal_visibility_grace_seconds",
+    ):
+        if float(getattr(terminal, field_name)) <= 0.0:
+            raise ValueError(f"terminal.{field_name} must be > 0")
     if config.fragments.enabled:
         if config.fragments.num_fragments < 1:
             raise ValueError("fragments.num_fragments must be >= 1")

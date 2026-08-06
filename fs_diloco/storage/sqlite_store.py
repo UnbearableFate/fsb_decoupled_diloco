@@ -11,6 +11,10 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .atomic_io import ensure_dir
+
+
+class DynamicMembershipFenceError(RuntimeError):
+    """A selected proposal lost its dynamic incarnation before final commit."""
 from ..core.constants import (
     GLOBAL_STATUS_COMMITTED,
     LEARNER_STATUS_UNKNOWN,
@@ -373,6 +377,7 @@ class SQLiteStore:
         optim_size_bytes: int | None = None,
         weight_sha256: str | None = None,
         optim_sha256: str | None = None,
+        require_membership_fence: bool = False,
         before_commit: Callable[[], None] | None = None,
     ) -> dict[str, Any]:
         """Atomically commit a full merge and every resulting update transition."""
@@ -429,6 +434,77 @@ class SQLiteStore:
                     raise RuntimeError(
                         f"update {update_id} staleness {stale} exceeds {max_staleness_versions}"
                     )
+            if require_membership_fence:
+                placements: set[str] = set()
+                streams: set[int] = set()
+                for update_id in selected_ids:
+                    row = by_id[update_id]
+                    instance_id = str(row["learner_instance_id"] or "")
+                    membership = self.conn.execute(
+                        """
+                        SELECT
+                            li.*, p.current_placement_epoch,
+                            p.current_instance_id AS placement_current_instance_id,
+                            s.current_stream_epoch,
+                            s.current_instance_id AS stream_current_instance_id
+                        FROM learner_instances AS li
+                        JOIN placements AS p ON p.placement_id = li.placement_id
+                        JOIN streams AS s ON s.stream_id = li.stream_id
+                        WHERE li.instance_id = ?
+                        """,
+                        (instance_id,),
+                    ).fetchone()
+                    if membership is None:
+                        raise DynamicMembershipFenceError(
+                            f"update {update_id} has no admitted instance"
+                        )
+                    if str(membership["status"]) not in {
+                        "admitted",
+                        "draining",
+                        "drained",
+                    }:
+                        raise DynamicMembershipFenceError(
+                            f"update {update_id} instance is not current"
+                        )
+                    expected = (
+                        str(membership["placement_id"]),
+                        int(membership["placement_epoch"]),
+                        int(membership["stream_id"]),
+                        int(membership["stream_epoch"]),
+                        int(membership["admission_generation"]),
+                        str(membership["admission_token_hash"]),
+                    )
+                    observed = (
+                        str(row["placement_id"] or ""),
+                        int(row["placement_epoch"]),
+                        int(row["stream_id"]),
+                        int(row["stream_epoch"]),
+                        int(row["admission_generation"]),
+                        str(row["admission_token_hash"] or ""),
+                    )
+                    if observed != expected:
+                        raise DynamicMembershipFenceError(
+                            f"update {update_id} membership fence changed"
+                        )
+                    if (
+                        str(membership["placement_current_instance_id"]) != instance_id
+                        or int(membership["current_placement_epoch"])
+                        != int(membership["placement_epoch"])
+                        or str(membership["stream_current_instance_id"]) != instance_id
+                        or int(membership["current_stream_epoch"])
+                        != int(membership["stream_epoch"])
+                    ):
+                        raise DynamicMembershipFenceError(
+                            f"update {update_id} is from a stale incarnation"
+                        )
+                    placement = str(membership["placement_id"])
+                    stream_id = int(membership["stream_id"])
+                    if placement in placements or stream_id in streams:
+                        raise DynamicMembershipFenceError(
+                            "selected updates contain duplicate placement or stream"
+                        )
+                    placements.add(placement)
+                    streams.add(stream_id)
 
             if publication_id is None:
                 self.conn.execute(
@@ -645,6 +721,7 @@ class SQLiteStore:
         *,
         pointer_path: str | Path | None = None,
         ingested_at: float | None = None,
+        require_membership_fence: bool = False,
     ) -> bool:
         ingested_at = time.time() if ingested_at is None else ingested_at
         params = {
@@ -673,9 +750,84 @@ class SQLiteStore:
             "ingested_at": ingested_at,
             "status": UPDATE_STATUS_PENDING,
         }
+        if require_membership_fence:
+            required = (
+                "learner_instance_id",
+                "placement_id",
+                "placement_epoch",
+                "stream_id",
+                "stream_epoch",
+                "admission_generation",
+                "admission_token_hash",
+            )
+            missing = [name for name in required if metadata.get(name) is None]
+            if missing:
+                raise ValueError(f"dynamic update is missing membership fields: {missing}")
+            params.update({name: metadata[name] for name in required})
         pointer = str(pointer_path or "")
         self.conn.execute("BEGIN IMMEDIATE")
         try:
+            if require_membership_fence:
+                membership = self.conn.execute(
+                    """
+                    SELECT
+                        li.*, p.current_placement_epoch,
+                        p.current_instance_id AS placement_current_instance_id,
+                        s.current_stream_epoch,
+                        s.current_instance_id AS stream_current_instance_id
+                    FROM learner_instances AS li
+                    JOIN placements AS p ON p.placement_id = li.placement_id
+                    JOIN streams AS s ON s.stream_id = li.stream_id
+                    WHERE li.instance_id = ?
+                    """,
+                    (params["learner_instance_id"],),
+                ).fetchone()
+                if membership is None or membership["status"] not in (
+                    "admitted",
+                    "draining",
+                    "drained",
+                ):
+                    self.conn.rollback()
+                    return False
+                if membership["status"] == "drained" and (
+                    membership["final_update_id"] is None
+                    or str(membership["final_update_id"]) != str(metadata["update_id"])
+                ):
+                    self.conn.rollback()
+                    return False
+                expected = (
+                    str(membership["instance_id"]),
+                    str(membership["placement_id"]),
+                    int(membership["placement_epoch"]),
+                    int(membership["stream_id"]),
+                    int(membership["stream_epoch"]),
+                    int(membership["admission_generation"]),
+                    str(membership["admission_token_hash"]),
+                )
+                observed = (
+                    str(params["learner_instance_id"]),
+                    str(params["placement_id"]),
+                    int(params["placement_epoch"]),
+                    int(params["stream_id"]),
+                    int(params["stream_epoch"]),
+                    int(params["admission_generation"]),
+                    str(params["admission_token_hash"]),
+                )
+                if expected != observed:
+                    self.conn.rollback()
+                    return False
+                if (
+                    str(membership["placement_current_instance_id"])
+                    != str(membership["instance_id"])
+                    or int(membership["current_placement_epoch"])
+                    != int(membership["placement_epoch"])
+                    or str(membership["stream_current_instance_id"])
+                    != str(membership["instance_id"])
+                    or int(membership["current_stream_epoch"])
+                    != int(membership["stream_epoch"])
+                ):
+                    self.conn.rollback()
+                    return False
             frontier = self.conn.execute(
                 "SELECT last_observed_update_id FROM proposal_frontiers WHERE learner_id = ?",
                 (metadata["learner_id"],),
@@ -700,8 +852,45 @@ class SQLiteStore:
                     metadata["update_id"],
                 ),
             )
-            cur = self.conn.execute(
-                """
+            if require_membership_fence:
+                cur = self.conn.execute(
+                    """
+                    INSERT OR IGNORE INTO updates(
+                        update_id, learner_id, hostname, base_global_version, local_step_start,
+                        local_step_end, inner_steps, tokens_this_update, tokens_since_global_load,
+                        mid_cycle_adoption_count, base_switched_at_step, num_examples_this_update,
+                        train_loss, grad_norm, param_norm, delta_norm,
+                        training_cpu_utilization_peak_percent,
+                        training_gpu_utilization_peak_percent,
+                        local_cycle_cpu_utilization_peak_percent,
+                        local_cycle_gpu_utilization_peak_percent,
+                        local_cycle_step_time_seconds_mean, local_cycle_step_count,
+                        local_cycle_resource_sample_count, file_path, file_size_bytes, sha256,
+                        created_at, committed_at, ingested_at, status,
+                        learner_instance_id, placement_id, placement_epoch, stream_id,
+                        stream_epoch, admission_generation, admission_token_hash
+                    ) VALUES (
+                        :update_id, :learner_id, :hostname, :base_global_version,
+                        :local_step_start, :local_step_end, :inner_steps, :tokens_this_update,
+                        :tokens_since_global_load, :mid_cycle_adoption_count,
+                        :base_switched_at_step, :num_examples_this_update, :train_loss,
+                        :grad_norm, :param_norm, :delta_norm,
+                        :training_cpu_utilization_peak_percent,
+                        :training_gpu_utilization_peak_percent,
+                        :local_cycle_cpu_utilization_peak_percent,
+                        :local_cycle_gpu_utilization_peak_percent,
+                        :local_cycle_step_time_seconds_mean, :local_cycle_step_count,
+                        :local_cycle_resource_sample_count, :file_path, :file_size_bytes,
+                        :sha256, :created_at, :committed_at, :ingested_at, :status,
+                        :learner_instance_id, :placement_id, :placement_epoch, :stream_id,
+                        :stream_epoch, :admission_generation, :admission_token_hash
+                    )
+                    """,
+                    params,
+                )
+            else:
+                cur = self.conn.execute(
+                    """
                 INSERT OR IGNORE INTO updates(
                     update_id, learner_id, hostname, base_global_version, local_step_start,
                     local_step_end, inner_steps, tokens_this_update, tokens_since_global_load,
@@ -730,7 +919,7 @@ class SQLiteStore:
                 )
                 """,
                 params,
-            )
+                )
             self.conn.execute(
                 """
                 INSERT INTO proposal_frontiers(

@@ -92,6 +92,101 @@ def archive_ha_history(store: SQLiteStore, paths: RunPaths) -> int:
     return len(archived_epoch_ids)
 
 
+def archive_dynamic_history(
+    store: SQLiteStore,
+    paths: RunPaths,
+    *,
+    expired_retention_seconds: float | None,
+    max_active_instance_records: int | None,
+    capacity_observation_retention_count: int | None,
+) -> dict[str, int]:
+    if (
+        expired_retention_seconds is None
+        or max_active_instance_records is None
+        or capacity_observation_retention_count is None
+        or not hasattr(store, "dynamic_history_to_archive")
+        or not getattr(getattr(store, "fenced_store", None), "dynamic_mode", False)
+    ):
+        return {
+            "learner_instances": 0,
+            "registration_requests": 0,
+            "launch_requests": 0,
+            "capacity_observations": 0,
+        }
+    history = store.dynamic_history_to_archive(
+        now=time.time(),
+        expired_retention_seconds=expired_retention_seconds,
+        max_active_instance_records=max_active_instance_records,
+        capacity_observation_retention_count=capacity_observation_retention_count,
+    )
+    archive_paths = {
+        "learner_instances": paths.learner_instance_history_jsonl,
+        "registration_requests": paths.registration_history_jsonl,
+        "launch_requests": paths.launch_request_history_jsonl,
+        "capacity_observations": paths.capacity_observation_history_jsonl,
+    }
+    for kind, target in archive_paths.items():
+        _append_jsonl_fsync(
+            target,
+            ({"record_kind": kind, "archived_at": time.time(), **row} for row in history[kind]),
+        )
+    _append_jsonl_fsync(
+        paths.membership_history_jsonl,
+        (
+            {
+                "record_kind": "registration_control_publication",
+                "archived_at": time.time(),
+                **row,
+            }
+            for row in history["registration_publications"]
+        ),
+    )
+    _append_jsonl_fsync(
+        paths.membership_history_jsonl,
+        (
+            {"record_kind": "learner_instance_terminal", "archived_at": time.time(), **row}
+            for row in history["learner_instances"]
+        ),
+    )
+    store.delete_archived_dynamic_history(
+        instance_ids=[str(row["instance_id"]) for row in history["learner_instances"]],
+        registration_instance_ids=[
+            str(row["instance_id"]) for row in history["registration_requests"]
+        ],
+        launch_request_ids=[
+            str(row["request_id"]) for row in history["launch_requests"]
+        ],
+        observation_keys=[
+            str(row["observation_key"]) for row in history["capacity_observations"]
+        ],
+        registration_publication_kinds=sorted(
+            {str(row["kind"]) for row in history["registration_publications"]}
+        ),
+    )
+    for row in history["registration_publications"]:
+        (paths.shared_root / str(row["relative_path"])).unlink(missing_ok=True)
+    for row in history["learner_instances"]:
+        instance_id = str(row["instance_id"])
+        paths.learner_heartbeat_path(instance_id).unlink(missing_ok=True)
+        paths.update_pointer_path(instance_id).unlink(missing_ok=True)
+        payload_dir = paths.update_payload_dir(instance_id)
+        if payload_dir.is_dir():
+            for payload in payload_dir.iterdir():
+                if payload.is_file():
+                    payload.unlink(missing_ok=True)
+            try:
+                payload_dir.rmdir()
+            except OSError:
+                pass
+    for row in history["registration_requests"]:
+        paths.registration_request_path(str(row["instance_id"])).unlink(missing_ok=True)
+    return {
+        kind: len(rows)
+        for kind, rows in history.items()
+        if kind != "registration_publications"
+    }
+
+
 def _unlink(path: Path) -> bool:
     try:
         path.unlink()
@@ -327,9 +422,21 @@ def run_maintenance(
     heartbeat_interval_seconds: float,
     scan_interval_seconds: float,
     input_closed: bool = False,
+    dynamic_expired_retention_seconds: float | None = None,
+    dynamic_max_active_instance_records: int | None = None,
+    dynamic_capacity_observation_retention_count: int | None = None,
 ) -> dict[str, int | float]:
     archived = archive_and_prune(store, paths)
     archived_epochs = archive_ha_history(store, paths)
+    archived_dynamic = archive_dynamic_history(
+        store,
+        paths,
+        expired_retention_seconds=dynamic_expired_retention_seconds,
+        max_active_instance_records=dynamic_max_active_instance_records,
+        capacity_observation_retention_count=(
+            dynamic_capacity_observation_retention_count
+        ),
+    )
     if input_closed and hasattr(store, "expedite_terminal_gc_candidates"):
         store.expedite_terminal_gc_candidates()
     grace = (
@@ -349,6 +456,10 @@ def run_maintenance(
         "archived_updates": int(archived["updates"]),
         "archived_versions": int(archived["versions"]),
         "archived_epochs": archived_epochs,
+        "archived_learner_instances": archived_dynamic["learner_instances"],
+        "archived_registration_requests": archived_dynamic["registration_requests"],
+        "archived_launch_requests": archived_dynamic["launch_requests"],
+        "archived_capacity_observations": archived_dynamic["capacity_observations"],
         "deleted_artifacts": deleted,
         "gc_pending_rows": int(scan_stats.get("gc_pending_rows", 0)),
         "maintenance_scanned_rows": int(scan_stats.get("maintenance_scanned_rows", 0)),

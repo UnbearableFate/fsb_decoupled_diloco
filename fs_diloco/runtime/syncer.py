@@ -57,16 +57,28 @@ from ..protocol.fragment_codec import (
 from ..protocol.fragment_index import build_fragment_index, save_fragment_index
 from ..protocol.fragment_scheduler import select_fragment
 from ..protocol.control_epoch import EpochControlPublisher
+from ..protocol.dynamic_terminal import (
+    DynamicTerminalPublisher,
+    read_dynamic_close_request,
+)
 from ..protocol.liveness import (
     capture_heartbeat_fences,
     ingest_heartbeats,
+    ingest_dynamic_heartbeats,
     no_progress_timed_out,
     update_liveness_statuses,
+)
+from ..protocol.membership import (
+    MembershipPublisher,
+    ingest_registration_requests,
+    read_bootstrap_scheduler_jobs,
+    validate_learner_instance_id,
 )
 from ..protocol.merge import (
     normalized_fragment_update_weights,
     normalized_update_weights,
     select_one_per_learner,
+    select_one_per_dynamic_member,
     weighted_average_tensors,
 )
 from ..storage.atomic_io import (
@@ -79,8 +91,10 @@ from ..storage.atomic_io import (
 from ..storage.maintenance import run_maintenance
 from ..storage.fenced_store import LeaderBoundSQLiteStore
 from ..storage.paths import RunPaths, prepare_run_dirs
-from ..storage.sqlite_store import SQLiteStore
+from ..storage.sqlite_store import DynamicMembershipFenceError, SQLiteStore
 from .syncer_ha import LeaseRenewalThread, acquire_candidate, open_leader_store
+from .launch_outbox import LearnerLaunchOutbox
+from .pbs_scheduler import PBSScheduler
 from ..storage.tensor_codec import (
     dtype_from_name,
     load_global_weights_flat,
@@ -713,6 +727,22 @@ def publish_fragment_latest(
     )
 
 
+def dynamic_maintenance_options(config: Config) -> dict[str, float | int]:
+    if config.membership.mode != "dynamic":
+        return {}
+    return {
+        "dynamic_expired_retention_seconds": (
+            config.membership.expired_retention_seconds
+        ),
+        "dynamic_max_active_instance_records": (
+            config.membership.max_active_instance_records
+        ),
+        "dynamic_capacity_observation_retention_count": (
+            config.scaling.capacity_observation_retention_count
+        ),
+    }
+
+
 def initialize_run(
     config: Config,
     paths: RunPaths,
@@ -756,6 +786,7 @@ def initialize_run(
         paths,
         heartbeat_interval_seconds=config.liveness.heartbeat_interval_seconds,
         scan_interval_seconds=config.sync.scan_interval_seconds,
+        **dynamic_maintenance_options(config),
     )
     logger.event("run_initialized", version=0, total_numel=int(theta.numel()))
     logger.event("state_maintenance_completed", **maintenance)
@@ -858,6 +889,7 @@ def initialize_fragment_run(
         paths,
         heartbeat_interval_seconds=config.liveness.heartbeat_interval_seconds,
         scan_interval_seconds=config.sync.scan_interval_seconds,
+        **dynamic_maintenance_options(config),
     )
     logger.event(
         "fragment_run_initialized",
@@ -961,7 +993,12 @@ def resume_run(
         resume_id=resume_id,
         resumed_at=resumed_at,
         expected_learner_ids=(
-            learner_id_from_index(index) for index in range(config.sync.num_learners)
+            ()
+            if config.membership.mode == "dynamic"
+            else (
+                learner_id_from_index(index)
+                for index in range(config.sync.num_learners)
+            )
         ),
         heartbeat_fences=heartbeat_fences,
     )
@@ -996,6 +1033,7 @@ def resume_run(
         paths,
         heartbeat_interval_seconds=config.liveness.heartbeat_interval_seconds,
         scan_interval_seconds=config.sync.scan_interval_seconds,
+        **dynamic_maintenance_options(config),
     )
     logger.event(
         "run_resumed",
@@ -1038,9 +1076,36 @@ def validate_update_metadata(payload: dict[str, Any], *, config: Config, paths: 
             return False
     elif payload.get("update_kind") == "fragment":
         return False
-    valid_ids = {learner_id_from_index(i) for i in range(config.sync.num_learners)}
-    if payload.get("learner_id") not in valid_ids:
-        return False
+    if config.membership.mode == "dynamic":
+        instance_id = str(payload.get("learner_instance_id") or "")
+        try:
+            validate_learner_instance_id(instance_id)
+        except ValueError:
+            return False
+        if payload.get("learner_id") != instance_id:
+            return False
+        if any(
+            payload.get(field) is None
+            for field in (
+                "placement_id",
+                "placement_epoch",
+                "stream_id",
+                "stream_epoch",
+                "admission_generation",
+                "admission_token_hash",
+            )
+        ):
+            return False
+        try:
+            stream_id = int(payload["stream_id"])
+        except (TypeError, ValueError):
+            return False
+        if not 0 <= stream_id < config.membership.stream_pool_size:
+            return False
+    else:
+        valid_ids = {learner_id_from_index(i) for i in range(config.sync.num_learners)}
+        if payload.get("learner_id") not in valid_ids:
+            return False
     file_path = Path(payload.get("file_path", ""))
     if not file_path.exists():
         return False
@@ -1144,6 +1209,8 @@ def ingest_update_metadata(
             for learner_index in range(config.sync.num_learners)
             for fragment_id in range(config.fragments.num_fragments)
         ]
+    elif config.membership.mode == "dynamic":
+        metadata_paths = list(paths.iter_instance_pointers())
     else:
         metadata_paths = [
             paths.update_pointer_path(learner_id_from_index(index))
@@ -1188,18 +1255,78 @@ def sync_liveness_and_metadata(
     first_seen: UpdateFirstSeenRegistry | None = None,
     heartbeat_fences: dict[str, str] | None = None,
 ) -> dict[str, int]:
-    heartbeat_count = ingest_heartbeats(
-        store,
-        paths.heartbeats,
-        run_id=config.run.run_id or "",
-        num_learners=config.sync.num_learners,
-        heartbeat_fences=heartbeat_fences,
-    )
-    counts = update_liveness_statuses(
-        store,
-        stale_after_seconds=config.liveness.stale_after_seconds,
-        dead_after_seconds=config.liveness.dead_after_seconds,
-    )
+    if config.membership.mode == "dynamic":
+        config_fingerprint = str(
+            store.get_run_state("dynamic_config_fingerprint") or ""
+        )
+        bootstrap_jobs = read_bootstrap_scheduler_jobs(
+            paths,
+            run_id=config.run.run_id or "",
+            source_fingerprint=str(config.run.source_fingerprint),
+            config_sha256=store.fenced_store.config_sha256,
+            config_fingerprint=config_fingerprint,
+        )
+        launch_jobs = {
+            str(row["request_id"]): row.get("pbs_job_id")
+            for row in store.launch_requests()
+            if str(row.get("reason")) == "bootstrap"
+        }
+        jobs_to_record = [
+            job
+            for job in bootstrap_jobs
+            if launch_jobs.get(str(job["request_id"])) != str(job["pbs_job_id"])
+        ]
+        external_launch_jobs = (
+            store.record_external_launch_jobs(jobs_to_record)
+            if jobs_to_record
+            else 0
+        )
+        heartbeat_count = ingest_dynamic_heartbeats(
+            store,
+            paths,
+            run_id=config.run.run_id or "",
+        )
+        registration_results = ingest_registration_requests(
+            store,
+            paths,
+            token=store.token,
+            run_id=config.run.run_id or "",
+            source_fingerprint=str(config.run.source_fingerprint),
+            config_sha256=store.fenced_store.config_sha256,
+            stream_pool_size=config.membership.stream_pool_size,
+            desired_contributors=config.scaling.desired_contributors,
+            allow_unsolicited_registration=(
+                config.membership.allow_unsolicited_registration
+            ),
+            allow_healthy_placement_replacement=(
+                config.membership.allow_healthy_placement_replacement
+            ),
+            reuse_stream_for_same_placement=(
+                config.membership.reuse_stream_for_same_placement
+            ),
+        )
+        revoked = store.revoke_dead_instances(
+            heartbeat_dead_after_seconds=config.membership.heartbeat_dead_after_seconds
+        )
+        counts = {
+            "admitted": len(store.current_instances()),
+            "registration_results": len(registration_results),
+            "revoked": len(revoked),
+            "external_launch_jobs": external_launch_jobs,
+        }
+    else:
+        heartbeat_count = ingest_heartbeats(
+            store,
+            paths.heartbeats,
+            run_id=config.run.run_id or "",
+            num_learners=config.sync.num_learners,
+            heartbeat_fences=heartbeat_fences,
+        )
+        counts = update_liveness_statuses(
+            store,
+            stale_after_seconds=config.liveness.stale_after_seconds,
+            dead_after_seconds=config.liveness.dead_after_seconds,
+        )
     if heartbeat_count:
         logger.event("heartbeats_ingested", count=heartbeat_count)
         logger.event("learner_liveness_updated", **counts)
@@ -1213,6 +1340,53 @@ def sync_liveness_and_metadata(
     return {"heartbeats": heartbeat_count, "metadata": metadata_count}
 
 
+def dynamic_non_target_close_request(
+    config: Config,
+    store: Any,
+    paths: RunPaths,
+    *,
+    now: float | None = None,
+) -> tuple[str, float] | None:
+    """Resolve configured manual, deadline, or exhausted-budget closure."""
+
+    if config.membership.mode != "dynamic":
+        return None
+    timestamp = time.time() if now is None else float(now)
+    policy = config.terminal.admission_close_policy
+    if policy == "manual":
+        request = read_dynamic_close_request(
+            paths,
+            run_id=str(config.run.run_id or ""),
+            source_fingerprint=str(config.run.source_fingerprint),
+            config_sha256=str(store.fenced_store.config_sha256),
+        )
+        if request is not None:
+            return "manual", float(request["requested_at"])
+        return None
+    if policy == "deadline":
+        initialized_at = store.get_run_state("dynamic_initialized_at")
+        deadline_seconds = config.terminal.deadline_seconds
+        if (
+            initialized_at is not None
+            and deadline_seconds is not None
+            and timestamp >= float(initialized_at) + float(deadline_seconds)
+        ):
+            return "deadline", float(initialized_at) + float(deadline_seconds)
+        return None
+    if policy != "global_target_or_launch_budget" or not config.scaling.enabled:
+        return None
+    scale_count = int(store.get_run_state("scale_launch_request_count") or 0)
+    if scale_count < int(config.scaling.max_total_launch_requests):
+        return None
+    active_scale_request = any(
+        str(row.get("reason")) == "scale_out"
+        for row in store.launch_requests(active_only=True)
+    )
+    if active_scale_request:
+        return None
+    return "launch_budget_exhausted", timestamp
+
+
 def configured_grace_seconds(config: Config) -> float:
     grace = config.sync.grace_window
     requested = (
@@ -1221,6 +1395,21 @@ def configured_grace_seconds(config: Config) -> float:
         else grace.fixed_seconds
     )
     return max(0.0, min(float(requested), float(grace.max_seconds)))
+
+
+def select_one_per_contributor(
+    updates: list[dict[str, Any]], config: Config
+) -> list[dict[str, Any]]:
+    selector = (
+        select_one_per_dynamic_member
+        if config.membership.mode == "dynamic"
+        else select_one_per_learner
+    )
+    return selector(
+        updates,
+        policy=config.sync.selection_policy,
+        quorum_max=config.sync.quorum_max,
+    )
 
 
 def interval_breakdown(
@@ -1411,11 +1600,7 @@ def collect_with_grace_window(
             source=source,
             first_seen=first_seen,
         )
-        selected = select_one_per_learner(
-            eligible,
-            policy=config.sync.selection_policy,
-            quorum_max=config.sync.quorum_max,
-        )
+        selected = select_one_per_contributor(eligible, config)
         now_monotonic = time.monotonic()
         shortened_deadline, eta_seconds = maybe_shorten_grace_deadline(
             deadline=deadline,
@@ -1483,6 +1668,8 @@ def drop_missing_update_files(
 
 
 def all_expected_learners_stopped(store: SQLiteStore, config: Config) -> bool:
+    if config.membership.mode == "dynamic":
+        return bool(store.dynamic_input_closed())
     expected = {learner_id_from_index(index) for index in range(config.sync.num_learners)}
     stopped = {
         str(row["learner_id"])
@@ -1592,11 +1779,7 @@ def _select_terminal_drain_from_source(
 ) -> list[dict[str, Any]]:
     pending = source.eligible_updates(store)
     pending = drop_missing_update_files(store, pending, logger, source=source)
-    selected = select_one_per_learner(
-        pending,
-        policy=config.sync.selection_policy,
-        quorum_max=config.sync.quorum_max,
-    )
+    selected = select_one_per_contributor(pending, config)
     if selected:
         logger.event(
             selected_event,
@@ -1706,6 +1889,8 @@ def wait_for_learner_shutdown(
 ) -> bool:
     if stop_reason == "error":
         return False
+    if config.membership.mode == "dynamic":
+        return bool(store.dynamic_input_closed())
     expected = {learner_id_from_index(index) for index in range(config.sync.num_learners)}
     timeout_seconds = learner_shutdown_timeout_seconds(config)
     deadline = time.monotonic() + timeout_seconds
@@ -1754,9 +1939,11 @@ def learner_resource_summary(
     store: SQLiteStore,
     config: Config,
 ) -> dict[str, Any]:
-    per_learner: dict[str, dict[str, float | int | str | None]] = {
-        learner_id_from_index(index): {} for index in range(config.sync.num_learners)
-    }
+    per_learner: dict[str, dict[str, float | int | str | None]] = (
+        {}
+        if config.membership.mode == "dynamic"
+        else {learner_id_from_index(index): {} for index in range(config.sync.num_learners)}
+    )
     for row in store.learner_resource_peaks(fragment_mode=config.fragments.enabled):
         learner_id = str(row["learner_id"])
         target = per_learner.setdefault(learner_id, {})
@@ -1937,6 +2124,7 @@ def repair_completed_ha_terminal(
         heartbeat_interval_seconds=config.liveness.heartbeat_interval_seconds,
         scan_interval_seconds=config.sync.scan_interval_seconds,
         input_closed=bool(summary.get("all_learners_stopped")),
+        **dynamic_maintenance_options(config),
     )
     generation = int(previous["generation"]) + 1
     repaired = store.finalize_terminal_state(
@@ -1945,6 +2133,20 @@ def repair_completed_ha_terminal(
         final_version=int(previous["final_version"]),
         total_seen_tokens=int(previous["total_seen_tokens"]),
     )
+    if config.membership.mode == "dynamic":
+        controller = store.controller_state()
+        if controller is None or str(controller["state"]) not in {"closed", "terminal"}:
+            raise RuntimeError(
+                "dynamic terminal repair requires a closed admission controller"
+            )
+        if str(controller["state"]) != "terminal":
+            store.set_controller_state(
+                state="terminal",
+                generation=int(controller["generation"]),
+                reason=str(controller.get("reason") or previous["stop_reason"]),
+                requested_at=controller.get("requested_at"),
+                max_terminal_version=int(controller["max_terminal_version"]),
+            )
     publisher = EpochControlPublisher(paths, store.fenced_store, store.token)
     publisher.repair_latest_from_db()
     lease_row = lease_store.observe()
@@ -2159,11 +2361,7 @@ def run_fragment_syncer(
                     source=proposal_source,
                     first_seen=first_seen,
                 )
-                one_per_learner = select_one_per_learner(
-                    eligible,
-                    policy=config.sync.selection_policy,
-                    quorum_max=config.sync.quorum_max,
-                )
+                one_per_learner = select_one_per_contributor(eligible, config)
                 cycle_discovery_seconds += time.monotonic() - discovery_start
                 if len(one_per_learner) < config.sync.quorum_min:
                     logger.event(
@@ -2371,6 +2569,7 @@ def run_fragment_syncer(
                 paths,
                 heartbeat_interval_seconds=config.liveness.heartbeat_interval_seconds,
                 scan_interval_seconds=config.sync.scan_interval_seconds,
+                **dynamic_maintenance_options(config),
             )
             maintenance_seconds = time.monotonic() - maintenance_start
             logger.event(
@@ -2558,6 +2757,7 @@ def run_fragment_syncer(
                     heartbeat_interval_seconds=config.liveness.heartbeat_interval_seconds,
                     scan_interval_seconds=config.sync.scan_interval_seconds,
                     input_closed=all_learners_stopped,
+                    **dynamic_maintenance_options(config),
                 )
                 logger.event("state_maintenance_completed", **maintenance)
             if wandb_run is not None:
@@ -2606,6 +2806,7 @@ def run_syncer(config: Config) -> None:
     lease_renewer = None
     lease_renewer_stop_attempted = False
     store = None
+    loaded_descriptor = None
 
     def cleanup_acquired_leadership(startup_error: BaseException) -> None:
         """Best-effort cleanup for every failure after a successful acquire."""
@@ -2645,6 +2846,7 @@ def run_syncer(config: Config) -> None:
             raise RuntimeError(
                 "candidate config differs from the immutable resolved run descriptor"
             )
+        loaded_descriptor = loaded
         try:
             lease_store, leader_token, lease_safety_tracker, _candidate_logger = acquire_candidate(
                 paths=paths,
@@ -2802,6 +3004,31 @@ def run_syncer(config: Config) -> None:
                 device=device,
             )
             heartbeat_fences = {}
+        if config.membership.mode == "dynamic":
+            if loaded_descriptor is None or leader_token is None:
+                raise RuntimeError("dynamic membership requires an immutable HA descriptor")
+            bootstrap_requests = store.initialize_dynamic_membership(
+                stream_pool_size=config.membership.stream_pool_size,
+                bootstrap_instances=config.membership.bootstrap_instances,
+                config_fingerprint=str(
+                    loaded_descriptor.descriptor["descriptor_sha256"]
+                ),
+            )
+            MembershipPublisher(
+                paths,
+                store.fenced_store,
+                leader_token,
+            ).publish_bootstrap_ready(bootstrap_requests)
+            controller = store.controller_state()
+            if controller is not None and str(controller["state"]) in {
+                "draining",
+                "closed",
+            }:
+                DynamicTerminalPublisher(
+                    paths,
+                    store.fenced_store,
+                    leader_token,
+                ).publish_drain(controller)
         if lease_renewer is not None:
             lease_renewer.enable_heartbeats()
         if ha_mode:
@@ -2827,6 +3054,79 @@ def run_syncer(config: Config) -> None:
         raise
 
     first_seen = UpdateFirstSeenRegistry(capacity=update_first_seen_capacity(config))
+    launch_outbox = None
+    next_launch_reconcile_monotonic = 0.0
+    next_dynamic_idle_maintenance_monotonic = 0.0
+    if dynamic_mode := (config.membership.mode == "dynamic"):
+        if loaded_descriptor is None:
+            raise RuntimeError("dynamic membership requires a loaded run descriptor")
+        launch_outbox = LearnerLaunchOutbox(
+            paths=paths,
+            config=config.scaling,
+            scheduler=PBSScheduler(),
+            descriptor_sha256=str(loaded_descriptor.descriptor["descriptor_sha256"]),
+        )
+
+    def record_dynamic_capacity(
+        *,
+        observation_key: str,
+        kind: str,
+        observed_version: int,
+        eligible_contributors: int,
+        selected_rows: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        if not dynamic_mode:
+            return None
+        assert loaded_descriptor is not None
+        result = store.record_capacity_observation(
+            observation_key=observation_key,
+            kind=kind,
+            global_version=observed_version,
+            eligible_contributors=eligible_contributors,
+            selected_instance_ids=[
+                str(row["learner_instance_id"]) for row in selected_rows
+            ],
+            low_contributor_threshold=config.scaling.low_contributor_threshold,
+            consecutive_low_windows=config.scaling.consecutive_low_windows,
+            productive_window_count=config.scaling.productive_window_count,
+            startup_grace_seconds=config.scaling.startup_grace_seconds,
+            heartbeat_stale_after_seconds=config.membership.heartbeat_stale_after_seconds,
+            productive_upload_grace_factor=(
+                config.scaling.productive_upload_grace_factor
+            ),
+            productive_upload_grace_min_seconds=(
+                config.scaling.productive_upload_grace_min_seconds
+            ),
+            productive_upload_grace_max_seconds=(
+                config.scaling.productive_upload_grace_max_seconds
+            ),
+            desired_contributors=config.scaling.desired_contributors,
+            stream_pool_size=config.membership.stream_pool_size,
+            scaling_enabled=config.scaling.enabled,
+            initial_membership_deadline_seconds=(
+                config.membership.initial_membership_deadline_seconds
+            ),
+            cooldown_seconds=config.scaling.cooldown_seconds,
+            max_pending_launch_requests=config.scaling.max_pending_launch_requests,
+            max_total_launch_requests=config.scaling.max_total_launch_requests,
+            launch_request_ttl_seconds=config.scaling.launch_request_ttl_seconds,
+            config_fingerprint=str(loaded_descriptor.descriptor["descriptor_sha256"]),
+        )
+        logger.event(
+            "capacity_observation_recorded",
+            observation_key=observation_key,
+            inserted=bool(result["inserted"]),
+            observation_seq=int(result["observation"]["observation_seq"]),
+            low_capacity=bool(result["observation"]["low_capacity"]),
+            consecutive_low_count=int(result.get("consecutive_low_count", 0)),
+            launch_request_id=(
+                None
+                if result.get("launch_request") is None
+                else result["launch_request"]["request_id"]
+            ),
+        )
+        return result
+
     last_progress_time = time.time()
     cycle_started_monotonic = time.monotonic()
     cycle_discovery_seconds = 0.0
@@ -2847,18 +3147,42 @@ def run_syncer(config: Config) -> None:
                         delta=lease_renewer.busy_retry_count - reported_lease_busy_retries,
                     )
                     reported_lease_busy_retries = lease_renewer.busy_retry_count
-            if (
+            reached_outer_target = (
                 config.sync.stop_after_outer_steps is not None
                 and version >= config.sync.stop_after_outer_steps
-            ):
-                stop_reason = "stop_after_outer_steps"
-                break
-            if (
+            )
+            reached_token_target = (
                 config.sync.stop_after_global_tokens is not None
                 and total_seen_tokens >= config.sync.stop_after_global_tokens
-            ):
-                stop_reason = "stop_after_global_tokens"
-                break
+            )
+            target_reason = (
+                "stop_after_outer_steps"
+                if reached_outer_target
+                else "stop_after_global_tokens" if reached_token_target else None
+            )
+            if target_reason is not None:
+                stop_reason = target_reason
+                if not dynamic_mode:
+                    break
+                controller = store.controller_state()
+                if controller is not None and str(controller["state"]) == "open":
+                    controller = store.begin_dynamic_drain(
+                        reason=target_reason,
+                        current_version=version,
+                        global_target=config.sync.stop_after_outer_steps,
+                        max_terminal_merges=config.terminal.max_terminal_merges,
+                    )
+                    DynamicTerminalPublisher(
+                        paths,
+                        store.fenced_store,
+                        store.token,
+                    ).publish_drain(controller)
+                    logger.event(
+                        "dynamic_drain_started",
+                        close_generation=int(controller["generation"]),
+                        max_terminal_version=int(controller["max_terminal_version"]),
+                        reason=target_reason,
+                    )
 
             discovery_start = time.monotonic()
             sync_liveness_and_metadata(
@@ -2869,12 +3193,94 @@ def run_syncer(config: Config) -> None:
                 first_seen=first_seen,
                 heartbeat_fences=heartbeat_fences,
             )
-            input_closed = all_expected_learners_stopped(store, config)
+            if dynamic_mode:
+                controller = store.controller_state()
+                if controller is not None and str(controller["state"]) == "open":
+                    close_request = dynamic_non_target_close_request(
+                        config,
+                        store,
+                        paths,
+                    )
+                    if close_request is not None:
+                        close_reason, requested_at = close_request
+                        stop_reason = close_reason
+                        controller = store.begin_dynamic_drain(
+                            reason=close_reason,
+                            current_version=version,
+                            global_target=config.sync.stop_after_outer_steps,
+                            max_terminal_merges=config.terminal.max_terminal_merges,
+                            requested_at=requested_at,
+                        )
+                        DynamicTerminalPublisher(
+                            paths,
+                            store.fenced_store,
+                            store.token,
+                        ).publish_drain(controller)
+                        logger.event(
+                            "dynamic_drain_started",
+                            close_generation=int(controller["generation"]),
+                            max_terminal_version=int(
+                                controller["max_terminal_version"]
+                            ),
+                            reason=close_reason,
+                        )
+                if controller is not None and str(controller["state"]) in {
+                    "draining",
+                    "closed",
+                }:
+                    controller = store.advance_dynamic_drain(
+                        drain_ack_timeout_seconds=(
+                            config.terminal.drain_ack_timeout_seconds
+                        ),
+                        registration_visibility_grace_seconds=(
+                            config.terminal.registration_visibility_grace_seconds
+                        ),
+                        proposal_visibility_grace_seconds=(
+                            config.terminal.proposal_visibility_grace_seconds
+                        ),
+                    )
+                    input_closed = bool(controller["input_closed"])
+                else:
+                    input_closed = False
+            else:
+                controller = None
+                input_closed = all_expected_learners_stopped(store, config)
             cycle_discovery_seconds += time.monotonic() - discovery_start
+            if (
+                launch_outbox is not None
+                and time.monotonic() >= next_launch_reconcile_monotonic
+            ):
+                reconciled = launch_outbox.reconcile(store)
+                next_launch_reconcile_monotonic = time.monotonic() + float(
+                    config.scaling.scheduler_reconcile_interval_seconds
+                )
+                if reconciled:
+                    logger.event(
+                        "learner_launch_outbox_reconciled",
+                        count=len(reconciled),
+                        states=[str(row["state"]) for row in reconciled],
+                    )
+            if (
+                dynamic_mode
+                and controller is not None
+                and str(controller["state"]) in {"draining", "closed"}
+                and version >= int(controller["max_terminal_version"])
+            ):
+                if input_closed:
+                    logger.event(
+                        "dynamic_input_closed",
+                        version=version,
+                        close_generation=int(controller["generation"]),
+                    )
+                    break
+                idle_start = time.monotonic()
+                time.sleep(config.membership.registration_scan_interval_seconds)
+                cycle_idle_seconds += time.monotonic() - idle_start
+                continue
             if not input_closed and terminal_grace_complete:
                 terminal_grace_complete = False
                 logger.event("terminal_input_reopened", version=version)
-            if input_closed and not terminal_grace_complete:
+            if input_closed and not terminal_grace_complete and not dynamic_mode:
                 logger.event("terminal_input_closed", version=version)
                 terminal_grace_start = time.monotonic()
                 grace_seconds = configured_grace_seconds(config)
@@ -2933,11 +3339,7 @@ def run_syncer(config: Config) -> None:
                     source=proposal_source,
                     first_seen=first_seen,
                 )
-                one_per_learner = select_one_per_learner(
-                    eligible,
-                    policy=config.sync.selection_policy,
-                    quorum_max=config.sync.quorum_max,
-                )
+                one_per_learner = select_one_per_contributor(eligible, config)
                 cycle_discovery_seconds += time.monotonic() - discovery_start
                 if len(one_per_learner) < config.sync.quorum_min:
                     logger.event(
@@ -2946,6 +3348,58 @@ def run_syncer(config: Config) -> None:
                         quorum_min=config.sync.quorum_min,
                         version=version,
                     )
+                    if dynamic_mode and controller is not None and str(controller["state"]) in {
+                        "draining",
+                        "closed",
+                    }:
+                        idle_start = time.monotonic()
+                        time.sleep(config.membership.registration_scan_interval_seconds)
+                        cycle_idle_seconds += time.monotonic() - idle_start
+                        continue
+                    if dynamic_mode:
+                        now_monotonic = time.monotonic()
+                        if now_monotonic >= next_dynamic_idle_maintenance_monotonic:
+                            maintenance_start = now_monotonic
+                            maintenance = run_maintenance(
+                                store,
+                                paths,
+                                heartbeat_interval_seconds=(
+                                    config.membership.heartbeat_stale_after_seconds
+                                ),
+                                scan_interval_seconds=config.sync.scan_interval_seconds,
+                                **dynamic_maintenance_options(config),
+                            )
+                            cycle_discovery_seconds += (
+                                time.monotonic() - maintenance_start
+                            )
+                            next_dynamic_idle_maintenance_monotonic = (
+                                time.monotonic()
+                                + config.scaling.scheduler_reconcile_interval_seconds
+                            )
+                            if any(
+                                int(maintenance.get(field, 0)) > 0
+                                for field in (
+                                    "archived_learner_instances",
+                                    "archived_registration_requests",
+                                    "archived_launch_requests",
+                                    "archived_capacity_observations",
+                                )
+                            ):
+                                logger.event(
+                                    "dynamic_state_maintenance_completed",
+                                    **maintenance,
+                                )
+                        starvation_key = store.allocate_starvation_observation_key(
+                            interval_seconds=config.scaling.starvation_observation_seconds
+                        )
+                        if starvation_key is not None:
+                            record_dynamic_capacity(
+                                observation_key=starvation_key,
+                                kind="starvation",
+                                observed_version=version,
+                                eligible_contributors=len(one_per_learner),
+                                selected_rows=[],
+                            )
                     if no_progress_timed_out(
                         last_progress_time,
                         config.liveness.no_progress_timeout_seconds,
@@ -3090,38 +3544,86 @@ def run_syncer(config: Config) -> None:
             total_update_tokens = sum(int(row["tokens_this_update"]) for row in selected)
             total_seen_tokens += total_update_tokens
             publish_start = time.monotonic()
-            publication = publish_global(
-                config=config,
-                paths=paths,
-                store=store,
-                version=new_version,
-                theta=theta,
-                outer_state=outer_state,
-                param_index=param_index,
-                num_updates=len(selected),
-                total_update_tokens=total_update_tokens,
-                total_seen_tokens=total_seen_tokens,
-                selected_updates=selected,
-                effective_weights=weights_by_update,
-                predecessor_version=version,
-                roundtrip_metrics=roundtrip_metrics,
-                during_checkpoint_wait=checkpoint_wait_ingestion_callback(
-                    config,
-                    lambda: sync_liveness_and_metadata(
-                        store,
-                        paths,
+            try:
+                publication = publish_global(
+                    config=config,
+                    paths=paths,
+                    store=store,
+                    version=new_version,
+                    theta=theta,
+                    outer_state=outer_state,
+                    param_index=param_index,
+                    num_updates=len(selected),
+                    total_update_tokens=total_update_tokens,
+                    total_seen_tokens=total_seen_tokens,
+                    selected_updates=selected,
+                    effective_weights=weights_by_update,
+                    predecessor_version=version,
+                    roundtrip_metrics=roundtrip_metrics,
+                    during_checkpoint_wait=checkpoint_wait_ingestion_callback(
                         config,
-                        logger,
-                        first_seen=first_seen,
-                        heartbeat_fences=heartbeat_fences,
+                        lambda: sync_liveness_and_metadata(
+                            store,
+                            paths,
+                            config,
+                            logger,
+                            first_seen=first_seen,
+                            heartbeat_fences=heartbeat_fences,
+                        ),
                     ),
-                ),
-                checkpoint_poll_seconds=min(
-                    0.2,
-                    max(0.001, float(config.sync.scan_interval_seconds)),
-                ),
-            )
+                    checkpoint_poll_seconds=min(
+                        0.2,
+                        max(0.001, float(config.sync.scan_interval_seconds)),
+                    ),
+                )
+            except DynamicMembershipFenceError as exc:
+                if not dynamic_mode:
+                    raise
+                store.reset_selected_to_pending(
+                    [str(row["update_id"]) for row in selected]
+                )
+                committed = store.latest_global_version()
+                if committed is None or int(committed["version"]) != version:
+                    raise RuntimeError(
+                        "membership retry could not recover the committed predecessor"
+                    ) from exc
+                weight_path = Path(str(committed["weight_path"]))
+                optim_path = Path(str(committed["optim_path"]))
+                if not weight_path.is_absolute():
+                    weight_path = paths.shared_root / weight_path
+                if not optim_path.is_absolute():
+                    optim_path = paths.shared_root / optim_path
+                theta = load_global_weights_flat(
+                    weight_path,
+                    param_index,
+                    device=device,
+                    dtype=syncer_compute_dtype(config),
+                )
+                optim_theta, outer_state = load_outer_state(
+                    optim_path,
+                    device=device,
+                    dtype=syncer_compute_dtype(config),
+                )
+                if theta.shape != optim_theta.shape or not torch.equal(theta, optim_theta):
+                    raise RuntimeError(
+                        "membership retry checkpoint weight/outer theta mismatch"
+                    ) from exc
+                total_seen_tokens = int(committed["total_seen_tokens"])
+                logger.event(
+                    "dynamic_membership_commit_retry",
+                    version=version,
+                    update_ids=[str(row["update_id"]) for row in selected],
+                    reason=str(exc),
+                )
+                continue
             first_seen.discard_many([row["update_id"] for row in selected])
+            record_dynamic_capacity(
+                observation_key=f"merge:{new_version}",
+                kind="merge",
+                observed_version=new_version,
+                eligible_contributors=len(selected),
+                selected_rows=selected,
+            )
             publish_seconds = time.monotonic() - publish_start
             sqlite_commit_seconds = float(publication["sqlite_commit_seconds"])
             publication_metrics = {
@@ -3154,6 +3656,7 @@ def run_syncer(config: Config) -> None:
                 paths,
                 heartbeat_interval_seconds=config.liveness.heartbeat_interval_seconds,
                 scan_interval_seconds=config.sync.scan_interval_seconds,
+                **dynamic_maintenance_options(config),
             )
             maintenance_seconds = time.monotonic() - maintenance_start
             logger.event(
@@ -3328,6 +3831,7 @@ def run_syncer(config: Config) -> None:
                     heartbeat_interval_seconds=config.liveness.heartbeat_interval_seconds,
                     scan_interval_seconds=config.sync.scan_interval_seconds,
                     input_closed=all_learners_stopped,
+                    **dynamic_maintenance_options(config),
                 )
                 logger.event("state_maintenance_completed", **maintenance)
                 if terminal_row is not None:
@@ -3340,6 +3844,19 @@ def run_syncer(config: Config) -> None:
                     EpochControlPublisher(paths, store.fenced_store, store.token).publish_terminal(
                         terminal_row, summary=summary
                     )
+                    if dynamic_mode and all_learners_stopped:
+                        controller = store.controller_state()
+                        if controller is None or str(controller["state"]) != "closed":
+                            raise RuntimeError(
+                                "dynamic terminal state requires a closed admission controller"
+                            )
+                        store.set_controller_state(
+                            state="terminal",
+                            generation=int(controller["generation"]),
+                            reason=str(controller.get("reason") or stop_reason),
+                            requested_at=controller.get("requested_at"),
+                            max_terminal_version=int(controller["max_terminal_version"]),
+                        )
             elif terminal_row is not None:
                 EpochControlPublisher(paths, store.fenced_store, store.token).publish_terminal(
                     terminal_row, summary=summary

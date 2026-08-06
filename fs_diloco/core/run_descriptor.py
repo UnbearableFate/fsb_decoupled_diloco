@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import Config, load_resolved_config_snapshot
-from .constants import HA_SCHEMA_VERSION, PROTOCOL_VERSION
+from .constants import DYNAMIC_SCHEMA_VERSION, HA_SCHEMA_VERSION, PROTOCOL_VERSION
 from ..storage.atomic_io import read_json, sha256_file
 from ..storage.paths import RunPaths
 from ..storage.schema_bootstrap import BootstrapIdentity
@@ -62,11 +62,20 @@ def load_run_descriptor(
         and actual_descriptor_sha != expected_descriptor_sha256
     ):
         raise RuntimeError("run descriptor does not match the submitted job identity")
+    descriptor_mode = str(descriptor.get("mode", ""))
+    if descriptor_mode == "full_ha_static":
+        expected_schema_version = HA_SCHEMA_VERSION
+        identity_mode = "full"
+    elif descriptor_mode == "full_ha_dynamic":
+        expected_schema_version = DYNAMIC_SCHEMA_VERSION
+        identity_mode = "full_dynamic"
+    else:
+        raise RuntimeError(f"unsupported run descriptor mode: {descriptor_mode!r}")
     checks = {
         "shared_root": str(paths.shared_root),
         "protocol_version": PROTOCOL_VERSION,
-        "schema_version": HA_SCHEMA_VERSION,
-        "mode": "full_ha_static",
+        "schema_version": expected_schema_version,
+        "mode": descriptor_mode,
     }
     if expected_run_id is not None:
         checks["run_id"] = expected_run_id
@@ -100,6 +109,9 @@ def load_run_descriptor(
         if source.get(key) != descriptor.get(key):
             raise RuntimeError(f"source manifest {key} mismatch")
     config = load_resolved_config_snapshot(config_path)
+    expected_config_mode = "dynamic" if descriptor_mode == "full_ha_dynamic" else "static"
+    if config.membership.mode != expected_config_mode:
+        raise RuntimeError("resolved config membership mode does not match descriptor")
     if config.run.run_id != descriptor.get("run_id"):
         raise RuntimeError("resolved config run_id mismatch")
     if Path(str(config.run.shared_root)).resolve() != paths.shared_root:
@@ -114,7 +126,7 @@ def load_run_descriptor(
         run_id=str(descriptor["run_id"]),
         source_fingerprint=str(descriptor["source_fingerprint"]),
         config_sha256=str(descriptor["resolved_config_sha256"]),
-        mode="full",
+        mode=identity_mode,
     )
     return LoadedRunDescriptor(paths, descriptor, config, identity)
 

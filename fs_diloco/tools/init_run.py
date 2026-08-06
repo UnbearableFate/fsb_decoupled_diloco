@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core.config import Config, resolve_config, write_resolved_config
-from ..core.constants import HA_SCHEMA_VERSION, PROTOCOL_VERSION
+from ..core.constants import DYNAMIC_SCHEMA_VERSION, HA_SCHEMA_VERSION, PROTOCOL_VERSION
 from ..storage.atomic_io import atomic_write_json, sha256_file
 from ..storage.paths import RunPaths, prepare_authority_dirs
 from ..storage.schema_bootstrap import BootstrapIdentity, initialize_new_run
@@ -67,6 +67,12 @@ def initialize_run(
     }
     source_manifest["manifest_sha256"] = _sha256_json(source_manifest)
     atomic_write_json(paths.run_source_manifest_json, source_manifest)
+    dynamic = config.membership.mode == "dynamic"
+    schema_version = DYNAMIC_SCHEMA_VERSION if dynamic else HA_SCHEMA_VERSION
+    descriptor_mode = "full_ha_dynamic" if dynamic else "full_ha_static"
+    bootstrap_slots = (
+        config.membership.bootstrap_instances if dynamic else config.sync.num_learners
+    )
     descriptor = {
         "format_version": 1,
         "run_id": config.run.run_id,
@@ -78,10 +84,13 @@ def initialize_run(
         "source_fingerprint": config.run.source_fingerprint,
         "git_commit": config.run.git_commit,
         "git_dirty": config.run.git_dirty,
-        "mode": "full_ha_static",
-        "bootstrap_slots": int(config.sync.num_learners),
+        "mode": descriptor_mode,
+        "bootstrap_slots": int(bootstrap_slots),
+        "stream_pool_size": (
+            int(config.membership.stream_pool_size) if dynamic else None
+        ),
         "protocol_version": PROTOCOL_VERSION,
-        "schema_version": HA_SCHEMA_VERSION,
+        "schema_version": schema_version,
         "created_at": time.time(),
     }
     descriptor["descriptor_sha256"] = _sha256_json(descriptor)
@@ -90,7 +99,7 @@ def initialize_run(
         run_id=config.run.run_id,
         source_fingerprint=config.run.source_fingerprint,
         config_sha256=config_sha256,
-        mode="full",
+        mode="full_dynamic" if dynamic else "full",
     )
     marker = initialize_new_run(
         paths.sqlite_db,

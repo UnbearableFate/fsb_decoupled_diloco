@@ -652,3 +652,49 @@ Artifacts:
 ### Conclusion
 
 - Phase 1完成门禁关闭。Phase 2现在可以开始，但本轮没有启动Phase 2；dynamic instance递归发现的明确follow-up仍由Phase 2 MEM-02/MEM-20负责。
+
+## 2026-08-06 22:32 JST — Phase 2 P2-L0–L6 focused foundation PASS
+
+- 实现dynamic schema v3、UUID incarnation、固定stream pool、bootstrap/registration/admission/replacement transaction、proposal与final-commit membership fence、幂等capacity observation、durable learner launch outbox、drain directive/ack和dynamic archive/GC。
+- Phase 2 focused compute-node replacement run：PBS `2500745.opbs`，Miyabi `mg0011`，依据上一轮7.45秒实测请求`00:00:30`并在7.23秒完成；`9 passed`，包括1000次UUID生成和1000 churn、SQLite warm-up后page增长冻结上限、scheduler queued-over-TTL/unknown/absent、logical request单一admission及drain closure。
+- 完整兼容回归：PBS `2500748.opbs`，Miyabi `mg0005`，依据现有full-tree约24秒证据请求`00:01:30`并在24.52秒完成；`457 passed`。static full、fragment和historical read-only路径无回归。
+- 静态门禁：`py_compile`、`git diff --check`和`bash -n scripts/miyabi/*.pbs`通过；所有新PBS脚本使用literal group `xg24i002`。
+- 当前边界：这些结果关闭focused实现回归，不替代G7 structured artifact、G8/G9独立job chaos、Phase 2 completed Checker或最终审查。
+
+## 2026-08-06 22:58 JST — Phase 2 bounded-authority remediation PASS
+
+- 持久化单调admission generation、lifetime scale-request budget及cooldown时间；bootstrap授权不再被动态maintenance归档后重建；非同stream replacement释放旧stream和旧launch状态；partial unique index同时约束current placement与stream。
+- `input_closed`现在显式要求drained learner声明的final update已经进入proposal frontier；registration/drain reader校验epoch目录owner；terminal repair同步dynamic controller terminal状态。动态归档同时清理proposal frontier及已归档registration control publication，避免单epoch churn使active physical state线性增长。
+- PBS `2500955.opbs`在Miyabi `debug-g`计算节点`mg0004`执行`.venv/bin/python -m pytest -q tests/test_plan02_phase2_dynamic.py`；依据上一轮7.20秒实测请求`00:01:00`，实际9秒、`Exit_status=0`，结果`11 passed in 7.27s`。
+- 证据：`artifacts/20260806-225826_phase2-focused-tests_review.log`。剩余G9/matched dirty preflight、clean-source G7–G9/matched/completed Checker、文档与matrix关闭及双审查。
+
+## 2026-08-06 23:02 JST — Phase 2 G9 dirty-source runtime preflight PASS
+
+- 目标：在冻结clean target前，以超过50 local steps × 10 global steps基线的1+8 dynamic workload验证takeover、永久learner终止、两次唯一low observation、scheduler确认释放后的replacement、短暂停顿、duplicate physical job拒绝、最多9个并发计算节点和dynamic drain close。
+- 提交前`bash -n scripts/miyabi/*.pbs`和literal `group_list=xg24i002`门禁通过。launcher PBS `2500962.opbs`初始化run `runs/fs_diloco/plan02_phase2_g9_2500962`；crash syncer `2500973.opbs`按预期exit 137，successor `2500974.opbs`在78秒完成到v60，victim `2500975.opbs`按预期exit 143，bootstrap learners `2500976`–`2500982`完成drain，duplicate `2500983.opbs`被拒绝，scheduler replacement `2500987.opbs`被admit并完成drain；checker `2500984.opbs`在9秒内返回`PASS`。
+- 结构化证据`artifacts/20260806-225947_phase2-g9_pass.json`绑定descriptor `eb07be91cf82b9b8b2bcb6cd36fa71f6982f9163f2074d56cb6ac7b3f49308e4`和dirty source fingerprint `sha256:e7618ddc77bd0643bc2869ca4e94767a19ad4600b880f43029114a60e847341d`；稳定bootstrap 1+8、replacement恢复1+8、pause recovery、duplicate rejection、并发节点上限和terminal close均为true。
+- 边界：该运行只证明runtime、chaos checker和walltime预检；dirty source identity不能进入Phase 2 completed Checker。正式G9必须在最终clean commit上重跑，并与G7/G8/compatibility/matched证据绑定同一source identity。
+
+## 2026-08-06 23:09 JST — Phase 2 matched launcher remediation PASS
+
+- matched launcher不再提交Miyabi不支持的non-rerunable learner array；static和dynamic各提交8个独立learner job，分别显式传`LEARNER_INDEX`与`BOOTSTRAP_SLOT`，并在每次qsub后原子持久化receipt。
+- 新增mock scheduler编排回归，验证19个子job命令、无`-J`、每个slot唯一、static→dynamic顺序依赖及checker依赖。PBS `2501057.opbs`在Miyabi `debug-g`节点`mg0005`以相邻9秒实测请求`00:00:30`，实际9秒、exit 0；focused组`12 passed in 7.45s`。
+- 证据：`artifacts/20260806-230848_phase2-focused-tests_matched-fix.log`。尚需重跑dirty matched runtime preflight；当前结果不替代clean-source matched性能门禁。
+
+## 2026-08-06 23:17 JST — Phase 2 control-path performance remediation regression PASS
+
+- dynamic heartbeat discovery现在把同一扫描中的有效heartbeat放入单个fenced transaction，保持逐instance membership/placement/stream/token重验；健康merge路径移除重复的完整maintenance扫描，post-merge maintenance仍保留，长期quorum/starvation等待按scheduler reconciliation周期维护。
+- acceptance的registration/proposal visibility grace由2秒收敛到一个0.2秒scan interval；`input_closed`仍要求全部final pointer精确进入frontier后才启动该grace，未放宽membership、drain或5%性能阈值。
+- 新增heartbeat批量transaction回归，验证两个current instance在一次DB transaction中更新且两个fence均成立。PBS `2501094.opbs`在Miyabi `debug-g`节点`mg0003`请求`00:00:30`、实际9秒、exit 0；focused组`13 passed in 7.11s`。证据：`artifacts/20260806-231634_phase2-focused-tests_performance-fix.log`。
+
+## 2026-08-06 23:19 JST — Phase 2 matched runtime dirty-source preflight PASS
+
+- launcher `2501095.opbs`提交两个顺序隔离的1+8 run：static jobs `2501096`–`2501104`及dynamic jobs `2501105`–`2501113`均正常terminal/exit 0，checker `2501114.opbs`实际1秒并返回`PASS`。请求walltime保持syncer`00:02:30`、learner`00:02:00`、checker`00:00:20`，覆盖相邻26秒完整训练及收尾波动。
+- 相同model/data/seed/v60 workload下，static complete time为`26.349440s`，dynamic为`25.365443s`；按冻结口径`max(0, dynamic-static)/static`为`0.0% < 5%`。dynamic完整执行8次registration、63次唯一capacity observation、drain ack和terminal closure；批量heartbeat后business transaction由上一预检2348降至1660。
+- 结构化证据：`artifacts/20260806-231714_phase2-matched-launch_pass.json`与`artifacts/20260806-231714_phase2-matched-performance_pass.json`。该结果重置matched实验连续失败计数，但仍是dirty-source时长/功能预检；正式门禁必须绑定最终clean source。
+## 2026-08-06 23:37 JST — bootstrap scheduler identity and finite close paths
+
+- Persisted identity-bound bootstrap qsub manifests and reconciled queued/running external bootstrap jobs through the launch outbox; logical admission now checks the physical PBS job identity.
+- Added manual operator close requests, deadline closure, launch-budget closure, immutable registration-decision replay handling, and a completed-checker PBS wrapper.
+- Expanded the Phase 2 focused matrix to 18 tests, including 8-slot bootstrap admission, ninth unsolicited rejection, scheduler retention beyond TTL, manifest reconciliation, replay collision safety, and manual/deadline/budget closure. PBS `2501171.opbs` passed all 18 tests in 6.96 seconds.
+- Full repository compatibility PBS `2501174.opbs` passed 470 tests in 23.92 seconds.

@@ -86,6 +86,42 @@ def select_one_per_learner(
     return selected
 
 
+def select_one_per_dynamic_member(
+    updates: list[dict[str, Any]],
+    *,
+    policy: str = "most_recent_per_learner",
+    quorum_max: int | None = None,
+) -> list[dict[str, Any]]:
+    """Select at most one proposal for each current placement and stream."""
+    selected = select_one_per_learner(updates, policy=policy, quorum_max=None)
+    by_stream: dict[int, dict[str, Any]] = {}
+    by_placement: dict[str, dict[str, Any]] = {}
+
+    def preference(row: dict[str, Any]) -> tuple[int, float, str]:
+        if policy == "oldest_pending":
+            return (-int(row["local_step_end"]), -float(row["committed_at"]), str(row["update_id"]))
+        return (int(row["local_step_end"]), float(row["committed_at"]), str(row["update_id"]))
+
+    for row in selected:
+        stream_id = int(row["stream_id"])
+        placement_id = str(row["placement_id"])
+        conflicts = [
+            candidate
+            for candidate in (by_stream.get(stream_id), by_placement.get(placement_id))
+            if candidate is not None
+        ]
+        if conflicts and any(preference(candidate) >= preference(row) for candidate in conflicts):
+            continue
+        for candidate in conflicts:
+            by_stream.pop(int(candidate["stream_id"]), None)
+            by_placement.pop(str(candidate["placement_id"]), None)
+        by_stream[stream_id] = row
+        by_placement[placement_id] = row
+    result = list(by_stream.values())
+    result.sort(key=lambda row: (int(row["stream_id"]), str(row["learner_id"])))
+    return result if quorum_max is None else result[: int(quorum_max)]
+
+
 def stale_update_ids(
     updates: list[dict[str, Any]],
     *,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -23,7 +24,7 @@ from ..core.constants import (
     LEARNER_STATUS_STOPPED,
     learner_index_from_id,
 )
-from ..modeling.hf_data import Batch, build_batch_iterator
+from ..modeling.hf_data import Batch, build_batch_iterator, build_stream_batch_iterator
 from ..modeling.hf_model import choose_device, load_causal_lm_and_tokenizer
 from ..modeling.outer_optim import outer_optimizer_step
 from ..modeling.param_index import (
@@ -47,6 +48,17 @@ from ..protocol.fragment_codec import (
 from ..protocol.fragment_index import load_fragment_index
 from ..protocol.fragment_scheduler import select_fragment
 from ..protocol.control_epoch import EpochControlReader
+from ..protocol.dynamic_terminal import read_current_drain
+from ..protocol.membership import (
+    Admission,
+    bootstrap_request_id,
+    new_learner_instance_id,
+    placement_id,
+    read_bootstrap_ready,
+    read_admission,
+    read_registration_decision,
+    write_registration_request,
+)
 from ..storage.atomic_io import atomic_write_json, file_size, safe_read_json, sha256_file
 from ..core.run_descriptor import load_run_descriptor
 from ..storage.paths import RunPaths, prepare_learner_instance_dir, prepare_run_dirs
@@ -186,8 +198,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--config", required=True)
     parser.add_argument("--run-id")
     parser.add_argument("--shared-root")
-    parser.add_argument("--learner-id", required=True)
+    parser.add_argument("--learner-id")
     parser.add_argument("--num-learners", type=int)
+    authorization = parser.add_mutually_exclusive_group()
+    authorization.add_argument("--bootstrap-slot", type=int)
+    authorization.add_argument("--launch-request-id")
     parser.add_argument("--training-seed", type=int)
     parser.add_argument("--scan-interval-seconds", type=float)
     parser.add_argument("--syncer-device", choices=("auto", "cpu", "cuda"))
@@ -236,6 +251,10 @@ def write_heartbeat(
     learning_rate: float | None = None,
     scheduler_total_steps: int | None = None,
     status_reason: str | None = None,
+    admission: Admission | None = None,
+    close_generation: int | None = None,
+    final_update_id: str | None = None,
+    last_proposal_at: float | None = None,
 ) -> None:
     payload = {
         "format_version": FORMAT_VERSION,
@@ -255,6 +274,25 @@ def write_heartbeat(
     }
     if status_reason is not None:
         payload["status_reason"] = status_reason
+    if admission is not None:
+        payload.update(
+            instance_id=admission.instance_id,
+            placement_id=admission.placement_id,
+            placement_epoch=admission.placement_epoch,
+            stream_id=admission.stream_id,
+            stream_epoch=admission.stream_epoch,
+            admission_generation=admission.admission_generation,
+            admission_token=admission.admission_token,
+            launch_request_id=admission.launch_request_id,
+            stream_restarted=admission.stream_restarted,
+            pbs_job_id=os.environ.get("PBS_JOBID"),
+        )
+    if close_generation is not None:
+        payload["close_generation"] = int(close_generation)
+    if final_update_id is not None:
+        payload["final_update_id"] = final_update_id
+    if last_proposal_at is not None:
+        payload["last_proposal_at"] = float(last_proposal_at)
     if last_loaded_global_merge_event is not None:
         payload["last_loaded_global_merge_event"] = last_loaded_global_merge_event
     if last_loaded_fragment_versions is not None:
@@ -1499,6 +1537,7 @@ def write_update(
     resource_metrics: dict[str, float | int],
     mid_cycle_adoption_count: int,
     base_switched_at_step: int | None,
+    admission: Admission | None = None,
 ) -> tuple[str, Path, Path, dict[str, Any]]:
     mid_cycle_adoption_count = int(mid_cycle_adoption_count)
     if mid_cycle_adoption_count < 0:
@@ -1546,6 +1585,18 @@ def write_update(
         "created_at": created_at,
         "committed_at": time.time(),
     }
+    if admission is not None:
+        metadata.update(
+            learner_instance_id=admission.instance_id,
+            placement_id=admission.placement_id,
+            placement_epoch=admission.placement_epoch,
+            stream_id=admission.stream_id,
+            stream_epoch=admission.stream_epoch,
+            admission_generation=admission.admission_generation,
+            admission_token_hash=hashlib.sha256(
+                admission.admission_token.encode("utf-8")
+            ).hexdigest(),
+        )
     metadata.update(resource_metrics)
     atomic_write_json(meta_path, metadata)
     return update_id, tensor_path, meta_path, metadata
@@ -2236,12 +2287,27 @@ def finalize_strategy_action(
     return optimizer, scheduler
 
 
-def run_learner(config: Config, learner_id: str) -> None:
+def run_learner(
+    config: Config,
+    learner_id: str | None,
+    *,
+    bootstrap_slot: int | None = None,
+    launch_request_id: str | None = None,
+) -> None:
+    dynamic = config.membership.mode == "dynamic"
+    if dynamic:
+        if learner_id is not None:
+            raise ValueError("dynamic learner generates its own instance ID")
+        learner_id = new_learner_instance_id()
+    elif learner_id is None:
+        raise ValueError("static learner requires --learner-id")
+    assert learner_id is not None
     if config.fragments.enabled:
         run_fragment_learner(config, learner_id)
         return
     paths = RunPaths(Path(config.run.shared_root or "."))
     loaded_descriptor = None
+    admission: Admission | None = None
     if config.coordination.syncer_ha.enabled:
         loaded = load_run_descriptor(
             paths.shared_root,
@@ -2259,6 +2325,93 @@ def run_learner(config: Config, learner_id: str) -> None:
         prepare_run_dirs(paths, config.sync.num_learners)
     logger = JsonlLogger(paths.logs / f"{learner_id}.jsonl", learner_id)
     log_uncaught_exception(logger)
+    if dynamic:
+        assert loaded_descriptor is not None
+        if (bootstrap_slot is None) == (launch_request_id is None):
+            raise ValueError(
+                "dynamic learner requires exactly one of --bootstrap-slot or --launch-request-id"
+            )
+        if bootstrap_slot is not None:
+            if not 0 <= bootstrap_slot < int(loaded_descriptor.descriptor["bootstrap_slots"]):
+                raise ValueError("bootstrap slot is outside the descriptor budget")
+            expected_request_id = bootstrap_request_id(
+                run_id=config.run.run_id or "",
+                bootstrap_slot=bootstrap_slot,
+                config_fingerprint=str(loaded_descriptor.descriptor["descriptor_sha256"]),
+            )
+            ready_deadline = time.monotonic() + float(
+                config.membership.initial_membership_deadline_seconds
+            )
+            ready_request = None
+            while time.monotonic() < ready_deadline:
+                ready_request = read_bootstrap_ready(
+                    paths,
+                    run_id=config.run.run_id or "",
+                    bootstrap_slot=bootstrap_slot,
+                )
+                if ready_request is not None:
+                    break
+                time.sleep(config.membership.registration_scan_interval_seconds)
+            if ready_request is None:
+                raise TimeoutError(f"bootstrap slot {bootstrap_slot} was not published")
+            launch_request_id = str(ready_request["request_id"])
+            if launch_request_id != expected_request_id:
+                raise RuntimeError("bootstrap request ID differs from the immutable descriptor")
+        assert launch_request_id is not None
+        request = write_registration_request(
+            paths,
+            run_id=config.run.run_id or "",
+            instance_id=learner_id,
+            placement=placement_id(),
+            launch_request_id=launch_request_id,
+            source_fingerprint=str(config.run.source_fingerprint),
+            config_sha256=str(loaded_descriptor.descriptor["resolved_config_sha256"]),
+            ttl_seconds=config.membership.registration_request_ttl_seconds,
+            pbs_job_id=os.environ.get("PBS_JOBID"),
+            gpu_identity=os.environ.get("CUDA_VISIBLE_DEVICES") or "cpu",
+        )
+        logger.event(
+            "registration_requested",
+            instance_id=learner_id,
+            launch_request_id=launch_request_id,
+            placement_id=request["placement_id"],
+            bootstrap_slot=bootstrap_slot,
+        )
+        admission_deadline = time.monotonic() + float(
+            config.membership.initial_membership_deadline_seconds
+            if bootstrap_slot is not None
+            else config.membership.registration_request_ttl_seconds
+        )
+        while time.monotonic() < admission_deadline:
+            decision = read_registration_decision(
+                paths,
+                run_id=config.run.run_id or "",
+                instance_id=learner_id,
+            )
+            if decision is not None and decision.get("state") != "admitted":
+                raise RuntimeError(
+                    "dynamic learner registration rejected: "
+                    f"{decision.get('rejection_reason') or decision.get('state')}"
+                )
+            admission = read_admission(
+                paths,
+                run_id=config.run.run_id or "",
+                instance_id=learner_id,
+            )
+            if admission is not None:
+                break
+            time.sleep(config.membership.registration_scan_interval_seconds)
+        if admission is None:
+            raise TimeoutError(f"dynamic learner admission timed out: {learner_id}")
+        logger.event(
+            "registration_admitted",
+            instance_id=learner_id,
+            placement_id=admission.placement_id,
+            placement_epoch=admission.placement_epoch,
+            stream_id=admission.stream_id,
+            stream_epoch=admission.stream_epoch,
+            stream_restarted=admission.stream_restarted,
+        )
     control_reader = _epoch_control_reader(
         paths,
         run_id=config.run.run_id,
@@ -2276,7 +2429,9 @@ def run_learner(config: Config, learner_id: str) -> None:
             else None
         ),
     )
-    learner_index = learner_index_from_id(learner_id)
+    learner_index = (
+        admission.stream_id if admission is not None else learner_index_from_id(learner_id)
+    )
     torch.manual_seed(config.training.seed + learner_index)
     device = choose_device()
     logger.event(
@@ -2368,13 +2523,23 @@ def run_learner(config: Config, learner_id: str) -> None:
         last_update_id=None,
         learning_rate=current_inner_learning_rate(optimizer),
         scheduler_total_steps=config.inner_optimizer.scheduler_total_steps,
+        admission=admission,
     )
 
-    batch_iter = build_batch_iterator(
-        config,
-        tokenizer,
-        learner_index=learner_index,
-        num_learners=config.sync.num_learners,
+    batch_iter = (
+        build_stream_batch_iterator(
+            config,
+            tokenizer,
+            stream_id=admission.stream_id,
+            stream_pool_size=config.membership.stream_pool_size,
+        )
+        if admission is not None
+        else build_batch_iterator(
+            config,
+            tokenizer,
+            learner_index=learner_index,
+            num_learners=config.sync.num_learners,
+        )
     )
     resource_monitor = create_resource_monitor(device)
     resource_monitor.start()
@@ -2387,6 +2552,7 @@ def run_learner(config: Config, learner_id: str) -> None:
     reported_cache_rejections = 0
     reported_canonical_repair_waits = 0
     reported_stale_scan_rejections = 0
+    drain_payload: dict[str, Any] | None = None
 
     def log_control_observation_changes() -> None:
         nonlocal reported_cache_rejections
@@ -2462,6 +2628,18 @@ def run_learner(config: Config, learner_id: str) -> None:
 
     try:
         while not stop_requested(paths, local_step, config):
+            if dynamic:
+                drain_payload = read_current_drain(
+                    paths,
+                    run_id=config.run.run_id or "",
+                )
+                if drain_payload is not None:
+                    logger.event(
+                        "drain_seen",
+                        close_generation=int(drain_payload["close_generation"]),
+                        max_terminal_version=int(drain_payload["max_terminal_version"]),
+                    )
+                    break
             mid_cycle_adoptions.reset()
             resource_monitor.begin_cycle()
             interval_start_time = time.monotonic()
@@ -2527,6 +2705,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                         tokens_per_sec=interval_tokens / elapsed,
                         learning_rate=current_inner_learning_rate(optimizer),
                         scheduler_total_steps=config.inner_optimizer.scheduler_total_steps,
+                        admission=admission,
                     )
                     logger.event("heartbeat_written", local_step=local_step)
                     last_heartbeat = time.monotonic()
@@ -2676,6 +2855,7 @@ def run_learner(config: Config, learner_id: str) -> None:
                 flat=flat,
                 resource_metrics=cycle_resources,
                 **mid_cycle_adoptions.metadata(),
+                admission=admission,
             )
             write_seconds = time.monotonic() - write_start
             last_update_id = update_id
@@ -2741,9 +2921,24 @@ def run_learner(config: Config, learner_id: str) -> None:
                 resource_metrics=cycle_resources,
                 learning_rate=current_inner_learning_rate(optimizer),
                 scheduler_total_steps=config.inner_optimizer.scheduler_total_steps,
+                admission=admission,
+                last_proposal_at=time.time(),
             )
             logger.event("heartbeat_written", local_step=local_step)
             del flat
+
+            if dynamic:
+                drain_payload = read_current_drain(
+                    paths,
+                    run_id=config.run.run_id or "",
+                )
+                if drain_payload is not None:
+                    logger.event(
+                        "drain_seen_after_final_proposal",
+                        close_generation=int(drain_payload["close_generation"]),
+                        final_update_id=last_update_id,
+                    )
+                    break
 
             if config.learner.adopt_global_after_upload:
                 post_publish_action = adoption_strategy.on_after_publish(
@@ -2764,12 +2959,15 @@ def run_learner(config: Config, learner_id: str) -> None:
         stop_payload = read_authoritative_terminal(paths)
         if stop_payload is not None:
             logger.event("stop_seen", reason=stop_payload.get("reason"))
+        final_status = "drained" if admission is not None and drain_payload is not None else (
+            LEARNER_STATUS_STOPPED
+        )
         write_heartbeat(
             paths=paths,
             config=config,
             learner_id=learner_id,
-            status=LEARNER_STATUS_STOPPED,
-            phase="process_exit",
+            status=final_status,
+            phase="drain_ack" if final_status == "drained" else "process_exit",
             last_loaded_global_version=last_loaded_global_version,
             last_local_step=local_step,
             last_update_id=last_update_id,
@@ -2777,6 +2975,11 @@ def run_learner(config: Config, learner_id: str) -> None:
             learning_rate=current_inner_learning_rate(optimizer),
             scheduler_total_steps=config.inner_optimizer.scheduler_total_steps,
             status_reason=watchdog_stop_reason,
+            admission=admission,
+            close_generation=(
+                None if drain_payload is None else int(drain_payload["close_generation"])
+            ),
+            final_update_id=last_update_id if drain_payload is not None else None,
         )
         logger.event(
             "process_exit",
@@ -2809,7 +3012,26 @@ def main(argv: list[str] | None = None) -> None:
         parallel_checkpoint_writes=args.parallel_checkpoint_writes,
         materialize_full_every_events=args.materialize_full_every_events,
     )
-    run_learner(config, args.learner_id)
+    if config.membership.mode == "dynamic":
+        if args.learner_id is not None:
+            raise ValueError("dynamic learner rejects --learner-id")
+        if args.num_learners is not None:
+            raise ValueError("dynamic learner rejects --num-learners as membership authority")
+        if (args.bootstrap_slot is None) == (args.launch_request_id is None):
+            raise ValueError(
+                "dynamic learner requires exactly one of --bootstrap-slot or --launch-request-id"
+            )
+    else:
+        if args.learner_id is None:
+            raise ValueError("static learner requires --learner-id")
+        if args.bootstrap_slot is not None or args.launch_request_id is not None:
+            raise ValueError("static learner rejects dynamic admission arguments")
+    run_learner(
+        config,
+        args.learner_id,
+        bootstrap_slot=args.bootstrap_slot,
+        launch_request_id=args.launch_request_id,
+    )
 
 
 if __name__ == "__main__":

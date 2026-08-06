@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from ..core.config import RecoverySubmissionSection
+from ..core.config import RecoverySubmissionSection, ScalingSection
 from ..storage.atomic_io import atomic_write_json, safe_read_json
 from ..storage.paths import RunPaths
 from .pbs_scheduler import OUTSTANDING_CLASSIFICATIONS, PBSScheduler
@@ -380,3 +380,163 @@ class RecoveryClaimManager:
             except OSError:
                 pass
         return len(directories)
+
+
+class LearnerLaunchOutbox:
+    """Reconcile and submit durable learner launch requests owned by SQLite."""
+
+    def __init__(
+        self,
+        *,
+        paths: RunPaths,
+        config: ScalingSection,
+        scheduler: PBSScheduler,
+        descriptor_sha256: str,
+        wall_clock: Callable[[], float] = time.time,
+    ) -> None:
+        self.paths = paths
+        self.config = config
+        self.scheduler = scheduler
+        self.descriptor_sha256 = descriptor_sha256
+        self._wall_clock = wall_clock
+
+    def reconcile(self, store: Any) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        for request in store.launch_requests(active_only=True):
+            request_reason = str(request["reason"])
+            state = str(request["state"])
+            request_id = str(request["request_id"])
+            now = float(self._wall_clock())
+            job_id = request.get("pbs_job_id")
+            if request_reason == "bootstrap" and not job_id:
+                continue
+            if job_id:
+                observation = self._query(str(job_id))
+                if observation.classification in OUTSTANDING_CLASSIFICATIONS:
+                    next_state = (
+                        "started"
+                        if observation.classification in {"running", "suspended"}
+                        else "submitted"
+                    )
+                    results.append(
+                        store.update_launch_request(
+                            request_id=request_id,
+                            expected_states={state},
+                            state=next_state,
+                            pbs_job_id=observation.job_id,
+                            scheduler_state=observation.classification,
+                            observed_at=now,
+                        )
+                    )
+                elif observation.classification in {"finished", "no_record"}:
+                    results.append(
+                        store.update_launch_request(
+                            request_id=request_id,
+                            expected_states={state},
+                            state="failed",
+                            scheduler_state=observation.classification,
+                            last_error="scheduler_terminal_before_admission",
+                            observed_at=now,
+                        )
+                    )
+                continue
+            found = self.scheduler.find_by_launch_request(request_id)
+            if found is not None and found.classification in OUTSTANDING_CLASSIFICATIONS:
+                results.append(
+                    store.update_launch_request(
+                        request_id=request_id,
+                        expected_states={state},
+                        state=(
+                            "started"
+                            if found.classification in {"running", "suspended"}
+                            else "submitted"
+                        ),
+                        pbs_job_id=found.job_id,
+                        scheduler_state=found.classification,
+                        observed_at=now,
+                    )
+                )
+                continue
+            expires_at = request.get("expires_at")
+            if expires_at is not None and now >= float(expires_at):
+                results.append(
+                    store.update_launch_request(
+                        request_id=request_id,
+                        expected_states={state},
+                        state="expired",
+                        scheduler_state="no_record",
+                        last_error="launch_authorization_expired_without_scheduler_job",
+                        observed_at=now,
+                    )
+                )
+                continue
+            if request_reason == "operator_replacement":
+                continue
+            if state in {"submitting", "submission_unknown"} and (
+                now - float(request["updated_at"])
+                >= 2.0 * float(self.config.scheduler_reconcile_interval_seconds)
+            ):
+                results.append(
+                    store.update_launch_request(
+                        request_id=request_id,
+                        expected_states={state},
+                        state="retryable",
+                        scheduler_state="no_record",
+                        observed_at=now,
+                    )
+                )
+                state = "retryable"
+            if state not in {"planned", "retryable"}:
+                continue
+            submitting = store.update_launch_request(
+                request_id=request_id,
+                expected_states={state},
+                state="submitting",
+                increment_submission_attempts=True,
+                observed_at=now,
+            )
+            submission = self.scheduler.submit_learner(
+                script=self.config.learner_pbs_script,
+                launch_request_id=request_id,
+                shared_root=self.paths.shared_root,
+                descriptor_sha256=self.descriptor_sha256,
+                walltime=str(self.config.learner_walltime),
+            )
+            if submission.get("returncode") == 0 and submission.get("job_id_raw"):
+                results.append(
+                    store.update_launch_request(
+                        request_id=request_id,
+                        expected_states={"submitting"},
+                        state="submitted",
+                        pbs_job_id=str(submission["job_id_raw"]),
+                        scheduler_state="submission_unknown",
+                        observed_at=float(self._wall_clock()),
+                    )
+                )
+            else:
+                results.append(
+                    store.update_launch_request(
+                        request_id=request_id,
+                        expected_states={"submitting"},
+                        state="submission_unknown",
+                        scheduler_state="submission_unknown",
+                        last_error=str(submission.get("stderr") or "qsub failed"),
+                        observed_at=float(self._wall_clock()),
+                    )
+                )
+            results.append(submitting)
+        return results
+
+    def _query(self, job_id: str):
+        observation = self.scheduler.query(job_id)
+        if observation.classification not in {"query_failed", "no_record", "unknown"}:
+            return observation
+        try:
+            historical = self.scheduler.query(job_id, historical=True)
+        except TypeError:
+            return observation
+        return (
+            historical
+            if historical.classification in OUTSTANDING_CLASSIFICATIONS | {"finished"}
+            else observation
+        )

@@ -81,6 +81,38 @@ class RunPaths:
         return self.control / "syncer_launch_claims"
 
     @property
+    def registration_requests(self) -> Path:
+        return self.control / "registration_requests"
+
+    @property
+    def bootstrap_scheduler_jobs_json(self) -> Path:
+        return self.control / "bootstrap_scheduler_jobs.json"
+
+    @property
+    def dynamic_close_request_json(self) -> Path:
+        return self.control / "dynamic_close_request.json"
+
+    @property
+    def membership_history_jsonl(self) -> Path:
+        return self.metrics / "membership_event_history.jsonl"
+
+    @property
+    def learner_instance_history_jsonl(self) -> Path:
+        return self.metrics / "learner_instance_history.jsonl"
+
+    @property
+    def registration_history_jsonl(self) -> Path:
+        return self.metrics / "registration_history.jsonl"
+
+    @property
+    def launch_request_history_jsonl(self) -> Path:
+        return self.metrics / "launch_request_history.jsonl"
+
+    @property
+    def capacity_observation_history_jsonl(self) -> Path:
+        return self.metrics / "capacity_observation_history.jsonl"
+
+    @property
     def bootstrap_complete_json(self) -> Path:
         return self.control / "bootstrap_complete.json"
 
@@ -154,6 +186,12 @@ class RunPaths:
     def update_payload_dir(self, learner_id: str) -> Path:
         return self.updates_payloads / learner_id
 
+    def learner_heartbeat_path(self, instance_id: str) -> Path:
+        return self.heartbeats / f"{instance_id}.json"
+
+    def registration_request_path(self, instance_id: str) -> Path:
+        return self.registration_requests / f"{instance_id}.json"
+
     def global_weight_path(self, version: int) -> Path:
         return self.weights / GLOBAL_WEIGHT_TEMPLATE.format(version=version)
 
@@ -181,6 +219,18 @@ class RunPaths:
 
     def epoch_terminal_dir(self, epoch: int, owner_id: str) -> Path:
         return self.syncer_epoch_dir(epoch, owner_id) / "terminal"
+
+    def epoch_membership_dir(self, epoch: int, owner_id: str) -> Path:
+        return self.syncer_epoch_dir(epoch, owner_id) / "membership"
+
+    def epoch_bootstrap_ready_path(self, epoch: int, owner_id: str) -> Path:
+        return self.epoch_membership_dir(epoch, owner_id) / "bootstrap_ready_g000001.json"
+
+    def epoch_admission_path(self, epoch: int, owner_id: str, instance_id: str) -> Path:
+        return self.epoch_membership_dir(epoch, owner_id) / "admissions" / f"{instance_id}.json"
+
+    def epoch_drain_path(self, epoch: int, owner_id: str, generation: int) -> Path:
+        return self.epoch_terminal_dir(epoch, owner_id) / f"drain_g{int(generation):06d}.json"
 
     def epoch_stop_path(self, epoch: int, owner_id: str, generation: int) -> Path:
         return self.epoch_terminal_dir(epoch, owner_id) / f"stop_g{int(generation):06d}.json"
@@ -259,6 +309,10 @@ class RunPaths:
         if self.updates_payloads.is_dir():
             yield from sorted(self.updates_payloads.rglob("*.safetensors"))
 
+    def iter_registration_requests(self) -> Iterator[Path]:
+        if self.registration_requests.is_dir():
+            yield from sorted(self.registration_requests.glob("*.json"))
+
     def fragment_weight_path(self, fragment_id: int, version: int) -> Path:
         return self.fragment_weights / f"fragment_{fragment_id:03d}" / f"v{version:06d}.safetensors"
 
@@ -304,6 +358,7 @@ def prepare_authority_dirs(paths: RunPaths) -> None:
         paths.metrics,
         paths.syncer_epochs,
         paths.syncer_launch_claims,
+        paths.registration_requests,
     ):
         ensure_dir(directory)
 

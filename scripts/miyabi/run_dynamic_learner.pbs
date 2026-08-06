@@ -1,0 +1,117 @@
+#!/bin/bash
+#PBS -N fsdiloco_dynamic_learner
+#PBS -q regular-g
+#PBS -W group_list=xg24i002
+#PBS -l select=1:mpiprocs=1
+#PBS -l walltime=24:00:00
+#PBS -j oe
+
+set -eEuo pipefail
+trap 'echo "[ERROR] dynamic learner failed at line $LINENO" >&2' ERR
+
+: "${FS_DILOCO_SHARED_ROOT:?FS_DILOCO_SHARED_ROOT is required}"
+DESCRIPTOR="$FS_DILOCO_SHARED_ROOT/control/run_descriptor.json"
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+
+readarray -t descriptor_fields < <(
+  "$PYTHON_BIN" - "$DESCRIPTOR" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    descriptor = json.load(handle)
+if descriptor["mode"] != "full_ha_dynamic":
+    raise SystemExit("dynamic learner requires a full_ha_dynamic descriptor")
+print(descriptor["resolved_config_path"])
+print(descriptor["descriptor_sha256"])
+print(descriptor["git_commit"])
+print(descriptor["source_fingerprint"])
+print(int(bool(descriptor["git_dirty"])))
+PY
+)
+CONFIG="${descriptor_fields[0]}"
+export FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256="${descriptor_fields[1]}"
+export FS_DILOCO_EXPECTED_GIT_COMMIT="${descriptor_fields[2]}"
+export FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT="${descriptor_fields[3]}"
+EXPECTED_GIT_DIRTY="${descriptor_fields[4]}"
+
+cd "$PROJECT_ROOT"
+readarray -t actual_source < <(
+  "$PYTHON_BIN" - "$PROJECT_ROOT" <<'PY'
+import sys
+
+sys.path.insert(0, sys.argv[1] + "/scripts/miyabi")
+from capture_source_identity import capture
+
+identity = capture(__import__("pathlib").Path(sys.argv[1]))
+print(identity["git_commit"])
+print(identity["source_fingerprint"])
+print(int(identity["git_dirty"]))
+PY
+)
+test "${actual_source[0]}" = "$FS_DILOCO_EXPECTED_GIT_COMMIT"
+test "${actual_source[1]}" = "$FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT"
+test "${actual_source[2]}" = "$EXPECTED_GIT_DIRTY"
+export FS_DILOCO_GIT_COMMIT="$FS_DILOCO_EXPECTED_GIT_COMMIT"
+export FS_DILOCO_SOURCE_FINGERPRINT="$FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT"
+export FS_DILOCO_GIT_DIRTY="$EXPECTED_GIT_DIRTY"
+export FS_DILOCO_REQUIRE_SOURCE_IDENTITY=1
+
+authorization=()
+if [[ -n "${FS_DILOCO_LAUNCH_REQUEST_ID:-}" ]]; then
+  authorization=(--launch-request-id "$FS_DILOCO_LAUNCH_REQUEST_ID")
+elif [[ -n "${PBS_ARRAY_INDEX:-}" ]]; then
+  authorization=(--bootstrap-slot "$PBS_ARRAY_INDEX")
+elif [[ -n "${BOOTSTRAP_SLOT:-}" ]]; then
+  authorization=(--bootstrap-slot "$BOOTSTRAP_SLOT")
+else
+  echo "FS_DILOCO_LAUNCH_REQUEST_ID, PBS_ARRAY_INDEX, or BOOTSTRAP_SLOT is required" >&2
+  exit 2
+fi
+
+learner_command=(
+  "$PYTHON_BIN" -m fs_diloco.learner
+  --config "$CONFIG"
+  --shared-root "$FS_DILOCO_SHARED_ROOT"
+  "${authorization[@]}"
+)
+
+if [[ -z "${FS_DILOCO_TEST_TERMINATE_AFTER_SECONDS:-}" && \
+      -z "${FS_DILOCO_TEST_PAUSE_AFTER_SECONDS:-}" ]]; then
+  exec "${learner_command[@]}"
+fi
+
+"${learner_command[@]}" &
+learner_pid=$!
+helper_pids=()
+
+if [[ -n "${FS_DILOCO_TEST_TERMINATE_AFTER_SECONDS:-}" ]]; then
+  (
+    sleep "$FS_DILOCO_TEST_TERMINATE_AFTER_SECONDS"
+    kill -TERM "$learner_pid" 2>/dev/null || true
+  ) &
+  helper_pids+=("$!")
+fi
+
+if [[ -n "${FS_DILOCO_TEST_PAUSE_AFTER_SECONDS:-}" ]]; then
+  : "${FS_DILOCO_TEST_PAUSE_DURATION_SECONDS:?pause duration is required}"
+  (
+    sleep "$FS_DILOCO_TEST_PAUSE_AFTER_SECONDS"
+    if kill -STOP "$learner_pid" 2>/dev/null; then
+      sleep "$FS_DILOCO_TEST_PAUSE_DURATION_SECONDS"
+      kill -CONT "$learner_pid" 2>/dev/null || true
+    fi
+  ) &
+  helper_pids+=("$!")
+fi
+
+set +e
+wait "$learner_pid"
+learner_status=$?
+set -e
+for helper_pid in "${helper_pids[@]}"; do
+  kill "$helper_pid" 2>/dev/null || true
+  wait "$helper_pid" 2>/dev/null || true
+done
+exit "$learner_status"

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import sqlite3
 import threading
@@ -277,6 +279,9 @@ class FencedSQLiteStore:
         self._wall_clock = wall_clock
         self.gc_grace_seconds = float(gc_grace_seconds)
         self.max_retained_epoch_dirs = int(max_retained_epoch_dirs)
+        self.run_id = str(identity_payload["run_id"])
+        self.config_sha256 = str(identity_payload["config_sha256"])
+        self.dynamic_mode = str(identity_payload["mode"]) == "full_dynamic"
 
     @property
     def conn(self) -> None:
@@ -312,6 +317,240 @@ class FencedSQLiteStore:
             "SELECT * FROM terminal_state WHERE singleton = 1"
         ).fetchone()
         return None if row is None else dict(row)
+
+    def current_instances(self) -> list[dict[str, Any]]:
+        rows = self._connection.execute(
+            """
+            SELECT * FROM learner_instances
+            WHERE status IN ('admitted', 'draining', 'drained')
+            ORDER BY stream_id, instance_id
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def streams(self) -> list[dict[str, Any]]:
+        rows = self._connection.execute("SELECT * FROM streams ORDER BY stream_id").fetchall()
+        return [dict(row) for row in rows]
+
+    def launch_requests(self, *, active_only: bool = False) -> list[dict[str, Any]]:
+        where = (
+            "WHERE state IN ('planned','submitting','submitted','started',"
+            "'external_submitted','submission_unknown','retryable')"
+            if active_only
+            else ""
+        )
+        rows = self._connection.execute(
+            f"SELECT * FROM launch_requests {where} ORDER BY created_at, request_id"
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def registration_requests(self, *, unresolved_only: bool = False) -> list[dict[str, Any]]:
+        where = "WHERE state='pending'" if unresolved_only else ""
+        rows = self._connection.execute(
+            f"SELECT * FROM registration_requests {where} ORDER BY created_at, instance_id"
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def capacity_observations(self) -> list[dict[str, Any]]:
+        rows = self._connection.execute(
+            "SELECT * FROM capacity_observations ORDER BY observation_seq"
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def dynamic_state_counts(self) -> dict[str, int]:
+        if not self.dynamic_mode:
+            return {}
+        return {
+            "current_instances": int(
+                self._connection.execute(
+                    """
+                    SELECT COUNT(*) FROM learner_instances
+                    WHERE status IN ('admitted','draining','drained')
+                    """
+                ).fetchone()[0]
+            ),
+            "registration_requests": int(
+                self._connection.execute(
+                    "SELECT COUNT(*) FROM registration_requests WHERE state='pending'"
+                ).fetchone()[0]
+            ),
+            "active_launch_requests": int(
+                self._connection.execute(
+                    """
+                    SELECT COUNT(*) FROM launch_requests
+                    WHERE state IN ('planned','submitting','submitted','started',
+                                    'external_submitted','submission_unknown','retryable')
+                    """
+                ).fetchone()[0]
+            ),
+            "capacity_observations": int(
+                self._connection.execute("SELECT COUNT(*) FROM capacity_observations").fetchone()[0]
+            ),
+        }
+
+    def dynamic_history_to_archive(
+        self,
+        *,
+        now: float,
+        expired_retention_seconds: float,
+        max_active_instance_records: int,
+        capacity_observation_retention_count: int,
+    ) -> dict[str, list[dict[str, Any]]]:
+        cutoff = float(now) - float(expired_retention_seconds)
+        excess_instances = max(
+            0,
+            int(
+                self._connection.execute("SELECT COUNT(*) FROM learner_instances").fetchone()[0]
+            )
+            - int(max_active_instance_records),
+        )
+        terminal_instances = self._connection.execute(
+            """
+            SELECT * FROM learner_instances AS li
+            WHERE li.status IN ('revoked','stopped','expired')
+              AND NOT EXISTS (
+                  SELECT 1 FROM updates AS u
+                  WHERE u.learner_instance_id=li.instance_id
+              )
+            ORDER BY COALESCE(expired_at, stopped_at, last_seen, registered_at), instance_id
+            """
+        ).fetchall()
+        instances = [
+            row
+            for index, row in enumerate(terminal_instances)
+            if index < excess_instances
+            or float(
+                row["expired_at"]
+                or row["stopped_at"]
+                or row["last_seen"]
+                or row["registered_at"]
+            )
+            <= cutoff
+        ]
+        registrations_all = self._connection.execute(
+            """
+            SELECT * FROM registration_requests
+            WHERE state IN ('admitted','rejected','expired','capacity_fulfilled')
+            ORDER BY created_at, instance_id
+            """
+        ).fetchall()
+        excess_registrations = max(
+            0,
+            len(registrations_all) - max(1, 2 * int(max_active_instance_records)),
+        )
+        registrations = [
+            row
+            for index, row in enumerate(registrations_all)
+            if index < excess_registrations
+            or float(row["expires_at"] or row["created_at"]) <= cutoff
+        ]
+        launches = self._connection.execute(
+            """
+            SELECT * FROM launch_requests
+            WHERE state IN ('completed','failed','expired','cancelled','capacity_fulfilled')
+              AND reason != 'bootstrap'
+              AND updated_at <= ?
+            ORDER BY updated_at, request_id
+            """,
+            (cutoff,),
+        ).fetchall()
+        observations = self._connection.execute(
+            """
+            SELECT * FROM capacity_observations
+            WHERE observation_seq <= (
+                SELECT COALESCE(MAX(observation_seq), 0) - ? FROM capacity_observations
+            )
+            ORDER BY observation_seq
+            """,
+            (int(capacity_observation_retention_count),),
+        ).fetchall()
+        registration_ids = {
+            str(row["instance_id"]) for row in (*instances, *registrations)
+        }
+        registration_publications: list[sqlite3.Row] = []
+        for instance_id in sorted(registration_ids):
+            registration_publications.extend(
+                self._connection.execute(
+                    """
+                    SELECT * FROM control_publications
+                    WHERE kind=?
+                    ORDER BY published_by_epoch, logical_generation
+                    """,
+                    (f"registration:{instance_id}",),
+                ).fetchall()
+            )
+        return {
+            "learner_instances": [dict(row) for row in instances],
+            "registration_requests": [dict(row) for row in registrations],
+            "launch_requests": [dict(row) for row in launches],
+            "capacity_observations": [dict(row) for row in observations],
+            "registration_publications": [
+                dict(row) for row in registration_publications
+            ],
+        }
+
+    def delete_archived_dynamic_history(
+        self,
+        token: LeaderToken,
+        *,
+        instance_ids: list[str],
+        registration_instance_ids: list[str],
+        launch_request_ids: list[str],
+        observation_keys: list[str],
+        registration_publication_kinds: list[str] = (),
+    ) -> None:
+        def operation(conn: _FencedConnection) -> None:
+            for instance_id in instance_ids:
+                row = conn.execute(
+                    "SELECT status FROM learner_instances WHERE instance_id=?",
+                    (instance_id,),
+                ).fetchone()
+                if row is None:
+                    continue
+                if str(row["status"]) not in {"revoked", "stopped", "expired"}:
+                    raise RuntimeError("cannot archive a current learner instance")
+                referenced = conn.execute(
+                    "SELECT 1 FROM updates WHERE learner_instance_id=? LIMIT 1",
+                    (instance_id,),
+                ).fetchone()
+                if referenced is not None:
+                    raise RuntimeError("cannot archive an instance referenced by an update")
+                conn.execute(
+                    "DELETE FROM learner_instances WHERE instance_id=?", (instance_id,)
+                )
+                conn.execute(
+                    "DELETE FROM proposal_frontiers WHERE learner_id=?", (instance_id,)
+                )
+            for instance_id in registration_instance_ids:
+                conn.execute(
+                    """
+                    DELETE FROM registration_requests
+                    WHERE instance_id=?
+                      AND state IN ('admitted','rejected','expired','capacity_fulfilled')
+                    """,
+                    (instance_id,),
+                )
+            for request_id in launch_request_ids:
+                conn.execute(
+                    """
+                    DELETE FROM launch_requests
+                    WHERE request_id=?
+                      AND state IN ('completed','failed','expired','cancelled','capacity_fulfilled')
+                    """,
+                    (request_id,),
+                )
+            for observation_key in observation_keys:
+                conn.execute(
+                    "DELETE FROM capacity_observations WHERE observation_key=?",
+                    (observation_key,),
+                )
+            for kind in registration_publication_kinds:
+                conn.execute(
+                    "DELETE FROM control_publications WHERE kind=?",
+                    (kind,),
+                )
+
+        self._transaction(token, operation)
 
     def archivable_ha_history(self, *, before_epoch: int) -> dict[str, Any]:
         epochs = self._connection.execute(
@@ -481,6 +720,7 @@ class FencedSQLiteStore:
             publication_id=publication_id,
             weight_size_bytes=weight_size_bytes,
             optim_size_bytes=optim_size_bytes,
+            require_membership_fence=self.dynamic_mode,
             **kwargs,
         )
 
@@ -499,11 +739,1679 @@ class FencedSQLiteStore:
     def insert_update_metadata(
         self, token: LeaderToken, metadata: dict[str, Any], **kwargs: Any
     ) -> bool:
+        if self.dynamic_mode:
+            return bool(
+                self._mutate(
+                    token,
+                    "insert_update_metadata",
+                    metadata,
+                    require_membership_fence=True,
+                    **kwargs,
+                )
+            )
         return bool(self._mutate(token, "insert_update_metadata", metadata, **kwargs))
+
+    def initialize_dynamic_membership(
+        self,
+        token: LeaderToken,
+        *,
+        stream_pool_size: int,
+        bootstrap_instances: int,
+        config_fingerprint: str,
+        created_at: float | None = None,
+    ) -> list[dict[str, Any]]:
+        if not self.dynamic_mode:
+            raise RuntimeError("dynamic membership requires schema v3")
+        timestamp = self._wall_clock() if created_at is None else float(created_at)
+
+        def operation(conn: _FencedConnection) -> list[dict[str, Any]]:
+            state_row = conn.execute(
+                "SELECT value FROM run_state WHERE key='stream_pool_size'"
+            ).fetchone()
+            if state_row is not None and int(json.loads(state_row["value"])) != int(
+                stream_pool_size
+            ):
+                raise RuntimeError("stream_pool_size is immutable after initialization")
+            if state_row is None:
+                conn.execute(
+                    "INSERT INTO run_state(key, value, updated_at) VALUES (?, ?, ?)",
+                    ("stream_pool_size", json.dumps(int(stream_pool_size)), timestamp),
+                )
+                conn.execute(
+                    "INSERT INTO run_state(key, value, updated_at) VALUES (?, ?, ?)",
+                    ("dynamic_initialized_at", json.dumps(timestamp), timestamp),
+                )
+                conn.execute(
+                    "INSERT INTO run_state(key, value, updated_at) VALUES (?, ?, ?)",
+                    ("consecutive_low_count", json.dumps(0), timestamp),
+                )
+                conn.execute(
+                    "INSERT INTO run_state(key, value, updated_at) VALUES (?, ?, ?)",
+                    (
+                        "dynamic_config_fingerprint",
+                        json.dumps(config_fingerprint),
+                        timestamp,
+                    ),
+                )
+            fingerprint_row = conn.execute(
+                "SELECT value FROM run_state WHERE key='dynamic_config_fingerprint'"
+            ).fetchone()
+            if (
+                fingerprint_row is None
+                or str(json.loads(fingerprint_row["value"])) != config_fingerprint
+            ):
+                raise RuntimeError("dynamic config fingerprint is immutable")
+            admission_max = int(
+                conn.execute(
+                    "SELECT COALESCE(MAX(admission_generation), 0) FROM learner_instances"
+                ).fetchone()[0]
+            )
+            scale_count = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM launch_requests WHERE reason='scale_out'"
+                ).fetchone()[0]
+            )
+            for key, value in (
+                ("admission_generation", admission_max),
+                ("scale_launch_request_count", scale_count),
+            ):
+                conn.execute(
+                    "INSERT INTO run_state(key, value, updated_at) VALUES (?, ?, ?) "
+                    "ON CONFLICT(key) DO NOTHING",
+                    (key, json.dumps(value), timestamp),
+                )
+            for stream_id in range(int(stream_pool_size)):
+                conn.execute(
+                    """
+                    INSERT INTO streams(
+                        stream_id, current_stream_epoch, current_instance_id, state, updated_at
+                    ) VALUES (?, 0, NULL, 'free', ?)
+                    ON CONFLICT(stream_id) DO NOTHING
+                    """,
+                    (stream_id, timestamp),
+                )
+            actual_streams = int(conn.execute("SELECT COUNT(*) FROM streams").fetchone()[0])
+            if actual_streams != int(stream_pool_size):
+                raise RuntimeError("stream table does not match the immutable pool size")
+            controller = conn.execute(
+                "SELECT * FROM controller_state WHERE singleton=1"
+            ).fetchone()
+            if controller is None:
+                conn.execute(
+                    """
+                    INSERT INTO controller_state(
+                        singleton, state, generation, reason, requested_at,
+                        max_terminal_version, updated_by_epoch, updated_by_owner_id
+                    ) VALUES (1, 'open', 0, NULL, ?, NULL, ?, ?)
+                    """,
+                    (timestamp, token.epoch, token.owner_id),
+                )
+            for slot in range(int(bootstrap_instances)):
+                encoded = json.dumps(
+                    [self.run_id, "bootstrap", slot, config_fingerprint],
+                    separators=(",", ":"),
+                ).encode("utf-8")
+                request_id = hashlib.sha256(encoded).hexdigest()
+                conn.execute(
+                    """
+                    INSERT INTO launch_requests(
+                        request_id, observation_key, bootstrap_slot, role, reason,
+                        requested_by_epoch, state, created_at, updated_at, not_before,
+                        submission_attempts, expires_at
+                    ) VALUES (?, NULL, ?, 'learner', 'bootstrap', ?,
+                              'external_submitted', ?, ?, ?, 0, NULL)
+                    ON CONFLICT(request_id) DO NOTHING
+                    """,
+                    (request_id, slot, token.epoch, timestamp, timestamp, timestamp),
+                )
+            rows = conn.execute(
+                """
+                SELECT * FROM launch_requests WHERE reason='bootstrap'
+                ORDER BY bootstrap_slot
+                """
+            ).fetchall()
+            if len(rows) != int(bootstrap_instances):
+                raise RuntimeError("bootstrap request set does not match configured slots")
+            return [dict(row) for row in rows]
+
+        return self._transaction(token, operation)
+
+    def reject_registration(
+        self,
+        token: LeaderToken,
+        *,
+        instance_id: str,
+        request_sha256: str,
+        launch_request_id: str | None,
+        placement_id: str,
+        created_at: float,
+        expires_at: float,
+        reason: str,
+    ) -> dict[str, Any]:
+        def operation(conn: _FencedConnection) -> dict[str, Any]:
+            existing = conn.execute(
+                "SELECT * FROM registration_requests WHERE instance_id=?", (instance_id,)
+            ).fetchone()
+            if existing is not None and str(existing["request_sha256"]) != request_sha256:
+                # Never replace an already published canonical decision with a
+                # result derived from conflicting replay content.
+                result_json = existing["result_json"]
+                if result_json:
+                    result = json.loads(result_json)
+                    result["_preserve_existing_publication"] = True
+                    return result
+                if str(existing["state"]) == "admitted":
+                    instance = conn.execute(
+                        "SELECT * FROM learner_instances WHERE instance_id=?",
+                        (instance_id,),
+                    ).fetchone()
+                    if instance is not None:
+                        result = self._admission_result(
+                            dict(instance),
+                            request_sha256=str(existing["request_sha256"]),
+                        )
+                        result["_preserve_existing_publication"] = True
+                        return result
+                result = {
+                    "instance_id": instance_id,
+                    "placement_id": str(existing["placement_id"]),
+                    "launch_request_id": existing["launch_request_id"],
+                    "state": str(existing["state"]),
+                    "rejection_reason": existing["rejection_reason"],
+                }
+                result["_preserve_existing_publication"] = True
+                return result
+            state = "expired" if "expired" in reason.lower() else "rejected"
+            result = {
+                "instance_id": instance_id,
+                "placement_id": placement_id,
+                "launch_request_id": launch_request_id,
+                "state": state,
+                "rejection_reason": reason,
+            }
+            conn.execute(
+                """
+                INSERT INTO registration_requests(
+                    instance_id, request_sha256, launch_request_id, placement_id,
+                    state, created_at, expires_at, processed_by_epoch,
+                    rejection_reason, result_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(instance_id) DO UPDATE SET
+                    state=excluded.state,
+                    processed_by_epoch=excluded.processed_by_epoch,
+                    rejection_reason=excluded.rejection_reason,
+                    result_json=excluded.result_json
+                """,
+                (
+                    instance_id,
+                    request_sha256,
+                    launch_request_id,
+                    placement_id,
+                    state,
+                    float(created_at),
+                    float(expires_at),
+                    token.epoch,
+                    reason,
+                    json.dumps(result, sort_keys=True),
+                ),
+            )
+            return result
+
+        return self._transaction(token, operation)
+
+    def record_external_launch_jobs(
+        self,
+        token: LeaderToken,
+        jobs: list[dict[str, Any]],
+        *,
+        observed_at: float | None = None,
+    ) -> int:
+        """Bind externally submitted bootstrap requests to durable PBS job IDs."""
+
+        if not self.dynamic_mode:
+            raise RuntimeError("external launch reconciliation requires schema v3")
+        timestamp = self._wall_clock() if observed_at is None else float(observed_at)
+
+        def operation(conn: _FencedConnection) -> int:
+            changed = 0
+            for job in jobs:
+                request_id = str(job["request_id"])
+                bootstrap_slot = int(job["bootstrap_slot"])
+                pbs_job_id = str(job["pbs_job_id"])
+                launch = conn.execute(
+                    "SELECT * FROM launch_requests WHERE request_id=?",
+                    (request_id,),
+                ).fetchone()
+                if (
+                    launch is None
+                    or str(launch["reason"]) != "bootstrap"
+                    or int(launch["bootstrap_slot"]) != bootstrap_slot
+                ):
+                    raise RuntimeError("bootstrap scheduler receipt has no matching request")
+                existing_job_id = launch["pbs_job_id"]
+                if existing_job_id is not None and str(existing_job_id) != pbs_job_id:
+                    raise RuntimeError("bootstrap launch request changed PBS job identity")
+                if str(launch["state"]) in {
+                    "failed",
+                    "expired",
+                    "cancelled",
+                    "capacity_fulfilled",
+                    "completed",
+                }:
+                    continue
+                cursor = conn.execute(
+                    """
+                    UPDATE launch_requests
+                    SET pbs_job_id=COALESCE(pbs_job_id, ?),
+                        scheduler_state=COALESCE(scheduler_state, 'submitted'),
+                        scheduler_observed_at=COALESCE(scheduler_observed_at, ?),
+                        updated_at=MAX(updated_at, ?)
+                    WHERE request_id=?
+                    """,
+                    (pbs_job_id, timestamp, timestamp, request_id),
+                )
+                changed += int(cursor.rowcount)
+            return changed
+
+        return int(self._transaction(token, operation))
+
+    def admit_registration(
+        self,
+        token: LeaderToken,
+        request: dict[str, Any],
+        *,
+        stream_pool_size: int,
+        desired_contributors: int,
+        allow_unsolicited_registration: bool,
+        allow_healthy_placement_replacement: bool,
+        reuse_stream_for_same_placement: bool,
+        now: float | None = None,
+    ) -> dict[str, Any]:
+        if not self.dynamic_mode:
+            raise RuntimeError("dynamic registration requires schema v3")
+        timestamp = self._wall_clock() if now is None else float(now)
+        instance_id = str(request["instance_id"])
+        placement_id = str(request["placement_id"])
+        launch_request_id = str(request.get("launch_request_id") or "")
+        request_sha256 = str(request["request_sha256"])
+
+        def operation(conn: _FencedConnection) -> dict[str, Any]:
+            existing_request = conn.execute(
+                "SELECT * FROM registration_requests WHERE instance_id=?", (instance_id,)
+            ).fetchone()
+            if existing_request is not None:
+                if str(existing_request["request_sha256"]) != request_sha256:
+                    raise RuntimeError("registration replay changed its request checksum")
+                if existing_request["state"] == "admitted":
+                    row = conn.execute(
+                        "SELECT * FROM learner_instances WHERE instance_id=?", (instance_id,)
+                    ).fetchone()
+                    if row is None:
+                        raise RuntimeError("admitted registration lost its instance row")
+                    return self._admission_result(dict(row), request_sha256=request_sha256)
+                if existing_request["state"] in {
+                    "rejected",
+                    "expired",
+                    "capacity_fulfilled",
+                }:
+                    result_json = existing_request["result_json"]
+                    return json.loads(result_json) if result_json else {
+                        "instance_id": instance_id,
+                        "state": str(existing_request["state"]),
+                    }
+            if timestamp > float(request["expires_at"]):
+                raise RuntimeError("registration request expired")
+            controller = conn.execute(
+                "SELECT * FROM controller_state WHERE singleton=1"
+            ).fetchone()
+            if controller is None or str(controller["state"]) != "open":
+                raise RuntimeError("dynamic admission is closed")
+            launch = None
+            if launch_request_id:
+                launch = conn.execute(
+                    "SELECT * FROM launch_requests WHERE request_id=?", (launch_request_id,)
+                ).fetchone()
+            if launch is None and not allow_unsolicited_registration:
+                raise RuntimeError("registration has no authorized launch request")
+            if launch is not None:
+                if launch["admitted_instance_id"] is not None:
+                    if str(launch["admitted_instance_id"]) != instance_id:
+                        raise RuntimeError("logical launch request already admitted another instance")
+                launch_job_id = launch["pbs_job_id"]
+                request_job_id = request.get("pbs_job_id")
+                if (
+                    launch_job_id is not None
+                    and str(request_job_id or "") != str(launch_job_id)
+                ):
+                    raise RuntimeError("registration PBS job does not match launch request")
+                if str(launch["state"]) in {
+                    "failed",
+                    "expired",
+                    "cancelled",
+                    "capacity_fulfilled",
+                    "completed",
+                }:
+                    raise RuntimeError(f"launch request is terminal: {launch['state']}")
+            current_count = int(
+                conn.execute(
+                    """
+                    SELECT COUNT(*) FROM learner_instances
+                    WHERE status IN ('admitted','draining','drained')
+                    """
+                ).fetchone()[0]
+            )
+            reserved_states = (
+                "planned",
+                "submitting",
+                "submitted",
+                "started",
+                "external_submitted",
+                "submission_unknown",
+                "retryable",
+            )
+            placeholders = ",".join("?" for _ in reserved_states)
+            reserved = int(
+                conn.execute(
+                    f"""
+                    SELECT COUNT(*) FROM launch_requests
+                    WHERE state IN ({placeholders}) AND admitted_instance_id IS NULL
+                      AND request_id != ?
+                    """,
+                    (*reserved_states, launch_request_id),
+                ).fetchone()[0]
+            )
+            if launch is not None and str(launch["reason"]) not in {
+                "bootstrap",
+                "operator_replacement",
+            } and (
+                current_count >= int(desired_contributors)
+                or current_count + reserved >= int(desired_contributors)
+                or current_count + reserved >= int(stream_pool_size)
+            ):
+                result = {
+                    "instance_id": instance_id,
+                    "placement_id": placement_id,
+                    "launch_request_id": launch_request_id,
+                    "state": "capacity_fulfilled",
+                    "rejection_reason": "current or reserved capacity already satisfies the request",
+                }
+                conn.execute(
+                    """
+                    UPDATE launch_requests SET state='capacity_fulfilled', updated_at=?,
+                        reservation_released_at=? WHERE request_id=?
+                    """,
+                    (timestamp, timestamp, launch_request_id),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO registration_requests(
+                        instance_id, request_sha256, launch_request_id, placement_id,
+                        state, created_at, expires_at, processed_by_epoch,
+                        rejection_reason, result_json
+                    ) VALUES (?, ?, ?, ?, 'capacity_fulfilled', ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        instance_id,
+                        request_sha256,
+                        launch_request_id,
+                        placement_id,
+                        float(request["created_at"]),
+                        float(request["expires_at"]),
+                        token.epoch,
+                        result["rejection_reason"],
+                        json.dumps(result, sort_keys=True),
+                    ),
+                )
+                return result
+            replacement_request = (
+                launch is not None
+                and str(launch["reason"]) == "operator_replacement"
+            )
+            if current_count >= int(stream_pool_size) and not replacement_request:
+                raise RuntimeError("stream pool is exhausted")
+            placement = conn.execute(
+                "SELECT * FROM placements WHERE placement_id=?", (placement_id,)
+            ).fetchone()
+            previous_instance = None
+            if placement is not None and placement["current_instance_id"] is not None:
+                previous_instance = conn.execute(
+                    "SELECT * FROM learner_instances WHERE instance_id=?",
+                    (placement["current_instance_id"],),
+                ).fetchone()
+            authorized_epoch = None if launch is None else launch["authorized_placement_epoch"]
+            authorized = (
+                authorized_epoch is not None
+                and str(launch["authorized_placement_id"] or "") == placement_id
+                and placement is not None
+                and int(authorized_epoch) == int(placement["current_placement_epoch"]) + 1
+            )
+            if previous_instance is not None and str(previous_instance["status"]) in {
+                "admitted",
+                "draining",
+                "drained",
+            }:
+                if not (authorized or allow_healthy_placement_replacement):
+                    raise RuntimeError("healthy placement replacement is not authorized")
+                conn.execute(
+                    """
+                    UPDATE learner_instances SET status='revoked', expired_at=?,
+                        status_reason='authorized_replacement'
+                    WHERE instance_id=?
+                    """,
+                    (timestamp, previous_instance["instance_id"]),
+                )
+                conn.execute(
+                    """
+                    UPDATE launch_requests SET state='failed', updated_at=?,
+                        reservation_released_at=COALESCE(reservation_released_at, ?),
+                        last_error='instance_replaced'
+                    WHERE admitted_instance_id=? AND state='admitted'
+                    """,
+                    (timestamp, timestamp, previous_instance["instance_id"]),
+                )
+            placement_epoch = (
+                0 if placement is None else int(placement["current_placement_epoch"]) + 1
+            )
+            reusable_stream = None
+            if reuse_stream_for_same_placement and placement is not None:
+                reusable_stream = placement["reusable_stream_id"]
+                if reusable_stream is None and previous_instance is not None:
+                    reusable_stream = previous_instance["stream_id"]
+            stream = None
+            if reusable_stream is not None:
+                stream = conn.execute(
+                    "SELECT * FROM streams WHERE stream_id=?", (int(reusable_stream),)
+                ).fetchone()
+                if stream is not None and stream["current_instance_id"] not in (
+                    None,
+                    None if previous_instance is None else previous_instance["instance_id"],
+                ):
+                    stream = None
+            if stream is None:
+                stream = conn.execute(
+                    """
+                    SELECT * FROM streams WHERE current_instance_id IS NULL OR state='free'
+                    ORDER BY stream_id LIMIT 1
+                    """
+                ).fetchone()
+            if stream is None:
+                raise RuntimeError("stream pool is exhausted")
+            stream_id = int(stream["stream_id"])
+            stream_restarted = str(stream["state"]) != "free" or (
+                placement is not None and reusable_stream == stream_id
+            )
+            stream_epoch = int(stream["current_stream_epoch"]) + int(stream_restarted)
+            generation_row = conn.execute(
+                "SELECT value FROM run_state WHERE key='admission_generation'"
+            ).fetchone()
+            admission_generation = (
+                1
+                if generation_row is None
+                else int(json.loads(generation_row["value"])) + 1
+            )
+            conn.execute(
+                """
+                INSERT INTO run_state(key, value, updated_at) VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value=excluded.value, updated_at=excluded.updated_at
+                """,
+                (
+                    "admission_generation",
+                    json.dumps(admission_generation),
+                    timestamp,
+                ),
+            )
+            admission_token = self._admission_token(instance_id, request_sha256)
+            admission_token_hash = hashlib.sha256(admission_token.encode("utf-8")).hexdigest()
+            conn.execute(
+                """
+                INSERT INTO learner_instances(
+                    instance_id, placement_id, placement_epoch, stream_id, stream_epoch,
+                    admission_generation, admission_token_hash, launch_request_id,
+                    pbs_job_id, hostname, pid, gpu_identity, status, registered_at,
+                    admitted_at, last_seen, admitted_by_epoch, stream_restarted
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'admitted', ?, ?, ?, ?, ?)
+                """,
+                (
+                    instance_id,
+                    placement_id,
+                    placement_epoch,
+                    stream_id,
+                    stream_epoch,
+                    admission_generation,
+                    admission_token_hash,
+                    launch_request_id or None,
+                    request.get("pbs_job_id"),
+                    str(request["hostname"]),
+                    int(request["pid"]),
+                    request.get("gpu_identity"),
+                    timestamp,
+                    timestamp,
+                    timestamp,
+                    token.epoch,
+                    int(stream_restarted),
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO placements(
+                    placement_id, current_placement_epoch, current_instance_id,
+                    reusable_stream_id, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(placement_id) DO UPDATE SET
+                    current_placement_epoch=excluded.current_placement_epoch,
+                    current_instance_id=excluded.current_instance_id,
+                    reusable_stream_id=excluded.reusable_stream_id,
+                    updated_at=excluded.updated_at
+                """,
+                (placement_id, placement_epoch, instance_id, stream_id, timestamp),
+            )
+            conn.execute(
+                """
+                UPDATE streams SET current_stream_epoch=?, current_instance_id=?,
+                    state='assigned', updated_at=? WHERE stream_id=?
+                """,
+                (stream_epoch, instance_id, timestamp, stream_id),
+            )
+            if (
+                previous_instance is not None
+                and int(previous_instance["stream_id"]) != stream_id
+            ):
+                conn.execute(
+                    """
+                    UPDATE streams SET current_instance_id=NULL, state='reusable', updated_at=?
+                    WHERE stream_id=? AND current_instance_id=?
+                    """,
+                    (
+                        timestamp,
+                        int(previous_instance["stream_id"]),
+                        previous_instance["instance_id"],
+                    ),
+                )
+            if launch is not None:
+                conn.execute(
+                    """
+                    UPDATE launch_requests SET state='admitted', updated_at=?,
+                        admitted_instance_id=?, pbs_job_id=COALESCE(pbs_job_id, ?)
+                    WHERE request_id=?
+                    """,
+                    (
+                        timestamp,
+                        instance_id,
+                        request.get("pbs_job_id"),
+                        launch_request_id,
+                    ),
+                )
+            row = conn.execute(
+                "SELECT * FROM learner_instances WHERE instance_id=?", (instance_id,)
+            ).fetchone()
+            assert row is not None
+            result = self._admission_result(dict(row), request_sha256=request_sha256)
+            conn.execute(
+                """
+                INSERT INTO registration_requests(
+                    instance_id, request_sha256, launch_request_id, placement_id,
+                    state, created_at, expires_at, processed_by_epoch,
+                    rejection_reason, result_json
+                ) VALUES (?, ?, ?, ?, 'admitted', ?, ?, ?, NULL, ?)
+                """,
+                (
+                    instance_id,
+                    request_sha256,
+                    launch_request_id or None,
+                    placement_id,
+                    float(request["created_at"]),
+                    float(request["expires_at"]),
+                    token.epoch,
+                    json.dumps({key: value for key, value in result.items() if key != "admission_token"}, sort_keys=True),
+                ),
+            )
+            return result
+
+        return self._transaction(token, operation)
+
+    def authorize_placement_replacement(
+        self,
+        token: LeaderToken,
+        *,
+        placement_id: str,
+        reason: str,
+        ttl_seconds: float,
+        now: float | None = None,
+    ) -> dict[str, Any]:
+        if not self.dynamic_mode:
+            raise RuntimeError("dynamic replacement authorization requires schema v3")
+        if not reason:
+            raise ValueError("replacement authorization requires an audit reason")
+        if ttl_seconds <= 0.0:
+            raise ValueError("replacement authorization TTL must be > 0")
+        timestamp = self._wall_clock() if now is None else float(now)
+
+        def operation(conn: _FencedConnection) -> dict[str, Any]:
+            controller = conn.execute(
+                "SELECT * FROM controller_state WHERE singleton=1"
+            ).fetchone()
+            if controller is None or str(controller["state"]) != "open":
+                raise RuntimeError("dynamic admission is closed")
+            placement = conn.execute(
+                "SELECT * FROM placements WHERE placement_id=?", (placement_id,)
+            ).fetchone()
+            if placement is None:
+                raise RuntimeError("replacement placement has no prior incarnation")
+            next_epoch = int(placement["current_placement_epoch"]) + 1
+            encoded = json.dumps(
+                [
+                    self.run_id,
+                    "operator_replacement",
+                    placement_id,
+                    next_epoch,
+                    reason,
+                ],
+                separators=(",", ":"),
+            ).encode("utf-8")
+            request_id = hashlib.sha256(encoded).hexdigest()
+            conn.execute(
+                """
+                INSERT INTO launch_requests(
+                    request_id, observation_key, bootstrap_slot, role, reason,
+                    requested_by_epoch, state, created_at, updated_at, not_before,
+                    submission_attempts, expires_at, authorized_placement_id,
+                    authorized_placement_epoch
+                ) VALUES (?, NULL, NULL, 'learner', 'operator_replacement', ?,
+                          'external_submitted', ?, ?, ?, 0, ?, ?, ?)
+                ON CONFLICT(request_id) DO NOTHING
+                """,
+                (
+                    request_id,
+                    token.epoch,
+                    timestamp,
+                    timestamp,
+                    timestamp,
+                    timestamp + float(ttl_seconds),
+                    placement_id,
+                    next_epoch,
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM launch_requests WHERE request_id=?", (request_id,)
+            ).fetchone()
+            assert row is not None
+            return dict(row)
+
+        return self._transaction(token, operation)
+
+    def _admission_token(self, instance_id: str, request_sha256: str) -> str:
+        encoded = f"{self.run_id}\0{self.config_sha256}\0{instance_id}\0{request_sha256}"
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+    def _admission_result(
+        self, instance: dict[str, Any], *, request_sha256: str
+    ) -> dict[str, Any]:
+        return {
+            "state": "admitted",
+            "instance_id": str(instance["instance_id"]),
+            "placement_id": str(instance["placement_id"]),
+            "placement_epoch": int(instance["placement_epoch"]),
+            "stream_id": int(instance["stream_id"]),
+            "stream_epoch": int(instance["stream_epoch"]),
+            "admission_generation": int(instance["admission_generation"]),
+            "admission_token": self._admission_token(
+                str(instance["instance_id"]), request_sha256
+            ),
+            "launch_request_id": str(instance["launch_request_id"] or ""),
+            "stream_restarted": bool(instance["stream_restarted"]),
+        }
+
+    def _update_instance_heartbeat_row(
+        self,
+        conn: _FencedConnection,
+        payload: dict[str, Any],
+        *,
+        heartbeat_path: str,
+    ) -> bool:
+        instance_id = str(payload["instance_id"])
+        admission_token_hash = hashlib.sha256(
+            str(payload["admission_token"]).encode("utf-8")
+        ).hexdigest()
+        row = conn.execute(
+            """
+            SELECT li.*, p.current_instance_id AS placement_current_instance_id,
+                p.current_placement_epoch, s.current_instance_id AS stream_current_instance_id,
+                s.current_stream_epoch
+            FROM learner_instances AS li
+            JOIN placements AS p ON p.placement_id=li.placement_id
+            JOIN streams AS s ON s.stream_id=li.stream_id
+            WHERE li.instance_id=?
+            """,
+            (instance_id,),
+        ).fetchone()
+        if row is None:
+            return False
+        observed = (
+            str(payload["placement_id"]),
+            int(payload["placement_epoch"]),
+            int(payload["stream_id"]),
+            int(payload["stream_epoch"]),
+            int(payload["admission_generation"]),
+            admission_token_hash,
+        )
+        expected = (
+            str(row["placement_id"]),
+            int(row["placement_epoch"]),
+            int(row["stream_id"]),
+            int(row["stream_epoch"]),
+            int(row["admission_generation"]),
+            str(row["admission_token_hash"]),
+        )
+        if observed != expected:
+            return False
+        if (
+            str(row["placement_current_instance_id"]) != instance_id
+            or int(row["current_placement_epoch"]) != int(row["placement_epoch"])
+            or str(row["stream_current_instance_id"]) != instance_id
+            or int(row["current_stream_epoch"]) != int(row["stream_epoch"])
+        ):
+            return False
+        heartbeat_status = str(payload.get("status") or "active")
+        if heartbeat_status == "drained":
+            controller = conn.execute(
+                "SELECT * FROM controller_state WHERE singleton=1"
+            ).fetchone()
+            if (
+                controller is None
+                or str(controller["state"]) not in {"draining", "closed"}
+                or int(payload.get("close_generation") or -1)
+                != int(controller["generation"])
+            ):
+                return False
+            next_status = "drained"
+        elif heartbeat_status == "stopped":
+            next_status = "stopped"
+        elif str(row["status"]) in {"draining", "drained"}:
+            next_status = str(row["status"])
+        elif str(row["status"]) == "admitted":
+            next_status = "admitted"
+        else:
+            return False
+        conn.execute(
+            """
+            UPDATE learner_instances SET
+                last_seen=?, last_proposal_at=COALESCE(?, last_proposal_at),
+                last_cycle_step_time_seconds_mean=COALESCE(
+                    ?, last_cycle_step_time_seconds_mean
+                ),
+                last_cycle_step_count=COALESCE(?, last_cycle_step_count),
+                drained_generation=COALESCE(?, drained_generation),
+                final_update_id=COALESCE(?, final_update_id),
+                stopped_at=CASE WHEN ?='stopped' THEN ? ELSE stopped_at END,
+                status=?, status_reason=?, pbs_job_id=COALESCE(?, pbs_job_id)
+            WHERE instance_id=?
+            """,
+            (
+                float(payload["timestamp"]),
+                payload.get("last_proposal_at"),
+                payload.get("local_cycle_step_time_seconds_mean"),
+                payload.get("local_cycle_step_count"),
+                payload.get("close_generation"),
+                payload.get("final_update_id"),
+                heartbeat_status,
+                float(payload["timestamp"]),
+                next_status,
+                str(payload.get("status_reason") or heartbeat_path),
+                payload.get("pbs_job_id"),
+                instance_id,
+            ),
+        )
+        if next_status == "stopped":
+            conn.execute(
+                """
+                UPDATE placements SET current_instance_id=NULL,
+                    reusable_stream_id=?, updated_at=?
+                WHERE placement_id=? AND current_instance_id=?
+                """,
+                (
+                    row["stream_id"],
+                    float(payload["timestamp"]),
+                    row["placement_id"],
+                    instance_id,
+                ),
+            )
+            conn.execute(
+                """
+                UPDATE streams SET current_instance_id=NULL, state='reusable', updated_at=?
+                WHERE stream_id=? AND current_instance_id=?
+                """,
+                (float(payload["timestamp"]), row["stream_id"], instance_id),
+            )
+            conn.execute(
+                """
+                UPDATE launch_requests SET state='completed', updated_at=?
+                WHERE admitted_instance_id=? AND state='admitted'
+                """,
+                (float(payload["timestamp"]), instance_id),
+            )
+        return True
+
+    def update_instance_heartbeat(
+        self,
+        token: LeaderToken,
+        payload: dict[str, Any],
+        *,
+        heartbeat_path: str,
+    ) -> bool:
+        if not self.dynamic_mode:
+            raise RuntimeError("dynamic heartbeat requires schema v3")
+
+        def operation(conn: _FencedConnection) -> bool:
+            return self._update_instance_heartbeat_row(
+                conn,
+                payload,
+                heartbeat_path=heartbeat_path,
+            )
+
+        return bool(self._transaction(token, operation))
+
+    def update_instance_heartbeats(
+        self,
+        token: LeaderToken,
+        heartbeats: list[tuple[dict[str, Any], str]],
+    ) -> int:
+        """Ingest one discovery scan under a single fenced transaction."""
+
+        if not self.dynamic_mode:
+            raise RuntimeError("dynamic heartbeat requires schema v3")
+        if not heartbeats:
+            return 0
+
+        def operation(conn: _FencedConnection) -> int:
+            return sum(
+                self._update_instance_heartbeat_row(
+                    conn,
+                    payload,
+                    heartbeat_path=heartbeat_path,
+                )
+                for payload, heartbeat_path in heartbeats
+            )
+
+        return int(self._transaction(token, operation))
+
+    def begin_dynamic_drain(
+        self,
+        token: LeaderToken,
+        *,
+        reason: str,
+        current_version: int,
+        global_target: int | None,
+        max_terminal_merges: int,
+        requested_at: float | None = None,
+    ) -> dict[str, Any]:
+        if not self.dynamic_mode:
+            raise RuntimeError("dynamic drain requires schema v3")
+        timestamp = self._wall_clock() if requested_at is None else float(requested_at)
+
+        def operation(conn: _FencedConnection) -> dict[str, Any]:
+            current = conn.execute(
+                "SELECT * FROM controller_state WHERE singleton=1"
+            ).fetchone()
+            if current is None:
+                raise RuntimeError("dynamic controller state is missing")
+            if str(current["state"]) in {"draining", "closed", "terminal"}:
+                return dict(current)
+            if str(current["state"]) != "open":
+                raise RuntimeError(f"cannot drain controller state {current['state']}")
+            generation = int(current["generation"]) + 1
+            if reason in {"stop_after_outer_steps", "stop_after_global_tokens"}:
+                maximum = (
+                    int(global_target)
+                    if global_target is not None
+                    else int(current_version) + int(max_terminal_merges)
+                )
+            else:
+                requested_maximum = int(current_version) + int(max_terminal_merges)
+                maximum = (
+                    requested_maximum
+                    if global_target is None
+                    else min(int(global_target), requested_maximum)
+                )
+            maximum = max(int(current_version), maximum)
+            conn.execute(
+                """
+                UPDATE controller_state SET state='draining', generation=?, reason=?,
+                    requested_at=?, max_terminal_version=?, updated_by_epoch=?,
+                    updated_by_owner_id=? WHERE singleton=1
+                """,
+                (generation, reason, timestamp, maximum, token.epoch, token.owner_id),
+            )
+            conn.execute(
+                """
+                UPDATE launch_requests SET state='cancelled', updated_at=?,
+                    reservation_released_at=?, last_error='admission_closed'
+                WHERE admitted_instance_id IS NULL
+                  AND state IN ('planned','submitting','submitted','started',
+                                'external_submitted','submission_unknown','retryable')
+                """,
+                (timestamp, timestamp),
+            )
+            conn.execute(
+                """
+                UPDATE learner_instances SET status='draining', status_reason=?
+                WHERE status='admitted'
+                """,
+                (f"drain_generation={generation}",),
+            )
+            conn.execute(
+                "DELETE FROM run_state WHERE key='drain_visibility_started_at'"
+            )
+            row = conn.execute(
+                "SELECT * FROM controller_state WHERE singleton=1"
+            ).fetchone()
+            assert row is not None
+            return dict(row)
+
+        return self._transaction(token, operation)
+
+    def advance_dynamic_drain(
+        self,
+        token: LeaderToken,
+        *,
+        drain_ack_timeout_seconds: float,
+        registration_visibility_grace_seconds: float,
+        proposal_visibility_grace_seconds: float,
+        now: float | None = None,
+    ) -> dict[str, Any]:
+        timestamp = self._wall_clock() if now is None else float(now)
+
+        def operation(conn: _FencedConnection) -> dict[str, Any]:
+            controller = conn.execute(
+                "SELECT * FROM controller_state WHERE singleton=1"
+            ).fetchone()
+            if controller is None or str(controller["state"]) not in {"draining", "closed"}:
+                raise RuntimeError("dynamic drain is not active")
+            generation = int(controller["generation"])
+            requested_at = float(controller["requested_at"])
+            conn.execute(
+                """
+                UPDATE registration_requests SET state='rejected',
+                    processed_by_epoch=?, rejection_reason='admission_closed'
+                WHERE state='pending'
+                """,
+                (token.epoch,),
+            )
+            if timestamp >= requested_at + float(drain_ack_timeout_seconds):
+                stale = conn.execute(
+                    """
+                    SELECT * FROM learner_instances
+                    WHERE status IN ('admitted','draining')
+                    ORDER BY instance_id
+                    """
+                ).fetchall()
+                for instance in stale:
+                    conn.execute(
+                        """
+                        UPDATE learner_instances SET status='revoked', expired_at=?,
+                            status_reason='drain_ack_timeout' WHERE instance_id=?
+                        """,
+                        (timestamp, instance["instance_id"]),
+                    )
+                    conn.execute(
+                        """
+                        UPDATE placements SET current_instance_id=NULL,
+                            reusable_stream_id=?, updated_at=?
+                        WHERE placement_id=? AND current_instance_id=?
+                        """,
+                        (
+                            instance["stream_id"],
+                            timestamp,
+                            instance["placement_id"],
+                            instance["instance_id"],
+                        ),
+                    )
+                    conn.execute(
+                        """
+                            UPDATE streams SET current_instance_id=NULL, state='reusable', updated_at=?
+                        WHERE stream_id=? AND current_instance_id=?
+                        """,
+                        (timestamp, instance["stream_id"], instance["instance_id"]),
+                    )
+            unsettled_instances = int(
+                conn.execute(
+                    """
+                    SELECT COUNT(*) FROM learner_instances
+                    WHERE status IN ('admitted','draining')
+                    """
+                ).fetchone()[0]
+            )
+            active_requests = int(
+                conn.execute(
+                    """
+                    SELECT COUNT(*) FROM launch_requests
+                    WHERE admitted_instance_id IS NULL
+                      AND state IN ('planned','submitting','submitted','started',
+                                    'external_submitted','submission_unknown','retryable')
+                    """
+                ).fetchone()[0]
+            )
+            pending_registrations = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM registration_requests WHERE state='pending'"
+                ).fetchone()[0]
+            )
+            pending_final_pointers = int(
+                conn.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM learner_instances AS li
+                    WHERE li.status='drained'
+                      AND li.final_update_id IS NOT NULL
+                      AND NOT EXISTS (
+                          SELECT 1 FROM proposal_frontiers AS pf
+                          WHERE pf.learner_id=li.instance_id
+                            AND pf.last_observed_update_id=li.final_update_id
+                      )
+                    """
+                ).fetchone()[0]
+            )
+            visibility_started = conn.execute(
+                "SELECT value FROM run_state WHERE key='drain_visibility_started_at'"
+            ).fetchone()
+            settled = (
+                unsettled_instances == 0
+                and active_requests == 0
+                and pending_registrations == 0
+                and pending_final_pointers == 0
+            )
+            conn.execute(
+                """
+                UPDATE launch_requests SET state='completed', updated_at=?
+                WHERE state='admitted' AND admitted_instance_id IN (
+                    SELECT instance_id FROM learner_instances
+                    WHERE status IN ('drained','stopped','revoked','expired')
+                )
+                """,
+                (timestamp,),
+            )
+            if settled and visibility_started is None:
+                conn.execute(
+                    "INSERT INTO run_state(key, value, updated_at) VALUES (?, ?, ?)",
+                    (
+                        "drain_visibility_started_at",
+                        json.dumps(timestamp),
+                        timestamp,
+                    ),
+                )
+                visibility_at = timestamp
+            elif visibility_started is None:
+                visibility_at = None
+            else:
+                visibility_at = float(json.loads(visibility_started["value"]))
+            grace = max(
+                float(registration_visibility_grace_seconds),
+                float(proposal_visibility_grace_seconds),
+            )
+            if (
+                settled
+                and visibility_at is not None
+                and timestamp >= visibility_at + grace
+                and str(controller["state"]) != "closed"
+            ):
+                conn.execute(
+                    """
+                    UPDATE controller_state SET state='closed', updated_by_epoch=?,
+                        updated_by_owner_id=? WHERE singleton=1 AND generation=?
+                    """,
+                    (token.epoch, token.owner_id, generation),
+                )
+            row = conn.execute(
+                "SELECT * FROM controller_state WHERE singleton=1"
+            ).fetchone()
+            assert row is not None
+            result = dict(row)
+            result.update(
+                unsettled_instances=unsettled_instances,
+                active_launch_requests=active_requests,
+                pending_registration_requests=pending_registrations,
+                pending_final_pointers=pending_final_pointers,
+                visibility_started_at=visibility_at,
+                input_closed=(str(row["state"]) == "closed" and settled),
+            )
+            return result
+
+        return self._transaction(token, operation)
+
+    def dynamic_input_closed(self) -> bool:
+        if not self.dynamic_mode:
+            return False
+        controller = self.controller_state()
+        if controller is None or str(controller["state"]) != "closed":
+            return False
+        return (
+            int(
+                self._connection.execute(
+                    """
+                    SELECT COUNT(*) FROM learner_instances
+                    WHERE status IN ('admitted','draining')
+                    """
+                ).fetchone()[0]
+            )
+            == 0
+            and int(
+                self._connection.execute(
+                    "SELECT COUNT(*) FROM registration_requests WHERE state='pending'"
+                ).fetchone()[0]
+            )
+            == 0
+            and int(
+                self._connection.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM learner_instances AS li
+                    WHERE li.status='drained'
+                      AND li.final_update_id IS NOT NULL
+                      AND NOT EXISTS (
+                          SELECT 1 FROM proposal_frontiers AS pf
+                          WHERE pf.learner_id=li.instance_id
+                            AND pf.last_observed_update_id=li.final_update_id
+                      )
+                    """
+                ).fetchone()[0]
+            )
+            == 0
+            and int(
+                self._connection.execute(
+                    """
+                    SELECT COUNT(*) FROM launch_requests
+                    WHERE admitted_instance_id IS NULL
+                      AND state IN ('planned','submitting','submitted','started',
+                                    'external_submitted','submission_unknown','retryable')
+                    """
+                ).fetchone()[0]
+            )
+            == 0
+        )
+
+    def revoke_dead_instances(
+        self,
+        token: LeaderToken,
+        *,
+        heartbeat_dead_after_seconds: float,
+        now: float | None = None,
+    ) -> list[dict[str, Any]]:
+        timestamp = self._wall_clock() if now is None else float(now)
+
+        def operation(conn: _FencedConnection) -> list[dict[str, Any]]:
+            rows = conn.execute(
+                """
+                SELECT * FROM learner_instances
+                WHERE status='admitted'
+                  AND ? - COALESCE(last_seen, admitted_at) > ?
+                ORDER BY instance_id
+                """,
+                (timestamp, float(heartbeat_dead_after_seconds)),
+            ).fetchall()
+            revoked: list[dict[str, Any]] = []
+            for row in rows:
+                conn.execute(
+                    """
+                    UPDATE learner_instances SET status='revoked', expired_at=?,
+                        status_reason='heartbeat_dead'
+                    WHERE instance_id=? AND status='admitted'
+                    """,
+                    (timestamp, row["instance_id"]),
+                )
+                conn.execute(
+                    """
+                    UPDATE placements SET current_instance_id=NULL,
+                        reusable_stream_id=?, updated_at=?
+                    WHERE placement_id=? AND current_instance_id=?
+                    """,
+                    (
+                        row["stream_id"],
+                        timestamp,
+                        row["placement_id"],
+                        row["instance_id"],
+                    ),
+                )
+                conn.execute(
+                    """
+                    UPDATE streams SET current_instance_id=NULL, state='reusable', updated_at=?
+                    WHERE stream_id=? AND current_instance_id=?
+                    """,
+                    (timestamp, row["stream_id"], row["instance_id"]),
+                )
+                conn.execute(
+                    """
+                    UPDATE launch_requests SET state='failed', updated_at=?,
+                        reservation_released_at=?, last_error='heartbeat_dead'
+                    WHERE admitted_instance_id=? AND state='admitted'
+                    """,
+                    (timestamp, timestamp, row["instance_id"]),
+                )
+                revoked.append(dict(row))
+            return revoked
+
+        return self._transaction(token, operation)
+
+    def record_capacity_observation(
+        self,
+        token: LeaderToken,
+        *,
+        observation_key: str,
+        kind: str,
+        global_version: int,
+        eligible_contributors: int,
+        selected_instance_ids: list[str],
+        low_contributor_threshold: int,
+        consecutive_low_windows: int,
+        productive_window_count: int,
+        startup_grace_seconds: float,
+        heartbeat_stale_after_seconds: float,
+        productive_upload_grace_factor: float,
+        productive_upload_grace_min_seconds: float,
+        productive_upload_grace_max_seconds: float,
+        desired_contributors: int,
+        stream_pool_size: int,
+        scaling_enabled: bool,
+        initial_membership_deadline_seconds: float,
+        cooldown_seconds: float,
+        max_pending_launch_requests: int,
+        max_total_launch_requests: int,
+        launch_request_ttl_seconds: float,
+        config_fingerprint: str,
+        now: float | None = None,
+    ) -> dict[str, Any]:
+        if not self.dynamic_mode:
+            raise RuntimeError("capacity observations require schema v3")
+        timestamp = self._wall_clock() if now is None else float(now)
+
+        def operation(conn: _FencedConnection) -> dict[str, Any]:
+            existing = conn.execute(
+                "SELECT * FROM capacity_observations WHERE observation_key=?",
+                (observation_key,),
+            ).fetchone()
+            if existing is not None:
+                request = conn.execute(
+                    "SELECT * FROM launch_requests WHERE observation_key=?",
+                    (observation_key,),
+                ).fetchone()
+                return {
+                    "inserted": False,
+                    "observation": dict(existing),
+                    "launch_request": None if request is None else dict(request),
+                }
+            observation_seq = int(
+                conn.execute(
+                    "SELECT COALESCE(MAX(observation_seq), 0) + 1 FROM capacity_observations"
+                ).fetchone()[0]
+            )
+            reserved_states = (
+                "planned",
+                "submitting",
+                "submitted",
+                "started",
+                "external_submitted",
+                "submission_unknown",
+                "retryable",
+            )
+            placeholders = ",".join("?" for _ in reserved_states)
+            reserved = int(
+                conn.execute(
+                    f"""
+                    SELECT COUNT(*) FROM launch_requests
+                    WHERE state IN ({placeholders}) AND admitted_instance_id IS NULL
+                    """,
+                    reserved_states,
+                ).fetchone()[0]
+            )
+            instances = conn.execute(
+                """
+                SELECT * FROM learner_instances
+                WHERE status IN ('admitted','draining','drained')
+                ORDER BY instance_id
+                """
+            ).fetchall()
+            productive = 0
+            for instance in instances:
+                recent = (
+                    instance["last_contributed_observation_seq"] is not None
+                    and int(instance["last_contributed_observation_seq"])
+                    >= max(1, observation_seq - int(productive_window_count))
+                )
+                startup = timestamp - float(instance["admitted_at"]) <= float(
+                    startup_grace_seconds
+                )
+                heartbeat_fresh = (
+                    instance["last_seen"] is not None
+                    and timestamp - float(instance["last_seen"])
+                    <= float(heartbeat_stale_after_seconds)
+                )
+                upload_fresh = False
+                if (
+                    heartbeat_fresh
+                    and instance["last_proposal_at"] is not None
+                    and instance["last_cycle_step_time_seconds_mean"] is not None
+                    and instance["last_cycle_step_count"] is not None
+                ):
+                    grace = float(instance["last_cycle_step_time_seconds_mean"]) * max(
+                        1, int(instance["last_cycle_step_count"])
+                    ) * float(productive_upload_grace_factor)
+                    grace = min(
+                        float(productive_upload_grace_max_seconds),
+                        max(float(productive_upload_grace_min_seconds), grace),
+                    )
+                    upload_fresh = timestamp - float(instance["last_proposal_at"]) <= grace
+                productive += int(recent or startup or upload_fresh)
+            low_capacity = int(int(eligible_contributors) <= int(low_contributor_threshold))
+            low_row = conn.execute(
+                "SELECT value FROM run_state WHERE key='consecutive_low_count'"
+            ).fetchone()
+            previous_low = 0 if low_row is None else int(json.loads(low_row["value"]))
+            consecutive_low = previous_low + 1 if low_capacity else 0
+            conn.execute(
+                """
+                INSERT INTO run_state(key, value, updated_at) VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+                """,
+                ("consecutive_low_count", json.dumps(consecutive_low), timestamp),
+            )
+            controller = conn.execute(
+                "SELECT * FROM controller_state WHERE singleton=1"
+            ).fetchone()
+            close_generation = 0 if controller is None else int(controller["generation"])
+            conn.execute(
+                """
+                INSERT INTO capacity_observations(
+                    observation_key, observation_seq, kind, global_version, observed_at,
+                    eligible_contributors, selected_contributors, productive_instances,
+                    reserved_launch_capacity, low_capacity, close_generation,
+                    recorded_by_epoch
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    observation_key,
+                    observation_seq,
+                    kind,
+                    int(global_version),
+                    timestamp,
+                    int(eligible_contributors),
+                    len(selected_instance_ids),
+                    productive,
+                    reserved,
+                    low_capacity,
+                    close_generation,
+                    token.epoch,
+                ),
+            )
+            for instance_id in sorted(set(selected_instance_ids)):
+                conn.execute(
+                    """
+                    UPDATE learner_instances SET last_contributed_observation_seq=?
+                    WHERE instance_id=?
+                    """,
+                    (observation_seq, instance_id),
+                )
+            launch_request = None
+            initialized = conn.execute(
+                "SELECT value FROM run_state WHERE key='dynamic_initialized_at'"
+            ).fetchone()
+            initialized_at = timestamp if initialized is None else float(
+                json.loads(initialized["value"])
+            )
+            bootstrap_open = int(
+                conn.execute(
+                    """
+                    SELECT COUNT(*) FROM launch_requests
+                    WHERE reason='bootstrap' AND state NOT IN (
+                        'admitted','completed','failed','expired','cancelled','capacity_fulfilled'
+                    )
+                    """
+                ).fetchone()[0]
+            )
+            initial_gate = bootstrap_open == 0 or (
+                timestamp >= initialized_at + float(initial_membership_deadline_seconds)
+            )
+            active_count = len(instances)
+            pending_scale = int(
+                conn.execute(
+                    f"""
+                    SELECT COUNT(*) FROM launch_requests
+                    WHERE reason='scale_out' AND state IN ({placeholders})
+                      AND admitted_instance_id IS NULL
+                    """,
+                    reserved_states,
+                ).fetchone()[0]
+            )
+            scale_count_row = conn.execute(
+                "SELECT value FROM run_state WHERE key='scale_launch_request_count'"
+            ).fetchone()
+            total_scale = (
+                0
+                if scale_count_row is None
+                else int(json.loads(scale_count_row["value"]))
+            )
+            last_scale = conn.execute(
+                "SELECT value FROM run_state WHERE key='last_scale_launch_at'"
+            ).fetchone()
+            cooldown_ready = last_scale is None or timestamp >= float(
+                json.loads(last_scale["value"])
+            ) + float(cooldown_seconds)
+            can_scale = (
+                bool(scaling_enabled)
+                and controller is not None
+                and str(controller["state"]) == "open"
+                and initial_gate
+                and consecutive_low >= int(consecutive_low_windows)
+                and productive + reserved < int(desired_contributors)
+                and pending_scale < int(max_pending_launch_requests)
+                and total_scale < int(max_total_launch_requests)
+                and cooldown_ready
+                and active_count + reserved < int(stream_pool_size)
+            )
+            if can_scale:
+                ordinal = total_scale + 1
+                encoded = json.dumps(
+                    [self.run_id, observation_key, ordinal, config_fingerprint],
+                    separators=(",", ":"),
+                ).encode("utf-8")
+                request_id = hashlib.sha256(encoded).hexdigest()
+                conn.execute(
+                    """
+                    INSERT INTO launch_requests(
+                        request_id, observation_key, bootstrap_slot, role, reason,
+                        requested_by_epoch, state, created_at, updated_at, not_before,
+                        submission_attempts, expires_at
+                    ) VALUES (?, ?, NULL, 'learner', 'scale_out', ?, 'planned',
+                              ?, ?, ?, 0, ?)
+                    ON CONFLICT(request_id) DO NOTHING
+                    """,
+                    (
+                        request_id,
+                        observation_key,
+                        token.epoch,
+                        timestamp,
+                        timestamp,
+                        timestamp,
+                        timestamp + float(launch_request_ttl_seconds),
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO run_state(key, value, updated_at) VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET
+                        value=excluded.value, updated_at=excluded.updated_at
+                    """,
+                    (
+                        "scale_launch_request_count",
+                        json.dumps(ordinal),
+                        timestamp,
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO run_state(key, value, updated_at) VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET
+                        value=excluded.value, updated_at=excluded.updated_at
+                    """,
+                    (
+                        "last_scale_launch_at",
+                        json.dumps(timestamp),
+                        timestamp,
+                    ),
+                )
+                request = conn.execute(
+                    "SELECT * FROM launch_requests WHERE request_id=?", (request_id,)
+                ).fetchone()
+                launch_request = None if request is None else dict(request)
+            observation = conn.execute(
+                "SELECT * FROM capacity_observations WHERE observation_key=?",
+                (observation_key,),
+            ).fetchone()
+            assert observation is not None
+            return {
+                "inserted": True,
+                "observation": dict(observation),
+                "consecutive_low_count": consecutive_low,
+                "launch_request": launch_request,
+            }
+
+        return self._transaction(token, operation)
+
+    def allocate_starvation_observation_key(
+        self,
+        token: LeaderToken,
+        *,
+        interval_seconds: float,
+        now: float | None = None,
+    ) -> str | None:
+        timestamp = self._wall_clock() if now is None else float(now)
+
+        def operation(conn: _FencedConnection) -> str | None:
+            next_row = conn.execute(
+                "SELECT value FROM run_state WHERE key='next_starvation_observation_at'"
+            ).fetchone()
+            if next_row is not None and timestamp < float(json.loads(next_row["value"])):
+                return None
+            generation_row = conn.execute(
+                "SELECT value FROM run_state WHERE key='starvation_generation'"
+            ).fetchone()
+            generation = (
+                1 if generation_row is None else int(json.loads(generation_row["value"])) + 1
+            )
+            for key, value in (
+                ("starvation_generation", generation),
+                ("next_starvation_observation_at", timestamp + float(interval_seconds)),
+            ):
+                conn.execute(
+                    """
+                    INSERT INTO run_state(key, value, updated_at) VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET
+                        value=excluded.value, updated_at=excluded.updated_at
+                    """,
+                    (key, json.dumps(value), timestamp),
+                )
+            return f"starvation:{generation}"
+
+        return self._transaction(token, operation)
+
+    def update_launch_request(
+        self,
+        token: LeaderToken,
+        *,
+        request_id: str,
+        expected_states: set[str],
+        state: str,
+        pbs_job_id: str | None = None,
+        scheduler_state: str | None = None,
+        last_error: str | None = None,
+        increment_submission_attempts: bool = False,
+        observed_at: float | None = None,
+    ) -> dict[str, Any]:
+        timestamp = self._wall_clock() if observed_at is None else float(observed_at)
+
+        def operation(conn: _FencedConnection) -> dict[str, Any]:
+            row = conn.execute(
+                "SELECT * FROM launch_requests WHERE request_id=?", (request_id,)
+            ).fetchone()
+            if row is None:
+                raise RuntimeError(f"unknown launch request: {request_id}")
+            if str(row["state"]) not in expected_states:
+                raise RuntimeError(
+                    f"launch request {request_id} state changed: {row['state']}"
+                )
+            conn.execute(
+                """
+                UPDATE launch_requests SET state=?, updated_at=?,
+                    submission_attempts=submission_attempts+?,
+                    pbs_job_id=COALESCE(?, pbs_job_id),
+                    scheduler_state=COALESCE(?, scheduler_state),
+                    scheduler_observed_at=CASE WHEN ? IS NULL
+                        THEN scheduler_observed_at ELSE ? END,
+                    last_error=?,
+                    reservation_released_at=CASE
+                        WHEN ? IN ('failed','expired','cancelled','capacity_fulfilled','completed')
+                        THEN COALESCE(reservation_released_at, ?)
+                        ELSE reservation_released_at
+                    END
+                WHERE request_id=?
+                """,
+                (
+                    state,
+                    timestamp,
+                    int(increment_submission_attempts),
+                    pbs_job_id,
+                    scheduler_state,
+                    scheduler_state,
+                    timestamp,
+                    last_error,
+                    state,
+                    timestamp,
+                    request_id,
+                ),
+            )
+            result = conn.execute(
+                "SELECT * FROM launch_requests WHERE request_id=?", (request_id,)
+            ).fetchone()
+            assert result is not None
+            return dict(result)
+
+        return self._transaction(token, operation)
 
     def mark_updates_selected(
         self, token: LeaderToken, update_ids: list[str], selected_by_run: str
     ) -> None:
+        if self.dynamic_mode:
+            if not update_ids:
+                return
+
+            def operation(conn: _FencedConnection) -> None:
+                for update_id in update_ids:
+                    cursor = conn.execute(
+                        """
+                        UPDATE updates
+                        SET status='selected', selected_at=?, selected_by_run=?,
+                            selected_membership_generation=admission_generation
+                        WHERE update_id=? AND status='pending'
+                          AND EXISTS (
+                              SELECT 1
+                              FROM learner_instances AS li
+                              JOIN placements AS p ON p.placement_id=li.placement_id
+                              JOIN streams AS s ON s.stream_id=li.stream_id
+                              WHERE li.instance_id=updates.learner_instance_id
+                                AND li.status IN ('admitted','draining','drained')
+                                AND p.current_instance_id=li.instance_id
+                                AND p.current_placement_epoch=li.placement_epoch
+                                AND s.current_instance_id=li.instance_id
+                                AND s.current_stream_epoch=li.stream_epoch
+                          )
+                        """,
+                        (float(self._wall_clock()), selected_by_run, update_id),
+                    )
+                    if cursor.rowcount != 1:
+                        raise RuntimeError(
+                            f"dynamic update is not pending/current at selection: {update_id}"
+                        )
+
+            self._transaction(token, operation)
+            return
         self._mutate(token, "mark_updates_selected", update_ids, selected_by_run)
 
     def mark_updates_applied(
@@ -973,6 +2881,11 @@ class FencedSQLiteStore:
 
 
 _BOUND_MUTATORS = {
+    "admit_registration",
+    "advance_dynamic_drain",
+    "allocate_starvation_observation_key",
+    "begin_dynamic_drain",
+    "authorize_placement_replacement",
     "claim_gc_candidate",
     "claim_ready_gc_candidates",
     "clear_gc_pending_paths",
@@ -980,6 +2893,7 @@ _BOUND_MUTATORS = {
     "complete_gc_candidate",
     "delete_archived_rows",
     "delete_archived_ha_history",
+    "delete_archived_dynamic_history",
     "drop_ineligible_updates",
     "drop_obsolete_updates",
     "drop_superseded_updates",
@@ -988,17 +2902,25 @@ _BOUND_MUTATORS = {
     "finalize_terminal_state",
     "finalize_unconsumed_updates",
     "initialize_full_run",
+    "initialize_dynamic_membership",
     "insert_update_metadata",
     "mark_updates_applied",
     "mark_updates_selected",
     "prepare_full_resume",
     "record_control_publication",
+    "record_capacity_observation",
+    "record_external_launch_jobs",
+    "reject_registration",
+    "revoke_dead_instances",
     "register_orphan_gc_candidate",
     "reset_all_selected_to_pending",
     "reset_selected_to_pending",
     "set_controller_state",
     "set_run_state",
     "update_learner_status",
+    "update_instance_heartbeat",
+    "update_instance_heartbeats",
+    "update_launch_request",
     "upsert_global_version",
     "upsert_learner",
 }
@@ -1044,6 +2966,68 @@ class ReadOnlySQLiteStore:
 
     def close(self) -> None:
         self._connection.close()
+
+    @property
+    def dynamic_mode(self) -> bool:
+        row = self._connection.execute(
+            "SELECT mode FROM schema_meta WHERE singleton=1"
+        ).fetchone()
+        return row is not None and str(row["mode"]) == "full_dynamic"
+
+    def current_instances(self) -> list[dict[str, Any]]:
+        rows = self._connection.execute(
+            """
+            SELECT * FROM learner_instances
+            WHERE status IN ('admitted','draining','drained')
+            ORDER BY stream_id, instance_id
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def streams(self) -> list[dict[str, Any]]:
+        rows = self._connection.execute(
+            "SELECT * FROM streams ORDER BY stream_id"
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def launch_requests(self, *, active_only: bool = False) -> list[dict[str, Any]]:
+        where = (
+            "WHERE state IN ('planned','submitting','submitted','started',"
+            "'external_submitted','submission_unknown','retryable')"
+            if active_only
+            else ""
+        )
+        rows = self._connection.execute(
+            f"SELECT * FROM launch_requests {where} ORDER BY created_at, request_id"
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def registration_requests(
+        self, *, unresolved_only: bool = False
+    ) -> list[dict[str, Any]]:
+        where = "WHERE state='pending'" if unresolved_only else ""
+        rows = self._connection.execute(
+            f"SELECT * FROM registration_requests {where} ORDER BY created_at, instance_id"
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def capacity_observations(self) -> list[dict[str, Any]]:
+        rows = self._connection.execute(
+            "SELECT * FROM capacity_observations ORDER BY observation_seq"
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def dynamic_state_counts(self) -> dict[str, int]:
+        if not self.dynamic_mode:
+            return {}
+        return {
+            "current_instances": len(self.current_instances()),
+            "registration_requests": len(
+                self.registration_requests(unresolved_only=True)
+            ),
+            "active_launch_requests": len(self.launch_requests(active_only=True)),
+            "capacity_observations": len(self.capacity_observations()),
+        }
 
     def __getattr__(self, name: str) -> Any:
         if name in _READ_METHODS:
