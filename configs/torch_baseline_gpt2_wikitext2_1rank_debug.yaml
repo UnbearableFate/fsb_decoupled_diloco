@@ -1,0 +1,59 @@
+run:
+  name: torch_baseline_gpt2_wikitext2_1rank_debug
+  run_id: null
+  shared_root: /work/xg24i002/x10041/fsb_decoupled_diloco/runs/torch_baselines/{run_id}
+  log_level: INFO
+
+model:
+  name_or_path: gpt2
+  trust_remote_code: false
+  dtype: bfloat16
+  compile: false
+
+data:
+  dataset_name: wikitext
+  dataset_config_name: wikitext-2-raw-v1
+  train_split: train
+  validation_split: validation
+  block_size: 1024
+  num_proc: 4
+  cache_dir: null
+  streaming: false
+  shuffle_blocks: true
+
+sync:
+  num_learners: 1
+  quorum_min: 1
+  quorum_max: 1
+
+training:
+  inner_steps: 2
+  micro_batch_size: 2
+  gradient_accumulation_steps: 8
+  block_size: 1024
+  max_local_steps: 10
+  completion_mode: local_or_global
+  precision: bf16
+  seed: 1337
+  log_every_steps: 1
+  grad_clip: 1.0
+
+inner_optimizer:
+  name: adamw
+  lr: 5.0e-5
+  betas: [0.9, 0.95]
+  eps: 1.0e-8
+  weight_decay: 0.1
+  scheduler: cosine
+  warmup_steps: 100
+  scheduler_total_steps: 5000
+  min_lr_ratio: 0.1
+
+wandb:
+  enabled: false
+  mode: disabled
+
+torch_baseline:
+  enabled: true
+  backend: nccl
+  require_distinct_hosts: false
