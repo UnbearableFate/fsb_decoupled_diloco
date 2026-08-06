@@ -165,3 +165,28 @@ All focused tests should pass after adding cross-node writer-lock evidence, a gu
 ### Evidence
 
 - Complete test log: `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-100000_phase0-remediation-tests_review.log`.
+
+## 2026-08-06T10:08:00+09:00 — Phase 0 final dual-review Claude attempt 1 blocked
+
+### Experiment identity
+
+- Review target: `f404fbd4831adcd9ffb8e6229a0004b1affe9f4e`.
+- Comparison base: `c1c61153548ff7b2543d3ce1bc764c19432b138e`.
+- Claude session: `4ca72c8d-7e52-4422-99f3-eb0dc04d1b0b`.
+- Invocation: fresh non-interactive `claude --print` process with explicit model `claude-opus-5`, `--permission-mode bypassPermissions`, `--dangerously-skip-permissions`, JSON output, no resume/continue, and no fallback model.
+
+### Expected behavior
+
+Claude Opus 5 should independently review the frozen Phase 0 diff and write only its assigned immutable report after Codex has launched the process and independently saved the Codex report.
+
+### Observed facts
+
+- The process returned after 209,771 ms with `is_error=true` and message `You've hit your session limit · resets 1:30pm (Asia/Tokyo)`.
+- Machine-readable metadata verified actual model `claude-opus-5`, canonical model `claude-opus-5`, provider `firstParty`, the requested session ID, and `permission_denials=[]`.
+- Claude did not create its assigned report. The independent Codex report was completed and saved before this result was inspected at `reports/DOING/code_review/fsb_decoupled_diloco_plan_02/phase-0/gpt-5.6-sol_f404fbd4831adcd9ffb8e6229a0004b1affe9f4e.md`.
+- No implementation, test, configuration, plan, or unrelated report change was produced by Claude. Phase 0 remains a completion candidate and Phase 1 has not started.
+
+### Confirmed cause and next action
+
+- This is an external Claude Code account session-limit block, not a review finding or source failure. Repository policy forbids substituting another model or treating an unverified/incomplete Claude run as a completed gate.
+- After the stated reset, start a new independent Opus 5 session against the same frozen commits and use the retry report name `claude-opus-5-retry1_f404fbd4831adcd9ffb8e6229a0004b1affe9f4e.md`. Re-verify model/session/permission metadata, then read both reports and disposition any findings before creating the Phase 0 final commit.

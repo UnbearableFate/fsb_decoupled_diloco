@@ -369,3 +369,16 @@ Artifacts:
 - `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-095900_phase0-remediation_review.log`.
 - `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-100100_phase0-remediation-tests_review.log`.
 - `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-100000_phase0-remediation-tests_review.log` (failed focused attempt; retained in full).
+
+## 2026-08-06T10:04:19+09:00 — Phase 0 second-review artifact retention cleanup
+
+### Facts
+
+- Scheduler history confirmed that representative focused-test job `2497331.opbs` and representative full-run job `2497333.opbs` are both terminal with `Exit_status=0`; duplicate jobs `2497332.opbs` and `2497334.opbs` are also terminal.
+- The authoritative PASS evidence remains `20260806-095900_phase0-feasibility_pass.json` plus its complete remediation log, the smallest successful focused-test log remains `20260806-100100_phase0-remediation-tests_review.log`, and the complete failed focused-test log remains `20260806-100000_phase0-remediation-tests_review.log`.
+- After exact-path inventory, three redundant successful-run files totaling 99,093 bytes were deleted: `20260806-095849_phase0-feasibility_pass.json`, `20260806-095849_phase0-review2-remediation_review.log`, and `20260806-100200_phase0-remediation-tests_review.log`. They are not recoverable from the workspace; their duplicate scheduler jobs remain auditable through PBS history.
+- A credential-pattern scan of the authoritative JSON/log and both immutable second-review reports found no credential value or environment dump. The sole text match was the Claude report's explicit statement that `Variable_List` was excluded from the final artifact.
+
+### Inferences
+
+- The retained files are the smallest representative evidence set for the completed remediation while preserving the only failed-attempt log required for root-cause audit.
