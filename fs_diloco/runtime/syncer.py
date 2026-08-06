@@ -3229,8 +3229,8 @@ def run_syncer(config: Config) -> None:
                 else None
             )
             if target_reason is not None:
-                stop_reason = target_reason
                 if not dynamic_mode:
+                    stop_reason = target_reason
                     break
                 controller = start_dynamic_drain(
                     config=config,
@@ -3240,6 +3240,7 @@ def run_syncer(config: Config) -> None:
                     reason=target_reason,
                     current_version=version,
                 )
+                stop_reason = str(controller.get("reason") or target_reason)
 
             discovery_start = time.monotonic()
             sync_liveness_and_metadata(

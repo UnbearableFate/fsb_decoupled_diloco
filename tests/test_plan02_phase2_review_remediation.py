@@ -369,6 +369,16 @@ def test_dynamic_no_progress_enters_persisted_drain_and_open_terminal_is_rejecte
             syncer_runtime.resumed_dynamic_stop_reason(store, default="completed")
             == "no_progress_timeout"
         )
+        repeated = syncer_runtime.start_dynamic_drain(
+            config=config,
+            store=store,
+            paths=paths,
+            reason="stop_after_outer_steps",
+            current_version=20,
+            requested_at=101.0,
+        )
+        assert repeated["reason"] == "no_progress_timeout"
+        assert int(repeated["max_terminal_version"]) == 4
         directive = read_current_drain(paths, run_id=_identity().run_id)
         assert directive is not None
         assert directive["reason"] == "no_progress_timeout"
