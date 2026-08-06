@@ -703,3 +703,9 @@ Artifacts:
 
 - Preserved raw qsub receipts while comparing PBS IDs by their server-independent numeric identity, preventing qstat's suffix-free spelling from looking like a different bootstrap job.
 - Added raw/normalized equivalence coverage. Focused PBS `2501208.opbs` passed 18 tests in 7.42 seconds; full compatibility PBS `2501209.opbs` passed 470 tests in 23.63 seconds.
+
+## 2026-08-06 23:54 JST — acceptance scheduler-horizon remediation
+
+- G8 clean-source rerun `plan02_phase2_g8_2501215` passed takeover, victim/replacement, stream reuse, and dynamic drain evidence.
+- Extended the G9/matched target to v120 after a measured scale-job queue cycle outlasted the v60 horizon; projected runtime remains within the 150-second syncer walltime with practical teardown margin.
+- Focused PBS `2501249.opbs` passed 18 tests in 7.24 seconds; full compatibility PBS `2501250.opbs` passed 470 tests in 24.48 seconds.

@@ -34,7 +34,7 @@ sync:
     mode: fixed
     fixed_seconds: 0.2
     max_seconds: 0.2
-  stop_after_outer_steps: 60
+  stop_after_outer_steps: 120
   stop_after_global_tokens: null
   stop_file_poll_seconds: 0.2
 
