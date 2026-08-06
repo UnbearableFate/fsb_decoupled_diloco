@@ -743,6 +743,13 @@ Artifacts:
 - RED evidence is recorded in `failures.md`. Post-fix PBS `2501697.opbs` passed all 5 focused review-remediation tests in 3.50 seconds. PBS `2501698.opbs` passed all 23 Phase 2 focused tests in 7.41 seconds. Full regression PBS `2501704.opbs` passed all 480 tests in 25.78 seconds. Each used the statically validated literal-group script `scripts/miyabi/run_plan02_phase2_tests.pbs`; focused jobs requested `00:01:00`, and the full suite requested `00:02:00` based on prior runtime plus teardown margin.
 - Static checks passed for the affected files: Python compilation, Ruff, `git diff --check`, `bash -n scripts/miyabi/*.pbs scripts/miyabi/*.sh scripts/local/*.sh`, and the placeholder group-ID scan. Remaining gates are a clean source commit, fresh Phase 2 runtime/matched/completed evidence for the changed atomic protocol, documentation synchronization, and incremental completion review.
 
+## 2026-08-07 01:34 JST — Successor drain reason and final pre-freeze regression PASS
+
+- The no-progress remediation now also restores the persisted controller reason when a successor resumes a `draining` or `closed` dynamic run. This prevents a takeover from changing `no_progress_timeout`, `manual`, `deadline`, or `launch_budget_exhausted` into the generic `completed` terminal reason.
+- Focused PBS `2501733.opbs` requested `00:01:00` and passed all 29 tests in `tests/test_plan02_phase2_dynamic.py` plus `tests/test_plan02_phase2_review_remediation.py` in 7.09 seconds.
+- Full compatibility PBS `2501735.opbs` requested `00:01:00`, passed all 481 tests in 30.41 seconds, and completed the Plan 01 two-process smoke plus telemetry assertions within the request. Static shell syntax, literal `group_list=xg24i002`, placeholder scan, and `git diff --check` remained clean before submission.
+- These jobs exercised the dirty pre-freeze tree. The next step is to freeze one clean executable commit and rerun the Phase 2 formal runtime, matched-performance, and completed-Checker evidence against that exact source identity.
+
 ## 2026-08-07 01:31 JST — Stable scheduler-authorization remediation group PASS
 
 - PBS `2501723.opbs` ran `tests/test_plan02_phase2_dynamic.py tests/test_plan02_phase2_review_remediation.py` on `mg0003` after the pending-request checksum and synthetic scheduler-binding tests were complete. With a `00:00:25` request it exited 0 after 9 seconds: `29 passed in 7.43s`.
