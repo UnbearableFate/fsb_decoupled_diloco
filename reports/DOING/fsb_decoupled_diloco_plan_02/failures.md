@@ -190,3 +190,29 @@ Claude Opus 5 should independently review the frozen Phase 0 diff and write only
 
 - This is an external Claude Code account session-limit block, not a review finding or source failure. Repository policy forbids substituting another model or treating an unverified/incomplete Claude run as a completed gate.
 - After the stated reset, start a new independent Opus 5 session against the same frozen commits and use the retry report name `claude-opus-5-retry1_f404fbd4831adcd9ffb8e6229a0004b1affe9f4e.md`. Re-verify model/session/permission metadata, then read both reports and disposition any findings before creating the Phase 0 final commit.
+
+## 2026-08-06T10:13:25+09:00 — Phase 0 final dual-review Claude attempt 2 blocked
+
+### Experiment identity
+
+- Consecutive failure count for the same final Claude review experiment: 2.
+- Review target: `f404fbd4831adcd9ffb8e6229a0004b1affe9f4e`.
+- Comparison base: `c1c61153548ff7b2543d3ce1bc764c19432b138e`.
+- Claude session: `6f6f98ee-05b8-44f6-a2dc-de003438aa15`.
+- Invocation: fresh non-interactive `claude --print` with explicit `claude-opus-5`, `bypassPermissions`, `--dangerously-skip-permissions`, JSON output, no resume/continue, and no fallback.
+
+### Expected behavior
+
+After `claude --help` reconfirmed every required option, Opus 5 should review the same frozen diff, create only its assigned report, and return `REVIEW_REPORT_WRITTEN` with verified model/session metadata.
+
+### Observed facts
+
+- The process ran for 125,426 ms and returned exit code 1, `is_error=true`, `terminal_reason=api_error`, HTTP status 429, and `You've hit your session limit · resets 1:30pm (Asia/Tokyo)`.
+- Metadata again verified canonical/actual model `claude-opus-5`, provider `firstParty`, the requested session ID, and `permission_denials=[]`; there was no fallback.
+- No Claude report was created and no working-tree change was produced. The already immutable Codex report for this target remains byte-identical to its committed form.
+- This attempt was launched before the already committed attempt-1 failure record became visible in the active workspace view, so its prompt named the still-absent base Claude report path rather than the documented `retry1` path. Because no report was written, no immutable filename collision or report mutation occurred.
+
+### Confirmed cause and next action
+
+- The same external Claude account session limit remains the sole blocker. This is the second consecutive failure of the final Claude review experiment; no source modification can falsify it before the stated reset.
+- Do not launch a third attempt before 13:30 Asia/Tokyo. After reset, use a fresh session and the documented `claude-opus-5-retry1_f404fbd4831adcd9ffb8e6229a0004b1affe9f4e.md` path, then continue the gate only if the process returns successfully and the report/metadata checks pass.
