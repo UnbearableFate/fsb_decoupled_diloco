@@ -1103,20 +1103,20 @@ def test_capacity_observation_idempotency_hysteresis_and_limits(tmp_path: Path) 
     _paths, lease, _token, fenced, store = dynamic_store(tmp_path)
     try:
         initialize_membership(store, pool=2, bootstrap=0)
-        first = capacity_observation(store, key="starvation:1", now=100.0, eligible=0)
+        first = capacity_observation(store, key="synthetic-low:1", now=100.0, eligible=0)
         assert first["consecutive_low_count"] == 1
         assert first["launch_request"] is None
-        replay = capacity_observation(store, key="starvation:1", now=101.0, eligible=0)
+        replay = capacity_observation(store, key="synthetic-low:1", now=101.0, eligible=0)
         assert replay["inserted"] is False
-        second = capacity_observation(store, key="starvation:2", now=102.0, eligible=0)
+        second = capacity_observation(store, key="synthetic-low:2", now=102.0, eligible=0)
         assert second["consecutive_low_count"] == 2
         assert second["launch_request"] is not None
         assert len(store.capacity_observations()) == 2
         assert len(store.launch_requests(active_only=True)) == 1
 
-        normal = capacity_observation(store, key="merge:1", now=103.0, eligible=2)
+        normal = capacity_observation(store, key="synthetic-healthy:1", now=103.0, eligible=2)
         assert normal["consecutive_low_count"] == 0
-        third = capacity_observation(store, key="starvation:3", now=104.0, eligible=0)
+        third = capacity_observation(store, key="synthetic-low:3", now=104.0, eligible=0)
         assert third["launch_request"] is None
         assert len(store.launch_requests(active_only=True)) == 1
 

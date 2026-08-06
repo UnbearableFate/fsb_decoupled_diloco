@@ -512,6 +512,12 @@ Attempt 3, `2497948.opbs`, submitted the short-walltime children and completed s
 - `test_merge_and_starvation_observations_reject_non_atomic_public_writes` called the existing `_dynamic_store` fixture helper without its leading underscore, raising `NameError` before exercising the new public-API guard.
 - Disposition: match the stable identity-mismatch diagnostic, correct the helper reference, keep both production safety guards unchanged, and rerun the focused cleanup/remediation tests followed by the full repository suite.
 
+## 2026-08-07 01:57 JST — Reserved capacity-key namespace regression attempt 1
+
+- PBS `2501919.opbs` ran the 40-test cleanup/dynamic/remediation group with a `00:00:25` request; PBS `2501920.opbs` ran the full suite with a `00:00:50` request. Both correctly exercised the strengthened public capacity API but returned one failure: `39 passed, 1 failed in 7.78s` and `491 passed, 1 failed in 25.05s` respectively.
+- The failing hysteresis unit helper had already changed its kind to `synthetic`, but still used production-reserved keys `merge:1` and `starvation:*`. The new guard intentionally rejects both reserved kinds and reserved key namespaces so a synthetic public write cannot pre-create the key that a later atomic merge/starvation transaction must own. No formal run or cleanup deletion was started.
+- Disposition: keep the production guard and exact merge kind/key/version validation. Rename only this synthetic unit sequence to `synthetic-low:*`/`synthetic-healthy:*`, retain separate rejection coverage for synthetic writes into both reserved namespaces, and rerun focused then full PBS tests.
+
 ## 2026-08-07 01:56 JST — concurrent cleanup-test stabilization attempts
 
 - PBS `2501895.opbs` ran the 30-test Phase 2 dynamic/remediation group while the newly added non-atomic-public-write case still referenced the wrong fixture helper; result `1 failed, 29 passed in 6.87s`. PBS `2501896.opbs` collected the same helper defect plus an intermediate cleanup diagnostic regex and returned `2 failed, 489 passed in 23.92s`.

@@ -809,6 +809,13 @@ Artifacts:
 - The four accepted completion-review findings are `fixed` and reverified by focused/full PBS regression plus a fresh locked-environment G7/G8/G9/matched/completed sequence. README, research-plan scope, architecture/runtime/data/configuration/operations/module references, and MEM-01–MEM-20 evidence paths now describe this remediated behavior and point to the `20260807-014345` completed artifact.
 - The remaining Phase 2 closure work is the incremental frozen-target review, followed by the mandatory plan-complete current-state review and evidence-safe cleanup.
 
+## 2026-08-07 01:59 JST — Reserved observation namespaces and final full regression PASS
+
+- The atomic capacity contract now rejects not only direct public `kind=merge/starvation` writes, but also synthetic writes into the reserved `merge:*`/`starvation:*` key namespaces. Dynamic `commit_full_merge` additionally requires the attached observation to have exact kind `merge`, key `merge:<target_version>` and matching `global_version`; callers cannot satisfy the atomic-input requirement with an unrelated synthetic observation.
+- The initial regression is retained in `failures.md`; it exposed only an old synthetic hysteresis fixture that reused production key names. That fixture now uses nonreserved synthetic keys, while explicit negative tests cover direct reserved kind/key writes and malformed merge attachments.
+- PBS `2501924.opbs` ran `tests/test_clean_run.py tests/test_plan02_phase2_dynamic.py tests/test_plan02_phase2_review_remediation.py` with a `00:00:25` request and passed all 40 tests in `7.50s`. PBS `2501925.opbs` ran the full `tests` tree with a `00:00:50` request and passed all 492 tests in `25.00s`.
+- Static Python compilation, Ruff lint/format, `git diff --check`, `bash -n scripts/miyabi/*.pbs`, and literal `group_list=xg24i002` validation passed before submission. This guard does not alter the already exercised runtime merge/starvation path or formal workload thresholds; it closes a public API bypass and therefore remains in the next incremental concurrency/protocol review target.
+
 ## 2026-08-07 01:57 JST — evidence-gated cleanup implementation and final regression PASS
 
 - Implemented `fs_diloco.tools.clean_run` as the plan-required exact-run cleaner. It requires terminal stop/summary agreement, all learners stopped, a matching error-free `PASS` artifact and descriptor/source identity, refuses SQLite authority sidecars and broad/symlink targets, defaults to dry-run inventory, and requires a new report-side manifest for deletion. It preserves authority DB/checkpoints/control/config/syncer evidence plus one learner log; execution revalidates the evidence and inventory before unlinking any candidate.
