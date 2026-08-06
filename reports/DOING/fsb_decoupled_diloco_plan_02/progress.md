@@ -907,3 +907,7 @@ Artifacts:
 
 - Exact dry-run inventories against the retained matched-performance PASS artifact excluded both update histories. Cleanup then deleted 24 reconstructable files / `6,855,723` bytes from the static branch and 25 files / `4,442,315` bytes from the dynamic branch. These deletions are not recoverable.
 - Both runs retain authority SQLite, current checkpoints, control/configuration, representative logs, and fsync-before-prune histories. Audit manifests: `artifacts/20260807-0221_phase2-matched-static-cleanup.json` and `artifacts/20260807-0221_phase2-matched-dynamic-cleanup.json`, each `status=complete`.
+
+## 2026-08-07 02:24 JST — External-review audit final correction
+
+- The overlapping final-target invocation set contains four sessions, not three: `befcf31c-16d5-4cb0-a45a-618d0f0b151f`, `3a8ce2bb-ae81-4fb3-8dc7-6d07804e1787`, `9ffc2980-403b-4e14-9a4c-aca710843876`, and `40ed395f-bb6f-4d61-ac26-3b9a5eec72d2`. Each returned the same zero-usage HTTP 429 session-limit result before the independent workspace continuations had converged on shared state. No Claude report was created and no further invocation is made; the external disposition remains `skipped-session-limit`.
