@@ -90,33 +90,19 @@ reports/DOING/01/
 
 ### 使用 `claude -p` 运行双模型独立审查
 
-针对同一 review-target commit 同时启动 Claude 和 Codex 审查。两者必须检查完整的范围内 diff，包括受影响的 `fs_diloco` 代码、测试、配置、PBS 脚本、launcher、Checker 和文档。
+从仓库根目录把占位符替换为实际值后执行：
 
-1. Codex 从仓库根目录启动一个全新的 `claude --print`（`claude -p`）非交互进程。必须显式指定 Opus 5 的完整模型 ID、唯一的 `--session-id`、`--permission-mode bypassPermissions` 和 `--dangerously-skip-permissions`；不得使用 `--continue`、`--resume`、模型 fallback 或先前会话。调用应使用 `--output-format json`，以便从机器可读的返回元数据核验实际模型和 session ID。不得要求或依赖 Herdr、终端 pane 或交互式 Claude Code 会话。
-2. 启动前必须根据当前 `claude --help` 确认参数仍受支持。返回元数据中的实际模型必须明确属于 Opus 5，且 session ID 必须与本次新建 ID 一致；仅有命令行请求值或模型自述不足以完成核验。无法取得这些证据、实际模型不是 Opus 5、发生 fallback、认证失败或 bypass permission mode 不可用时，门禁标记为 blocked，不得替换其他模型或权限模式。唯一例外是 Codex 之外的 reviewer 返回可核验的会话额度耗尽信息（例如明确的 session/usage limit exhausted，而不是含义不明的 API 错误）：将该 reviewer 记为 `skipped-session-limit`，保留不含秘密的调用、模型/session 和限额错误摘要，不创建或伪造审查报告，不要求重试，也不得因此阻断当前 phase、plan 或后续任务；Codex 审查仍为必做门禁。
-3. non-interactive prompt 必须包含 review-target 和 comparison-base 的完整 commit ID、完整审查范围、目标报告绝对路径，以及本节规定的全部报告字段。它必须明确限定 Claude 为 reviewer-only：除其唯一指定的 Claude 报告外，不得修改实现、测试、配置、计划、其他报告或 Git 状态，也不得提交或删除 scheduler job、删除 run 数据、commit、push、创建 PR、变更远程服务或使用任务范围之外的凭据。
-4. Codex 应在启动该独立进程后立即进行自己的审查，并在读取 Claude 报告或 Claude 的实质性结论前完成并保存 Codex 报告。可以等待 non-interactive 进程结束并检查不含审查结论的状态和模型/session 元数据；Claude 报告内容必须等 Codex 报告落盘后才能读取。两份审查必须针对同一 review-target commit 和 comparison base；若 Claude 按第 2 条记为 `skipped-session-limit`，则只保留同一目标的 Codex 报告和追加式 skip 记录并继续门禁。
-5. bypass/full-permission 是工具权限设置，不是额外的任务授权。它不授权任一 reviewer 提交或删除 scheduler job、删除 run 数据、commit、push、创建 PR、变更远程服务、使用任务范围之外的凭据，或在审查期间进行报告之外的代码修改。
-6. Claude 完成后，核对除指定 Claude 报告外不存在工作树改动。报告中记录 invocation 方式为 `claude --print`、实际完整模型 ID、session ID、permission mode 和 review-target；不得记录 token、认证信息、完整环境变量或其他秘密。命令输出若包含敏感或无关运行元数据，不得直接纳入版本库。
-
-未被 `skipped-session-limit` 跳过的完成报告写入：
-
-```text
-reports/DOING/code_review/<plan-id>/<phase_id>/<model_name>_<commit_id>.md
+```bash
+claude -p \
+  --model claude-opus-5 \
+  --session-id <new-uuid> \
+  --permission-mode bypassPermissions \
+  --dangerously-skip-permissions \
+  --output-format json \
+  '审核当前仓库 commit id <base-commit> 到 <target-commit> 的代码修改，覆盖相关源代码、测试、配置、PBS脚本、launcher、Checker和文档。将审核结果写入 <absolute-repo>/reports/DOING/code_review/<plan-id>/<phase-id>/claude-opus-5_<target-commit>.md。按 Critical/High/Medium/Low 列出finding、证据、文件行号、修复建议和缺失测试，检查correctness、回归风险、错误处理、并发/持久化不变量、测试覆盖及plan验收条件，最后给出 APPROVE 或 CHANGES_REQUIRED；没有finding时列明检查范围。你是只读reviewer，除上述报告外不得修改任何文件或Git状态，不得qsub/qdel、删除run数据、commit、push或创建PR，也不得在报告中写入secret、token、凭据或完整环境变量。'
 ```
 
-Claude 使用 `claude-opus-5`，Codex 使用能稳定标识实际模型的 slug。完成的报告不可修改；同一模型重新审查同一 commit 时，在 `<model_name>` 后添加 `-retryN` 并新建文件，禁止覆盖或追加既有报告。不可变的双模型报告必须保存在 `reports/DOING/code_review/`，与每个 plan 的追加式 progress/failure 记录分开。
-
-每份报告必须包含：
-
-- review-target 和 comparison-base commit ID、source identity、审查范围及相关 diff；
-- 实际使用的模型；Claude 报告还必须包含 `claude --print` invocation、session ID 和 permission mode；
-- 按 `Critical`、`High`、`Medium`、`Low` 分类的 findings，以及证据和文件/行号；
-- correctness 和 regression 风险、错误处理、并发和持久化不变量、测试覆盖、与 plan acceptance criteria 的一致性；
-- 具体修复建议和缺失测试；无 findings 时，列明检查过的内容；
-- 最终 `APPROVE` 或 `CHANGES_REQUIRED` 决定，并明确区分事实、推断和建议。
-
-任何报告都不得包含 secrets、token、凭据或不必要的敏感环境数据。
+Codex同时独立审查同一`<base-commit>..<target-commit>`，并在读取Claude报告前保存自己的报告到同一目录。完成报告不可覆盖；重跑使用`-retryN`新文件。核验JSON中的实际模型和session ID；明确的Claude会话额度耗尽记为`skipped-session-limit`，不重试、不伪造报告且不阻断后续任务，Codex审查仍为必做门禁。其他模型/session/fallback/认证/权限错误均为`blocked`。
 
 ### 处置问题并验证
 
