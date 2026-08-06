@@ -299,3 +299,27 @@ Attempt 3, `2497948.opbs`, submitted the short-walltime children and completed s
 - 原始证据：`artifacts/20260806-1503_phase1-independent-launch_pass.json`、`artifacts/20260806-1506_phase1-completed-checker_pass.json`、run root `runs/fs_diloco/plan02_phase1_final_14aeef1`及jobs的原始输出。
 - 已确认根因：为了在短acceptance runtime内取得≥100 renew样本，把acceptance专用`renew_interval`降到0.05秒；冻结门槛因此同步收紧到25ms，低于本次共享FS上正常业务transaction p99。结果不是transaction failure或锁饥饿，而是采样频率与性能阈值自相矛盾。
 - 下一轮：acceptance专用renew/heartbeat/candidate poll调整为0.1秒、lease busy timeout调整为100ms。按本轮217个样本线性估算仍约108个真实renew，满足≥100；business p99阈值恢复到50ms，高于已观察30.5ms但仍严格执行plan的`renew_interval/2`，不得修改Checker公式或事后放宽。重跑完整1+8；依据本轮实测使用crash15秒、successor30秒、learner25秒和Checker10秒的最短带余量walltime。
+
+## 2026-08-06 16:11 JST — phase1-matched-performance（连续失败 1）
+
+### Experiment identity
+
+- Clean source commit `d9ab027fac7877e46d5cf4dda31d820dc8befbe2`，source fingerprint `sha256:aeba76f01a31cfbb42e4a332ecd7e969c0a582ee3662bb716f8ac3e415319485`，run `plan02_phase1_final_d9ab027`，descriptor SHA-256 `93a75184e2617f6b50f4a8151e50cf2411ec8c574eee352b8dcfa5cd78887b61`。
+- Miyabi `debug-g` PBS `2499293.opbs`，compute node `mg0003`；提交前`bash -n scripts/miyabi/*.pbs`和literal group扫描通过。精确提交为：
+
+  ```text
+  qsub -q debug-g -l walltime=00:01:00 -v FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_final_d9ab027,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,STAMP=20260806-1611 scripts/miyabi/run_plan02_phase1_matched_performance.pbs
+  ```
+
+- 请求walltime `00:01:00`、实际`00:00:28`、scheduler `Exit_status=1`；一分钟为28秒相邻实测保留32秒启动/运行/收尾余量，失败不是walltime不足。
+
+### Expected and observed behavior
+
+- 预期：candidate observer和baseline各至少400个fenced business transaction样本，observer nearest-rank p99不超过`baseline * 1.25 + 0.002s`；legacy/HA checkpoint各100样本并通过同公式，writer transaction attempt为0。
+- 实际：checkpoint gate通过（legacy p99 `0.019466s`，HA p99 `0.016676s`，允许`0.026333s`），candidate共观察21次且writer attempt为0；但business baseline p99 `0.006261s`、observer p99 `0.017182s`，超过允许值`0.009826s`，artifact状态为`BLOCKED`。
+- 原始结构化证据：`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-1611_phase1-matched-performance_pass.json`（文件由预期PASS输出路径生成，但内容为BLOCKED），SHA-256 `ef8b6ecfb1572fd3b1f60a18d438a21ac42ef3b948e0d0eb6a28977c7bc81084`；PBS合并输出为`fsdiloco_p1_match.o2499293`。
+
+### Confirmed facts, inference, and next falsification
+
+- 相同实现的16:05预检出现相反的时间偏差：baseline p99 `0.030623s`而observer p99 `0.010470s`。两次28秒运行中比例方向反转，说明当前只有8个100-transaction大块且每块重新启动observer线程的采样顺序，把共享文件系统的时间漂移和线程启动边界混入了candidate效果；单次通过或重跑碰巧通过都不能证明门禁。
+- 下一轮不放宽冻结的25%+2ms阈值。把400+400样本拆成更多细粒度AB/BA配对块，复用一个candidate线程并在baseline块确认其静默、在observer块确认至少一次完整`terminal_state + observe`循环，以降低跨时段漂移且保留production只读操作；artifact增加每块顺序/样本/observation证据。新增schedule和平衡/静默同步回归，运行focused+full关联测试，再在compute node重跑同一matched experiment。通过条件仍为原始冻结公式、每侧至少400样本、每个observer块有观察且writer attempt严格为0。

@@ -19,6 +19,7 @@ from ..modeling.hf_model import load_causal_lm_and_tokenizer
 from ..modeling.outer_optim import init_outer_state
 from ..modeling.param_index import build_param_index, flatten_trainable_params
 from ..observability.phase1_performance import (
+    BUSINESS_TRANSACTION_BATCH_SIZE,
     BUSINESS_TRANSACTION_MAX_P99_RATIO,
     BUSINESS_TRANSACTION_MIN_SAMPLES,
     BUSINESS_TRANSACTION_P99_JITTER_SECONDS,
@@ -42,6 +43,28 @@ from ..storage.schema_bootstrap import BootstrapIdentity, initialize_new_run
 from ..storage.sqlite_store import SQLiteStore
 
 
+def _business_batch_schedule(
+    *,
+    samples_per_mode: int,
+    batch_size: int = BUSINESS_TRANSACTION_BATCH_SIZE,
+) -> tuple[bool, ...]:
+    """Return fine-grained AB/BA pairs without favoring either temporal position."""
+
+    if samples_per_mode <= 0 or batch_size <= 0:
+        raise ValueError("matched business sample and batch sizes must be positive")
+    if samples_per_mode % batch_size != 0:
+        raise ValueError("matched business samples must divide evenly into batches")
+    schedule: list[bool] = []
+    for pair in range(samples_per_mode // batch_size):
+        schedule.extend((False, True) if pair % 2 == 0 else (True, False))
+    return tuple(schedule)
+
+
+def _is_writer_transaction_statement(statement: str) -> bool:
+    normalized = " ".join(str(statement).strip().upper().split())
+    return normalized.startswith(("BEGIN IMMEDIATE", "BEGIN EXCLUSIVE"))
+
+
 def _benchmark_identity(loaded: LoadedRunDescriptor, run_id: str) -> BootstrapIdentity:
     return BootstrapIdentity(
         run_id=run_id,
@@ -55,7 +78,7 @@ def _business_transaction_samples(
     root: Path,
     *,
     loaded: LoadedRunDescriptor,
-) -> tuple[list[float], list[float], int]:
+) -> tuple[list[float], list[float], int, int, list[dict[str, Any]]]:
     paths = RunPaths(root / "business")
     prepare_authority_dirs(paths)
     identity = _benchmark_identity(loaded, "phase1-matched-business")
@@ -91,78 +114,144 @@ def _business_transaction_samples(
     baseline: list[float] = []
     observer: list[float] = []
     observation_count = 0
+    observer_active = threading.Event()
+    observer_idle = threading.Event()
+    observer_idle.set()
+    observer_started = threading.Event()
+    observer_stop = threading.Event()
+    observation_condition = threading.Condition()
+    observation_errors: list[BaseException] = []
+    writer_transaction_statements: list[str] = []
+    block_evidence: list[dict[str, Any]] = []
+
+    def observe() -> None:
+        nonlocal observation_count
+        candidate = LeaderLeaseStore(
+            paths.sqlite_db,
+            identity,
+            marker_path=paths.bootstrap_complete_json,
+            lease_duration_seconds=max(120.0, float(ha.lease_duration_seconds)),
+            max_clock_skew_seconds=float(ha.max_clock_skew_seconds),
+            busy_timeout_ms=int(ha.lease_busy_timeout_ms),
+        )
+
+        def trace(statement: str) -> None:
+            if _is_writer_transaction_statement(statement):
+                writer_transaction_statements.append(statement)
+
+        candidate.conn.set_trace_callback(trace)
+        observer_started.set()
+        try:
+            while not observer_stop.is_set():
+                if not observer_active.wait(timeout=0.01):
+                    observer_idle.set()
+                    continue
+                if observer_stop.is_set():
+                    break
+                observer_idle.clear()
+                candidate.terminal_state()
+                observed = candidate.observe()
+                if observed is None or observed["state"] != "active":
+                    raise RuntimeError("matched observer lost the healthy active leader")
+                with observation_condition:
+                    observation_count += 1
+                    observation_condition.notify_all()
+                observer_stop.wait(max(0.001, float(ha.candidate_acquire_poll_seconds)))
+        except BaseException as exc:
+            observation_errors.append(exc)
+            with observation_condition:
+                observation_condition.notify_all()
+        finally:
+            observer_idle.set()
+            candidate.close()
+
+    def assert_observer_healthy() -> None:
+        if observation_errors:
+            raise RuntimeError("matched candidate observer failed") from observation_errors[0]
+
+    def pause_observer() -> None:
+        observer_active.clear()
+        if not observer_idle.wait(timeout=5.0):
+            raise TimeoutError("matched candidate observer did not become idle")
+        assert_observer_healthy()
+
+    def activate_observer() -> int:
+        before = observation_count
+        observer_idle.clear()
+        observer_active.set()
+        deadline = time.monotonic() + 5.0
+        with observation_condition:
+            while observation_count <= before and not observation_errors:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0.0:
+                    raise TimeoutError("matched candidate observer did not complete an observation")
+                observation_condition.wait(timeout=remaining)
+        assert_observer_healthy()
+        return before
 
     def run_batch(*, with_observer: bool, batch: int, samples: int) -> list[float]:
-        nonlocal observation_count
-        stop = threading.Event()
-        started = threading.Event()
-        observation_errors: list[BaseException] = []
-        count = [0]
-
-        def observe() -> None:
-            candidate = LeaderLeaseStore(
-                paths.sqlite_db,
-                identity,
-                marker_path=paths.bootstrap_complete_json,
-                lease_duration_seconds=max(120.0, float(ha.lease_duration_seconds)),
-                max_clock_skew_seconds=float(ha.max_clock_skew_seconds),
-                busy_timeout_ms=int(ha.lease_busy_timeout_ms),
-            )
-            try:
-                while not stop.is_set():
-                    candidate.terminal_state()
-                    observed = candidate.observe()
-                    if observed is None or observed["state"] != "active":
-                        raise RuntimeError("matched observer lost the healthy active leader")
-                    count[0] += 1
-                    started.set()
-                    stop.wait(max(0.001, float(ha.candidate_acquire_poll_seconds)))
-            except BaseException as exc:
-                observation_errors.append(exc)
-                started.set()
-            finally:
-                candidate.close()
-
-        thread = threading.Thread(target=observe, name="phase1-matched-observer")
         if with_observer:
-            thread.start()
-            if not started.wait(timeout=5.0):
-                raise TimeoutError("matched candidate observer did not start")
-            if observation_errors:
-                raise RuntimeError("matched candidate observer failed") from observation_errors[0]
+            observations_before = activate_observer()
+        else:
+            pause_observer()
+            observations_before = observation_count
         before = store.business_transaction_metrics()["business_transaction_captured_count"]
         for index in range(samples):
             store.set_run_state("matched-business", {"batch": batch, "index": index})
         recorded = store.business_transaction_metrics()["business_transaction_seconds"]
         measured = [float(value) for value in recorded[int(before) :]]
-        if with_observer:
-            stop.set()
-            thread.join(timeout=5.0)
-            if thread.is_alive():
-                raise TimeoutError("matched candidate observer did not stop")
-            if observation_errors:
-                raise RuntimeError("matched candidate observer failed") from observation_errors[0]
-            observation_count += count[0]
+        pause_observer()
+        observations_after = observation_count
+        block_observations = observations_after - observations_before
+        if with_observer and block_observations <= 0:
+            raise RuntimeError("matched observer block completed without an observation")
+        if not with_observer and block_observations != 0:
+            raise RuntimeError("matched baseline block overlapped a candidate observation")
         if len(measured) != samples:
             raise RuntimeError(f"business sample mismatch: {len(measured)} != {samples}")
+        block_evidence.append(
+            {
+                "batch": batch,
+                "mode": "observer" if with_observer else "baseline",
+                "sample_count": len(measured),
+                "candidate_observation_count": block_observations,
+            }
+        )
         return measured
 
+    observer_thread = threading.Thread(target=observe, name="phase1-matched-observer")
+    observer_thread.start()
     try:
+        if not observer_started.wait(timeout=5.0):
+            raise TimeoutError("matched candidate observer did not start")
+        assert_observer_healthy()
         for index in range(20):
             store.set_run_state("matched-warmup", index)
-        batch_size = BUSINESS_TRANSACTION_MIN_SAMPLES // 4
-        for batch, with_observer in enumerate((False, True, True, False) * 2):
+        schedule = _business_batch_schedule(samples_per_mode=BUSINESS_TRANSACTION_MIN_SAMPLES)
+        for batch, with_observer in enumerate(schedule):
             measured = run_batch(
                 with_observer=with_observer,
                 batch=batch,
-                samples=batch_size,
+                samples=BUSINESS_TRANSACTION_BATCH_SIZE,
             )
             (observer if with_observer else baseline).extend(measured)
     finally:
+        observer_stop.set()
+        observer_active.set()
+        observer_thread.join(timeout=5.0)
+        if observer_thread.is_alive():
+            raise TimeoutError("matched candidate observer did not stop")
         store.close()
         lease.release(token)
         lease.close()
-    return baseline, observer, observation_count
+    assert_observer_healthy()
+    return (
+        baseline,
+        observer,
+        observation_count,
+        len(writer_transaction_statements),
+        block_evidence,
+    )
 
 
 def _publication_config(
@@ -307,9 +396,13 @@ def run_matched_performance(run_root: Path) -> dict[str, Any]:
         dir=run_root.resolve().parent,
     ) as directory:
         benchmark_root = Path(directory)
-        business_baseline, business_observer, observation_count = _business_transaction_samples(
-            benchmark_root, loaded=loaded
-        )
+        (
+            business_baseline,
+            business_observer,
+            observation_count,
+            candidate_writer_transaction_attempt_count,
+            business_blocks,
+        ) = _business_transaction_samples(benchmark_root, loaded=loaded)
         checkpoint_baseline, checkpoint_ha, checkpoint_tensor_numel = _checkpoint_publish_samples(
             benchmark_root,
             loaded=loaded,
@@ -333,6 +426,7 @@ def run_matched_performance(run_root: Path) -> dict[str, Any]:
         len(business_baseline) >= BUSINESS_TRANSACTION_MIN_SAMPLES
         and len(business_observer) >= BUSINESS_TRANSACTION_MIN_SAMPLES
         and observation_count > 0
+        and candidate_writer_transaction_attempt_count == 0
         and business_observer_p99 <= business_limit
         and len(checkpoint_baseline) >= CHECKPOINT_PUBLISH_MIN_SAMPLES
         and len(checkpoint_ha) >= CHECKPOINT_PUBLISH_MIN_SAMPLES
@@ -362,7 +456,14 @@ def run_matched_performance(run_root: Path) -> dict[str, Any]:
             "jitter_seconds": BUSINESS_TRANSACTION_P99_JITTER_SECONDS,
             "allowed_observer_p99_seconds": business_limit,
             "candidate_observation_count": observation_count,
-            "candidate_writer_transaction_attempt_count": 0,
+            "candidate_writer_transaction_attempt_count": (
+                candidate_writer_transaction_attempt_count
+            ),
+            "candidate_writer_transaction_instrumentation": (
+                "sqlite trace count of BEGIN IMMEDIATE/EXCLUSIVE"
+            ),
+            "batch_size": BUSINESS_TRANSACTION_BATCH_SIZE,
+            "blocks": business_blocks,
         },
         "checkpoint_publish": {
             "baseline_contract": "Plan 01 legacy SQLiteStore publication",

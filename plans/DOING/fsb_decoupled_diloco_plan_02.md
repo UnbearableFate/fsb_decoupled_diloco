@@ -1117,7 +1117,7 @@ Phase 2 Checker：`scripts/miyabi/check_plan02_phase2.py --mode phase2-completed
 - takeover protocol latency从旧 lease过期边界到新 epoch DB commit，不含 PBS queue，门槛 `<= 2*renew_interval + 10s`；
 - transaction内 writer-lock pause单独报告，不计入自动 takeover latency；
 - lease/heartbeat控制面 CPU time和阻塞 critical-path wall time分别报告，不把后台重叠 wall time简单相加；
-- 健康leader存在时启动候选观察者，candidate只执行production candidate采用的`terminal_state + observe`只读循环；相对无候选的interleaved matched batch，fenced business transaction（`sqlite_commit_seconds`边界）各至少400个样本，nearest-rank p99必须`<= baseline_p99 * 1.25 + 0.002s`，candidate写transaction尝试数严格为0；
+- 健康leader存在时启动候选观察者，candidate只执行production candidate采用的`terminal_state + observe`只读循环；相对无候选使用细粒度AB/BA配对块交错采样，每个observer块至少完成一次观察、每个baseline块确认observer静默，fenced business transaction（`sqlite_commit_seconds`边界）各至少400个样本，nearest-rank p99必须`<= baseline_p99 * 1.25 + 0.002s`；用SQLite trace直接计数`BEGIN IMMEDIATE/EXCLUSIVE`，candidate写transaction尝试数严格为0；
 - checkpoint digest默认 `off`，publisher、resume和Checker均不得新增全量hash读取；`checker`模式单独报告离线hash wall time，`always`模式单独报告publish关键路径hash wall time；normal HA publish和Plan 01 legacy `SQLiteStore` baseline从目标配置构建同一model/seed/tensor并在同一filesystem以相同dtype交替采样，各至少100个样本，`publish_checkpoint_seconds` nearest-rank p99必须`<= baseline_p99 * 1.25 + 0.002s`；
 - fixed cache污染允许出现，但 current canonical adoption错误严格为0；
 - stale epoch业务 commit数严格为0。

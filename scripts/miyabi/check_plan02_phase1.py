@@ -14,6 +14,7 @@ from safetensors import safe_open
 
 from fs_diloco.core.run_descriptor import load_run_descriptor
 from fs_diloco.observability.phase1_performance import (
+    BUSINESS_TRANSACTION_BATCH_SIZE,
     BUSINESS_TRANSACTION_MAX_P99_RATIO,
     BUSINESS_TRANSACTION_MIN_SAMPLES,
     BUSINESS_TRANSACTION_P99_JITTER_SECONDS,
@@ -275,6 +276,61 @@ def _matched_performance_errors(
             "healthy candidate observer attempted a writer transaction",
             errors,
         )
+        _check(
+            business.get("candidate_writer_transaction_instrumentation")
+            == "sqlite trace count of BEGIN IMMEDIATE/EXCLUSIVE",
+            "candidate writer-attempt instrumentation is missing or changed",
+            errors,
+        )
+        _check(
+            _integer(business.get("batch_size")) == BUSINESS_TRANSACTION_BATCH_SIZE,
+            "matched business batch size changed",
+            errors,
+        )
+        blocks = business.get("blocks")
+        if not isinstance(blocks, list) or not blocks:
+            errors.append("matched business block evidence is missing")
+        else:
+            baseline_block_samples = 0
+            observer_block_samples = 0
+            block_observations = 0
+            block_modes: list[str] = []
+            blocks_valid = True
+            for block in blocks:
+                if not isinstance(block, dict):
+                    blocks_valid = False
+                    continue
+                mode = str(block.get("mode"))
+                sample_count = _integer(block.get("sample_count"), -1)
+                observations = _integer(block.get("candidate_observation_count"), -1)
+                block_modes.append(mode)
+                blocks_valid = blocks_valid and sample_count == BUSINESS_TRANSACTION_BATCH_SIZE
+                if mode == "baseline":
+                    baseline_block_samples += sample_count
+                    blocks_valid = blocks_valid and observations == 0
+                elif mode == "observer":
+                    observer_block_samples += sample_count
+                    block_observations += observations
+                    blocks_valid = blocks_valid and observations > 0
+                else:
+                    blocks_valid = False
+            for pair_index in range(0, len(block_modes), 2):
+                expected = (
+                    ["baseline", "observer"]
+                    if (pair_index // 2) % 2 == 0
+                    else ["observer", "baseline"]
+                )
+                if block_modes[pair_index : pair_index + 2] != expected:
+                    blocks_valid = False
+            _check(
+                blocks_valid
+                and len(block_modes) % 2 == 0
+                and baseline_block_samples == baseline_count
+                and observer_block_samples == observer_count
+                and block_observations == _integer(business.get("candidate_observation_count"), -1),
+                "matched business AB/BA block evidence is invalid",
+                errors,
+            )
         _check(
             business.get("max_p99_ratio") == BUSINESS_TRANSACTION_MAX_P99_RATIO
             and business.get("jitter_seconds") == BUSINESS_TRANSACTION_P99_JITTER_SECONDS,

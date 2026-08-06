@@ -1,0 +1,18 @@
+{
+  "actual_walltime": "00:00:33",
+  "focused": {
+    "elapsed_seconds": 6.95,
+    "passed": 67,
+    "target": "tests/test_plan02_phase1_ha.py"
+  },
+  "full_tree": {
+    "elapsed_seconds": 23.96,
+    "passed": 448
+  },
+  "git_commit": "d9ab027fac7877e46d5cf4dda31d820dc8befbe2",
+  "git_dirty": true,
+  "pbs_job_id": "2499320.opbs",
+  "requested_walltime": "00:01:00",
+  "status": "PASS",
+  "stdout_sha256": "3173f8a0f9978820806fadb2dd65b341cf97cd6cf5220e7c52b4c9edaf967eef"
+}

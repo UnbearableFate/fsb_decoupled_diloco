@@ -609,3 +609,17 @@ Artifacts:
 - 运行环境与walltime：Miyabi `debug-g` compute node `mg0001`，PBS `2499251.opbs`；首次真实model matched运行保守请求`00:01:00`，实际`00:00:28`、`Exit_status=0`，为启动、运行波动和收尾保留了32秒余量。
 - 结果：business baseline/observer各400样本，candidate observation 20次且writer transaction attempt为0，observer p99 `0.010470s`低于允许值`0.040279s`；legacy/HA checkpoint各100样本，HA p99 `0.008285s`低于允许值`0.017494s`；目标tensor为2048个`float32`元素。非正式结构化输出为`artifacts/20260806-1604_phase1-matched-performance-dev_review.json`，SHA-256 `b924a4ea8f39adb2fcef720b92d885767fa690e13f2df48be100ca5c1bbe5853`。
 - 后续：正式clean-target matched job仍请求`00:01:00`。28秒实测尚不足以证明30或40秒在调度启动和共享文件系统波动下有可靠余量；一分钟仍是当前最短实用请求。
+
+## 2026-08-06 16:10 JST — clean target `d9ab027` 1+8 acceptance runtime PASS
+
+- clean commit `d9ab027fac7877e46d5cf4dda31d820dc8befbe2`的launcher PBS `2499280.opbs`请求15秒/实际2秒/exit 0；它提交crash `2499281.opbs`（请求15秒/实际5秒/预期exit 137）、successor `2499282.opbs`（请求40秒/实际22秒/exit 0）及learner array `2499283[0-7]`（各请求35秒/实际18–19秒/全部exit 0）。所有walltime均按相邻实测保留启动、运行和收尾余量。
+- run `plan02_phase1_final_d9ab027`绑定source fingerprint `sha256:aeba76f01a31cfbb42e4a332ecd7e969c0a582ee3662bb716f8ac3e415319485`及descriptor SHA-256 `93a75184e2617f6b50f4a8151e50cf2411ec8c574eee352b8dcfa5cd78887b61`。launcher artifact为`artifacts/20260806-1610_phase1-independent-launch_pass.json`（SHA-256 `21d6f12fefc1e7fcffb32c1d19b2d8b593eab189c904cc1b92caebada2515ff8`），init artifact为`artifacts/20260806-1610_phase1-init-run_pass.json`（SHA-256 `a3cc3cb514e1e7ee31a3c88812ab788d4097120d3e068d3d418f21c52dde1c6a`）。
+- runtime/调度阶梯通过，但随后的matched job `2499293.opbs`返回`BLOCKED`，因此该target没有运行completed Checker且不能作为Phase 1完成证据；失败及采样方法根因已在`failures.md`记录。
+
+## 2026-08-06 16:19 JST — matched performance sampling remediation PASS
+
+- 目标：处置PBS `2499293.opbs`暴露的matched business大块时间漂移，保持冻结的`baseline * 1.25 + 0.002s`门槛不变，并直接证明candidate只读路径没有writer transaction attempt。
+- 修改：400+400 transaction改为32个25-sample细粒度AB/BA配对块；单个candidate线程跨块复用，baseline块等待线程idle并验证观察数不变，observer块至少完成一次`terminal_state + observe`；SQLite trace直接计数`BEGIN IMMEDIATE/EXCLUSIVE`。artifact和completed Checker同时核对batch顺序、每块样本数、observer/baseline observation count及instrumentation identity。
+- 关联测试：Miyabi `debug-g` PBS `2499320.opbs`在`mg0008`运行focused和full tree；根据最近34秒实测并为启动/运行/收尾波动保留充分余量，请求`00:01:00`、实际`00:00:33`、exit 0。focused `67 passed in 6.95s`，full `448 passed in 23.96s`；结构化证据`artifacts/20260806-1618_phase1-matched-remediation-tests_pass.json`，stdout SHA-256 `3173f8a0f9978820806fadb2dd65b341cf97cd6cf5220e7c52b4c9edaf967eef`。
+- compute preflight：PBS `2499323.opbs`在同一node以`00:01:00`请求运行35秒并exit 0。business baseline/observer各400样本、16个observer块各2次观察、16个baseline块均0次观察、SQLite trace writer attempt为0；baseline p99 `0.022691s`、observer p99 `0.023480s`，低于允许值`0.030364s`。checkpoint legacy/HA各100样本，HA p99 `0.014221s`低于允许值`0.019835s`。非正式dirty-source预检artifact为`artifacts/20260806-1619_phase1-matched-performance-remediation-dev_review.json`，SHA-256 `713dd40e93235340324f93e8720366516be96a13161a0b1115e5055c72fdfe78`。
+- 边界：preflight故意绕过wrapper source gate，用当前dirty benchmark实现读取上一clean run descriptor，只证明采样逻辑和时长；不能作为completed Checker输入。提交新clean target后仍需绑定新descriptor执行正式1+8、matched gate和completed Checker。

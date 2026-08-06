@@ -95,7 +95,7 @@ python scripts/miyabi/check_plan02_phase1.py \
   --output /absolute/report/path/phase1-completed-checker_pass.json
 ```
 
-matched artifact在同一shared filesystem上交错比较健康leader只读candidate observer与无observer的fenced transaction p99，并用目标配置构建同一model/seed/tensor交替比较HA checkpoint publication与Plan 01 legacy baseline。completed Checker会复算冻结阈值、校验零candidate writer attempt，并要求artifact的run/descriptor/source/config identity全部与被验收run一致；缺失、错配或性能回归都返回`BLOCKED`。
+matched artifact在同一shared filesystem上用细粒度AB/BA配对块交错比较健康leader只读candidate observer与静默baseline的fenced transaction p99，并用SQLite trace核验candidate没有尝试writer transaction；checkpoint门禁从目标配置构建同一model/seed/tensor，交替比较HA publication与Plan 01 legacy baseline。completed Checker会复算冻结阈值、核对每块采样/观察证据，并要求artifact的run/descriptor/source/config identity全部与被验收run一致；缺失、错配或性能回归都返回`BLOCKED`。
 
 ## 3. 本地冒烟(无 GPU、无外网)
 

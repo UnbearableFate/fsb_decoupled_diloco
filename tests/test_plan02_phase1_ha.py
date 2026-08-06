@@ -21,6 +21,7 @@ from fs_diloco.core.constants import (
     SYNCER_HEARTBEAT_FORMAT_VERSION,
 )
 from fs_diloco.observability.phase1_performance import (
+    BUSINESS_TRANSACTION_BATCH_SIZE,
     BUSINESS_TRANSACTION_MAX_P99_RATIO,
     BUSINESS_TRANSACTION_MIN_SAMPLES,
     BUSINESS_TRANSACTION_P99_JITTER_SECONDS,
@@ -49,6 +50,10 @@ from fs_diloco.runtime.syncer_ha import (
 )
 from fs_diloco.tools.launch_independent_run import _walltime_resource, launch
 from fs_diloco.tools.launch_phase1_acceptance import submit_acceptance_jobs
+from fs_diloco.tools.phase1_matched_performance import (
+    _business_batch_schedule,
+    _is_writer_transaction_statement,
+)
 from fs_diloco.tools.init_run import initialize_run as initialize_ha_run
 from fs_diloco.storage.fenced_store import FencedSQLiteStore, ReadOnlySQLiteStore
 from fs_diloco.storage.leader_lease import (
@@ -2047,6 +2052,16 @@ def _matched_performance_payload() -> tuple[dict[str, object], dict[str, object]
     }
     business_baseline = 0.004
     checkpoint_baseline = 0.003
+    schedule = _business_batch_schedule(samples_per_mode=BUSINESS_TRANSACTION_MIN_SAMPLES)
+    blocks = [
+        {
+            "batch": batch,
+            "mode": "observer" if with_observer else "baseline",
+            "sample_count": BUSINESS_TRANSACTION_BATCH_SIZE,
+            "candidate_observation_count": 1 if with_observer else 0,
+        }
+        for batch, with_observer in enumerate(schedule)
+    ]
     payload: dict[str, object] = {
         "checker": "plan02_phase1_matched_performance",
         "format_version": MATCHED_PERFORMANCE_FORMAT_VERSION,
@@ -2064,8 +2079,13 @@ def _matched_performance_payload() -> tuple[dict[str, object], dict[str, object]
                 max_ratio=BUSINESS_TRANSACTION_MAX_P99_RATIO,
                 jitter_seconds=BUSINESS_TRANSACTION_P99_JITTER_SECONDS,
             ),
-            "candidate_observation_count": 4,
+            "candidate_observation_count": sum(schedule),
             "candidate_writer_transaction_attempt_count": 0,
+            "candidate_writer_transaction_instrumentation": (
+                "sqlite trace count of BEGIN IMMEDIATE/EXCLUSIVE"
+            ),
+            "batch_size": BUSINESS_TRANSACTION_BATCH_SIZE,
+            "blocks": blocks,
         },
         "checkpoint_publish": {
             "baseline_contract": "Plan 01 legacy SQLiteStore publication",
@@ -2118,6 +2138,33 @@ def test_phase1_checker_blocks_missing_or_regressed_matched_evidence() -> None:
     errors = _matched_performance_errors(payload, expected_identity=expected_identity)
     assert any("candidate observer p99 regression" in error for error in errors)
     assert any("HA checkpoint p99 regression" in error for error in errors)
+
+
+def test_matched_business_schedule_is_fine_grained_balanced_ab_ba() -> None:
+    schedule = _business_batch_schedule(samples_per_mode=BUSINESS_TRANSACTION_MIN_SAMPLES)
+    assert len(schedule) == 2 * BUSINESS_TRANSACTION_MIN_SAMPLES // BUSINESS_TRANSACTION_BATCH_SIZE
+    assert sum(schedule) * BUSINESS_TRANSACTION_BATCH_SIZE == BUSINESS_TRANSACTION_MIN_SAMPLES
+    assert (len(schedule) - sum(schedule)) * BUSINESS_TRANSACTION_BATCH_SIZE == (
+        BUSINESS_TRANSACTION_MIN_SAMPLES
+    )
+    for pair_index in range(0, len(schedule), 2):
+        expected = (False, True) if (pair_index // 2) % 2 == 0 else (True, False)
+        assert schedule[pair_index : pair_index + 2] == expected
+
+    assert _is_writer_transaction_statement("BEGIN IMMEDIATE")
+    assert _is_writer_transaction_statement("  begin   exclusive transaction")
+    assert not _is_writer_transaction_statement("BEGIN")
+    assert not _is_writer_transaction_statement("SELECT * FROM syncer_leader")
+
+
+def test_phase1_checker_requires_matched_block_and_writer_instrumentation() -> None:
+    payload, expected_identity = _matched_performance_payload()
+    business = payload["business_candidate_observer"]  # type: ignore[assignment]
+    business["candidate_writer_transaction_instrumentation"] = "hardcoded"
+    business["blocks"][0]["candidate_observation_count"] = 1
+    errors = _matched_performance_errors(payload, expected_identity=expected_identity)
+    assert any("writer-attempt instrumentation" in error for error in errors)
+    assert any("AB/BA block evidence" in error for error in errors)
 
 
 def test_epoch_history_compaction_keeps_active_rows_bounded(tmp_path: Path) -> None:
