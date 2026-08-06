@@ -198,3 +198,53 @@
   normally.
 - Remaining risk: the fresh 8-node jobs must pass source preflight, reach 200 steps with
   declining finite loss, and continue toward their 5000-step final checkpoints.
+
+## 2026-08-06 20:58:01 JST — formal 8-node jobs resubmitted
+
+- Source: branch `codex/torch_ddp_baselines`, commit
+  `051061f46ebf4c889118fcf39088edc8e8743eb7`, runtime source fingerprint
+  `sha256:f15b030f14b021916f4865562e991c2346c5f8d796b810bcbe78815e97f473b0`;
+  pre-submission capture reported `git_dirty=false`.
+- DDP: job `2500440.opbs`, run
+  `20260806_210001_torch_ddp_gpt2_wikitext2_8n_5k`.
+- Periodic average: job `2500441.opbs`, run
+  `20260806_210001_torch_periodic_average_gpt2_wikitext2_8n_5k`.
+- Both requests use `select=8:mpiprocs=1`, literal group `xg24i002`, `small-g`, and an
+  explicit `walltime=01:00:00` override. Prior 5000-step filesystem runs completed in
+  about 18–21 minutes; one hour leaves substantial margin for DDP communication,
+  startup variance, the final checkpoint, and orderly teardown without retaining the
+  materially longer two-hour default reservation.
+- Initial PBS state: both accepted and queued. At 21:02 JST the scheduler estimated
+  21:57:49 JST for both because earlier execution would conflict with a reservation or
+  higher-priority job.
+- Pending acceptance: after start, each job must pass source preflight and the live
+  8-rank health checker at step 200; neither job is to be stopped at that checkpoint.
+
+## 2026-08-06 22:07 JST — CUDA launch fix and required interactive ladder PASS
+
+- Root cause fixed: the formal launchers no longer propagate the allocation shell's
+  node-specific GPU UUID to every host. They pass the logical worker ordinal `0` and
+  export it separately inside each MPI child. They also prefer the rank-zero host's
+  IPv4 address for the rendezvous endpoint.
+- Static validation on `miyabi-g1`: Python compile, Ruff, `bash -n
+  scripts/miyabi/*.pbs`, literal group-list checks, config collection, and `git diff
+  --check` all passed.
+- One-node interactive allocation: `2500613.opbs`, host `mg0006`, GH200, NCCL,
+  real `gpt2` plus `wikitext-2-raw-v1`. DDP completed 50/50 steps with loss
+  `3.834762 -> 3.575747`; periodic averaging completed 50/50 with loss
+  `3.834762 -> 3.576012` and averages at steps 25 and 50.
+- Two-node interactive allocation: `2500620.opbs`, distinct hosts `mg0005` and
+  `mg0006`. A per-host preflight proved both MPI children see one GH200 after setting
+  `CUDA_VISIBLE_DEVICES=0`. DDP completed 50/50 steps on both ranks, recorded 50
+  gradient synchronization events, and losses changed from `3.920998 -> 3.694865`
+  and `3.825627 -> 3.682695`. Periodic averaging completed 50/50 on both ranks,
+  recorded two 124,439,808-parameter averages at steps 25 and 50, and losses changed
+  from `3.920998 -> 3.706724` and `3.825627 -> 3.691891`.
+- The complete repository suite then passed on the two-node allocation: `387 passed
+  in 19.04s`.
+- Run roots: `runs/torch_baselines/interactive_1n_ddp_real50_20260806_2202`,
+  `interactive_1n_periodic_real50_20260806_2203`,
+  `interactive_2n_ddp_real50_20260806_2205`, and
+  `interactive_2n_periodic_real50_20260806_2206`.
+- Gate result: the user-required real-model/real-dataset 1-node and 2-node interactive
+  tests have passed; fresh formal 8-node submissions are now permitted.

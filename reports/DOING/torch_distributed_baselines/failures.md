@@ -155,3 +155,31 @@
   the fingerprint, add a regression proving an untracked `reports/` file neither marks
   runtime source dirty nor changes the fingerprint, then rerun static and compute-node
   validation before resubmitting with fresh run IDs.
+
+## 2026-08-06 21:43 JST — formal-8node-launch-02 (consecutive failure 1)
+
+- Jobs and runs: DDP `2500440.opbs` /
+  `20260806_210001_torch_ddp_gpt2_wikitext2_8n_5k`; periodic average
+  `2500441.opbs` /
+  `20260806_210001_torch_periodic_average_gpt2_wikitext2_8n_5k`.
+- Environment: two independent `select=8:mpiprocs=1` allocations in `small-g`, source
+  commit `051061f46ebf4c889118fcf39088edc8e8743eb7` and runtime fingerprint
+  `sha256:f15b030f14b021916f4865562e991c2346c5f8d796b810bcbe78815e97f473b0`.
+- Expected: both launchers expose one local GPU per rank, initialize their eight-rank
+  NCCL process groups, and begin real GPT-2/WikiText-2 training.
+- Actual: both passed clean-source preflight and rendezvous, then every training process
+  failed in `_runtime_device` with `RuntimeError: NCCL baseline requires CUDA`. Both
+  jobs exited 1 after 14 seconds; PBS reported no abnormal nodes.
+- Confirmed cause: each launcher captured the allocation shell's ambient
+  `CUDA_VISIBLE_DEVICES` GPU UUID and explicitly sent that same node-specific UUID to
+  all eight MPI children. The UUID is valid only on its owning node, so remote ranks
+  could not enumerate a CUDA device. The repository's established multi-node launchers
+  instead pass a logical local ordinal (`0`) and export it independently in every MPI
+  child.
+- Evidence: both `train.log` files under `logs/qsub_20260806_210001_*`, PBS stdout
+  `torch_ddp_gpt2_5k.o2500440` / `torch_pavg_gpt2_5k.o2500441`, and terminal
+  `tracejob` records.
+- Next change: pass `WORKER_CUDA_VISIBLE_DEVICES=0` through MPI, export it only inside
+  each node-local supervisor, and verify both algorithms for at least 50 real-model,
+  real-dataset steps on interactive one-node and two-node allocations before another
+  formal submission.

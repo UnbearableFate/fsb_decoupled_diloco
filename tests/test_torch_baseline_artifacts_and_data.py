@@ -26,6 +26,9 @@ def _runtimes(size: int):
 
 def test_formal_and_smoke_baseline_configs_resolve():
     formal = resolve_config("configs/torch_baseline_gpt2_wikitext2_8n_5000steps.yaml")
+    real_two_rank = resolve_config(
+        "configs/torch_baseline_gpt2_wikitext2_2rank_debug.yaml"
+    )
     smoke = resolve_config("configs/torch_baseline_tiny_2rank.yaml")
 
     assert formal.torch_baseline.enabled
@@ -34,8 +37,33 @@ def test_formal_and_smoke_baseline_configs_resolve():
     assert formal.training.max_local_steps == 5000
     assert formal.training.inner_steps == 100
     assert formal.inner_optimizer.scheduler_total_steps == 5000
+    assert real_two_rank.model.name_or_path == "gpt2"
+    assert real_two_rank.data.dataset_name == "wikitext"
+    assert real_two_rank.sync.num_learners == 2
+    assert real_two_rank.training.max_local_steps == 50
+    assert real_two_rank.training.inner_steps == 25
+    assert real_two_rank.torch_baseline.backend == "nccl"
+    assert real_two_rank.torch_baseline.require_distinct_hosts
     assert smoke.torch_baseline.backend == "gloo"
     assert not smoke.torch_baseline.require_distinct_hosts
+
+
+@pytest.mark.parametrize(
+    "launcher",
+    [
+        "scripts/miyabi/run_8node_torch_ddp_gpt2_wikitext2_5000steps.pbs",
+        "scripts/miyabi/run_8node_torch_periodic_average_gpt2_wikitext2_5000steps.pbs",
+    ],
+)
+def test_formal_launcher_uses_node_local_cuda_ordinal(launcher):
+    with open(launcher, encoding="utf-8") as launcher_file:
+        script = launcher_file.read()
+
+    assert 'WORKER_CUDA_VISIBLE_DEVICES="${WORKER_CUDA_VISIBLE_DEVICES:-0}"' in script
+    assert '"WORKER_CUDA_VISIBLE_DEVICES=$WORKER_CUDA_VISIBLE_DEVICES"' in script
+    assert 'export CUDA_VISIBLE_DEVICES="$WORKER_CUDA_VISIBLE_DEVICES"' in script
+    assert 'CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"' not in script
+    assert '"CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"' not in script
 
 
 def test_existing_training_manifest_or_metrics_refuses_overwrite(tmp_path):
