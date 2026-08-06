@@ -623,3 +623,19 @@ Artifacts:
 - 关联测试：Miyabi `debug-g` PBS `2499320.opbs`在`mg0008`运行focused和full tree；根据最近34秒实测并为启动/运行/收尾波动保留充分余量，请求`00:01:00`、实际`00:00:33`、exit 0。focused `67 passed in 6.95s`，full `448 passed in 23.96s`；结构化证据`artifacts/20260806-1618_phase1-matched-remediation-tests_pass.json`，stdout SHA-256 `3173f8a0f9978820806fadb2dd65b341cf97cd6cf5220e7c52b4c9edaf967eef`。
 - compute preflight：PBS `2499323.opbs`在同一node以`00:01:00`请求运行35秒并exit 0。business baseline/observer各400样本、16个observer块各2次观察、16个baseline块均0次观察、SQLite trace writer attempt为0；baseline p99 `0.022691s`、observer p99 `0.023480s`，低于允许值`0.030364s`。checkpoint legacy/HA各100样本，HA p99 `0.014221s`低于允许值`0.019835s`。非正式dirty-source预检artifact为`artifacts/20260806-1619_phase1-matched-performance-remediation-dev_review.json`，SHA-256 `713dd40e93235340324f93e8720366516be96a13161a0b1115e5055c72fdfe78`。
 - 边界：preflight故意绕过wrapper source gate，用当前dirty benchmark实现读取上一clean run descriptor，只证明采样逻辑和时长；不能作为completed Checker输入。提交新clean target后仍需绑定新descriptor执行正式1+8、matched gate和completed Checker。
+
+## 2026-08-06 16:24 JST — final clean 1+8, matched performance, and completed Checker PASS
+
+### Facts
+
+- 最终clean executable source commit为`36762854bfcbbc23b71ab838913023d64cf37b5e`，source fingerprint `sha256:c2cd29b369c4825af1cf491ad414de68e11c77e78df0173915f6ef834827dbe2`。run `plan02_phase1_final_3676285`的descriptor SHA-256为`151a3f77ffa8c54bb9e2a038e36ed04382d1ccfa2ecfd75c401627cc3ba6bc17`，config SHA-256为`1b0afea92e9ffe98afb692360dc7a2edd9d57a706d7afde1a1826c556490c3f9`。
+- 1+8独立job：launcher `2499329.opbs`请求15秒/实际2秒/exit 0；crash syncer `2499331.opbs`请求15秒/实际6秒/预期exit 137；successor `2499332.opbs`请求40秒/实际22秒/exit 0；learner array `2499333[0-7]`各请求35秒/实际18秒/全部exit 0。请求值基于相邻实测并分别保留9、18和17秒运行余量，且launcher另有13秒余量；没有因压缩walltime牺牲完成可靠性。
+- runtime达到epoch 2、v10、terminal generation 2和5120 seen tokens；epoch 1只提交v0后被注入SIGKILL，epoch 2从DB恢复并提交v1–v10后released。8个learner的独立process exit均正常。
+- formal matched job `2499345.opbs`请求1分钟、实际35秒、exit 0。business baseline/observer各400样本：32个25-sample AB/BA块中，16个observer块各2次观察、16个baseline块均0次观察，SQLite trace writer attempt为0；baseline p99 `0.022910s`、observer p99 `0.020053s`，低于允许值`0.030638s`。legacy/HA checkpoint各100样本，HA p99 `0.015462s`低于允许值`0.020234s`。artifact `artifacts/20260806-1623_phase1-matched-performance_pass.json`，SHA-256 `63299493aa9eaeb8d372c8296cbd1d73135b6cce358e838d761f0238a5a49d78`。
+- completed Checker PBS `2499349.opbs`请求15秒、实际4秒、exit 0并返回`PASS`。它复核120次lease renew/0 failure、457次business transaction/0 failure/p99 `0.018573s < 0.05s`、takeover `1.030941s < 10.2s`、stale epoch business commit 0、canonical adoption error 0、runtime failure event 0、matched artifact identity/门槛和terminal/canonical control。主artifact为`artifacts/20260806-1624_phase1-completed-checker_pass.json`，SHA-256 `590129ac221c51679aafca517b92b86a92727e0d70908769021336609c58f74e`。
+- submission/init artifacts分别为`artifacts/20260806-1622_phase1-independent-launch_pass.json`（SHA-256 `bf12888130785320e6d25eb727aeebc307b1491accf31256a755db76f9af67a2`）和`artifacts/20260806-1622_phase1-init-run_pass.json`（SHA-256 `207b90f1fa3816c2a0cc10a396d8097875defda468d51482eca4ce98c1c02aa0`）。
+
+### Inferences and gate boundary
+
+- 该9节点workload每个learner约执行200以上local steps并完成10个global merge，超过50-local-step × 10-global-step文档同步基线；`docs/07-operations.md`已同步最终验证结果。这是HA恢复、协议和控制面性能证据，不产生训练质量结论。
+- runtime、matched性能和completed Checker现均绑定同一clean source/descriptor并通过，修复了本轮Codex High/Medium/Low accepted findings以及matched采样失败。Phase 1仍保持completion candidate，直到对Phase 0 base `1ba9a1a70e4ede6fdd5edf066f11f6921f111da5`至最终evidence target的累计diff完成最后一次必做Codex审查；Claude reviewer已在本轮按可核验会话限额记为`skipped-session-limit`且不重试、不阻断。

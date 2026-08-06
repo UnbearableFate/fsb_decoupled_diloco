@@ -1,0 +1,238 @@
+{
+  "business_candidate_observer": {
+    "aggregation": "nearest-rank p99 over interleaved matched batches",
+    "allowed_observer_p99_seconds": 0.030637978684855627,
+    "baseline_p99_seconds": 0.0229103829478845,
+    "baseline_sample_count": 400,
+    "batch_size": 25,
+    "blocks": [
+      {
+        "batch": 0,
+        "candidate_observation_count": 0,
+        "mode": "baseline",
+        "sample_count": 25
+      },
+      {
+        "batch": 1,
+        "candidate_observation_count": 2,
+        "mode": "observer",
+        "sample_count": 25
+      },
+      {
+        "batch": 2,
+        "candidate_observation_count": 2,
+        "mode": "observer",
+        "sample_count": 25
+      },
+      {
+        "batch": 3,
+        "candidate_observation_count": 0,
+        "mode": "baseline",
+        "sample_count": 25
+      },
+      {
+        "batch": 4,
+        "candidate_observation_count": 0,
+        "mode": "baseline",
+        "sample_count": 25
+      },
+      {
+        "batch": 5,
+        "candidate_observation_count": 2,
+        "mode": "observer",
+        "sample_count": 25
+      },
+      {
+        "batch": 6,
+        "candidate_observation_count": 2,
+        "mode": "observer",
+        "sample_count": 25
+      },
+      {
+        "batch": 7,
+        "candidate_observation_count": 0,
+        "mode": "baseline",
+        "sample_count": 25
+      },
+      {
+        "batch": 8,
+        "candidate_observation_count": 0,
+        "mode": "baseline",
+        "sample_count": 25
+      },
+      {
+        "batch": 9,
+        "candidate_observation_count": 2,
+        "mode": "observer",
+        "sample_count": 25
+      },
+      {
+        "batch": 10,
+        "candidate_observation_count": 2,
+        "mode": "observer",
+        "sample_count": 25
+      },
+      {
+        "batch": 11,
+        "candidate_observation_count": 0,
+        "mode": "baseline",
+        "sample_count": 25
+      },
+      {
+        "batch": 12,
+        "candidate_observation_count": 0,
+        "mode": "baseline",
+        "sample_count": 25
+      },
+      {
+        "batch": 13,
+        "candidate_observation_count": 2,
+        "mode": "observer",
+        "sample_count": 25
+      },
+      {
+        "batch": 14,
+        "candidate_observation_count": 2,
+        "mode": "observer",
+        "sample_count": 25
+      },
+      {
+        "batch": 15,
+        "candidate_observation_count": 0,
+        "mode": "baseline",
+        "sample_count": 25
+      },
+      {
+        "batch": 16,
+        "candidate_observation_count": 0,
+        "mode": "baseline",
+        "sample_count": 25
+      },
+      {
+        "batch": 17,
+        "candidate_observation_count": 2,
+        "mode": "observer",
+        "sample_count": 25
+      },
+      {
+        "batch": 18,
+        "candidate_observation_count": 2,
+        "mode": "observer",
+        "sample_count": 25
+      },
+      {
+        "batch": 19,
+        "candidate_observation_count": 0,
+        "mode": "baseline",
+        "sample_count": 25
+      },
+      {
+        "batch": 20,
+        "candidate_observation_count": 0,
+        "mode": "baseline",
+        "sample_count": 25
+      },
+      {
+        "batch": 21,
+        "candidate_observation_count": 2,
+        "mode": "observer",
+        "sample_count": 25
+      },
+      {
+        "batch": 22,
+        "candidate_observation_count": 2,
+        "mode": "observer",
+        "sample_count": 25
+      },
+      {
+        "batch": 23,
+        "candidate_observation_count": 0,
+        "mode": "baseline",
+        "sample_count": 25
+      },
+      {
+        "batch": 24,
+        "candidate_observation_count": 0,
+        "mode": "baseline",
+        "sample_count": 25
+      },
+      {
+        "batch": 25,
+        "candidate_observation_count": 2,
+        "mode": "observer",
+        "sample_count": 25
+      },
+      {
+        "batch": 26,
+        "candidate_observation_count": 2,
+        "mode": "observer",
+        "sample_count": 25
+      },
+      {
+        "batch": 27,
+        "candidate_observation_count": 0,
+        "mode": "baseline",
+        "sample_count": 25
+      },
+      {
+        "batch": 28,
+        "candidate_observation_count": 0,
+        "mode": "baseline",
+        "sample_count": 25
+      },
+      {
+        "batch": 29,
+        "candidate_observation_count": 2,
+        "mode": "observer",
+        "sample_count": 25
+      },
+      {
+        "batch": 30,
+        "candidate_observation_count": 2,
+        "mode": "observer",
+        "sample_count": 25
+      },
+      {
+        "batch": 31,
+        "candidate_observation_count": 0,
+        "mode": "baseline",
+        "sample_count": 25
+      }
+    ],
+    "candidate_observation_count": 32,
+    "candidate_writer_transaction_attempt_count": 0,
+    "candidate_writer_transaction_instrumentation": "sqlite trace count of BEGIN IMMEDIATE/EXCLUSIVE",
+    "jitter_seconds": 0.002,
+    "max_p99_ratio": 1.25,
+    "metric": "fenced business transaction seconds (sqlite commit boundary)",
+    "observer_p99_seconds": 0.020052672014571726,
+    "observer_sample_count": 400
+  },
+  "checked_at": 1786001049.780499,
+  "checker": "plan02_phase1_matched_performance",
+  "checkpoint_publish": {
+    "aggregation": "nearest-rank p99 over alternating matched samples",
+    "allowed_ha_p99_seconds": 0.020234487506560983,
+    "baseline_contract": "Plan 01 legacy SQLiteStore publication",
+    "baseline_p99_seconds": 0.014587590005248785,
+    "baseline_sample_count": 100,
+    "digest_mode": "off",
+    "ha_p99_seconds": 0.015461578033864498,
+    "ha_sample_count": 100,
+    "jitter_seconds": 0.002,
+    "matched_fields": "source/config/model/seed/tensor/dtype/filesystem",
+    "max_p99_ratio": 1.25,
+    "publish_dtype": "float32",
+    "tensor_numel": 2048
+  },
+  "format_version": 1,
+  "identity": {
+    "config_sha256": "1b0afea92e9ffe98afb692360dc7a2edd9d57a706d7afde1a1826c556490c3f9",
+    "descriptor_sha256": "151a3f77ffa8c54bb9e2a038e36ed04382d1ccfa2ecfd75c401627cc3ba6bc17",
+    "git_commit": "36762854bfcbbc23b71ab838913023d64cf37b5e",
+    "git_dirty": false,
+    "run_id": "plan02_phase1_final_3676285",
+    "source_fingerprint": "sha256:c2cd29b369c4825af1cf491ad414de68e11c77e78df0173915f6ef834827dbe2"
+  },
+  "status": "PASS"
+}
