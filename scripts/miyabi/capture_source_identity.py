@@ -78,7 +78,14 @@ def capture(project_root: Path) -> dict[str, Any]:
     project_root = project_root.resolve()
     commit = _git(project_root, "rev-parse", "HEAD").decode("ascii").strip()
     dirty = bool(
-        _git(project_root, "status", "--porcelain=v1", "--untracked-files=all").strip()
+        _git(
+            project_root,
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+            "--",
+            *SOURCE_SCOPES,
+        ).strip()
     )
     listed = _git(
         project_root,

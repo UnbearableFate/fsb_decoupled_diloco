@@ -56,6 +56,12 @@ def test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources(tm
         "fs_diloco/module.py",
     }
 
+    (repo / "reports").mkdir()
+    (repo / "reports" / "review.md").write_text("review evidence\n", encoding="utf-8")
+    out_of_scope = _capture(repo, "out-of-scope")
+    assert out_of_scope["git_dirty"] is False
+    assert out_of_scope["source_fingerprint"] == clean["source_fingerprint"]
+
     (repo / "fs_diloco" / "module.py").write_text("VALUE = 2\n", encoding="utf-8")
     tracked_edit = _capture(repo, "tracked")
     assert tracked_edit["git_dirty"] is True

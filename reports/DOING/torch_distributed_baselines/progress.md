@@ -176,3 +176,25 @@
 - Evidence: `artifacts/20260806-115126_review-remediation_pass.txt`; source-pin run root
   `/work/xg24i002/x10041/fsb_decoupled_diloco-master/runs/torch_baselines/sourcepin_1n_20260806_1150`.
 - Remaining risk: formal 8-node/200-step acceptance and continued 5000-step handoff.
+
+## 2026-08-06 20:57:00 JST — scoped source-identity regression PASS
+
+- Scope: correction for the two formal jobs that rejected unchanged runtime sources
+  after unrelated review reports were added while queued.
+- Change: `capture_source_identity.py` now computes `git_dirty` over the same runtime
+  source scopes used by its fingerprint instead of the entire worktree. A new regression
+  proves that an untracked file under `reports/` leaves both runtime dirty state and the
+  source fingerprint unchanged, while tracked and untracked files inside `fs_diloco/`
+  still mark the source dirty and change the fingerprint.
+- Static validation on `miyabi-g1`: `git diff --check`, Python compile, `bash -n
+  scripts/miyabi/*.pbs`, literal group scan, and placeholder scan all passed.
+- Runtime environment: compute node `mg0011`, interactive allocation `2500425.opbs`,
+  `select=1`, modules `nvidia/25.9` and `nv-hpcx/25.9`.
+- Runtime commands: focused capture test (`1 passed`) followed by
+  `tests/test_capture_source_identity.py tests/test_source_identity.py
+  tests/test_torch_baseline_artifacts_and_data.py` (`9 passed in 4.04s`).
+- Result: the failure cause is covered and the baseline manifest/source-identity
+  integration remains passing. The allocation used 00:01:51 of 00:15:00 and exited
+  normally.
+- Remaining risk: the fresh 8-node jobs must pass source preflight, reach 200 steps with
+  declining finite loss, and continue toward their 5000-step final checkpoints.

@@ -130,3 +130,28 @@
   target code-review directory.
 - Next change: start a new independent session with a new UUID against the same frozen
   commit and allow it to finish while Codex completes its independent report.
+
+## 2026-08-06 — formal-8node-launch-01 (consecutive failure 1)
+
+- Jobs and runs: DDP `2497995.opbs` /
+  `20260806_115410_torch_ddp_gpt2_wikitext2_8n_5k`; periodic average
+  `2497996.opbs` /
+  `20260806_115410_torch_periodic_average_gpt2_wikitext2_8n_5k`.
+- Environment: two independent `select=8:mpiprocs=1` allocations in `small-g`, source
+  commit `1d4ff72f46766082e77de95fff21d6ab130d83ac`.
+- Expected: both launchers pass source preflight and begin the 5000-step distributed
+  training runs.
+- Actual: both exited with status 2 after two seconds, before MPI, torchrun, model load,
+  or GPU training. PBS reported no abnormal nodes and zero GPU memory use. Both stdout
+  files contain `Formal torch baseline requires a clean source commit`.
+- Confirmed cause: while the jobs were queued, the requested GLM-5.2 and DeepSeek V4
+  Flash review reports were created as untracked files under `reports/`. Source identity
+  fingerprints only `fs_diloco`, `configs`, `scripts`, and environment metadata, but its
+  `git_dirty` flag incorrectly inspected the entire worktree. The unrelated review
+  evidence therefore rejected otherwise unchanged runtime sources.
+- Evidence: `torch_ddp_gpt2_5k.o2497995`, `torch_pavg_gpt2_5k.o2497996`, `tracejob`
+  terminal records, and both failed run roots' `source_identity.json` files.
+- Next change: scope the source-dirty check to the same runtime source paths included in
+  the fingerprint, add a regression proving an untracked `reports/` file neither marks
+  runtime source dirty nor changes the fingerprint, then rerun static and compute-node
+  validation before resubmitting with fresh run IDs.
