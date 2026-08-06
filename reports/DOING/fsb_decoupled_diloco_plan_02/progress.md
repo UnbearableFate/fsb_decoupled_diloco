@@ -835,8 +835,21 @@ Artifacts:
 - Low finding disposition `fixed`: runtime flow, configuration, and syncer module documentation now state that only token close freezes at current version, whereas no-progress shares the manual/budget/deadline allowance of at most `max_terminal_merges` additional merges and remains bounded by the global outer target.
 - The subsequent review increment also includes the independently found-and-fixed successor reason-overlap case recorded immediately above. Because that fix touches terminal concurrency semantics, the next frozen review uses c92dd0f as base and the latest committed target, rather than treating the documentation correction as automatic approval.
 
+## 2026-08-07 02:07 JST — Phase 2 continuous incremental review APPROVE
+
+- Frozen review base/target: `c92dd0f5814acf5cb3c1d5b1d0dfe7c73f754cd6..68fdb0ab538b56bb2e99245fb55c1ff3f3c9d364`; ancestry and clean target were verified.
+- Independent Codex report `reports/DOING/code_review/fsb_decoupled_diloco_plan_02/phase-2/gpt-5.6-sol_68fdb0ab538b56bb2e99245fb55c1ff3f3c9d364.md` returned `APPROVE` with no Critical/High/Medium/Low findings. It confirms the c92dd0f Low documentation finding is `fixed`, the successor reason-overlap finding is `fixed`, reserved capacity namespaces remain protected, and focused/full PBS `2501959/2501960` passed 40/492 tests.
+- External reviewer invocation used requested/canonical model `claude-opus-5`, fresh session `dc08ca5a-8e01-4651-be62-48322d09a08b`, exact base/target and read-only prompt. The JSON result had `api_error_status=429`, zero model usage, and the explicit message `You've hit your session limit · resets 6am (Asia/Tokyo)`. Per `plans/AGENTS.md`, disposition is `skipped-session-limit`: no Claude report was created or fabricated, this is not approval, it is not retried, and it does not block the completed Codex gate.
+- Phase 2 incremental review findings are therefore fully disposed. The remaining mandatory gate is the plan-complete current-state review of all tracked `fs_diloco/` code at a new latest frozen commit.
+
 ## 2026-08-07 02:05 JST — Phase 2 target `c92dd0f` incremental review disposition
 
 - Independent Codex review report: `reports/DOING/code_review/fsb_decoupled_diloco_plan_02/phase-2/gpt-5.6-sol_c92dd0f5814acf5cb3c1d5b1d0dfe7c73f754cd6.md`, base `7feb09992b7f40b255e0858020a50d811a602b9c`, target `c92dd0f5814acf5cb3c1d5b1d0dfe7c73f754cd6`, decision `CHANGES_REQUIRED` for one Low documentation contradiction.
 - Disposition `fixed`: the runtime-flow, configuration, syncer-module, and requirement-matrix descriptions now distinguish the token close ceiling (current version) from no-progress/manual/budget/deadline close (at most `max_terminal_merges` extra merges, bounded by the global outer target). No executable behavior changed for this finding.
 - The required external invocation used requested model `claude-opus-5` and fresh session `5da4ea40-98c7-4fdc-93ba-6a7c054a9e27`. Its JSON returned `api_error_status=429`, zero model usage, and the explicit message `You've hit your session limit · resets 6am (Asia/Tokyo)`. Per `plans/AGENTS.md`, this reviewer is `skipped-session-limit`; it was not retried and does not block the Codex gate.
+
+## 2026-08-07 02:08 JST — Phase 2 final incremental review APPROVE
+
+- Independent Codex report `reports/DOING/code_review/fsb_decoupled_diloco_plan_02/phase-2/gpt-5.6-sol_68fdb0ab538b56bb2e99245fb55c1ff3f3c9d364.md` reviewed continuous range `c92dd0f5814acf5cb3c1d5b1d0dfe7c73f754cd6..68fdb0ab538b56bb2e99245fb55c1ff3f3c9d364` and returned `APPROVE` with no findings.
+- The required external invocation requested `claude-opus-5` with fresh session `729a74d1-39e0-46c4-a8b5-b691b972a28e`; its JSON returned `api_error_status=429`, zero model usage, and the explicit session-limit reset message. It is recorded as `skipped-session-limit`, was not retried, and does not block the completed Codex gate.
+- The approved increment covers the persisted successor drain-reason fix, nonreserved synthetic observation test keys, documentation/requirement corrections, and append-only review evidence. Phase 2's incremental review gate is closed; plan completion still requires the current-state review of all tracked `fs_diloco/` code.
