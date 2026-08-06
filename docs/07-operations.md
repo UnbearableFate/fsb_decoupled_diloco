@@ -125,6 +125,8 @@ scripts/local/clean_run.sh --delete --keep-latest-global runs/fs_diloco
 | `run_syncer_candidate.pbs` / `run_static_learner.pbs` | 各 1 节点独立 job | HA full候选和 static learner array；两者在 runtime import前校验 descriptor/source identity，提交时应覆盖成 workload所需的短 walltime |
 | `run_plan02_phase1_{tests,smoke,faults,lock,acceptance_launcher,checker}.pbs` | 1或2节点 | Phase 1关联测试、故障矩阵、SQLite lock边界、独立 1+8 launcher和只读 completed Checker；验证脚本使用分钟级 walltime |
 
+2026-08-06 的 Phase 1 正式验收在 Miyabi 上以 1 个 syncer job、8 个独立 learner array element运行：epoch 1 syncer在 v0提交后的 failpoint被 `SIGKILL`，依赖 job取得 epoch 2并从 DB恢复，随后连续提交 v1–v10；8个 learner分别位于独立GPU节点并正常停止。最终 terminal generation为2，completed Checker返回`PASS`，无runtime failure event。该 workload每个 learner约执行200以上local steps且完成10个global merge，超过50-local-step × 10-global-step文档同步基线；证据为 PBS `2498481/2498482/2498483/2498484[]/2498521`及 `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-130015_phase1-completed-checker_pass.json`。这是恢复/协议验证，不是训练质量结论。
+
 提交与自定义(以 9 节点为例):
 
 ```bash

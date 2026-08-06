@@ -1,0 +1,21 @@
+{
+  "environment": {
+    "host": "mg0007",
+    "pbs_job_id": "2498366.opbs",
+    "queue": "debug-g"
+  },
+  "focused": {
+    "command": ".venv/bin/python -m pytest -q tests/test_plan02_phase1_ha.py",
+    "passed": 34,
+    "seconds": 4.99
+  },
+  "full": {
+    "command": ".venv/bin/python -m pytest -q",
+    "passed": 413,
+    "seconds": 21.27
+  },
+  "requested_walltime": "00:01:00",
+  "review_target_at_execution": "17e704ad79af2fb832d140262673ec8f3272fa96",
+  "status": "PASS",
+  "used_walltime": "00:00:29"
+}

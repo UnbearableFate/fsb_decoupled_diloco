@@ -467,3 +467,21 @@ Artifacts:
 - 命令与walltime：Miyabi `debug-g` node `mg0007`，PBS `2498353.opbs`；依据上一 smoke实际12秒，显式使用 `qsub -l walltime=00:01:00 scripts/miyabi/run_plan02_phase1_smoke.pbs`，实际walltime `00:00:12`。
 - 结果：job `Exit_status=0`；最终version 2、leader epoch 1且released、terminal generation 2；generation 1只有early stop，generation 2有stop/summary两条publication；staged Checker返回`PASS_WITH_FOLLOWUPS`。结构化摘要：`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-124637_phase1-smoke_pass.json`。
 - 边界：本轮run使用dirty source fingerprint，只是协议回归；正式Phase 1证据仍须固定到clean review-target commit。
+
+## 2026-08-06 13:00 JST — Phase 1 clean 1+8 independent-job acceptance PASS
+
+### Facts
+
+- 冻结实现为commit `24e181bc8031e68ae32310c628d56422b3d7654b`；runtime source fingerprint为`sha256:5b5bac2807e9b1caa976e72bc8824721d1703d81e609b5368eacdc65a00e097f`，run `plan02_phase1_acceptance_2498481`的descriptor SHA为`7b7db838e74c26657c4e7d6802f66d2fc0811bafe6ec4a790cc6bc3347bd9c11`。
+- 最短walltime依据历史实际用时估算：launcher请求15秒/实际1秒；crash syncer请求20秒/实际5秒并按预期`Exit_status=137`；successor请求45秒/实际19秒并`Exit_status=0`；8个learner各请求45秒/实际30秒并全部`Exit_status=0`；completed Checker请求20秒/实际5秒并`Exit_status=0`。
+- 独立job为launcher `2498481.opbs`、crash syncer `2498482.opbs`、successor `2498483.opbs`、8节点learner array `2498484[].opbs`、Checker `2498521.opbs`。epoch 1提交v0后在`after_db_commit` failpoint被SIGKILL；epoch 2从DB恢复并连续提交v1–v10。
+- completed Checker验证terminal generation 2、final version 10、5120 seen tokens、leader released、canonical latest/stop/summary与DB一致、无runtime failure event、无error/warning并返回`PASS`。结构化主证据：`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-130015_phase1-completed-checker_pass.json`，SHA-256 `a49fd10e97f0d2b22efdd9111738d5e7eb3ddeb7332d9b9ea564d0172424dcba`。
+- 同一clean源上的G2测试为PBS `2498366.opbs`（focused 34 passed / full 413 passed，29秒）；G3故障矩阵为`2498449.opbs`（6 failpoints × 10 iterations，123秒，artifact SHA-256 `061695f4ca542b3c7200f634c58c6a76f440927a7af71892fdcf90e19255e468`）；G4两节点lock为`2498464.opbs`（6秒，artifact SHA-256 `0136bcccf04dd4848cdbd6e338ce27276f12c2d332827ed9412ddc9ee1e61d16`）；clean smoke为`2498472.opbs`（12秒，terminal generation 2）。
+
+### Inferences
+
+- Phase 1的实现与实验阶梯已满足完成候选条件。该9节点workload每个learner约200以上local steps并完成10个global merge，超过仓库50-local-step × 10-global-step文档同步基线，因此同步更新了`docs/07-operations.md`；这是HA恢复与协议证据，不产生训练质量结论。
+
+### Follow-up
+
+- 对累计Phase 1 diff执行`plans/AGENTS.md`规定的Codex必做审查及Claude `claude -p`非交互审查；完成findings处置后才将HA-01…HA-20标记complete并进入Phase 2。
