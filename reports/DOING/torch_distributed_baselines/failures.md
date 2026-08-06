@@ -111,3 +111,22 @@
 - Next change: reuse the already selected `expected_root` for the resolved path assertion
   and rerun the complete suite. A third same-suite failure will trigger the required
   comprehensive review before a fourth attempt.
+
+## 2026-08-06 — claude-review-invocation-01 (consecutive failure 1)
+
+- Environment: `miyabi-g1` login/control plane; clean review target
+  `e30d49f102ca91c44af5e5700457c98a6e26de6e` against
+  `c1c61153548ff7b2543d3ce1bc764c19432b138e`.
+- Invocation: fresh `claude --print`, requested model `claude-opus-5`, session
+  `4c7c2fdc-c5af-4af3-aafc-49436742051a`, `--output-format json`, permission mode
+  `bypassPermissions`, and `--dangerously-skip-permissions`.
+- Expected: independent reviewer-only report for the frozen target.
+- Actual: Codex interrupted the still-running invocation during an unnecessary
+  re-audit of whether the final hardening changes preceded the target commit. Git
+  inspection then confirmed that they were already included in the target. No Claude
+  report was created and no substantive result or model metadata was read.
+- Confirmed cause: operator sequencing error, not a reviewer/session/model failure.
+- Evidence: process exit 1, empty captured stdout at interruption, and no file under the
+  target code-review directory.
+- Next change: start a new independent session with a new UUID against the same frozen
+  commit and allow it to finish while Codex completes its independent report.

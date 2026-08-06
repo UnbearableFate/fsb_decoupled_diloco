@@ -20,6 +20,8 @@ FATAL_LOG_PATTERN = re.compile(
     r"Traceback \(most recent call last\)|non-finite (?:loss|gradient|parameter)|worker lost",
     re.IGNORECASE,
 )
+FORMAL_MAX_STEPS = 5000
+FORMAL_AVERAGE_INTERVAL = 100
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
@@ -137,6 +139,18 @@ def evaluate_health(
     if summary is not None and summary.get("status") == "failed":
         failures.append(f"training summary reports failure: {summary.get('error')}")
     max_steps = int(manifest.get("max_steps", 0))
+    average_interval = int(manifest.get("average_interval", 0))
+    checks["formal_max_steps"] = max_steps
+    checks["formal_average_interval"] = average_interval
+    if max_steps != FORMAL_MAX_STEPS:
+        failures.append(
+            f"formal max_steps is {max_steps}, expected {FORMAL_MAX_STEPS}"
+        )
+    if average_interval != FORMAL_AVERAGE_INTERVAL:
+        failures.append(
+            "formal average interval is "
+            f"{average_interval}, expected {FORMAL_AVERAGE_INTERVAL}"
+        )
     completed_full_run = bool(
         summary is not None
         and summary.get("status") == "completed"
@@ -255,9 +269,9 @@ def evaluate_health(
         if mode == "ddp"
         else set(
             range(
-                int(manifest.get("average_interval", 0)),
+                average_interval,
                 target_step + 1,
-                int(manifest.get("average_interval", 0)) or target_step + 1,
+                average_interval or target_step + 1,
             )
         )
     )
@@ -292,6 +306,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
+    if args.expected_world_size < 1:
+        raise SystemExit("--expected-world-size must be >= 1")
+    if args.target_step < 1:
+        raise SystemExit("--target-step must be >= 1")
+    if args.poll_seconds <= 0.0:
+        raise SystemExit("--poll-seconds must be > 0")
+    if args.timeout_seconds <= 0.0:
+        raise SystemExit("--timeout-seconds must be > 0")
     deadline = time.monotonic() + args.timeout_seconds
     while True:
         result = evaluate_health(

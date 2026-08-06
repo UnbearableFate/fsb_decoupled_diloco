@@ -24,6 +24,8 @@ def _build_run(
     declining: bool = True,
     missing_periodic_step: int | None = None,
     completed: bool = False,
+    max_steps: int = 5000,
+    average_interval: int = 100,
 ):
     root.mkdir()
     manifest = {
@@ -32,8 +34,8 @@ def _build_run(
         "backend": "nccl",
         "world_size": 8,
         "expected_world_size": 8,
-        "max_steps": 5000,
-        "average_interval": 100,
+        "max_steps": max_steps,
+        "average_interval": average_interval,
         "pbs_job_id": "123.miyabi",
         "runtimes": [
             {
@@ -75,7 +77,11 @@ def _build_run(
                 }
             )
         _write_csv(root / "metrics" / f"rank_{rank:03d}.csv", RANK_METRIC_FIELDS, rows)
-    sync_steps = range(1, metric_steps + 1) if mode == "ddp" else range(100, metric_steps + 1, 100)
+    sync_steps = (
+        range(1, metric_steps + 1)
+        if mode == "ddp"
+        else range(average_interval, metric_steps + 1, average_interval)
+    )
     sync_rows = [
         {
             "timestamp": step,
@@ -97,7 +103,7 @@ def _build_run(
                 {
                     "status": "completed",
                     "exit_status": 0,
-                    "final_step": 5000,
+                    "final_step": max_steps,
                 }
             ),
             encoding="utf-8",
@@ -216,3 +222,30 @@ def test_health_checker_fails_missing_periodic_sync(tmp_path):
     )
     assert result["status"] == "FAIL"
     assert any("200" in failure for failure in result["failures"])
+
+
+def test_health_checker_rejects_short_declared_formal_run(tmp_path):
+    root = tmp_path / "short-formal"
+    _build_run(root, mode="ddp", max_steps=200, completed=True)
+    result = evaluate_health(
+        root,
+        mode="ddp",
+        expected_world_size=8,
+        target_step=200,
+    )
+    assert result["status"] == "FAIL"
+    assert any("max_steps" in failure for failure in result["failures"])
+
+
+def test_health_checker_requires_periodic_step_100_boundary(tmp_path):
+    root = tmp_path / "wrong-interval"
+    _build_run(root, mode="periodic_average", average_interval=200)
+    result = evaluate_health(
+        root,
+        mode="periodic_average",
+        expected_world_size=8,
+        target_step=200,
+        job_status={"state": "R"},
+    )
+    assert result["status"] == "FAIL"
+    assert any("average interval" in failure for failure in result["failures"])

@@ -1,8 +1,10 @@
 from types import SimpleNamespace
 
 import pytest
+import torch
 
 from fs_diloco.baselines.artifacts import BaselineRunPaths, initialize_run_root
+from fs_diloco.baselines.train import _save_final_checkpoint
 from fs_diloco.core.config import resolve_config
 from fs_diloco.modeling import hf_data
 
@@ -141,3 +143,45 @@ def test_rank_data_shards_are_deterministic_and_nonoverlapping(monkeypatch):
 
     assert rank_batches == [[0, 1, 2, 3], [4, 5, 6, 7]]
     assert set(rank_batches[0]).isdisjoint(rank_batches[1])
+
+
+class SaveableModel(torch.nn.Module):
+    def save_pretrained(self, path, *, safe_serialization):
+        assert safe_serialization is True
+        (path / "model.safetensors").write_bytes(b"model")
+
+
+class SaveableTokenizer:
+    def __init__(self, *, fail: bool = False):
+        self.fail = fail
+
+    def save_pretrained(self, path):
+        if self.fail:
+            raise RuntimeError("injected tokenizer save failure")
+        (path / "tokenizer.json").write_text("{}", encoding="utf-8")
+
+
+def test_final_checkpoint_is_published_from_staging(tmp_path):
+    paths = BaselineRunPaths(tmp_path)
+    paths.final_checkpoint.parent.mkdir(parents=True)
+
+    _save_final_checkpoint(paths, SaveableModel(), SaveableTokenizer())
+
+    assert (paths.final_checkpoint / "model.safetensors").read_bytes() == b"model"
+    assert (paths.final_checkpoint / "tokenizer.json").read_text(encoding="utf-8") == "{}"
+    assert not list(paths.final_checkpoint.parent.glob(".final.*"))
+
+
+def test_final_checkpoint_failure_cleans_staging(tmp_path):
+    paths = BaselineRunPaths(tmp_path)
+    paths.final_checkpoint.parent.mkdir(parents=True)
+
+    with pytest.raises(RuntimeError, match="injected tokenizer save failure"):
+        _save_final_checkpoint(
+            paths,
+            SaveableModel(),
+            SaveableTokenizer(fail=True),
+        )
+
+    assert not paths.final_checkpoint.exists()
+    assert not list(paths.final_checkpoint.parent.glob(".final.*"))

@@ -19,6 +19,7 @@ module list 2>&1 | cat
 PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
 PRIMARY_WORKTREE_ROOT="${PRIMARY_WORKTREE_ROOT:-/work/xg24i002/x10041/fsb_decoupled_diloco}"
 PYTHON_BIN="${PYTHON_BIN:-$PRIMARY_WORKTREE_ROOT/.venv/bin/python}"
+PYTHONPATH="$PROJECT_ROOT"
 CONFIG="${CONFIG:-$PROJECT_ROOT/configs/torch_baseline_gpt2_wikitext2_8n_5000steps.yaml}"
 MODE=ddp
 RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_torch_ddp_gpt2_wikitext2_8n_5k}"
@@ -85,6 +86,7 @@ fi
 MPI_ENV_ARGS=(
   "PROJECT_ROOT=$PROJECT_ROOT"
   "PYTHON_BIN=$PYTHON_BIN"
+  "PYTHONPATH=$PYTHONPATH"
   "CONFIG=$CONFIG"
   "MODE=$MODE"
   "RUN_ID=$RUN_ID"

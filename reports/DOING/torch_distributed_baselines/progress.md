@@ -138,3 +138,41 @@
   target step.
 - Evidence: `artifacts/20260806-113242_remediation-regression_pass.txt`.
 - Remaining risk: independent review gate and formal 8-node/200-step acceptance remain.
+
+## 2026-08-06 11:51:26 JST — review findings remediated and verified PASS
+
+- Review target/base: `e30d49f102ca91c44af5e5700457c98a6e26de6e` /
+  `c1c61153548ff7b2543d3ce1bc764c19432b138e`.
+- Codex independent report:
+  `reports/DOING/code_review/torch_distributed_baselines/implementation-and-formal-validation/gpt-5-codex_e30d49f102ca91c44af5e5700457c98a6e26de6e.md`.
+- Claude reviewer disposition: `skipped-session-limit`. A fresh `claude --print`
+  invocation requested `claude-opus-5` with session
+  `fd9b2759-4dff-4ea0-8757-ab12807b3e4c`, output format JSON, permission mode
+  `bypassPermissions`, and dangerous-skip enabled. Machine-readable result metadata
+  matched the requested session and returned HTTP 429 with the explicit, verifiable
+  message `You've hit your session limit · resets 1:30pm (Asia/Tokyo)`, zero model
+  usage, and no fallback. Per the completion-gate exception, no Claude report was
+  created and the skip does not block remediation or the phase.
+- Finding dispositions:
+  - `High` checker false-positive for short/wrong-interval runs: **fixed**. Formal
+    health now requires manifest `max_steps=5000` and `average_interval=100`; RED tests
+    cover a declared 200-step completion and interval 200.
+  - `Medium` feature-worktree source selection: **fixed**. Both PBS launchers pass
+    `PYTHONPATH=$PROJECT_ROOT` through MPI. A fresh one-node GPT-2/WikiText-2 NCCL
+    torchrun started with ambient `PYTHONPATH` unset and completed through the explicit
+    project-root pin.
+  - `Medium` untested terminal checkpoint publication: **fixed**. New tests cover model
+    and tokenizer publication through staging, atomic final-directory rename, and
+    staging cleanup after injected tokenizer failure.
+  - `Low` checker numeric CLI validation: **fixed** for expected world size, target
+    step, polling interval, and timeout.
+- Static commands: Python compile, Ruff, `bash -n scripts/miyabi/*.pbs`, and `git diff
+  --check`; all passed on `miyabi-g1`.
+- Runtime environment: node `mg0007`, allocation `2497967.opbs`, modules
+  `nvidia/25.9` and `nv-hpcx/25.9`; 00:03:08 of 00:30:00 used.
+- Runtime results: complete repository suite `383 passed in 21.06s`; source-pin smoke
+  run `sourcepin_1n_20260806_1150` exited 0 with NCCL/CUDA, GPT-2/WikiText-2, one finite
+  optimizer step, and completed local artifacts.
+- Evidence: `artifacts/20260806-115126_review-remediation_pass.txt`; source-pin run root
+  `/work/xg24i002/x10041/fsb_decoupled_diloco-master/runs/torch_baselines/sourcepin_1n_20260806_1150`.
+- Remaining risk: formal 8-node/200-step acceptance and continued 5000-step handoff.
