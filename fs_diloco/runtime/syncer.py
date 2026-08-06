@@ -94,7 +94,7 @@ from ..storage.paths import RunPaths, prepare_run_dirs
 from ..storage.sqlite_store import DynamicMembershipFenceError, SQLiteStore
 from .syncer_ha import LeaseRenewalThread, acquire_candidate, open_leader_store
 from .launch_outbox import LearnerLaunchOutbox
-from .pbs_scheduler import PBSScheduler
+from .pbs_scheduler import PBSScheduler, normalize_job_id
 from ..storage.tensor_codec import (
     dtype_from_name,
     load_global_weights_flat,
@@ -1274,7 +1274,11 @@ def sync_liveness_and_metadata(
         jobs_to_record = [
             job
             for job in bootstrap_jobs
-            if launch_jobs.get(str(job["request_id"])) != str(job["pbs_job_id"])
+            if launch_jobs.get(str(job["request_id"])) is None
+            or normalize_job_id(
+                str(launch_jobs[str(job["request_id"])])
+            )
+            != normalize_job_id(str(job["pbs_job_id"]))
         ]
         external_launch_jobs = (
             store.record_external_launch_jobs(jobs_to_record)

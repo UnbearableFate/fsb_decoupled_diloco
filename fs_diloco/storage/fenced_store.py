@@ -52,6 +52,10 @@ _PRAGMA_RE = re.compile(
 )
 
 
+def _pbs_job_identity(value: Any) -> str:
+    return str(value).strip().split(".", 1)[0]
+
+
 def _keyword(sql: str) -> str:
     statement = sql.lstrip()
     while statement.startswith("--"):
@@ -989,7 +993,11 @@ class FencedSQLiteStore:
                 ):
                     raise RuntimeError("bootstrap scheduler receipt has no matching request")
                 existing_job_id = launch["pbs_job_id"]
-                if existing_job_id is not None and str(existing_job_id) != pbs_job_id:
+                if (
+                    existing_job_id is not None
+                    and _pbs_job_identity(existing_job_id)
+                    != _pbs_job_identity(pbs_job_id)
+                ):
                     raise RuntimeError("bootstrap launch request changed PBS job identity")
                 if str(launch["state"]) in {
                     "failed",
@@ -1081,7 +1089,8 @@ class FencedSQLiteStore:
                 request_job_id = request.get("pbs_job_id")
                 if (
                     launch_job_id is not None
-                    and str(request_job_id or "") != str(launch_job_id)
+                    and _pbs_job_identity(request_job_id or "")
+                    != _pbs_job_identity(launch_job_id)
                 ):
                     raise RuntimeError("registration PBS job does not match launch request")
                 if str(launch["state"]) in {
@@ -2337,6 +2346,18 @@ class FencedSQLiteStore:
                 raise RuntimeError(
                     f"launch request {request_id} state changed: {row['state']}"
                 )
+            stored_job_id = row["pbs_job_id"]
+            if pbs_job_id is not None and stored_job_id is not None:
+                if _pbs_job_identity(pbs_job_id) != _pbs_job_identity(stored_job_id):
+                    raise RuntimeError(
+                        f"launch request {request_id} changed PBS job identity"
+                    )
+                # Preserve the first auditable spelling (normally qsub's raw
+                # receipt) when qstat returns the same ID without its server
+                # suffix.
+                effective_pbs_job_id = None
+            else:
+                effective_pbs_job_id = pbs_job_id
             conn.execute(
                 """
                 UPDATE launch_requests SET state=?, updated_at=?,
@@ -2357,7 +2378,7 @@ class FencedSQLiteStore:
                     state,
                     timestamp,
                     int(increment_submission_attempts),
-                    pbs_job_id,
+                    effective_pbs_job_id,
                     scheduler_state,
                     scheduler_state,
                     timestamp,

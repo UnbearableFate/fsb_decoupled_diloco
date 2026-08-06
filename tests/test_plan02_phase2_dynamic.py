@@ -539,6 +539,15 @@ def test_bootstrap_scheduler_manifest_reconciles_external_jobs(
         rows = {row["bootstrap_slot"]: row for row in store.launch_requests()}
         assert rows[0]["pbs_job_id"] == "123.opbs"
         assert rows[1]["pbs_job_id"] == "124.opbs"
+        reconciled = store.update_launch_request(
+            request_id=str(launches[0]["request_id"]),
+            expected_states={"external_submitted"},
+            state="started",
+            pbs_job_id="123",
+            scheduler_state="running",
+            observed_at=103.0,
+        )
+        assert reconciled["pbs_job_id"] == "123.opbs"
 
         wrong_job = request_payload(
             paths,
@@ -562,7 +571,7 @@ def test_bootstrap_scheduler_manifest_reconciles_external_jobs(
             instance_id=new_learner_instance_id(),
             launch_request_id=str(launches[0]["request_id"]),
             placement_id="host:gpu0",
-            pbs_job_id="123.opbs",
+            pbs_job_id="123",
         )
         result = store.admit_registration(
             accepted,

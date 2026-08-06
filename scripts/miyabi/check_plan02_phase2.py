@@ -12,6 +12,7 @@ from typing import Any
 from fs_diloco.core.constants import DYNAMIC_SCHEMA_VERSION, PROTOCOL_VERSION
 from fs_diloco.core.run_descriptor import load_run_descriptor
 from fs_diloco.protocol.membership import read_bootstrap_scheduler_jobs
+from fs_diloco.runtime.pbs_scheduler import normalize_job_id
 from fs_diloco.storage.atomic_io import safe_read_json, sha256_file
 from fs_diloco.storage.paths import RunPaths
 from fs_diloco.storage.schema_bootstrap import open_readonly
@@ -384,7 +385,13 @@ def check_run(
     for row in all_launches:
         if row.get("reason") != "bootstrap":
             continue
-        if manifest_jobs.get(str(row["request_id"])) != str(row.get("pbs_job_id")):
+        manifest_job = manifest_jobs.get(str(row["request_id"]))
+        launch_job = row.get("pbs_job_id")
+        if (
+            manifest_job is None
+            or launch_job is None
+            or normalize_job_id(manifest_job) != normalize_job_id(str(launch_job))
+        ):
             errors.append(
                 f"bootstrap request {row['request_id']} lacks its scheduler job identity"
             )

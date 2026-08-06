@@ -371,3 +371,9 @@ Attempt 3, `2497948.opbs`, submitted the short-walltime children and completed s
 - PBS `2501185.opbs` ran the clean-source full suite for commit `8476bcf11ebcd415c293c49070cabaed66f99534` and returned 1 failed, 469 passed.
 - The only failure was the pre-existing nondeterministic tolerance assertion in `tests/test_learner_rebase.py::test_rebase_preserves_only_progress_after_each_published_reference`; the immediately preceding full-suite run `2501174.opbs` passed all 470 tests, and no Phase 2 contract failed.
 - Disposition: do not alter production behavior or relax a threshold from one stochastic failure. Persist this failure record, freeze a new clean source identity, and restart the formal G7/compatibility evidence set; repeated failure will trigger a focused reproducibility review.
+
+### 2026-08-06 23:42 JST — Phase 2 formal G8 attempt 1
+
+- Launcher `2501190.opbs` created clean-source run `plan02_phase2_g8_2501190`; injected syncer `2501191.opbs` failed at the intended DB-commit failpoint, successor `2501192.opbs` acquired epoch 2, bootstrap learner `2501193.opbs` started, and checker `2501194.opbs` returned `BLOCKED`.
+- Root cause: the persisted launcher manifest used raw PBS ID `2501193.opbs`, while scheduler reconciliation normalized the same identity to `2501193` and overwrote the launch row. The next manifest scan treated these equivalent spellings as different physical jobs and failed closed.
+- Disposition: canonicalize PBS IDs for equality at the storage boundary while retaining auditable raw receipts; add a suffix-equivalence regression, rerun focused/full tests, then restart the formal evidence set from a clean commit.

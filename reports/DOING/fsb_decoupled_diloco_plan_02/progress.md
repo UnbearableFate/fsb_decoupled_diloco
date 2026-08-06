@@ -698,3 +698,8 @@ Artifacts:
 - Added manual operator close requests, deadline closure, launch-budget closure, immutable registration-decision replay handling, and a completed-checker PBS wrapper.
 - Expanded the Phase 2 focused matrix to 18 tests, including 8-slot bootstrap admission, ninth unsolicited rejection, scheduler retention beyond TTL, manifest reconciliation, replay collision safety, and manual/deadline/budget closure. PBS `2501171.opbs` passed all 18 tests in 6.96 seconds.
 - Full repository compatibility PBS `2501174.opbs` passed 470 tests in 23.92 seconds.
+
+## 2026-08-06 23:47 JST — PBS job identity normalization remediation
+
+- Preserved raw qsub receipts while comparing PBS IDs by their server-independent numeric identity, preventing qstat's suffix-free spelling from looking like a different bootstrap job.
+- Added raw/normalized equivalence coverage. Focused PBS `2501208.opbs` passed 18 tests in 7.42 seconds; full compatibility PBS `2501209.opbs` passed 470 tests in 23.63 seconds.
