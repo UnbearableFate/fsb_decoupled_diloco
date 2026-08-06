@@ -17,6 +17,7 @@ from ..protocol.fragment_index import fragment_size_summary, load_fragment_index
 from ..protocol.fragment_scheduler import expected_fragment_versions_after_events
 from ..storage.atomic_io import safe_read_json
 from ..storage.paths import RunPaths
+from ..storage.schema_bootstrap import open_readonly
 
 
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
@@ -25,11 +26,7 @@ def _read_csv_rows(path: Path) -> list[dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         first_field = reader.fieldnames[0] if reader.fieldnames else None
-        return [
-            row
-            for row in reader
-            if first_field is None or row.get(first_field) != first_field
-        ]
+        return [row for row in reader if first_field is None or row.get(first_field) != first_field]
 
 
 def _read_csv_summary(path: Path) -> dict[str, Any]:
@@ -95,8 +92,7 @@ def _fragment_update_integrity(rows: list[dict[str, Any]]) -> dict[str, Any]:
 def _db_summary(path: Path | None, root: Path) -> dict[str, Any]:
     if path is None or not path.exists():
         return {"exists": False}
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
+    conn = open_readonly(path)
     try:
         integrity = [str(row[0]) for row in conn.execute("PRAGMA integrity_check").fetchall()]
         archived_updates = _read_jsonl_deduplicated(
@@ -118,18 +114,11 @@ def _db_summary(path: Path | None, root: Path) -> dict[str, Any]:
             archived_full = [
                 row for row in archived_updates if row.get("update_kind", "full") == "full"
             ]
-            full_by_id = {
-                str(row["update_id"]): row for row in [*archived_full, *live_full]
-            }
-            applied_rows = [
-                row for row in full_by_id.values() if row.get("status") == "applied"
-            ]
-            dropped_rows = [
-                row for row in full_by_id.values() if row.get("status") == "dropped"
-            ]
+            full_by_id = {str(row["update_id"]): row for row in [*archived_full, *live_full]}
+            applied_rows = [row for row in full_by_id.values() if row.get("status") == "applied"]
+            dropped_rows = [row for row in full_by_id.values() if row.get("status") == "dropped"]
             mid_cycle_counts = [
-                int(row.get("mid_cycle_adoption_count") or 0)
-                for row in full_by_id.values()
+                int(row.get("mid_cycle_adoption_count") or 0) for row in full_by_id.values()
             ]
             base_switch_steps = [
                 int(row["base_switched_at_step"])
@@ -166,9 +155,7 @@ def _db_summary(path: Path | None, root: Path) -> dict[str, Any]:
                     "global_versions": versions,
                     "contributors": contributors,
                     "mid_cycle_adoption": {
-                        "proposals_with_adoption": sum(
-                            count > 0 for count in mid_cycle_counts
-                        ),
+                        "proposals_with_adoption": sum(count > 0 for count in mid_cycle_counts),
                         "adoption_count": sum(mid_cycle_counts),
                         "base_switched_at_step_values": base_switch_steps,
                     },
@@ -182,8 +169,7 @@ def _db_summary(path: Path | None, root: Path) -> dict[str, Any]:
                 row for row in archived_updates if row.get("update_kind") == "fragment"
             ]
             fragment_by_id = {
-                str(row["update_id"]): row
-                for row in [*archived_fragment, *live_fragment]
+                str(row["update_id"]): row for row in [*archived_fragment, *live_fragment]
             }
             applied_rows = [
                 row for row in fragment_by_id.values() if row.get("status") == "applied"
@@ -191,15 +177,9 @@ def _db_summary(path: Path | None, root: Path) -> dict[str, Any]:
             pending = conn.execute(
                 "SELECT COUNT(*) AS n FROM fragment_updates WHERE status='pending'",
             ).fetchone()["n"]
-            dropped = sum(
-                1 for row in fragment_by_id.values() if row.get("status") == "dropped"
-            )
+            dropped = sum(1 for row in fragment_by_id.values() if row.get("status") == "dropped")
             learners_with_updates = sorted(
-                {
-                    str(row["learner_id"])
-                    for row in fragment_by_id.values()
-                    if row.get("learner_id")
-                }
+                {str(row["learner_id"]) for row in fragment_by_id.values() if row.get("learner_id")}
             )
             fragment_versions = [
                 dict(row)
@@ -478,11 +458,7 @@ def _learner_adoption_pause(
     learner_metric_rows: list[dict[str, str]],
 ) -> dict[str, dict[str, Any]]:
     cycle_elapsed: dict[str, float] = defaultdict(float)
-    learner_ids = {
-        str(row["learner_id"])
-        for row in learner_metric_rows
-        if row.get("learner_id")
-    }
+    learner_ids = {str(row["learner_id"]) for row in learner_metric_rows if row.get("learner_id")}
     for row in learner_metric_rows:
         learner_id = row.get("learner_id")
         raw = row.get("local_cycle_elapsed_seconds")
@@ -504,13 +480,9 @@ def _learner_adoption_pause(
                 except json.JSONDecodeError:
                     continue
                 event_type = str(event.get("event_type") or "")
-                if event_type != "global_adopted" and not event_type.endswith(
-                    "fragments_adopted"
-                ):
+                if event_type != "global_adopted" and not event_type.endswith("fragments_adopted"):
                     continue
-                learner_id = str(
-                    event.get("learner_id") or event.get("actor") or path.stem
-                )
+                learner_id = str(event.get("learner_id") or event.get("actor") or path.stem)
                 learner_ids.add(learner_id)
                 raw = event.get("adoption_pause_seconds")
                 try:
@@ -530,9 +502,7 @@ def _learner_adoption_pause(
         mean = total / len(timed) if available and timed else None
         denominator = cycle_elapsed.get(learner_id, 0.0)
         fraction = (
-            total / denominator
-            if available and total is not None and denominator > 0.0
-            else None
+            total / denominator if available and total is not None and denominator > 0.0 else None
         )
         payload[learner_id] = {
             "status": "available" if available else "unavailable",
@@ -555,9 +525,7 @@ def _syncer_log_flags(root: Path) -> dict[str, bool]:
     }
     if not paths:
         return flags
-    text = "\n".join(
-        path.read_text(encoding="utf-8", errors="replace").lower() for path in paths
-    )
+    text = "\n".join(path.read_text(encoding="utf-8", errors="replace").lower() for path in paths)
     flags["error"] = '"event_type": "error"' in text or '"event_type":"error"' in text
     flags["no_progress_timeout"] = "no_progress_timeout" in text
     flags["uncaught_exception"] = "traceback" in text or "uncaught" in text

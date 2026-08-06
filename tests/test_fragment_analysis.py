@@ -1,7 +1,12 @@
+import sqlite3
 import time
 
+import pytest
+
+import fs_diloco.tools.analysis as analysis_runtime
 from fs_diloco.protocol.fragment_index import build_fragment_index, save_fragment_index
 from fs_diloco.storage.atomic_io import atomic_write_json
+from fs_diloco.storage.schema_bootstrap import open_readonly as enforced_open_readonly
 from fs_diloco.storage.sqlite_store import SQLiteStore
 from fs_diloco.tools.analysis import assert_fragment_run, summarize_run
 
@@ -177,3 +182,31 @@ def test_fragment_summary_and_assertions(tmp_path):
     args.run_root = str(root)
     args.db = str(db_path)
     assert_fragment_run(args, require_local_steps=True)
+
+
+def test_analysis_opens_authority_database_query_only(tmp_path, monkeypatch):
+    root = tmp_path / "run"
+    root.mkdir()
+    db_path = root / "metadata.db"
+    connection = sqlite3.connect(db_path)
+    try:
+        connection.execute("CREATE TABLE sample(value INTEGER NOT NULL)")
+        connection.execute("INSERT INTO sample(value) VALUES (1)")
+        connection.commit()
+    finally:
+        connection.close()
+
+    observed_query_only: list[int] = []
+
+    def checked_open_readonly(path):
+        readonly = enforced_open_readonly(path)
+        observed_query_only.append(int(readonly.execute("PRAGMA query_only").fetchone()[0]))
+        with pytest.raises(sqlite3.OperationalError):
+            readonly.execute("CREATE TABLE forbidden(value INTEGER)")
+        return readonly
+
+    monkeypatch.setattr(analysis_runtime, "open_readonly", checked_open_readonly)
+    summary = analysis_runtime.summarize_run(root, db_path)
+
+    assert summary["db"]["exists"] is True
+    assert observed_query_only == [1]

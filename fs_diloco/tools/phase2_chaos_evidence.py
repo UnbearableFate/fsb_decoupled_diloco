@@ -90,7 +90,9 @@ def main() -> None:
 
     connection = open_readonly(paths.sqlite_db)
     try:
-        query = lambda sql: [dict(row) for row in connection.execute(sql).fetchall()]
+        def query(sql: str) -> list[dict[str, Any]]:
+            return [dict(row) for row in connection.execute(sql).fetchall()]
+
         epochs = query("SELECT * FROM syncer_epochs ORDER BY epoch")
         controller = query("SELECT * FROM controller_state")
         terminal = query("SELECT * FROM terminal_state")

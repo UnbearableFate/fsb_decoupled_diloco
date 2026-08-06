@@ -208,6 +208,16 @@ def test_merge_and_capacity_observation_share_one_rollback_boundary(tmp_path: Pa
             {**capacity, "kind": "synthetic"},
             {**capacity, "observation_key": "merge:2"},
             {**capacity, "global_version": 2},
+            {**capacity, "selected_instance_ids": []},
+            {**capacity, "selected_instance_ids": [None]},
+            {
+                **capacity,
+                "selected_instance_ids": [
+                    admission["instance_id"],
+                    admission["instance_id"],
+                ],
+            },
+            {**capacity, "eligible_contributors": 0},
         ):
             with pytest.raises(RuntimeError, match="exact merge capacity observation"):
                 store.commit_full_merge(**{**merge, "capacity_observation": malformed})

@@ -30,9 +30,9 @@
 
 ## `tools/clean_run.py`
 
-- `build_cleanup_plan()`要求目标是project `runs/`下的精确run目录，`control/stop.json`与`summary.json`的run ID/final version一致、全部learner已停止，并要求`reports/`内同run的error-free `PASS` evidence；SQLite WAL/SHM/journal存在、目标过宽、symlink或identity不符都fail closed。
+- `build_cleanup_plan()`要求目标是project `runs/`下的精确run目录，`control/stop.json`与`summary.json`的run ID/final version一致、全部learner已停止，并要求`reports/`内同run、绑定当前terminal final version的error-free `PASS` evidence；SQLite WAL/SHM/journal存在、目标过宽、symlink或identity不符都fail closed。
 - dry-run输出逐文件relative path、size、mtime和原因。正式`--delete`必须指定新的report-side `--manifest-output`，先fsync planned inventory，逐文件重新核对size/mtime后unlink，再把manifest原子更新为`complete`；部分失败会记录已删除数量并标为`failed`。
-- cleaner保留authority DB、weight/outer checkpoint、control/config、syncer/candidate日志和一份代表性learner日志；候选仅包括重复成功learner日志、offline W&B cache、terminal heartbeat/pointer/payload、已由summary/DB/evidence覆盖的raw learner/update telemetry及临时文件。
+- cleaner保留authority DB、weight/outer checkpoint、control/config、所有fsync-before-prune history（包括`update_history.jsonl`）、syncer/candidate日志和一份代表性learner日志；候选仅包括重复成功learner日志、offline W&B cache、terminal heartbeat/pointer/payload、可重建的learner metrics/update manifest及临时文件。早期`20260807-0150`清理已不可恢复地删除主G9 run的update archive；其cleanup前completed artifact和未清理的detached coherent run仍分别保留冻结结论与原始复查证据，但主run不再可完整重跑Checker。
 
 ## `tools/analysis.py`
 

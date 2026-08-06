@@ -1,7 +1,8 @@
 """Conservatively prune redundant output from one completed run.
 
 The cleaner intentionally accepts only an exact run directory and a matching
-PASS evidence artifact.  It preserves the authority database, checkpoints,
+PASS evidence artifact bound to the current terminal version.  It preserves
+the authority database, fsync-before-prune histories, checkpoints,
 configuration, control publications, syncer logs, and one representative
 learner log.  Deletion is opt-in and always leaves an immutable report-side
 manifest of the resolved targets.
@@ -166,6 +167,29 @@ def _matching_pass_evidence(
         raise CleanupRefusedError("completion evidence belongs to a different run")
     if direct_evidence and str(identity.get("run_id") or "") != run_id:
         raise CleanupRefusedError("completion evidence run identity does not match")
+    if direct_evidence:
+        authority = evidence.get("authority")
+        terminal_candidates: list[dict[str, Any]] = []
+        if isinstance(evidence.get("terminal"), dict):
+            terminal_candidates.append(evidence["terminal"])
+        if isinstance(authority, dict):
+            if isinstance(authority.get("terminal"), dict):
+                terminal_candidates.append(authority["terminal"])
+            terminal_candidates.append(authority)
+        terminal_versions: set[int] = set()
+        for candidate in terminal_candidates:
+            if candidate.get("final_version") is None:
+                continue
+            try:
+                terminal_versions.add(int(candidate["final_version"]))
+            except (TypeError, ValueError) as exc:
+                raise CleanupRefusedError(
+                    "completion evidence terminal final version is invalid"
+                ) from exc
+        if terminal_versions != {int(summary.get("final_version", -1))}:
+            raise CleanupRefusedError(
+                "completion evidence terminal final version does not match the run"
+            )
 
     descriptor = _load_json(run_root / "control" / "run_descriptor.json", label="run descriptor")
     if str(descriptor.get("run_id") or "") != run_id:
@@ -248,7 +272,6 @@ def build_cleanup_plan(
     select(learner_logs[1:], "repeated successful learner log")
     for relative in (
         "metrics/learner_metrics.csv",
-        "metrics/update_history.jsonl",
         "metrics/update_manifest.csv",
     ):
         path = run / relative

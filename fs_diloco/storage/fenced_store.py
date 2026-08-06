@@ -728,13 +728,36 @@ class FencedSQLiteStore:
             try:
                 target_version = int(kwargs["target_version"])
                 observation_version = int(specification["global_version"])
+                selected_updates = list(kwargs["selected_updates"])
+                selected_update_instances = [
+                    update["learner_instance_id"] for update in selected_updates
+                ]
+                observed_instances = list(specification["selected_instance_ids"])
+                eligible_contributors = int(specification["eligible_contributors"])
             except (KeyError, TypeError, ValueError):
                 target_version = -1
                 observation_version = -1
+                selected_updates = []
+                selected_update_instances = []
+                observed_instances = []
+                eligible_contributors = -1
             if (
                 str(specification.get("kind")) != "merge"
                 or str(specification.get("observation_key")) != f"merge:{target_version}"
                 or observation_version != target_version
+                or not selected_update_instances
+                or any(
+                    not isinstance(instance_id, str) or not instance_id
+                    for instance_id in selected_update_instances
+                )
+                or any(
+                    not isinstance(instance_id, str) or not instance_id
+                    for instance_id in observed_instances
+                )
+                or len(set(selected_update_instances)) != len(selected_update_instances)
+                or len(set(observed_instances)) != len(observed_instances)
+                or set(observed_instances) != set(selected_update_instances)
+                or eligible_contributors != len(selected_updates)
             ):
                 raise RuntimeError(
                     "dynamic full merge requires its exact merge capacity observation"

@@ -135,7 +135,7 @@ scripts/local/clean_run.sh --delete runs/fs_diloco
 scripts/local/clean_run.sh --delete --keep-latest-global runs/fs_diloco
 ```
 
-Python `clean_run`是已完成实验的首选收口工具：只接受project `runs/`下一个精确run目录、同run且无error的`PASS` completion artifact、匹配的terminal stop/summary和已停止的全部learner；authority SQLite sidecar存在时拒绝。默认只输出精确inventory。`--delete`还要求在`reports/`内创建新的manifest，保留authority DB、current weight/outer、control/config、syncer/candidate日志和一份代表性learner日志，只删除已由completion artifact覆盖的重复learner日志、terminal heartbeat/pointer、offline W&B cache和raw update telemetry；候选在inventory后变化会停止删除并把manifest标为`failed`。
+Python `clean_run`是已完成实验的首选收口工具：只接受project `runs/`下一个精确run目录、同run且无error并绑定当前terminal final version的`PASS` completion artifact、匹配的terminal stop/summary和已停止的全部learner；authority SQLite sidecar存在时拒绝。默认只输出精确inventory。`--delete`还要求在`reports/`内创建新的manifest，保留authority DB、current weight/outer、control/config、所有fsync-before-prune history（包括`metrics/update_history.jsonl`）、syncer/candidate日志和一份代表性learner日志，只删除重复learner日志、terminal heartbeat/pointer/payload、offline W&B cache、learner metrics/update manifest等可重建telemetry及临时文件；候选在inventory后变化会停止删除并把manifest标为`failed`。旧实现的`20260807-0150_phase2-g9-cleanup.json`已从主G9 run不可恢复地删除2,563,263-byte `update_history.jsonl`；cleanup前的completed artifact仍冻结PASS结论，未清理的detached coherent run保留可复查原始history，但主run不能再完整重跑completed Checker。
 
 legacy `clean_run.sh`只扫描项目`runs/`内的目标目录；默认dry-run，必须传`--delete`才删除。它的实际glob是递归`*.safetensors`和`*.db`：当前权威库名为`syncer_metadata.sqlite3`，**不会**被该glob删除，但global/outer/update/fragment tensor会被删掉，run仍无法恢复。`--keep-latest-global`只在每个目录保留编号最大的`global_v<version>.safetensors`，不会保留匹配的outer/fragment/update tensor，也不会把残留DB+weight变成可恢复证据。它没有Python工具的completion-evidence和manifest门禁，不应替代正式实验清理。
 

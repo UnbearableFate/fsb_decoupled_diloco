@@ -54,6 +54,7 @@ def _completed_run(project: Path, name: str = "completed-run") -> tuple[Path, Pa
                     "descriptor_sha256": f"descriptor-{name}",
                     "source_fingerprint": "sha256:test-source",
                 },
+                "authority": {"terminal": {"final_version": 12}},
             }
         ),
         encoding="utf-8",
@@ -74,11 +75,11 @@ def test_clean_run_preserves_authority_and_one_learner_log(tmp_path: Path) -> No
         run / "optim" / "outer_v000012.safetensors",
         run / "logs" / "syncer.jsonl",
         run / "logs" / "learner_000.jsonl",
+        run / "metrics" / "update_history.jsonl",
     ]
     deleted = [
         run / "logs" / "learner_001.jsonl",
         run / "logs" / "wandb" / "offline-run" / "debug.log",
-        run / "metrics" / "update_history.jsonl",
         run / "metrics" / "update_manifest.csv",
         run / "metrics" / "learner_metrics.csv",
         run / "heartbeats" / "learner_000.json",
@@ -174,6 +175,23 @@ def test_clean_run_rejects_mismatched_descriptor_identity(tmp_path: Path) -> Non
         build_cleanup_plan(tmp_path, run, evidence)
 
 
+@pytest.mark.parametrize("terminal_binding", [None, 11])
+def test_clean_run_requires_evidence_for_current_terminal_version(
+    tmp_path: Path,
+    terminal_binding: int | None,
+) -> None:
+    run, evidence = _completed_run(tmp_path)
+    payload = json.loads(evidence.read_text(encoding="utf-8"))
+    if terminal_binding is None:
+        payload.pop("authority")
+    else:
+        payload["authority"]["terminal"]["final_version"] = terminal_binding
+    evidence.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(CleanupRefusedError, match="terminal final version"):
+        build_cleanup_plan(tmp_path, run, evidence)
+
+
 def test_clean_run_refuses_authority_sidecar_and_changed_candidate(tmp_path: Path) -> None:
     run, evidence = _completed_run(tmp_path)
     sidecar = run / "control" / "syncer_metadata.sqlite3-wal"
@@ -198,7 +216,7 @@ def test_clean_run_refuses_authority_sidecar_and_changed_candidate(tmp_path: Pat
 
 def test_clean_run_revalidates_completion_evidence_before_delete(tmp_path: Path) -> None:
     run, evidence = _completed_run(tmp_path)
-    candidate = run / "metrics" / "update_history.jsonl"
+    candidate = run / "metrics" / "update_manifest.csv"
     _write(candidate)
     plan = build_cleanup_plan(tmp_path, run, evidence)
     evidence_payload = json.loads(evidence.read_text(encoding="utf-8"))
@@ -217,7 +235,7 @@ def test_clean_run_cli_is_dry_run_by_default(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     run, evidence = _completed_run(tmp_path)
-    candidate = run / "metrics" / "update_history.jsonl"
+    candidate = run / "metrics" / "update_manifest.csv"
     _write(candidate)
 
     assert main([str(run), "--evidence", str(evidence), "--project-root", str(tmp_path)]) == 0
