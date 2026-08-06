@@ -10,6 +10,11 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Iterable
 
+from .atomic_io import ensure_dir
+
+
+class DynamicMembershipFenceError(RuntimeError):
+    """A selected proposal lost its dynamic incarnation before final commit."""
 from ..core.constants import (
     GLOBAL_STATUS_COMMITTED,
     LEARNER_STATUS_UNKNOWN,
@@ -18,11 +23,6 @@ from ..core.constants import (
     UPDATE_STATUS_PENDING,
     UPDATE_STATUS_SELECTED,
 )
-from .atomic_io import ensure_dir
-
-
-class DynamicMembershipFenceError(RuntimeError):
-    """A selected proposal lost its dynamic incarnation before final commit."""
 
 
 def _schema_text() -> str:
@@ -823,8 +823,7 @@ class SQLiteStore:
                     != int(membership["placement_epoch"])
                     or str(membership["stream_current_instance_id"])
                     != str(membership["instance_id"])
-                    or int(membership["current_stream_epoch"])
-                    != int(membership["stream_epoch"])
+                    or int(membership["current_stream_epoch"]) != int(membership["stream_epoch"])
                 ):
                     self.conn.rollback()
                     return False
@@ -918,7 +917,7 @@ class SQLiteStore:
                     :sha256, :created_at, :committed_at, :ingested_at, :status
                 )
                 """,
-                params,
+                    params,
                 )
             self.conn.execute(
                 """

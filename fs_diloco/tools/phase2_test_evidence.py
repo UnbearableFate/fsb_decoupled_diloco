@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import platform
 import socket
 import subprocess
@@ -22,11 +23,7 @@ def main() -> None:
     parser.add_argument("--source-fingerprint", required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    target = (
-        "tests/test_plan02_phase2_dynamic.py"
-        if args.kind == "g7"
-        else "tests"
-    )
+    target = "tests/test_plan02_phase2_dynamic.py" if args.kind == "g7" else "tests"
     command = [sys.executable, "-m", "pytest", "-q", target]
     started = time.time()
     completed = subprocess.run(

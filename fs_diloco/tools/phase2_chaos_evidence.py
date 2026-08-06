@@ -21,9 +21,7 @@ def _history(path: Path) -> list[dict[str, Any]]:
     if not path.is_file():
         return []
     return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
     ]
 
 
@@ -90,9 +88,8 @@ def main() -> None:
 
     connection = open_readonly(paths.sqlite_db)
     try:
-        def query(sql: str) -> list[dict[str, Any]]:
-            return [dict(row) for row in connection.execute(sql).fetchall()]
 
+        query = lambda sql: [dict(row) for row in connection.execute(sql).fetchall()]
         epochs = query("SELECT * FROM syncer_epochs ORDER BY epoch")
         controller = query("SELECT * FROM controller_state")
         terminal = query("SELECT * FROM terminal_state")
@@ -100,9 +97,7 @@ def main() -> None:
         streams = query("SELECT * FROM streams ORDER BY stream_id")
         launches = query("SELECT * FROM launch_requests ORDER BY created_at")
         registrations = query("SELECT * FROM registration_requests ORDER BY created_at")
-        observations = query(
-            "SELECT * FROM capacity_observations ORDER BY observation_seq"
-        )
+        observations = query("SELECT * FROM capacity_observations ORDER BY observation_seq")
         versions = query("SELECT * FROM global_versions ORDER BY version")
     finally:
         connection.close()
@@ -149,9 +144,7 @@ def main() -> None:
             errors.append(f"injected role {role} did not terminate nonzero: {exit_status}")
 
     current_instances = [
-        row
-        for row in instances
-        if str(row.get("status")) in {"admitted", "draining", "drained"}
+        row for row in instances if str(row.get("status")) in {"admitted", "draining", "drained"}
     ]
     scale_launches = [row for row in launches if row.get("reason") == "scale_out"]
     admitted_scale = [row for row in scale_launches if row.get("admitted_instance_id")]
@@ -159,9 +152,7 @@ def main() -> None:
     bootstrap_admissions: dict[int, set[str]] = defaultdict(set)
     for row in launches:
         if row.get("reason") == "bootstrap" and row.get("admitted_instance_id"):
-            bootstrap_admissions[int(row["bootstrap_slot"])].add(
-                str(row["admitted_instance_id"])
-            )
+            bootstrap_admissions[int(row["bootstrap_slot"])].add(str(row["admitted_instance_id"]))
     duplicate_rejections = [
         row
         for row in registrations
@@ -182,11 +173,7 @@ def main() -> None:
         and int(terminal_row["final_version"]) == int(versions[-1]["version"])
     )
     max_concurrency = _max_concurrency(
-        [
-            row
-            for row in scheduler_rows
-            if row["role"] not in {"crash_syncer"}
-        ]
+        [row for row in scheduler_rows if row["role"] not in {"crash_syncer"}]
     )
 
     if len(epochs) < 2:
@@ -194,8 +181,7 @@ def main() -> None:
     if not admitted_scale:
         errors.append("acceptance did not admit a scale-out replacement")
     if not victim_instances or not any(
-        str(row.get("status")) in {"revoked", "stopped", "expired"}
-        for row in victim_instances
+        str(row.get("status")) in {"revoked", "stopped", "expired"} for row in victim_instances
     ):
         errors.append("victim learner has no terminal membership transition")
     if max(int(row["current_stream_epoch"]) for row in streams) < 1:
@@ -225,9 +211,7 @@ def main() -> None:
             "dynamic_close_completed": terminal_complete,
         }
         errors.extend(
-            f"G9 chaos predicate failed: {name}"
-            for name, passed in chaos.items()
-            if not passed
+            f"G9 chaos predicate failed: {name}" for name, passed in chaos.items() if not passed
         )
     else:
         chaos = {
@@ -239,9 +223,7 @@ def main() -> None:
             and all(str(row.get("status")) == "drained" for row in current_instances),
         }
         errors.extend(
-            f"G8 predicate failed: {name}"
-            for name, passed in chaos.items()
-            if not passed
+            f"G8 predicate failed: {name}" for name, passed in chaos.items() if not passed
         )
 
     payload = {
