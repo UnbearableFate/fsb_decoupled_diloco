@@ -55,11 +55,14 @@
 
 ## miyabi/sqlite_shared_fs_probe.py
 
-- **`connect(path)`** — 建父目录，SQLite timeout/busy timeout 均 60s，强制 DELETE journal + FULL sync；幂等建单行 counter 和带 event-id 主键、`(writer_id,sequence)` unique 的 event 表。
-- **`verify(conn)`** — integrity 必须恰好 `ok`，counter 必须等于 event 行数，否则判为 partial transaction。
-- **`stress(path, writer_id, count)`** — 每轮 `BEGIN IMMEDIATE`，`INSERT OR IGNORE`成功才同事务 counter+1，随后 commit。记录 busy/locked 数，但捕获后仍 rollback 并重抛，不做 retry。
+- **`connect(path, timeout_seconds, busy_timeout_ms)`** — 建父目录，使用至少 5 秒的启动期 busy timeout 安装 DELETE journal + FULL sync，再降到调用方的 measured busy timeout；幂等建 counter/event、lease 和 contention-event 表。
+- **`open_existing` / `open_readonly`** — 前者只打开既有 DB、设置 PRAGMA 而不执行 DDL；后者使用 SQLite URI `mode=ro`，供跨节点 visibility 与 Checker 路径使用。
+- **`verify(conn)`** — integrity 必须恰好 `ok`，counter 必须等于 event 行数，且 journal/synchronous 必须是 DELETE/FULL，否则 fail closed。
+- **`stress(path, writer_id, count)`** — 每轮 `BEGIN IMMEDIATE`，`INSERT OR IGNORE` 成功才同事务 counter+1，随后 commit。记录 busy/locked 数，但捕获后仍 rollback 并重抛，不做 retry。
+- **`contend(...)`** — 对既有 DB 做 acquire/renew 型 `BEGIN IMMEDIATE` 争抢；busy/locked 使用 seeded jitter 有界重试，逐 writer 记录 wait 分布、busy 次数、action 数和 starvation。若 starvation，先持久化 JSON 再以非零状态退出。
+- **`clock_exchange(...)`** — 通过共享目录执行多轮 coordinator/responder request/response，计算非负单向延迟假设下的 offset interval 及交集，同时记录 wall/monotonic discontinuity。
 - **`kill_once` / `kill_reopen`** — child 在 counter+event 事务 commit 前或后收 SIGKILL；parent 用 seeded RNG 选 phase，每轮重开并 verify，默认 100 cycles/seed 1337。
-- **`parse_args/main`** — 必须选 `stress/verify/kill-reopen`；`_kill-once` 是内部 subcommand。结果为单行排序 JSON。跨节点可并发用不同 writer id 跑 stress，脚本本身不负责调度这些进程。
+- **`parse_args/main`** — 支持 `stress`、`verify`、`verify-readonly`、`contend`、`clock-exchange` 和 `kill-reopen`；`_kill-once` 是内部 subcommand。结果为单行排序 JSON，`contend` 可另外原子写入每个 writer 的结构化结果；跨节点进程仍由 PBS/mpirun launcher 编排。
 
 ## shell launcher 与清理脚本
 

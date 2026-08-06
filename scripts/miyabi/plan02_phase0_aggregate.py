@@ -38,18 +38,29 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
         raise
 
 
-def _clock_summary(path: Path, max_clock_skew_seconds: float) -> dict[str, Any]:
+def _clock_summary(
+    path: Path,
+    max_clock_skew_seconds: float,
+    max_clock_discontinuity_seconds: float = 0.1,
+) -> dict[str, Any]:
     exchange = _read_object(path)
     absolute_bound = exchange.get("absolute_offset_upper_bound_seconds")
+    discontinuity = exchange.get("maximum_wall_monotonic_elapsed_delta_seconds")
+    clock_stable = isinstance(discontinuity, (int, float)) and (
+        float(discontinuity) <= max_clock_discontinuity_seconds
+    )
     within_bound = (
         exchange.get("status") == "PASS"
         and exchange.get("intersection_valid") is True
+        and clock_stable
         and isinstance(absolute_bound, (int, float))
         and float(absolute_bound) <= max_clock_skew_seconds
     )
     return {
         **exchange,
         "max_clock_skew_seconds": max_clock_skew_seconds,
+        "max_clock_discontinuity_seconds": max_clock_discontinuity_seconds,
+        "clock_stable": clock_stable,
         "within_bound": within_bound,
     }
 
@@ -82,6 +93,11 @@ def _contention_summary(paths: list[Path], db_path: Path) -> dict[str, Any]:
     requested = sum(int(writer["requested_transactions"]) for writer in writers)
     committed = sum(int(writer["committed_transactions"]) for writer in writers)
     hostnames = sorted({str(writer["hostname"]) for writer in writers})
+    maximum_waits = [
+        float(writer["wait_seconds"]["max"])
+        for writer in writers
+        if writer["wait_seconds"]["max"] is not None
+    ]
     return {
         "writers": writers,
         "writer_count": len(writers),
@@ -93,11 +109,7 @@ def _contention_summary(paths: list[Path], db_path: Path) -> dict[str, Any]:
         "event_count": event_count,
         "busy_errors": sum(int(writer["busy_errors"]) for writer in writers),
         "starvation_count": sum(bool(writer["starved"]) for writer in writers),
-        "maximum_writer_wait_seconds": max(
-            float(writer["wait_seconds"]["max"])
-            for writer in writers
-            if writer["wait_seconds"]["max"] is not None
-        ),
+        "maximum_writer_wait_seconds": max(maximum_waits) if maximum_waits else None,
         "action_counts": action_counts,
         "integrity_check": integrity,
         "pragmas": pragmas,
@@ -108,7 +120,11 @@ def _contention_summary(paths: list[Path], db_path: Path) -> dict[str, Any]:
 def aggregate(args: argparse.Namespace) -> dict[str, Any]:
     visibility_write = _read_object(args.visibility_write)
     visibility_read = _read_object(args.visibility_read)
-    clock = _clock_summary(args.clock_exchange, args.max_clock_skew_seconds)
+    clock = _clock_summary(
+        args.clock_exchange,
+        args.max_clock_skew_seconds,
+        args.max_clock_discontinuity_seconds,
+    )
     contention = _contention_summary(args.contention_results, args.sqlite_db)
     visibility = {
         "writer": visibility_write,
@@ -162,6 +178,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pbs-job-id", required=True)
     parser.add_argument("--host", dest="hosts", action="append", required=True)
     parser.add_argument("--max-clock-skew-seconds", type=float, default=2.0)
+    parser.add_argument("--max-clock-discontinuity-seconds", type=float, default=0.1)
     parser.add_argument("--output-json", type=Path, required=True)
     return parser.parse_args()
 

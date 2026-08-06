@@ -129,8 +129,8 @@ printf 'HOST %s\n' "${HOSTS[@]}"
 
 "$PYTHON_BIN" "$FAULT_PROBE" writer-lock \
   --work-dir "$PLAN02_PHASE0_WORK_DIR/writer_lock_work" \
-  --output-json "$PLAN02_PHASE0_WORK_DIR/writer_lock.json" \
-  > "$PLAN02_PHASE0_WORK_DIR/writer_lock.log"
+  --output-json "$PLAN02_PHASE0_WORK_DIR/writer_lock_single.json" \
+  > "$PLAN02_PHASE0_WORK_DIR/writer_lock_single.log"
 
 "$PYTHON_BIN" "$FAULT_PROBE" old-cache-writer \
   --work-dir "$PLAN02_PHASE0_WORK_DIR/old_cache_work" \
@@ -154,9 +154,36 @@ MPI_COMMON=(
 MPI_ENV_ARGS=(
   "PYTHON_BIN=$PYTHON_BIN"
   "SQLITE_PROBE=$SQLITE_PROBE"
+  "FAULT_PROBE=$FAULT_PROBE"
   "SQLITE_DB=$SQLITE_DB"
   "PLAN02_PHASE0_WORK_DIR=$PLAN02_PHASE0_WORK_DIR"
 )
+
+mpirun "${MPI_COMMON[@]}" \
+  --map-by ppr:1:node \
+  -np 2 \
+  /usr/bin/env "${MPI_ENV_ARGS[@]}" \
+  bash -lc '
+    set -eEuo pipefail
+    rank="${OMPI_COMM_WORLD_RANK:?missing OMPI_COMM_WORLD_RANK}"
+    if [[ "$rank" -eq 0 ]]; then
+      role=holder
+    else
+      role=contender
+    fi
+    "$PYTHON_BIN" "$FAULT_PROBE" writer-lock-cross-node \
+      --work-dir "$PLAN02_PHASE0_WORK_DIR/writer_lock_cross_node_work" \
+      --role "$role" \
+      --output-json "$PLAN02_PHASE0_WORK_DIR/writer_lock_${role}.json" \
+      > "$PLAN02_PHASE0_WORK_DIR/writer_lock_${role}.log"
+  '
+
+"$PYTHON_BIN" "$FAULT_PROBE" writer-lock-combine \
+  --single-node "$PLAN02_PHASE0_WORK_DIR/writer_lock_single.json" \
+  --holder "$PLAN02_PHASE0_WORK_DIR/writer_lock_holder.json" \
+  --contender "$PLAN02_PHASE0_WORK_DIR/writer_lock_contender.json" \
+  --output-json "$PLAN02_PHASE0_WORK_DIR/writer_lock.json" \
+  > "$PLAN02_PHASE0_WORK_DIR/writer_lock.log"
 
 mpirun "${MPI_COMMON[@]}" \
   --map-by ppr:1:node \
@@ -256,6 +283,7 @@ AGGREGATE_ARGS=(
   --source-identity "$PLAN02_PHASE0_WORK_DIR/source_identity.json"
   --pbs-job-id "${PBS_JOBID:?PBS_JOBID is not set}"
   --max-clock-skew-seconds 2.0
+  --max-clock-discontinuity-seconds 0.1
   --output-json "$PLAN02_PHASE0_WORK_DIR/phase0_raw.json"
 )
 for host in "${HOSTS[@]}"; do

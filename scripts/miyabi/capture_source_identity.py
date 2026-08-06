@@ -77,9 +77,7 @@ def _source_record(project_root: Path, relative_path: str) -> dict[str, Any]:
 def capture(project_root: Path) -> dict[str, Any]:
     project_root = project_root.resolve()
     commit = _git(project_root, "rev-parse", "HEAD").decode("ascii").strip()
-    dirty = bool(
-        _git(project_root, "status", "--porcelain=v1", "--untracked-files=all").strip()
-    )
+    dirty = bool(_git(project_root, "status", "--porcelain=v1", "--untracked-files=all").strip())
     listed = _git(
         project_root,
         "ls-files",
@@ -90,9 +88,17 @@ def capture(project_root: Path) -> dict[str, Any]:
         "--",
         *SOURCE_SCOPES,
     )
-    relative_paths = sorted(
-        {item.decode("utf-8") for item in listed.split(b"\0") if item}
+    relative_path_set = {item.decode("utf-8") for item in listed.split(b"\0") if item}
+    # Explicit file scopes such as the environment-specific (and therefore
+    # gitignored) uv.lock still define the executable environment. Include
+    # them when present even though `git ls-files --exclude-standard` omits
+    # ignored files.
+    relative_path_set.update(
+        scope
+        for scope in SOURCE_SCOPES
+        if (project_root / scope).is_file() or (project_root / scope).is_symlink()
     )
+    relative_paths = sorted(relative_path_set)
     source_files = [_source_record(project_root, path) for path in relative_paths]
     fingerprint_payload = {
         "fingerprint_format": 1,

@@ -116,7 +116,7 @@ qsub -v TRAINING_SEED=2027,SYNC_SCAN_INTERVAL_SECONDS=0.2,INGEST_DURING_PUBLISH=
 
 ```bash
 scripts/miyabi/inspect_run.sh <run_root>    # 快速查看 run 状态
-python scripts/miyabi/sqlite_shared_fs_probe.py --help  # 共享 SQLite stress/kill-reopen probe
+python scripts/miyabi/sqlite_shared_fs_probe.py --help  # 共享 SQLite stress/contention/clock/kill-reopen probe
 python scripts/miyabi/publication_crash_probe.py --help # full publication crash matrix
 python scripts/miyabi/check_plan01_invariants.py --help # current-only/一致性/时延三值 Checker
 python scripts/miyabi/measure_pointer_polling.py --help # 固定 pointer 轮询成本测量

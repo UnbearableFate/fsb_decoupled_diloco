@@ -97,6 +97,7 @@ def test_sqlite_contend_records_waits_without_starvation(tmp_path):
     results = [json.loads(path.read_text(encoding="utf-8")) for path in outputs]
     assert all(result["committed_transactions"] == 20 for result in results)
     assert all(result["starved"] is False for result in results)
+    assert all(result["hostname"] and int(result["pid"]) > 0 for result in results)
     assert sum(result["busy_errors"] for result in results) > 0
 
 

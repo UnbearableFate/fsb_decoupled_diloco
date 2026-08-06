@@ -129,3 +129,39 @@ The remediated bundle should aggregate host coverage from every contention-write
 - Parent traceback and workload log: `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-090551_phase0-remediation_review.log`.
 - Structured fail-closed summary: `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-090551_phase0-feasibility_blocked.json`.
 - Diagnosed raw work (temporary until the next terminal result): `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-090551_2497224/`.
+
+## 2026-08-06T09:48:00+09:00 — append-only record correction
+
+The opening sentence stating that no Phase 0 failure had been recorded is an obsolete initialization placeholder. It cannot be rewritten under the append-only rule. The timestamped failure entries above are authoritative; the diagnosed raw directory from the 09:06 remediation failure was deleted only after its blocked artifact/log were retained and a replacement PASS completed.
+
+## 2026-08-06T09:57:00+09:00 — phase0-review2-remediation focused tests attempt 1
+
+### Experiment identity
+
+- Consecutive failure count for `phase0-review2-remediation focused tests`: 1.
+- PBS job `2497329.opbs`, queue `debug-g`, compute host `mg0004`, walltime 11 seconds, `Exit_status=1`.
+- Command from `scripts/miyabi/run_plan02_phase0_tests.pbs`:
+
+  ```text
+  .venv/bin/python -m pytest -q tests/test_plan02_feasibility.py tests/test_sqlite_probe.py tests/test_capture_source_identity.py tests/test_source_identity.py
+  ```
+
+### Expected behavior
+
+All focused tests should pass after adding cross-node writer-lock evidence, a guarded source-runtime write, direct aggregate/source-gate coverage, and ignored `uv.lock` fingerprinting.
+
+### Observed facts
+
+- Result: `3 failed, 20 passed in 8.09s`.
+- Two Checker tests raised `UnboundLocalError: incarnations` for the manifest-fallback fixture. The physical-incarnation assertion was accidentally indented into the non-array `else` branch, where `incarnations` is undefined.
+- The source-identity test expected a clean repository but created an untracked `.gitignore`; the ignored `uv.lock` was not the dirty cause.
+
+### Confirmed root causes and next falsification
+
+1. Move the physical-incarnation assertion back inside the `array_supported` branch; retain a separate fallback-orchestration assertion in the `else` branch.
+2. Commit the test repository's `.gitignore` in its baseline fixture so an ignored lock file can be present while `git_dirty=false`.
+3. Rerun the identical focused group on a compute node before any full Phase 0 experiment.
+
+### Evidence
+
+- Complete test log: `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-100000_phase0-remediation-tests_review.log`.

@@ -1,0 +1,386 @@
+Currently Loaded Modulefiles:
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9
+
+Key:
+(symbolic-version)
+........FF..........F..                                                  [100%]
+=================================== FAILURES ===================================
+___________ test_feasibility_checker_stdout_contract_and_fail_closed ___________
+
+tmp_path = PosixPath('/tmp/2497329.8824/pytest-of-x10041/pytest-0/test_feasibility_checker_stdou0')
+
+    def test_feasibility_checker_stdout_contract_and_fail_closed(tmp_path):
+        input_path = tmp_path / "input.json"
+        output_path = tmp_path / "output.json"
+        input_path.write_text(json.dumps(_passing_checker_input()), encoding="utf-8")
+        passed = subprocess.run(
+            [
+                sys.executable,
+                str(CHECKER),
+                "--input-json",
+                str(input_path),
+                "--output-json",
+                str(output_path),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+>       assert passed.returncode == 0
+E       AssertionError: assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python', '/work/xg24i002/x10041/fsb_decou...4/pytest-of-x10041/pytest-0/test_feasibility_checker_stdou0/output.json'], returncode=1, stdout='BLOCKED\n', stderr='').returncode
+
+tests/test_plan02_feasibility.py:418: AssertionError
+______ test_feasibility_checker_rejects_missing_or_self_asserted_evidence ______
+
+    def test_feasibility_checker_rejects_missing_or_self_asserted_evidence():
+        module = _load_script(CHECKER, "plan02_checker_strictness")
+
+        empty_repair = _passing_checker_input()
+        empty_repair["old_cache_writer"]["repair_epochs"] = {}
+>       assert module.evaluate(empty_repair)[0]["FEAS-02"]["status"] == "BLOCKED"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_plan02_feasibility.py:449:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+payload = {'sqlite_writer_lock': {'status': 'PASS', 'single_node': {'status': 'PASS'}, 'host_count': 2, 'holder_hostname': 'mg00...ate_classifier_validated': True, 'scheduler_query_supported': True, 'independent_job_query_supported': True, ...}, ...}
+
+    def evaluate(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+        failures: list[str] = []
+        requirements: dict[str, dict[str, Any]] = {}
+
+        lock = payload.get("sqlite_writer_lock", {})
+        lock_failures: list[str] = []
+        boundary = lock.get("availability_boundary", {})
+        _require(lock.get("status") == "PASS", "writer-lock probe did not pass", lock_failures)
+        _require(
+            lock.get("single_node", {}).get("status") == "PASS",
+            "single-node writer-lock evidence is missing",
+            lock_failures,
+        )
+        _require(
+            int(lock.get("host_count", 0)) >= 2,
+            "writer-lock probe did not cover two hosts",
+            lock_failures,
+        )
+        _require(
+            lock.get("holder_hostname") != lock.get("contender_hostname")
+            and lock.get("successor_hostname") == lock.get("contender_hostname"),
+            "writer-lock holder and successor were not placed on distinct hosts",
+            lock_failures,
+        )
+        contender_error = str(lock.get("contender_error", "")).lower()
+        _require(
+            lock.get("holder_stopped_state") == "T",
+            "writer-lock holder was not observed stopped",
+            lock_failures,
+        )
+        _require(
+            any(token in contender_error for token in ("locked", "busy")),
+            "writer-lock contender did not report lock contention",
+            lock_failures,
+        )
+        _require(
+            lock.get("visible_rows_before_kill") == 0,
+            "uncommitted writer row became visible",
+            lock_failures,
+        )
+        _require(
+            lock.get("holder_exit_status") == -9,
+            "writer-lock holder was not killed with SIGKILL",
+            lock_failures,
+        )
+        _require(
+            lock.get("post_kill_rows") == [["successor", "committed"]],
+            "successor did not observe rollback and commit the next row",
+            lock_failures,
+        )
+        _require(
+            boundary.get("paused_writer_transaction_blocks_takeover") is True,
+            "paused writer did not block contender",
+            lock_failures,
+        )
+        _require(
+            boundary.get("killing_holder_releases_lock") is True,
+            "killing lock holder did not release writer lock",
+            lock_failures,
+        )
+        _require(
+            boundary.get("uncommitted_state_rolled_back") is True,
+            "uncommitted state survived holder death",
+            lock_failures,
+        )
+        _require(
+            lock.get("integrity_check") == ["ok"], "writer-lock DB integrity failed", lock_failures
+        )
+        requirements["FEAS-01"] = {
+            "status": "PASS" if not lock_failures else "BLOCKED",
+            "failures": lock_failures,
+        }
+
+        cache = payload.get("old_cache_writer", {})
+        cache_failures: list[str] = []
+        _require(cache.get("status") == "PASS", "old-cache probe did not pass", cache_failures)
+        _require(
+            cache.get("counterexample_reproduced") is True,
+            "old writer did not overwrite fixed cache",
+            cache_failures,
+        )
+        _require(
+            cache.get("business_state_failed") is False,
+            "cache pollution changed business state",
+            cache_failures,
+        )
+        expected_kinds = {"latest", "stop", "summary"}
+        polluted_epochs = cache.get("polluted_cache_epochs", {})
+        _require(
+            isinstance(polluted_epochs, dict)
+            and set(polluted_epochs) == expected_kinds
+            and all(int(value) == 1 for value in polluted_epochs.values()),
+            "fixed-cache pollution evidence is missing or not stale",
+            cache_failures,
+        )
+        selected = cache.get("selected_canonical", {})
+        _require(
+            isinstance(selected, dict)
+            and set(selected) == expected_kinds
+            and all(
+                isinstance(payload, dict)
+                and payload.get("artifact_kind") == kind
+                and int(payload.get("published_by_epoch", -1)) == 2
+                for kind, payload in selected.items()
+            ),
+            "reader did not select current canonical artifacts for every kind",
+            cache_failures,
+        )
+        repair_epochs = cache.get("repair_epochs", {})
+        _require(
+            isinstance(repair_epochs, dict)
+            and set(repair_epochs) == expected_kinds
+            and all(int(value) == 2 for value in repair_epochs.values()),
+            "current leader did not repair all fixed caches",
+            cache_failures,
+        )
+        discovery_counts = cache.get("canonical_discovery_counts", {})
+        _require(
+            isinstance(discovery_counts, dict)
+            and set(discovery_counts) == expected_kinds
+            and all(int(value) >= 2 for value in discovery_counts.values()),
+            "canonical scan was incomplete or silently empty",
+            cache_failures,
+        )
+        requirements["FEAS-02"] = {
+            "status": "PASS" if not cache_failures else "BLOCKED",
+            "failures": cache_failures,
+        }
+
+        clock_sqlite = payload.get("clock_sqlite", {})
+        sqlite_failures: list[str] = []
+        clock = clock_sqlite.get("clock", {})
+        visibility = clock_sqlite.get("visibility", {})
+        contention = clock_sqlite.get("contention", {})
+        _require(clock.get("status") == "PASS", "clock exchange did not pass", sqlite_failures)
+        _require(
+            clock.get("method") == "filesystem_two_way_offset_interval",
+            "clock probe did not use a two-way offset interval",
+            sqlite_failures,
+        )
+        _require(
+            int(clock.get("host_count", 0)) >= 2, "clock probe did not cover two hosts", sqlite_failures
+        )
+        _require(
+            int(clock.get("rounds_completed", 0)) >= 3,
+            "clock exchange had too few rounds",
+            sqlite_failures,
+        )
+        _require(
+            clock.get("intersection_valid") is True,
+            "clock offset intervals did not intersect",
+            sqlite_failures,
+        )
+        _require(
+            clock.get("clock_stable") is True, "wall clock changed during exchange", sqlite_failures
+        )
+        _require(
+            float(clock.get("maximum_wall_monotonic_elapsed_delta_seconds", float("inf")))
+            <= float(clock.get("max_clock_discontinuity_seconds", 0.0)),
+            "wall/monotonic clock discontinuity exceeded the configured maximum",
+            sqlite_failures,
+        )
+        _require(
+            float(clock.get("absolute_offset_upper_bound_seconds", float("inf")))
+            <= float(clock.get("max_clock_skew_seconds", 0.0)),
+            "clock offset upper bound exceeded configured maximum",
+            sqlite_failures,
+        )
+        _require(
+            clock.get("within_bound") is True,
+            "observed clock bound exceeded configured maximum",
+            sqlite_failures,
+        )
+        _require(
+            visibility.get("same_committed_state") is True,
+            "cross-node reopen did not see committed state",
+            sqlite_failures,
+        )
+        _require(
+            visibility.get("writer_hostname") != visibility.get("reader_hostname"),
+            "visibility probe did not use distinct hosts",
+            sqlite_failures,
+        )
+        _require(
+            int(contention.get("writer_count", 0)) >= 2,
+            "contention probe had fewer than two writers",
+            sqlite_failures,
+        )
+        _require(
+            int(contention.get("distinct_db_writers", -1)) == int(contention.get("writer_count", 0)),
+            "contention writer evidence did not match DB writers",
+            sqlite_failures,
+        )
+        _require(
+            int(contention.get("host_count", 0)) >= 2,
+            "contention did not cover two hosts",
+            sqlite_failures,
+        )
+        requested = int(contention.get("requested_transactions", -1))
+        committed = int(contention.get("committed_transactions", -2))
+        event_count = int(contention.get("event_count", -3))
+        _require(
+            requested > 0 and requested == committed == event_count,
+            "contention transaction counts disagree",
+            sqlite_failures,
+        )
+        _require(
+            contention.get("all_transactions_committed") is True,
+            "contention lost transactions",
+            sqlite_failures,
+        )
+        _require(
+            int(contention.get("busy_errors", 0)) > 0,
+            "contention produced no busy events",
+            sqlite_failures,
+        )
+        _require(
+            int(contention.get("starvation_count", -1)) == 0,
+            "contention starvation occurred",
+            sqlite_failures,
+        )
+        actions = contention.get("action_counts", {})
+        _require(
+            int(actions.get("acquire", 0)) > 0 and int(actions.get("renew", 0)) > 0,
+            "contention did not exercise both acquire and renew",
+            sqlite_failures,
+        )
+        _require(
+            contention.get("integrity_check") == ["ok"],
+            "contention DB integrity failed",
+            sqlite_failures,
+        )
+        pragmas = contention.get("pragmas", {})
+        _require(
+            str(pragmas.get("journal_mode", "")).lower() == "delete",
+            "journal mode is not DELETE",
+            sqlite_failures,
+        )
+        _require(int(pragmas.get("synchronous", -1)) == 2, "synchronous is not FULL", sqlite_failures)
+        requirements["FEAS-03"] = {
+            "status": "PASS" if not sqlite_failures else "BLOCKED",
+            "failures": sqlite_failures,
+        }
+
+        pbs = payload.get("pbs_capability", {})
+        pbs_failures: list[str] = []
+        _require(pbs.get("status") == "PASS", "PBS capability probe did not complete", pbs_failures)
+        _require(
+            pbs.get("state_classifier_validated") is True,
+            "PBS state classifier matrix failed",
+            pbs_failures,
+        )
+        _require(
+            pbs.get("scheduler_query_supported") is True,
+            "scheduler query path is unavailable",
+            pbs_failures,
+        )
+        _require(
+            pbs.get("independent_job_query_supported") is True,
+            "independent parent job query path is unavailable",
+            pbs_failures,
+        )
+        if pbs.get("automatic_submission_supported") is True:
+            observed_states = set(pbs.get("observed_scheduler_states", []))
+            _require(
+                {"queued", "prologue", "running", "finished"}.issubset(observed_states),
+                "real scheduler lifecycle evidence is incomplete",
+                pbs_failures,
+            )
+            _require(
+                pbs.get("terminal_state_query_supported") is True,
+                "scheduler terminal-state query was not verified",
+                pbs_failures,
+            )
+        orchestration = pbs.get("initial_learner_orchestration")
+        array_supported = pbs.get("job_array_supported") is True
+        if array_supported:
+            _require(
+                pbs.get("automatic_submission_supported") is True and orchestration == "pbs_job_array",
+                "array capability and selected orchestration are inconsistent",
+                pbs_failures,
+            )
+            array_evidence = pbs.get("rerunable_job_evidence", {}).get("array", {})
+            incarnations = array_evidence.get("physical_incarnations", {})
+            _require(
+                str(array_evidence.get("Rerunable", "")).lower() == "true",
+                "array job was not recorded as rerunable",
+                pbs_failures,
+            )
+        else:
+            _require(
+                orchestration == "independent_manifest",
+                "array fallback did not select the independent manifest",
+                pbs_failures,
+            )
+            _require(
+>               isinstance(incarnations, dict)
+                           ^^^^^^^^^^^^
+                and len(incarnations) == 2
+                and all(
+                    int(item.get("run_count", 0)) >= 1 and int(item.get("Exit_status", -1)) == 0
+                    for item in incarnations.values()
+                ),
+                "array physical incarnation evidence is incomplete",
+                pbs_failures,
+            )
+E           UnboundLocalError: cannot access local variable 'incarnations' where it is not associated with a value
+
+scripts/miyabi/check_plan02_feasibility.py:344: UnboundLocalError
+__ test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources ___
+
+tmp_path = PosixPath('/tmp/2497329.8824/pytest-of-x10041/pytest-0/test_capture_source_identity_h0')
+
+    def test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources(tmp_path):
+        repo = tmp_path / "repo"
+        (repo / "fs_diloco").mkdir(parents=True)
+        (repo / "configs").mkdir()
+        (repo / "fs_diloco" / "module.py").write_text("VALUE = 1\n", encoding="utf-8")
+        (repo / "configs" / "run.yaml").write_text("run: {}\n", encoding="utf-8")
+        (repo / ".gitignore").write_text("uv.lock\n", encoding="utf-8")
+        (repo / "uv.lock").write_text("dependency = 1\n", encoding="utf-8")
+        _git(repo, "init", "-q")
+        _git(repo, "config", "user.email", "test@example.invalid")
+        _git(repo, "config", "user.name", "Test User")
+        _git(repo, "add", "fs_diloco/module.py", "configs/run.yaml")
+        _git(repo, "commit", "-qm", "baseline")
+
+        clean = _capture(repo, "clean")
+>       assert clean["git_dirty"] is False
+E       assert True is False
+
+tests/test_capture_source_identity.py:54: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_plan02_feasibility.py::test_feasibility_checker_stdout_contract_and_fail_closed
+FAILED tests/test_plan02_feasibility.py::test_feasibility_checker_rejects_missing_or_self_asserted_evidence
+FAILED tests/test_capture_source_identity.py::test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources
+3 failed, 20 passed in 8.09s
+[ERROR] Failed at line 19

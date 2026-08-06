@@ -1,0 +1,2611 @@
+{
+  "artifact_format_version": 1,
+  "checked_at": 1785977971.542784,
+  "failures": [],
+  "phase": "Phase 0",
+  "plan_id": "fsb_decoupled_diloco_plan_02",
+  "requirements": {
+    "FEAS-01": {
+      "failures": [],
+      "status": "PASS"
+    },
+    "FEAS-02": {
+      "failures": [],
+      "status": "PASS"
+    },
+    "FEAS-03": {
+      "failures": [],
+      "status": "PASS"
+    },
+    "FEAS-04": {
+      "automatic_submission_supported": true,
+      "failures": [],
+      "job_array_supported": true,
+      "selected_orchestration": "pbs_job_array",
+      "status": "PASS"
+    },
+    "FEAS-05": {
+      "failures": [],
+      "status": "PASS"
+    }
+  },
+  "source_evidence": {
+    "artifact_format_version": 1,
+    "captured_at": 1785977971.4887407,
+    "clock_sqlite": {
+      "clock": {
+        "absolute_offset_upper_bound_seconds": 0.003113702,
+        "clock_stable": true,
+        "host_count": 2,
+        "hostname": "mg0004",
+        "hostnames": [
+          "mg0004",
+          "mg0008"
+        ],
+        "intersection_valid": true,
+        "max_clock_discontinuity_seconds": 0.1,
+        "max_clock_skew_seconds": 2.0,
+        "maximum_round_trip_seconds": 0.471524797,
+        "maximum_wall_monotonic_elapsed_delta_seconds": 5.44e-07,
+        "method": "filesystem_two_way_offset_interval",
+        "mode": "clock-exchange",
+        "monotonic_clock_resolution_seconds": 1e-09,
+        "observations": [
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977940248589369,
+            "local_sent_wall_ns": 1785977940187932990,
+            "offset_lower_bound_seconds": -0.004601806,
+            "offset_upper_bound_seconds": 0.056053421,
+            "remote_received_wall_ns": 1785977940243986411,
+            "remote_sent_wall_ns": 1785977940243987563,
+            "responder_hostname": "mg0008",
+            "round": 0,
+            "round_trip_monotonic_seconds": 0.060656923,
+            "wall_monotonic_elapsed_delta_seconds": 5.44e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977940255583102,
+            "local_sent_wall_ns": 1785977940248609882,
+            "offset_lower_bound_seconds": -0.003202961,
+            "offset_upper_bound_seconds": 0.003769363,
+            "remote_received_wall_ns": 1785977940252379245,
+            "remote_sent_wall_ns": 1785977940252380141,
+            "responder_hostname": "mg0008",
+            "round": 1,
+            "round_trip_monotonic_seconds": 0.006973604,
+            "wall_monotonic_elapsed_delta_seconds": 3.84e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977940266637784,
+            "local_sent_wall_ns": 1785977940255600862,
+            "offset_lower_bound_seconds": -0.007323567,
+            "offset_upper_bound_seconds": 0.003712651,
+            "remote_received_wall_ns": 1785977940259313513,
+            "remote_sent_wall_ns": 1785977940259314217,
+            "responder_hostname": "mg0008",
+            "round": 2,
+            "round_trip_monotonic_seconds": 0.011037338,
+            "wall_monotonic_elapsed_delta_seconds": 4.16e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977940274791139,
+            "local_sent_wall_ns": 1785977940266655640,
+            "offset_lower_bound_seconds": -0.0042131,
+            "offset_upper_bound_seconds": 0.003921663,
+            "remote_received_wall_ns": 1785977940270577303,
+            "remote_sent_wall_ns": 1785977940270578039,
+            "responder_hostname": "mg0008",
+            "round": 3,
+            "round_trip_monotonic_seconds": 0.008135819,
+            "wall_monotonic_elapsed_delta_seconds": 3.2e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977940282765933,
+            "local_sent_wall_ns": 1785977940274807907,
+            "offset_lower_bound_seconds": -0.004138934,
+            "offset_upper_bound_seconds": 0.003818484,
+            "remote_received_wall_ns": 1785977940278626391,
+            "remote_sent_wall_ns": 1785977940278626999,
+            "responder_hostname": "mg0008",
+            "round": 4,
+            "round_trip_monotonic_seconds": 0.007958378,
+            "wall_monotonic_elapsed_delta_seconds": 3.52e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977940292390878,
+            "local_sent_wall_ns": 1785977940282781901,
+            "offset_lower_bound_seconds": -0.003512797,
+            "offset_upper_bound_seconds": 0.006095604,
+            "remote_received_wall_ns": 1785977940288877505,
+            "remote_sent_wall_ns": 1785977940288878081,
+            "responder_hostname": "mg0008",
+            "round": 5,
+            "round_trip_monotonic_seconds": 0.009609297,
+            "wall_monotonic_elapsed_delta_seconds": 3.2e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977940299120897,
+            "local_sent_wall_ns": 1785977940292408287,
+            "offset_lower_bound_seconds": -0.003468389,
+            "offset_upper_bound_seconds": 0.003243613,
+            "remote_received_wall_ns": 1785977940295651900,
+            "remote_sent_wall_ns": 1785977940295652508,
+            "responder_hostname": "mg0008",
+            "round": 6,
+            "round_trip_monotonic_seconds": 0.006712898,
+            "wall_monotonic_elapsed_delta_seconds": 2.88e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977940305945541,
+            "local_sent_wall_ns": 1785977940299136929,
+            "offset_lower_bound_seconds": -0.003555629,
+            "offset_upper_bound_seconds": 0.003252471,
+            "remote_received_wall_ns": 1785977940302389400,
+            "remote_sent_wall_ns": 1785977940302389912,
+            "responder_hostname": "mg0008",
+            "round": 7,
+            "round_trip_monotonic_seconds": 0.0068089,
+            "wall_monotonic_elapsed_delta_seconds": 2.88e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977940312847401,
+            "local_sent_wall_ns": 1785977940305960325,
+            "offset_lower_bound_seconds": -0.003584822,
+            "offset_upper_bound_seconds": 0.003301678,
+            "remote_received_wall_ns": 1785977940309262003,
+            "remote_sent_wall_ns": 1785977940309262579,
+            "responder_hostname": "mg0008",
+            "round": 8,
+            "round_trip_monotonic_seconds": 0.006887364,
+            "wall_monotonic_elapsed_delta_seconds": 2.88e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977940319619021,
+            "local_sent_wall_ns": 1785977940312862409,
+            "offset_lower_bound_seconds": -0.003642238,
+            "offset_upper_bound_seconds": 0.003113702,
+            "remote_received_wall_ns": 1785977940315976111,
+            "remote_sent_wall_ns": 1785977940315976783,
+            "responder_hostname": "mg0008",
+            "round": 9,
+            "round_trip_monotonic_seconds": 0.0067569,
+            "wall_monotonic_elapsed_delta_seconds": 2.88e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977940327780439,
+            "local_sent_wall_ns": 1785977940319635501,
+            "offset_lower_bound_seconds": -0.003693127,
+            "offset_upper_bound_seconds": 0.004451267,
+            "remote_received_wall_ns": 1785977940324086768,
+            "remote_sent_wall_ns": 1785977940324087312,
+            "responder_hostname": "mg0008",
+            "round": 10,
+            "round_trip_monotonic_seconds": 0.008145226,
+            "wall_monotonic_elapsed_delta_seconds": 2.88e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977940359492829,
+            "local_sent_wall_ns": 1785977940327794136,
+            "offset_lower_bound_seconds": -0.004216719,
+            "offset_upper_bound_seconds": 0.027481366,
+            "remote_received_wall_ns": 1785977940355275502,
+            "remote_sent_wall_ns": 1785977940355276110,
+            "responder_hostname": "mg0008",
+            "round": 11,
+            "round_trip_monotonic_seconds": 0.031699013,
+            "wall_monotonic_elapsed_delta_seconds": 3.2e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977940737837075,
+            "local_sent_wall_ns": 1785977940359506237,
+            "offset_lower_bound_seconds": -0.007370547,
+            "offset_upper_bound_seconds": 0.370959491,
+            "remote_received_wall_ns": 1785977940730465728,
+            "remote_sent_wall_ns": 1785977940730466528,
+            "responder_hostname": "mg0008",
+            "round": 12,
+            "round_trip_monotonic_seconds": 0.378331126,
+            "wall_monotonic_elapsed_delta_seconds": 2.88e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977940744637750,
+            "local_sent_wall_ns": 1785977940737852083,
+            "offset_lower_bound_seconds": -0.003464043,
+            "offset_upper_bound_seconds": 0.003321048,
+            "remote_received_wall_ns": 1785977940741173131,
+            "remote_sent_wall_ns": 1785977940741173707,
+            "responder_hostname": "mg0008",
+            "round": 13,
+            "round_trip_monotonic_seconds": 0.006785891,
+            "wall_monotonic_elapsed_delta_seconds": 2.24e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977940751502298,
+            "local_sent_wall_ns": 1785977940744653270,
+            "offset_lower_bound_seconds": -0.003532147,
+            "offset_upper_bound_seconds": 0.003316305,
+            "remote_received_wall_ns": 1785977940747969575,
+            "remote_sent_wall_ns": 1785977940747970151,
+            "responder_hostname": "mg0008",
+            "round": 14,
+            "round_trip_monotonic_seconds": 0.00684922,
+            "wall_monotonic_elapsed_delta_seconds": 1.92e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977940802653509,
+            "local_sent_wall_ns": 1785977940751515194,
+            "offset_lower_bound_seconds": -0.04678035,
+            "offset_upper_bound_seconds": 0.004357389,
+            "remote_received_wall_ns": 1785977940755872583,
+            "remote_sent_wall_ns": 1785977940755873159,
+            "responder_hostname": "mg0008",
+            "round": 15,
+            "round_trip_monotonic_seconds": 0.051138635,
+            "wall_monotonic_elapsed_delta_seconds": 3.2e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977941274192194,
+            "local_sent_wall_ns": 1785977940802667685,
+            "offset_lower_bound_seconds": -0.004743032,
+            "offset_upper_bound_seconds": 0.466780709,
+            "remote_received_wall_ns": 1785977941269448394,
+            "remote_sent_wall_ns": 1785977941269449162,
+            "responder_hostname": "mg0008",
+            "round": 16,
+            "round_trip_monotonic_seconds": 0.471524797,
+            "wall_monotonic_elapsed_delta_seconds": 2.88e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977941280890501,
+            "local_sent_wall_ns": 1785977941274207906,
+            "offset_lower_bound_seconds": -0.002982041,
+            "offset_upper_bound_seconds": 0.003699978,
+            "remote_received_wall_ns": 1785977941277907884,
+            "remote_sent_wall_ns": 1785977941277908460,
+            "responder_hostname": "mg0008",
+            "round": 17,
+            "round_trip_monotonic_seconds": 0.006682915,
+            "wall_monotonic_elapsed_delta_seconds": 3.2e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977941288870894,
+            "local_sent_wall_ns": 1785977941280904581,
+            "offset_lower_bound_seconds": -0.004246535,
+            "offset_upper_bound_seconds": 0.003718946,
+            "remote_received_wall_ns": 1785977941284623527,
+            "remote_sent_wall_ns": 1785977941284624359,
+            "responder_hostname": "mg0008",
+            "round": 18,
+            "round_trip_monotonic_seconds": 0.007966441,
+            "wall_monotonic_elapsed_delta_seconds": 1.28e-07
+          },
+          {
+            "coordinator_hostname": "mg0004",
+            "interval_valid": true,
+            "local_received_wall_ns": 1785977941296729367,
+            "local_sent_wall_ns": 1785977941288883950,
+            "offset_lower_bound_seconds": -0.004096943,
+            "offset_upper_bound_seconds": 0.003747994,
+            "remote_received_wall_ns": 1785977941292631944,
+            "remote_sent_wall_ns": 1785977941292632424,
+            "responder_hostname": "mg0008",
+            "round": 19,
+            "round_trip_monotonic_seconds": 0.007845641,
+            "wall_monotonic_elapsed_delta_seconds": 2.24e-07
+          }
+        ],
+        "offset_interval_seconds": {
+          "lower": -0.002982041,
+          "upper": 0.003113702
+        },
+        "pid": 2779727,
+        "role": "coordinator",
+        "rounds_completed": 20,
+        "rounds_requested": 20,
+        "status": "PASS",
+        "wall_clock_resolution_seconds": 1e-09,
+        "within_bound": true,
+        "writer_id": "rank0"
+      },
+      "contention": {
+        "action_counts": {
+          "acquire": 48,
+          "renew": 352
+        },
+        "all_transactions_committed": true,
+        "busy_errors": 4139,
+        "committed_transactions": 400,
+        "distinct_db_writers": 8,
+        "event_count": 400,
+        "host_count": 2,
+        "hostnames": [
+          "mg0004",
+          "mg0008"
+        ],
+        "integrity_check": [
+          "ok"
+        ],
+        "maximum_writer_wait_seconds": 7.372740368009545,
+        "pragmas": {
+          "journal_mode": "delete",
+          "synchronous": 2
+        },
+        "requested_transactions": 400,
+        "starvation_count": 0,
+        "writer_count": 8,
+        "writers": [
+          {
+            "acquire_count": 8,
+            "busy_errors": 704,
+            "committed_transactions": 50,
+            "elapsed_seconds": 13.26269585895352,
+            "hostname": "mg0004",
+            "integrity_check": [
+              "ok"
+            ],
+            "mode": "contend",
+            "pid": 2779665,
+            "renew_count": 42,
+            "requested_transactions": 50,
+            "starvation_error": null,
+            "starved": false,
+            "wait_seconds": {
+              "max": 5.824802105082199,
+              "p50": 0.0004221780691295862,
+              "p95": 0.1767993230605498,
+              "p99": 2.9200248039560392,
+              "samples": 50
+            },
+            "writer_id": "mg0004-rank0"
+          },
+          {
+            "acquire_count": 8,
+            "busy_errors": 338,
+            "committed_transactions": 50,
+            "elapsed_seconds": 6.238605704042129,
+            "hostname": "mg0004",
+            "integrity_check": [
+              "ok"
+            ],
+            "mode": "contend",
+            "pid": 2779666,
+            "renew_count": 42,
+            "requested_transactions": 50,
+            "starvation_error": null,
+            "starved": false,
+            "wait_seconds": {
+              "max": 2.0611616669921204,
+              "p50": 0.00042665901128202677,
+              "p95": 0.933676072047092,
+              "p99": 1.410623294999823,
+              "samples": 50
+            },
+            "writer_id": "mg0004-rank1"
+          },
+          {
+            "acquire_count": 5,
+            "busy_errors": 515,
+            "committed_transactions": 50,
+            "elapsed_seconds": 10.882004845072515,
+            "hostname": "mg0004",
+            "integrity_check": [
+              "ok"
+            ],
+            "mode": "contend",
+            "pid": 2779668,
+            "renew_count": 45,
+            "requested_transactions": 50,
+            "starvation_error": null,
+            "starved": false,
+            "wait_seconds": {
+              "max": 4.715238236007281,
+              "p50": 0.00042614596895873547,
+              "p95": 0.15556679503060877,
+              "p99": 2.3681447089184076,
+              "samples": 50
+            },
+            "writer_id": "mg0004-rank2"
+          },
+          {
+            "acquire_count": 7,
+            "busy_errors": 418,
+            "committed_transactions": 50,
+            "elapsed_seconds": 9.754228273057379,
+            "hostname": "mg0004",
+            "integrity_check": [
+              "ok"
+            ],
+            "mode": "contend",
+            "pid": 2779667,
+            "renew_count": 43,
+            "requested_transactions": 50,
+            "starvation_error": null,
+            "starved": false,
+            "wait_seconds": {
+              "max": 2.7189822520595044,
+              "p50": 0.0004145939601585269,
+              "p95": 1.1680611670017242,
+              "p99": 1.5441295300843194,
+              "samples": 50
+            },
+            "writer_id": "mg0004-rank3"
+          },
+          {
+            "acquire_count": 6,
+            "busy_errors": 312,
+            "committed_transactions": 50,
+            "elapsed_seconds": 7.8081087569880765,
+            "hostname": "mg0008",
+            "integrity_check": [
+              "ok"
+            ],
+            "mode": "contend",
+            "pid": 1788030,
+            "renew_count": 44,
+            "requested_transactions": 50,
+            "starvation_error": null,
+            "starved": false,
+            "wait_seconds": {
+              "max": 3.804764137021266,
+              "p50": 0.0004180489922873676,
+              "p95": 0.19082099699880928,
+              "p99": 0.8485295209975448,
+              "samples": 50
+            },
+            "writer_id": "mg0008-rank4"
+          },
+          {
+            "acquire_count": 5,
+            "busy_errors": 629,
+            "committed_transactions": 50,
+            "elapsed_seconds": 11.783866356010549,
+            "hostname": "mg0008",
+            "integrity_check": [
+              "ok"
+            ],
+            "mode": "contend",
+            "pid": 1788025,
+            "renew_count": 45,
+            "requested_transactions": 50,
+            "starvation_error": null,
+            "starved": false,
+            "wait_seconds": {
+              "max": 4.951038994011469,
+              "p50": 0.00041984100244008005,
+              "p95": 0.9664521120139398,
+              "p99": 3.1220519589842297,
+              "samples": 50
+            },
+            "writer_id": "mg0008-rank5"
+          },
+          {
+            "acquire_count": 4,
+            "busy_errors": 498,
+            "committed_transactions": 50,
+            "elapsed_seconds": 9.73590083300951,
+            "hostname": "mg0008",
+            "integrity_check": [
+              "ok"
+            ],
+            "mode": "contend",
+            "pid": 1788029,
+            "renew_count": 46,
+            "requested_transactions": 50,
+            "starvation_error": null,
+            "starved": false,
+            "wait_seconds": {
+              "max": 5.020356394001283,
+              "p50": 0.00041968197911046445,
+              "p95": 0.8453293490165379,
+              "p99": 1.6090745269902982,
+              "samples": 50
+            },
+            "writer_id": "mg0008-rank6"
+          },
+          {
+            "acquire_count": 5,
+            "busy_errors": 725,
+            "committed_transactions": 50,
+            "elapsed_seconds": 13.922711862018332,
+            "hostname": "mg0008",
+            "integrity_check": [
+              "ok"
+            ],
+            "mode": "contend",
+            "pid": 1788031,
+            "renew_count": 45,
+            "requested_transactions": 50,
+            "starvation_error": null,
+            "starved": false,
+            "wait_seconds": {
+              "max": 7.372740368009545,
+              "p50": 0.0004159380041528493,
+              "p95": 0.14792699899408035,
+              "p99": 4.0503036600130145,
+              "samples": 50
+            },
+            "writer_id": "mg0008-rank7"
+          }
+        ]
+      },
+      "visibility": {
+        "reader": {
+          "counter": 25,
+          "events": 25,
+          "hostname": "mg0008",
+          "integrity_check": [
+            "ok"
+          ],
+          "mode": "verify-readonly",
+          "pid": 1787787,
+          "pragmas": {
+            "busy_timeout_ms": 60000,
+            "journal_mode": "delete",
+            "synchronous": 2
+          }
+        },
+        "reader_hostname": "mg0008",
+        "same_committed_state": true,
+        "writer": {
+          "busy_errors": 0,
+          "counter": 25,
+          "elapsed_seconds": 1.3836266429862007,
+          "events": 25,
+          "hostname": "mg0004",
+          "integrity_check": [
+            "ok"
+          ],
+          "mode": "stress",
+          "pid": 2779487,
+          "pragmas": {
+            "busy_timeout_ms": 60000,
+            "journal_mode": "delete",
+            "synchronous": 2
+          },
+          "requested_transactions": 25,
+          "writer_id": "visibility-writer"
+        },
+        "writer_hostname": "mg0004"
+      }
+    },
+    "hosts": [
+      "mg0004",
+      "mg0008"
+    ],
+    "old_cache_writer": {
+      "business_state_failed": false,
+      "cache_pollution_reported": true,
+      "canonical_discovery_counts": {
+        "latest": 2,
+        "stop": 2,
+        "summary": 2
+      },
+      "counterexample_reproduced": true,
+      "elapsed_seconds": 0.14025282789953053,
+      "hostname": "mg0004",
+      "old_writer_exit_status": 0,
+      "old_writer_pid": 2779113,
+      "polluted_cache_epochs": {
+        "latest": 1,
+        "stop": 1,
+        "summary": 1
+      },
+      "probe": "old-cache-writer",
+      "repair_epochs": {
+        "latest": 2,
+        "stop": 2,
+        "summary": 2
+      },
+      "selected_canonical": {
+        "latest": {
+          "artifact_kind": "latest",
+          "logical_generation": 2,
+          "published_by_epoch": 2,
+          "published_by_owner_id": "new-owner",
+          "relative_path": "control/syncer_epochs/e000002_new/latest/head.json",
+          "version": 2
+        },
+        "stop": {
+          "artifact_kind": "stop",
+          "logical_generation": 1,
+          "published_by_epoch": 2,
+          "published_by_owner_id": "new-owner",
+          "relative_path": "control/syncer_epochs/e000002_new/terminal/stop_g000001.json",
+          "version": 2
+        },
+        "summary": {
+          "artifact_kind": "summary",
+          "logical_generation": 1,
+          "published_by_epoch": 2,
+          "published_by_owner_id": "new-owner",
+          "relative_path": "control/syncer_epochs/e000002_new/terminal/summary_g000001.json",
+          "version": 2
+        }
+      },
+      "status": "PASS"
+    },
+    "pbs_capability": {
+      "automatic_submission_supported": true,
+      "commands": {
+        "qstat": "/usr/local/bin/qstat",
+        "qsub": "/opt/pbs/bin/qsub"
+      },
+      "current_job_query": {
+        "classification": "running",
+        "command": [
+          "qstat",
+          "-f",
+          "2497333.opbs"
+        ],
+        "fields": {
+          "Job_Name": "fsdiloco_plan02_phase0",
+          "Rerunable": "False",
+          "job_state": "R",
+          "run_count": "1",
+          "substate": "42"
+        },
+        "returncode": 0,
+        "stderr": ""
+      },
+      "hostname": "mg0004",
+      "independent_job_query_supported": true,
+      "initial_learner_orchestration": "pbs_job_array",
+      "job_array_supported": true,
+      "manual_independent_evidence": {
+        "parent_job_is_independent_scheduler_job": true,
+        "parent_job_query_returncode": 0,
+        "restart_execution_deferred_to_phase_1": true
+      },
+      "observed_scheduler_states": [
+        "finished",
+        "prologue",
+        "queued",
+        "running"
+      ],
+      "parent_job_id": "2497333.opbs",
+      "parent_job_id_normalized": "2497333",
+      "rerunable_job_evidence": {
+        "array": {
+          "Rerunable": "True",
+          "physical_incarnations": {
+            "2497336[0].opbs": {
+              "Exit_status": "0",
+              "Rerunable": "True",
+              "run_count": "1"
+            },
+            "2497336[1].opbs": {
+              "Exit_status": "0",
+              "Rerunable": "True",
+              "run_count": "1"
+            }
+          },
+          "run_count": null
+        },
+        "scalar": {
+          "Rerunable": "False",
+          "physical_incarnations": {
+            "2497335.opbs": {
+              "Exit_status": "0",
+              "Rerunable": "False",
+              "run_count": "1"
+            }
+          },
+          "run_count": "1"
+        }
+      },
+      "scheduler_query_supported": true,
+      "state_classifier": {
+        "finished": "finished",
+        "no_record": "no_record",
+        "prologue": "prologue",
+        "query_failed": "query_failed",
+        "queued": "queued",
+        "running": "running",
+        "suspended": "suspended",
+        "unknown": "unknown"
+      },
+      "state_classifier_validated": true,
+      "status": "PASS",
+      "submissions": {
+        "array": {
+          "array_requested": true,
+          "command": [
+            "qsub",
+            "-N",
+            "p02_ay-2497333_a",
+            "-v",
+            "PLAN02_PROBE_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/pbs,PLAN02_REQUEST_FINGERPRINT=plan02-array-2497333,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco",
+            "-r",
+            "y",
+            "-J",
+            "0-1",
+            "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/run_plan02_capability_child.pbs"
+          ],
+          "completion": {
+            "artifact_paths": [
+              "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/pbs/child_plan02-array-2497333_0.json",
+              "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/pbs/child_plan02-array-2497333_1.json"
+            ],
+            "artifact_terminal_queries": {
+              "2497336[0].opbs": {
+                "classification": "finished",
+                "command": [
+                  "qstat",
+                  "-H",
+                  "-f",
+                  "2497336[0].opbs"
+                ],
+                "fields": {
+                  "Exit_status": "0",
+                  "Job_Name": "p02_ay-2497333_a",
+                  "Rerunable": "True",
+                  "job_state": "F",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-array-2497333"
+                  },
+                  "run_count": "1",
+                  "substate": "92"
+                },
+                "returncode": 0,
+                "stderr": ""
+              },
+              "2497336[1].opbs": {
+                "classification": "finished",
+                "command": [
+                  "qstat",
+                  "-H",
+                  "-f",
+                  "2497336[1].opbs"
+                ],
+                "fields": {
+                  "Exit_status": "0",
+                  "Job_Name": "p02_ay-2497333_a",
+                  "Rerunable": "True",
+                  "job_state": "F",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-array-2497333"
+                  },
+                  "run_count": "1",
+                  "substate": "92"
+                },
+                "returncode": 0,
+                "stderr": ""
+              }
+            },
+            "artifacts": [
+              {
+                "array_index": "0",
+                "artifact_format_version": 1,
+                "hostname": "mg0010",
+                "job_name": "p02_ay-2497333_a",
+                "pbs_job_id": "2497336[0].opbs",
+                "request_fingerprint": "plan02-array-2497333",
+                "written_at": 1785977963.4809098
+              },
+              {
+                "array_index": "1",
+                "artifact_format_version": 1,
+                "hostname": "mg0012",
+                "job_name": "p02_ay-2497333_a",
+                "pbs_job_id": "2497336[1].opbs",
+                "request_fingerprint": "plan02-array-2497333",
+                "written_at": 1785977963.323654
+              }
+            ],
+            "completed": true,
+            "exit_status": 0,
+            "historical_query": {
+              "classification": "finished",
+              "command": [
+                "qstat",
+                "-H",
+                "-f",
+                "2497336[].opbs"
+              ],
+              "fields": {
+                "Exit_status": "0",
+                "Job_Name": "p02_ay-2497333_a",
+                "Rerunable": "True",
+                "array_indices_submitted": "0-1",
+                "array_state_count": "Queued:0 Running:0 Exiting:0 Expired:0",
+                "job_state": "F",
+                "request_variables": {
+                  "PLAN02_REQUEST_FINGERPRINT": "plan02-array-2497333"
+                },
+                "substate": "92"
+              },
+              "returncode": 0,
+              "stderr": ""
+            },
+            "state_observations": [
+              {
+                "classification": "running",
+                "fields": {
+                  "Job_Name": "p02_ay-2497333_a",
+                  "Rerunable": "True",
+                  "array_indices_submitted": "0-1",
+                  "array_state_count": "Queued:0 Running:2 Exiting:0 Expired:0",
+                  "job_state": "B",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-array-2497333"
+                  },
+                  "substate": "70"
+                },
+                "observed_at": 1785977960.0871637,
+                "returncode": 0
+              },
+              {
+                "classification": "running",
+                "fields": {
+                  "Job_Name": "p02_ay-2497333_a",
+                  "Rerunable": "True",
+                  "array_indices_submitted": "0-1",
+                  "array_state_count": "Queued:0 Running:2 Exiting:0 Expired:0",
+                  "job_state": "B",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-array-2497333"
+                  },
+                  "substate": "70"
+                },
+                "observed_at": 1785977960.9927685,
+                "returncode": 0
+              },
+              {
+                "classification": "running",
+                "fields": {
+                  "Job_Name": "p02_ay-2497333_a",
+                  "Rerunable": "True",
+                  "array_indices_submitted": "0-1",
+                  "array_state_count": "Queued:0 Running:2 Exiting:0 Expired:0",
+                  "job_state": "B",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-array-2497333"
+                  },
+                  "substate": "70"
+                },
+                "observed_at": 1785977961.667413,
+                "returncode": 0
+              },
+              {
+                "classification": "running",
+                "fields": {
+                  "Job_Name": "p02_ay-2497333_a",
+                  "Rerunable": "True",
+                  "array_indices_submitted": "0-1",
+                  "array_state_count": "Queued:0 Running:2 Exiting:0 Expired:0",
+                  "job_state": "B",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-array-2497333"
+                  },
+                  "substate": "70"
+                },
+                "observed_at": 1785977962.3404024,
+                "returncode": 0
+              },
+              {
+                "classification": "running",
+                "fields": {
+                  "Job_Name": "p02_ay-2497333_a",
+                  "Rerunable": "True",
+                  "array_indices_submitted": "0-1",
+                  "array_state_count": "Queued:0 Running:2 Exiting:0 Expired:0",
+                  "job_state": "B",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-array-2497333"
+                  },
+                  "substate": "70"
+                },
+                "observed_at": 1785977963.2149363,
+                "returncode": 0
+              },
+              {
+                "classification": "running",
+                "fields": {
+                  "Job_Name": "p02_ay-2497333_a",
+                  "Rerunable": "True",
+                  "array_indices_submitted": "0-1",
+                  "array_state_count": "Queued:0 Running:2 Exiting:0 Expired:0",
+                  "job_state": "B",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-array-2497333"
+                  },
+                  "substate": "70"
+                },
+                "observed_at": 1785977964.1784687,
+                "returncode": 0
+              },
+              {
+                "classification": "running",
+                "fields": {
+                  "Job_Name": "p02_ay-2497333_a",
+                  "Rerunable": "True",
+                  "array_indices_submitted": "0-1",
+                  "array_state_count": "Queued:0 Running:2 Exiting:0 Expired:0",
+                  "job_state": "B",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-array-2497333"
+                  },
+                  "substate": "70"
+                },
+                "observed_at": 1785977965.3514588,
+                "returncode": 0
+              },
+              {
+                "classification": "running",
+                "fields": {
+                  "Job_Name": "p02_ay-2497333_a",
+                  "Rerunable": "True",
+                  "array_indices_submitted": "0-1",
+                  "array_state_count": "Queued:0 Running:2 Exiting:0 Expired:0",
+                  "job_state": "B",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-array-2497333"
+                  },
+                  "substate": "70"
+                },
+                "observed_at": 1785977966.5288875,
+                "returncode": 0
+              },
+              {
+                "classification": "running",
+                "fields": {
+                  "Job_Name": "p02_ay-2497333_a",
+                  "Rerunable": "True",
+                  "array_indices_submitted": "0-1",
+                  "array_state_count": "Queued:0 Running:2 Exiting:0 Expired:0",
+                  "job_state": "B",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-array-2497333"
+                  },
+                  "substate": "70"
+                },
+                "observed_at": 1785977967.902819,
+                "returncode": 0
+              },
+              {
+                "classification": "running",
+                "fields": {
+                  "Exit_status": "0",
+                  "Job_Name": "p02_ay-2497333_a",
+                  "Rerunable": "True",
+                  "array_indices_submitted": "0-1",
+                  "array_state_count": "Queued:0 Running:0 Exiting:2 Expired:0",
+                  "job_state": "B",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-array-2497333"
+                  },
+                  "substate": "70"
+                },
+                "observed_at": 1785977969.0867984,
+                "returncode": 0
+              }
+            ],
+            "terminal_query": {
+              "classification": "finished",
+              "command": [
+                "qstat",
+                "-H",
+                "-f",
+                "2497336[].opbs"
+              ],
+              "fields": {
+                "Exit_status": "0",
+                "Job_Name": "p02_ay-2497333_a",
+                "Rerunable": "True",
+                "array_indices_submitted": "0-1",
+                "array_state_count": "Queued:0 Running:0 Exiting:0 Expired:0",
+                "job_state": "F",
+                "request_variables": {
+                  "PLAN02_REQUEST_FINGERPRINT": "plan02-array-2497333"
+                },
+                "substate": "92"
+              },
+              "returncode": 0,
+              "stderr": ""
+            },
+            "terminal_state_observed": true,
+            "terminal_success": true,
+            "workload_artifacts_complete": true
+          },
+          "job_id_normalized": "2497336[]",
+          "job_id_raw": "2497336[].opbs",
+          "job_name": "p02_ay-2497333_a",
+          "request_fingerprint": "plan02-array-2497333",
+          "returncode": 0,
+          "start_at": null,
+          "start_delay_seconds": 0.0,
+          "stderr": "",
+          "stdout": "2497336[].opbs"
+        },
+        "scalar": {
+          "array_requested": false,
+          "command": [
+            "qsub",
+            "-N",
+            "p02_ar-2497333_s",
+            "-v",
+            "PLAN02_PROBE_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/pbs,PLAN02_REQUEST_FINGERPRINT=plan02-scalar-2497333,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco",
+            "-a",
+            "202608060959.07",
+            "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/run_plan02_capability_child.pbs"
+          ],
+          "completion": {
+            "artifact_paths": [
+              "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/pbs/child_plan02-scalar-2497333_scalar.json"
+            ],
+            "artifact_terminal_queries": {
+              "2497335.opbs": {
+                "classification": "finished",
+                "command": [
+                  "qstat",
+                  "-H",
+                  "-f",
+                  "2497335.opbs"
+                ],
+                "fields": {
+                  "Exit_status": "0",
+                  "Job_Name": "p02_ar-2497333_s",
+                  "Rerunable": "False",
+                  "job_state": "F",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                  },
+                  "run_count": "1",
+                  "substate": "92"
+                },
+                "returncode": 0,
+                "stderr": ""
+              }
+            },
+            "artifacts": [
+              {
+                "array_index": "scalar",
+                "artifact_format_version": 1,
+                "hostname": "mg0010",
+                "job_name": "p02_ar-2497333_s",
+                "pbs_job_id": "2497335.opbs",
+                "request_fingerprint": "plan02-scalar-2497333",
+                "written_at": 1785977951.3301497
+              }
+            ],
+            "completed": true,
+            "exit_status": 0,
+            "historical_query": {
+              "classification": "finished",
+              "command": [
+                "qstat",
+                "-H",
+                "-f",
+                "2497335.opbs"
+              ],
+              "fields": {
+                "Exit_status": "0",
+                "Job_Name": "p02_ar-2497333_s",
+                "Rerunable": "False",
+                "job_state": "F",
+                "request_variables": {
+                  "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                },
+                "run_count": "1",
+                "substate": "92"
+              },
+              "returncode": 0,
+              "stderr": ""
+            },
+            "state_observations": [
+              {
+                "classification": "queued",
+                "fields": {
+                  "Job_Name": "p02_ar-2497333_s",
+                  "Rerunable": "False",
+                  "job_state": "W",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                  },
+                  "substate": "30"
+                },
+                "observed_at": 1785977942.7755423,
+                "returncode": 0
+              },
+              {
+                "classification": "queued",
+                "fields": {
+                  "Job_Name": "p02_ar-2497333_s",
+                  "Rerunable": "False",
+                  "job_state": "W",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                  },
+                  "substate": "30"
+                },
+                "observed_at": 1785977943.3486164,
+                "returncode": 0
+              },
+              {
+                "classification": "queued",
+                "fields": {
+                  "Job_Name": "p02_ar-2497333_s",
+                  "Rerunable": "False",
+                  "job_state": "W",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                  },
+                  "substate": "30"
+                },
+                "observed_at": 1785977944.2243993,
+                "returncode": 0
+              },
+              {
+                "classification": "queued",
+                "fields": {
+                  "Job_Name": "p02_ar-2497333_s",
+                  "Rerunable": "False",
+                  "job_state": "W",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                  },
+                  "substate": "30"
+                },
+                "observed_at": 1785977945.0998974,
+                "returncode": 0
+              },
+              {
+                "classification": "queued",
+                "fields": {
+                  "Job_Name": "p02_ar-2497333_s",
+                  "Rerunable": "False",
+                  "job_state": "W",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                  },
+                  "substate": "30"
+                },
+                "observed_at": 1785977945.974764,
+                "returncode": 0
+              },
+              {
+                "classification": "queued",
+                "fields": {
+                  "Job_Name": "p02_ar-2497333_s",
+                  "Rerunable": "False",
+                  "job_state": "W",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                  },
+                  "substate": "30"
+                },
+                "observed_at": 1785977946.650191,
+                "returncode": 0
+              },
+              {
+                "classification": "prologue",
+                "fields": {
+                  "Job_Name": "p02_ar-2497333_s",
+                  "Rerunable": "False",
+                  "job_state": "R",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                  },
+                  "run_count": "1",
+                  "substate": "41"
+                },
+                "observed_at": 1785977947.37357,
+                "returncode": 0
+              },
+              {
+                "classification": "prologue",
+                "fields": {
+                  "Job_Name": "p02_ar-2497333_s",
+                  "Rerunable": "False",
+                  "job_state": "R",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                  },
+                  "run_count": "1",
+                  "substate": "41"
+                },
+                "observed_at": 1785977948.248604,
+                "returncode": 0
+              },
+              {
+                "classification": "prologue",
+                "fields": {
+                  "Job_Name": "p02_ar-2497333_s",
+                  "Rerunable": "False",
+                  "job_state": "R",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                  },
+                  "run_count": "1",
+                  "substate": "41"
+                },
+                "observed_at": 1785977949.1244047,
+                "returncode": 0
+              },
+              {
+                "classification": "prologue",
+                "fields": {
+                  "Job_Name": "p02_ar-2497333_s",
+                  "Rerunable": "False",
+                  "job_state": "R",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                  },
+                  "run_count": "1",
+                  "substate": "41"
+                },
+                "observed_at": 1785977950.0013733,
+                "returncode": 0
+              },
+              {
+                "classification": "prologue",
+                "fields": {
+                  "Job_Name": "p02_ar-2497333_s",
+                  "Rerunable": "False",
+                  "job_state": "R",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                  },
+                  "run_count": "1",
+                  "substate": "41"
+                },
+                "observed_at": 1785977950.6747494,
+                "returncode": 0
+              },
+              {
+                "classification": "prologue",
+                "fields": {
+                  "Job_Name": "p02_ar-2497333_s",
+                  "Rerunable": "False",
+                  "job_state": "R",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                  },
+                  "run_count": "1",
+                  "substate": "41"
+                },
+                "observed_at": 1785977951.349126,
+                "returncode": 0
+              },
+              {
+                "classification": "prologue",
+                "fields": {
+                  "Job_Name": "p02_ar-2497333_s",
+                  "Rerunable": "False",
+                  "job_state": "R",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                  },
+                  "run_count": "1",
+                  "substate": "41"
+                },
+                "observed_at": 1785977952.5279832,
+                "returncode": 0
+              },
+              {
+                "classification": "running",
+                "fields": {
+                  "Job_Name": "p02_ar-2497333_s",
+                  "Rerunable": "False",
+                  "job_state": "R",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                  },
+                  "run_count": "1",
+                  "substate": "42"
+                },
+                "observed_at": 1785977953.9016933,
+                "returncode": 0
+              },
+              {
+                "classification": "running",
+                "fields": {
+                  "Job_Name": "p02_ar-2497333_s",
+                  "Rerunable": "False",
+                  "job_state": "R",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                  },
+                  "run_count": "1",
+                  "substate": "42"
+                },
+                "observed_at": 1785977955.416011,
+                "returncode": 0
+              },
+              {
+                "classification": "running",
+                "fields": {
+                  "Exit_status": "0",
+                  "Job_Name": "p02_ar-2497333_s",
+                  "Rerunable": "False",
+                  "job_state": "E",
+                  "request_variables": {
+                    "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                  },
+                  "run_count": "1",
+                  "substate": "53"
+                },
+                "observed_at": 1785977956.595934,
+                "returncode": 0
+              },
+              {
+                "classification": "no_record",
+                "fields": {},
+                "observed_at": 1785977957.699982,
+                "returncode": 0
+              }
+            ],
+            "terminal_query": {
+              "classification": "finished",
+              "command": [
+                "qstat",
+                "-H",
+                "-f",
+                "2497335.opbs"
+              ],
+              "fields": {
+                "Exit_status": "0",
+                "Job_Name": "p02_ar-2497333_s",
+                "Rerunable": "False",
+                "job_state": "F",
+                "request_variables": {
+                  "PLAN02_REQUEST_FINGERPRINT": "plan02-scalar-2497333"
+                },
+                "run_count": "1",
+                "substate": "92"
+              },
+              "returncode": 0,
+              "stderr": ""
+            },
+            "terminal_state_observed": true,
+            "terminal_success": true,
+            "workload_artifacts_complete": true
+          },
+          "job_id_normalized": "2497335",
+          "job_id_raw": "2497335.opbs",
+          "job_name": "p02_ar-2497333_s",
+          "request_fingerprint": "plan02-scalar-2497333",
+          "returncode": 0,
+          "start_at": "202608060959.07",
+          "start_delay_seconds": 5.0,
+          "stderr": "",
+          "stdout": "2497335.opbs"
+        }
+      },
+      "terminal_state_query_supported": true
+    },
+    "pbs_job_id": "2497333.opbs",
+    "phase": "Phase 0",
+    "plan_id": "fsb_decoupled_diloco_plan_02",
+    "source_identity": {
+      "captured_at": 1785977915.8770833,
+      "fingerprint_format": 1,
+      "git_commit": "c43a519997a581357561981cd448b07a24df5fdb",
+      "git_dirty": true,
+      "source_files": [
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": ".python-version",
+          "sha256": "02e735b3dfe1c32833eb550b7ff8ffa17f5f2bc3fa1e7bae61a8f5a3883ce398",
+          "size_bytes": 5
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/5000/fs_diloco_gpt2_wikitext2_8l_200x25steps.yaml",
+          "sha256": "c5c2c55947bf51aa394315d72af1e2934b120d7c10c1acd6190220947674bb7e",
+          "size_bytes": 2058
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_gpt2_wikitext2_1l_debug.yaml",
+          "sha256": "a58f67bdf43a5ede5c9311d9a534111678623e6f7ddf59a26898885ee04b420c",
+          "size_bytes": 1653
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_gpt2_wikitext2_1l_fragment_debug.yaml",
+          "sha256": "930aaf976b614f15b08ed8a23dc0ed4b54da32485694cee6f36262a9c08b414d",
+          "size_bytes": 1878
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_gpt2_wikitext2_1l_rebase_state_debug.yaml",
+          "sha256": "0e5b4f9b15b24e3468efd48259157623fdc963ed228a64ec9364259976681e8f",
+          "size_bytes": 1844
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_gpt2_wikitext2_8l.yaml",
+          "sha256": "756def01f71bc50524f8b759111bf9bb1c88de73be9377614cd2a5592835eb0f",
+          "size_bytes": 1737
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_gpt2_wikitext2_8l_5000steps.yaml",
+          "sha256": "b3af36c7835d1d181185d16ac172a00a120d88be601822d330c6758dc28a64c3",
+          "size_bytes": 2058
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_predict.yaml",
+          "sha256": "2a23210a453cfa8be7ec78ff510318a23f86469152e04b279dc345c6cfeec5cc",
+          "size_bytes": 2181
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_predict_bf16all_cuda.yaml",
+          "sha256": "4e8b41543cd60b8565b6154aa3c6044ba4035ddf026db89c62d9c898096aadc2",
+          "size_bytes": 2270
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_rebase_bf16all_cuda.yaml",
+          "sha256": "1d67c8224252150759c99825afc09546e6cd2fa6e7fd8d41e8d224c002e70568",
+          "size_bytes": 2213
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_terminal_capture.yaml",
+          "sha256": "662900020802dd113262930bb2e603e9b1e4084802973d453c207df0a1a7e7ac",
+          "size_bytes": 2167
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_wait2p5.yaml",
+          "sha256": "801926e2a5afbbc3bb673a26869479058a0dae1d770fa898d88bbd4f31e1d30e",
+          "size_bytes": 2074
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_wait2p5_predict.yaml",
+          "sha256": "17a6bb09cc764810bd58e29f46a001a628f7c3e2c0a633dc0b07e6248ae94f6a",
+          "size_bytes": 2213
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_gpt2_wikitext2_8l_acceptance.yaml",
+          "sha256": "b757931063c5c1b129ff3e004bf84cb9c190b5e94ac9f1410327c866fd97defc",
+          "size_bytes": 1660
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_gpt2_wikitext2_8l_fragment_5000steps.yaml",
+          "sha256": "1d17bd3f79850798ffdcfd09904c6eb00b7361767374b4bc7a7380570cbc72b3",
+          "size_bytes": 2174
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_gpt2_wikitext2_8l_fragment_50x10.yaml",
+          "sha256": "37f4ad7faa166bde7013f360fcdd62c52073e57213e2106d391bc254e7cd4feb",
+          "size_bytes": 2179
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_gpt2_wikitext2_8l_fragment_50x4.yaml",
+          "sha256": "eb8587b9769620e1f25b7513eb45b754d195605bf71f4faf9df67eedc53411ad",
+          "size_bytes": 2148
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_gpt2_wikitext2_8l_no_fragment_50x10.yaml",
+          "sha256": "83ad39d844c7aae3e6bbbf95a694a3c9d48c29d0cff72a6bc33aa96bad644339",
+          "size_bytes": 2185
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_tiny_adaptive_global_stop.yaml",
+          "sha256": "aeac96428b7a5a2a3491ca0e6b195c3f6179857f18763665198103162dca84d3",
+          "size_bytes": 1808
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_tiny_fragment_local.yaml",
+          "sha256": "001226e74eb5d7b83fb7613d0008f0d18630359b299df2eaa02091bffe314ec6",
+          "size_bytes": 1911
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_tiny_fragment_terminal_local.yaml",
+          "sha256": "c02ab298c2639ee16d090ae84d32685fa04230456e53714a80eca4bdbb966a37",
+          "size_bytes": 1891
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_tiny_local.yaml",
+          "sha256": "a0a193fcf4650e57e734eacb56331057ac0686379cfa6fbf7ed6d75016ace3fa",
+          "size_bytes": 1686
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_tiny_midcycle_replace_local.yaml",
+          "sha256": "d487c5263173ec1b49825f09a523e5be924e357c889883203457367507073c5c",
+          "size_bytes": 1882
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_tiny_predict_bf16_gpu.yaml",
+          "sha256": "b70b11e383df8b8481cdd044c768934c8699609e94f0e532305e0b832389ce37",
+          "size_bytes": 1887
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_tiny_predict_local.yaml",
+          "sha256": "1592e4c25225a76ada2715cdb3a770dc58b2cee68a815432c12aefb845825437",
+          "size_bytes": 2000
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_tiny_publish_ingest_local.yaml",
+          "sha256": "bb8d4e39b229d0efed0b8ac5c032632645dd6cd859a768c1ba7fcb02acb4cfd2",
+          "size_bytes": 1731
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_tiny_rebase_local.yaml",
+          "sha256": "315d12bac49ddf44198b7c0355358d55b0d1a3ba0877d4f70dfeb7e2e71348f2",
+          "size_bytes": 1948
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_tiny_scheduler_fragment_local.yaml",
+          "sha256": "1f46a1527f581a321ec4f3d9e3a7ea718f48becb0eab295b9f3c47599ec5f392",
+          "size_bytes": 2002
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_tiny_scheduler_replace_local.yaml",
+          "sha256": "fbdd67b31126be47593e04217ff290f1df13df2f47d75f07c0b097761b03ac92",
+          "size_bytes": 1786
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_tiny_syncer_bf16_gpu.yaml",
+          "sha256": "01ad009c570fb334925d9a0526e9bc7d0e41369399af9413537ee964a928e9bb",
+          "size_bytes": 1701
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_tiny_wait_local.yaml",
+          "sha256": "68afea0698483937b038ce09a410cd3a82b8673d75ed5d22d0ddc1883039621e",
+          "size_bytes": 1849
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_tiny_watchdog_fragment_local.yaml",
+          "sha256": "ce919c9109961815ec63cf572afd969f344ab51b2c9c9a27e9e4a6ad5f5173be",
+          "size_bytes": 1934
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "configs/fs_diloco_tiny_watchdog_local.yaml",
+          "sha256": "18120e02c4965b4c2828d9bbda539616c0fdd3bb06cb1817c3659d9f0f54af24",
+          "size_bytes": 1710
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/__init__.py",
+          "sha256": "de81b374df20f6690aba0226c051924f69a6fa206abd36b5fa3c6fb37d17dd7e",
+          "size_bytes": 102
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/analysis.py",
+          "sha256": "5ff8dc4375b2aff600ac2c70fd70f3835964a6bed76b183183b566bcc5061925",
+          "size_bytes": 258
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/cli.py",
+          "sha256": "5686371035345d734e22b04c248a9b5cbaeae5d4d6f6c9ad5aafad678f42d293",
+          "size_bytes": 675
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/core/__init__.py",
+          "sha256": "45253b8a4d3a42ce30942e47ea2bc27b4659771d3822e2ef1c2a28ece8b8c1b1",
+          "size_bytes": 44
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/core/config.py",
+          "sha256": "2cf9ae89384ddd864301bcee0e41fce20dd3bba9a8cbc41ac27e86335544f5af",
+          "size_bytes": 19733
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/core/constants.py",
+          "sha256": "754c1c702f5b29e848e09e4e71fa3a6d8051a2a51a78fb13da88298fdf8bea16",
+          "size_bytes": 1090
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/eval_lm_harness.py",
+          "sha256": "385424162400ae3d96727819ae9bcee34a892b5d506b8d7b46d763d22fbc3ecb",
+          "size_bytes": 322
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/learner.py",
+          "sha256": "19e2297ee33421fda9a9bbd655c0bf9a1d819385695cf9321c4df599efc859dd",
+          "size_bytes": 216
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/modeling/__init__.py",
+          "sha256": "54d8e35d40904bed25e601d4f14f6aba808b541c71c7c38998ee88fd852a059a",
+          "size_bytes": 62
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/modeling/hf_data.py",
+          "sha256": "a64c65a4e37d515d0e9d117e405c595fb22320616641131fae4f52c872e2739f",
+          "size_bytes": 6010
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/modeling/hf_model.py",
+          "sha256": "f7022145f76d95c25d0851cf15d674e98d9712d9fc93cdabe5466ff2f78b5aee",
+          "size_bytes": 3068
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/modeling/outer_optim.py",
+          "sha256": "e6f9806f2d5246a9373a6b8e1e1116eff6d307f64b0215d0c074dd40d0f2f658",
+          "size_bytes": 5097
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/modeling/param_index.py",
+          "sha256": "6cfb0784a9d5ea16c426117dceacfccb69ae27177edb787f28ec346e70bbd655",
+          "size_bytes": 5542
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/observability/__init__.py",
+          "sha256": "0858ddb49d1bdc76d269d44f6e3bdf3f6b9cdd6fe6656acbc83d8c2a2fd78ea5",
+          "size_bytes": 62
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/observability/logging_utils.py",
+          "sha256": "bf9f2bfa9e96571e98e2e6559d03ecda569a10bf6e129d6d5fb46509943c9dd7",
+          "size_bytes": 1641
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/observability/metrics.py",
+          "sha256": "9cba12aa4891c6478cb5eb18126dc0763ae6bb6fb6e02f2d2cd8cebef14fbe57",
+          "size_bytes": 3456
+        },
+        {
+          "kind": "file",
+          "mode": "0600",
+          "path": "fs_diloco/observability/resource_monitor.py",
+          "sha256": "8cf07b81e2365ed25260dd43d7dfea7144365460481620c086ef04ad0c46a368",
+          "size_bytes": 7007
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/observability/wandb_logging.py",
+          "sha256": "2684e8e10420929703f6520f855dcbe9664f6328d2a0c6e5ab1b1efc00fcded4",
+          "size_bytes": 5075
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/protocol/__init__.py",
+          "sha256": "02dd258a4e7869e4b7457817b5527294662c56d7b68fb716aeda5cc662d4e4c5",
+          "size_bytes": 65
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/protocol/fragment_codec.py",
+          "sha256": "6ff268284d4c37c6415a5ef5d0ffec5ec354416f6bd67434fdf2f18d383e816e",
+          "size_bytes": 5978
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/protocol/fragment_index.py",
+          "sha256": "04bb91c2e9963a6e2eb75444fc8aeb64652091a67eac846e1a13652e5b9ef11d",
+          "size_bytes": 6437
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/protocol/fragment_scheduler.py",
+          "sha256": "3b8b935017c8e169ea27e9e20572ce99d3eb97152c4c8cb643c838840a340dbf",
+          "size_bytes": 876
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/protocol/liveness.py",
+          "sha256": "9569a73df64e807a760dd6b3191f1c921b79a0e226b4b9ae77585a3ade68fc9e",
+          "size_bytes": 5437
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/protocol/merge.py",
+          "sha256": "0b7bbe7a64b66ecbba1fd15719c4eb74dfc87fbd2a4e868814c8c75f8166e0ee",
+          "size_bytes": 4199
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/runtime/__init__.py",
+          "sha256": "de02c15d0ad18f4b21f5c188d08d9a602f8c7826494a9d660a4b2a013527fccc",
+          "size_bytes": 43
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/runtime/adoption.py",
+          "sha256": "a8a87b330274887f60f2a7ae9ae7ebe4b3b82d42ead7ebd5a2a806ae51b25e87",
+          "size_bytes": 23921
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/runtime/failure_sim.py",
+          "sha256": "b9da18fd404ce18cdac791d56cc9b3e3ed7f5063984c5ecfd89e3d6a33d5b6a1",
+          "size_bytes": 964
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/runtime/learner.py",
+          "sha256": "58aa07c102d60f06c8559dc60d88ac5b981f695ffc1f1aa69318f8f0a51cfb1c",
+          "size_bytes": 98546
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/runtime/syncer.py",
+          "sha256": "9d088ddd8e6a8540cdb61f59386a202d8bdc3dc5035ef29dea6829dce4ea033f",
+          "size_bytes": 116390
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/storage/__init__.py",
+          "sha256": "c3338e8a5086fbf9e7d1530cac4d8c17257044c968de806b48658a4d9280786f",
+          "size_bytes": 55
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/storage/atomic_io.py",
+          "sha256": "d3119b65458f51e25456ebc2176b570f98ed2329acf33e54da42189c1ec94101",
+          "size_bytes": 3130
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/storage/maintenance.py",
+          "sha256": "4ce3c707f6ff06c1820c36ecab85b1f07ac76dd4f9aa2246383693ec6f2f4898",
+          "size_bytes": 7587
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/storage/paths.py",
+          "sha256": "19a7d08f2097278e155fd4a2ab7be0cea4619311c6db881836ef050092ab1213",
+          "size_bytes": 4344
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/storage/schema.sql",
+          "sha256": "90842e33832f0badf2001a2c9ffbfe159439bc03001f5d2439ecff038ca41f6f",
+          "size_bytes": 5483
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/storage/sqlite_store.py",
+          "sha256": "d392386e45272a07db534fcbcf4703a27770e2291f420bd4a34ce1e6b6903626",
+          "size_bytes": 57793
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/storage/tensor_codec.py",
+          "sha256": "c05e12b59e88ef05d3649bcd046e4b38e1b00ce0952fa88c64a95b5509fc9967",
+          "size_bytes": 5135
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/syncer.py",
+          "sha256": "adcc94f435224ed8235ddbbed8a8fb8fc25c1087abc2fd63b5ee33f0fa2936bf",
+          "size_bytes": 272
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/tools/__init__.py",
+          "sha256": "1dd7c1f4477dca17b61275c611d9674dc4467a8749412b151e236d2dc73e85e7",
+          "size_bytes": 47
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/tools/analysis.py",
+          "sha256": "411f8135aad54044a9c66cda2cd9e3b9f58963a7d94dbf86684d6dee9352f2bb",
+          "size_bytes": 34957
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/tools/clean_run.py",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "size_bytes": 0
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/tools/compare_event_traces.py",
+          "sha256": "411566f12702728d6b42e18eb394f92845df5aa38c14a95adcc960af41c1e620",
+          "size_bytes": 13497
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/tools/eval_lm_harness.py",
+          "sha256": "2f7ea3e2e6472add746d1464e50bb4560749be2f685b326d27f19a25b22b93d3",
+          "size_bytes": 14723
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/tools/publish_quality_gate.py",
+          "sha256": "c13254ff4fe53ac15b5bf7ccbd5cc7353469f974b29e1201692bcc43c990ecd2",
+          "size_bytes": 10044
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/tools/run_metrics_csv.py",
+          "sha256": "363a6d818447507438d4c21373164e09480a277e3c80b6cad9b953c6ee74c399",
+          "size_bytes": 28825
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "fs_diloco/tools/validation_eval.py",
+          "sha256": "a695420035056fac8e7b9727620cda549215228330df61b86584530230e2709b",
+          "size_bytes": 16460
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "pyproject.toml",
+          "sha256": "3b40cef2e046b295e18c0c6de116dfcdad4ede4e9a33eb03b8015c01f648b9d7",
+          "size_bytes": 1416
+        },
+        {
+          "kind": "file",
+          "mode": "0750",
+          "path": "scripts/local/clean_run.sh",
+          "sha256": "d3d506c0078e8da01f6847149432611c6fd5a89b33c3ac68777f8f2411724410",
+          "size_bytes": 4127
+        },
+        {
+          "kind": "file",
+          "mode": "0750",
+          "path": "scripts/local/prune_runs_without_5000.sh",
+          "sha256": "e8a42b0aaff6c562313afd7f7d2f03cd96dbb704a83085f5469eb065c9263e8e",
+          "size_bytes": 2973
+        },
+        {
+          "kind": "file",
+          "mode": "0750",
+          "path": "scripts/local/run_tiny_2proc_smoke.sh",
+          "sha256": "16d88bf8d6e1da7290bb64f83bb6e0b481d4b50236daa82beed995abb8e2c15c",
+          "size_bytes": 1645
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/benchmark_syncer_device.py",
+          "sha256": "f9bf7579d0dedea48ee4c10a3d5a1d81f42ee2e41a54300d1313fc6370ca1299",
+          "size_bytes": 8075
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/capture_source_identity.py",
+          "sha256": "bcaa49952da071a832462d0ad61890d8f006e8f6218a229dcf7ea3c2c1fec1d6",
+          "size_bytes": 5230
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/check_plan01_invariants.py",
+          "sha256": "bcb6a01c39c694394d3ae5f8712bf6f48035284506e4da7958b7f43498f4274d",
+          "size_bytes": 16128
+        },
+        {
+          "kind": "file",
+          "mode": "0600",
+          "path": "scripts/miyabi/check_plan02_feasibility.py",
+          "sha256": "dd5e0fe35aba22b18c6d58bb7788d6010980a61b4eef45912bfb746fe398f261",
+          "size_bytes": 17080
+        },
+        {
+          "kind": "file",
+          "mode": "0750",
+          "path": "scripts/miyabi/inspect_run.sh",
+          "sha256": "07d159b981f2d2894ff71a8ed46c9d409f70e4cfc8a79b0758baa9fbd5a93e5b",
+          "size_bytes": 438
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/measure_pointer_polling.py",
+          "sha256": "e880bf28e66dd83ab4c1d9d0ddadf5483a2df54eb6d33e492783f7790a896a4e",
+          "size_bytes": 3626
+        },
+        {
+          "kind": "file",
+          "mode": "0600",
+          "path": "scripts/miyabi/plan02_fault_probe.py",
+          "sha256": "0945ec49bfa93cc1c6496219bc990481b97a91838043b02ba69c9b3193a10736",
+          "size_bytes": 36367
+        },
+        {
+          "kind": "file",
+          "mode": "0600",
+          "path": "scripts/miyabi/plan02_pbs_capability.py",
+          "sha256": "ae16dd3138f8984e9e05497a01780c824ad4e44a969a32f84b080c73573a91f0",
+          "size_bytes": 18570
+        },
+        {
+          "kind": "file",
+          "mode": "0600",
+          "path": "scripts/miyabi/plan02_phase0_aggregate.py",
+          "sha256": "985986a88b156afe39c3e2fdaf55c2bc91c575daa5dc7dcd517f671a590bd32f",
+          "size_bytes": 7295
+        },
+        {
+          "kind": "file",
+          "mode": "0600",
+          "path": "scripts/miyabi/plan02_source_gate.py",
+          "sha256": "aafe02a6c7c6a8179e24a68a1f3efacdadacd9594e22083738b15fd451cb463d",
+          "size_bytes": 6813
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/publication_crash_probe.py",
+          "sha256": "fb41ebbe5a02cde8cf8b8cdfaceaee55b02afe0805827f10ecf8fbe57b288798",
+          "size_bytes": 14012
+        },
+        {
+          "kind": "file",
+          "mode": "0750",
+          "path": "scripts/miyabi/run_1node_debug.pbs",
+          "sha256": "ac1eb3f6dfe764b4d2a8c7c2d89f8cc15f142299f5a0f15b942666956291d341",
+          "size_bytes": 2974
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/run_1node_fragment_debug.pbs",
+          "sha256": "ef318dcfea772ab987018f347cc5d518f35c9fa9816b5a32af260f796fafbd24",
+          "size_bytes": 3261
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/run_1node_lm_eval.pbs",
+          "sha256": "6d83bfce7cd3b85a99f5d4e75c15c3d2405dd58434f15cb9aa1115a015baa856",
+          "size_bytes": 5288
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/run_1node_validation_eval.pbs",
+          "sha256": "25c9c0741f2617679e2988e5586076698455bbb3c21ac5a6caa4081510086cee",
+          "size_bytes": 4835
+        },
+        {
+          "kind": "file",
+          "mode": "0750",
+          "path": "scripts/miyabi/run_2node_debug.pbs",
+          "sha256": "f697cdb1e314108910c9339fd6354ca1bc8b1a2a6b228f68b8c27090cc63018f",
+          "size_bytes": 3836
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/run_2node_fragment_debug.pbs",
+          "sha256": "129593e3fdd254ddd1432b5edfbeecb0200c35854f33896c6482a9a6ea03b6d7",
+          "size_bytes": 4249
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/run_2node_resume_regression.pbs",
+          "sha256": "810f830f877a00783f9204d774051dd5051cc31e31c4bb1160a34b8f90d6729f",
+          "size_bytes": 10100
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/run_8node_colocated_gpt2_wikitext2_5000steps.pbs",
+          "sha256": "c19cf94803b7274dbb17dbe8174237fed89c4d9876aed541547163c95f3263a3",
+          "size_bytes": 9342
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/run_9node_fragment_gpt2_wikitext2_5000steps.pbs",
+          "sha256": "09872d9cc681a6335c8e427fc13f075e771126a065ac60bb968104c5e73f4b38",
+          "size_bytes": 5656
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/run_9node_fragment_gpt2_wikitext2_50x10.pbs",
+          "sha256": "69d68b9f721cc89ffef79fe0278277a73992af28b656de967a333a2c1933a7b4",
+          "size_bytes": 6443
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/run_9node_fragment_gpt2_wikitext2_50x4.pbs",
+          "sha256": "1d603e8395ffcb02217d60032904b18f1d9666646b05e14df0821bdc7231f8f9",
+          "size_bytes": 5267
+        },
+        {
+          "kind": "file",
+          "mode": "0750",
+          "path": "scripts/miyabi/run_9node_gpt2_wikitext2.pbs",
+          "sha256": "4c051b08655eec428ba4f4ac2ed9c5cee443592d9626b608cb849963b8de6414",
+          "size_bytes": 3630
+        },
+        {
+          "kind": "file",
+          "mode": "0750",
+          "path": "scripts/miyabi/run_9node_gpt2_wikitext2_5000steps.pbs",
+          "sha256": "269f8992650f90996bd44490cba95687575947d295b3ba8a9750c07e7668ca90",
+          "size_bytes": 8435
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/run_9node_no_fragment_gpt2_wikitext2_50x10.pbs",
+          "sha256": "3784555bb82d4d80362334a9a937f1ea79ca20c5527e7d38feeb4d4535479377",
+          "size_bytes": 6369
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/run_plan01_regression.pbs",
+          "sha256": "db482f895bb023cc50db56c7da0babfd2e91f824f1873f2beab60fca007cc5aa",
+          "size_bytes": 1608
+        },
+        {
+          "kind": "file",
+          "mode": "0600",
+          "path": "scripts/miyabi/run_plan02_capability_child.pbs",
+          "sha256": "f305c2fa9df620cd1a1472c90dce059de7e39887718092ca82054a2ca2cdc641",
+          "size_bytes": 1778
+        },
+        {
+          "kind": "file",
+          "mode": "0600",
+          "path": "scripts/miyabi/run_plan02_phase0_feasibility.pbs",
+          "sha256": "4348ab3dae9f34bc866c0b84874a307144018c2e6726d523b727c18f1a6eb9c6",
+          "size_bytes": 12119
+        },
+        {
+          "kind": "file",
+          "mode": "0600",
+          "path": "scripts/miyabi/run_plan02_phase0_tests.pbs",
+          "sha256": "a572cf87d8e23dc402d9fb54aec95e9454e790b037f3124ee6549d06d12cdec7",
+          "size_bytes": 672
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/sqlite_shared_fs_probe.py",
+          "sha256": "13fa19dc75e4cfe6427c11dfc5514245f06b10ebf87a780cbb8948078c14898a",
+          "size_bytes": 24756
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "scripts/miyabi/submit_train_with_validation.sh",
+          "sha256": "69249cb68ed22bc46073ca16bd8347388c0b9cb25f050946e8802530749bcf55",
+          "size_bytes": 2364
+        },
+        {
+          "kind": "file",
+          "mode": "0640",
+          "path": "uv.lock",
+          "sha256": "240e2fd8dc4294b2e3aef8c5c2061e209549451a66632d8419c90bc374d64a8b",
+          "size_bytes": 747721
+        }
+      ],
+      "source_fingerprint": "sha256:ccdc35c09745ebbdff4be5ae9b50646a04b785a27c84ecc685aa4fd0e345682a",
+      "source_scopes": [
+        "fs_diloco",
+        "configs",
+        "scripts",
+        "pyproject.toml",
+        "uv.lock",
+        ".python-version"
+      ]
+    },
+    "source_pinning": {
+      "business_db_after": {
+        "counts": {
+          "global_versions": 0,
+          "learner_instances": 0,
+          "syncer_leader": 1
+        },
+        "integrity_check": [
+          "ok"
+        ],
+        "sha256": "26b8630544fff63aa00dc1fa99ff38bc7db289b2f1bc61da77c9118d76c525d2"
+      },
+      "business_db_before": {
+        "counts": {
+          "global_versions": 0,
+          "learner_instances": 0,
+          "syncer_leader": 0
+        },
+        "integrity_check": [
+          "ok"
+        ],
+        "sha256": "c3809057fcb3ebc5e9cebaa435adbbe9746fdf53e49271d6dc3b150a8c755642"
+      },
+      "cases": {
+        "commit_mismatch": {
+          "bootstrap_marker_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/commit_mismatch/bootstrap_complete.json",
+          "business_writes": 0,
+          "checked_at": 1785977917.8446496,
+          "current_source": {
+            "git_commit": "c43a519997a581357561981cd448b07a24df5fdb",
+            "git_dirty": true,
+            "source_fingerprint": "sha256:ccdc35c09745ebbdff4be5ae9b50646a04b785a27c84ecc685aa4fd0e345682a"
+          },
+          "descriptor_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/commit_mismatch/run_descriptor.json",
+          "descriptor_sha256": "395b4406186e8372a4e810a8d4df2fbd978ea47599c7b4d92fe9ccad7f466f0c",
+          "expected_runtime_identity": {
+            "protocol_version": 1,
+            "run_id": "plan02-source-probe",
+            "schema_version": 2
+          },
+          "fs_diloco_imported": false,
+          "gate_format_version": 1,
+          "gate_fs_diloco_imported": false,
+          "mismatches": [
+            "git_commit"
+          ],
+          "project_root": "/work/xg24i002/x10041/fsb_decoupled_diloco",
+          "resolved_config_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/commit_mismatch/run_config.resolved.yaml",
+          "resolved_config_sha256": "ec90760cae734a0a0c2033cc232902087f252757d8d797e1f109605976da3cd3",
+          "returncode": 3,
+          "runtime_started": false,
+          "status": "BLOCKED"
+        },
+        "config_mismatch": {
+          "bootstrap_marker_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/config_mismatch/bootstrap_complete.json",
+          "business_writes": 0,
+          "checked_at": 1785977918.1205592,
+          "current_source": {
+            "git_commit": "c43a519997a581357561981cd448b07a24df5fdb",
+            "git_dirty": true,
+            "source_fingerprint": "sha256:ccdc35c09745ebbdff4be5ae9b50646a04b785a27c84ecc685aa4fd0e345682a"
+          },
+          "descriptor_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/config_mismatch/run_descriptor.json",
+          "descriptor_sha256": "8ca0ecbca6a2e9c933cbe8bff5dc5c45d628fc14be7f32a8f8866692e1ddceb5",
+          "expected_runtime_identity": {
+            "protocol_version": 1,
+            "run_id": "plan02-source-probe",
+            "schema_version": 2
+          },
+          "fs_diloco_imported": false,
+          "gate_format_version": 1,
+          "gate_fs_diloco_imported": false,
+          "mismatches": [
+            "resolved_config_sha256"
+          ],
+          "project_root": "/work/xg24i002/x10041/fsb_decoupled_diloco",
+          "resolved_config_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/config_mismatch/run_config.resolved.yaml",
+          "resolved_config_sha256": "93ba716e8224b867b10cefdf4e555a872408851088d87ef6f03156e314f05b3a",
+          "returncode": 3,
+          "runtime_started": false,
+          "status": "BLOCKED"
+        },
+        "descriptor_mismatch": {
+          "bootstrap_marker_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/descriptor_mismatch/bootstrap_complete.json",
+          "business_writes": 0,
+          "checked_at": 1785977918.2627826,
+          "current_source": {
+            "git_commit": "c43a519997a581357561981cd448b07a24df5fdb",
+            "git_dirty": true,
+            "source_fingerprint": "sha256:ccdc35c09745ebbdff4be5ae9b50646a04b785a27c84ecc685aa4fd0e345682a"
+          },
+          "descriptor_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/descriptor_mismatch/run_descriptor.json",
+          "descriptor_sha256": "d218c5c8656111520e362af0cb013b1fda5391cbf21688877a72cb78dc40bedc",
+          "expected_runtime_identity": {
+            "protocol_version": 1,
+            "run_id": "plan02-source-probe",
+            "schema_version": 2
+          },
+          "fs_diloco_imported": false,
+          "gate_format_version": 1,
+          "gate_fs_diloco_imported": false,
+          "mismatches": [
+            "descriptor_sha256"
+          ],
+          "project_root": "/work/xg24i002/x10041/fsb_decoupled_diloco",
+          "resolved_config_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/descriptor_mismatch/run_config.resolved.yaml",
+          "resolved_config_sha256": "ec90760cae734a0a0c2033cc232902087f252757d8d797e1f109605976da3cd3",
+          "returncode": 3,
+          "runtime_started": false,
+          "status": "BLOCKED"
+        },
+        "dirty_fingerprint_mismatch": {
+          "bootstrap_marker_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/dirty_fingerprint_mismatch/bootstrap_complete.json",
+          "business_writes": 0,
+          "checked_at": 1785977917.9836683,
+          "current_source": {
+            "git_commit": "c43a519997a581357561981cd448b07a24df5fdb",
+            "git_dirty": true,
+            "source_fingerprint": "sha256:ccdc35c09745ebbdff4be5ae9b50646a04b785a27c84ecc685aa4fd0e345682a"
+          },
+          "descriptor_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/dirty_fingerprint_mismatch/run_descriptor.json",
+          "descriptor_sha256": "4f1b4954b76e2db7b3d3f87019a13e03b41d3604a73f06fbb67982e8667c82c8",
+          "expected_runtime_identity": {
+            "protocol_version": 1,
+            "run_id": "plan02-source-probe",
+            "schema_version": 2
+          },
+          "fs_diloco_imported": false,
+          "gate_format_version": 1,
+          "gate_fs_diloco_imported": false,
+          "mismatches": [
+            "git_dirty",
+            "source_fingerprint"
+          ],
+          "project_root": "/work/xg24i002/x10041/fsb_decoupled_diloco",
+          "resolved_config_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/dirty_fingerprint_mismatch/run_config.resolved.yaml",
+          "resolved_config_sha256": "ec90760cae734a0a0c2033cc232902087f252757d8d797e1f109605976da3cd3",
+          "returncode": 3,
+          "runtime_started": false,
+          "status": "BLOCKED"
+        },
+        "matching_identity": {
+          "bootstrap_marker_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/matching_identity/bootstrap_complete.json",
+          "business_writes": 1,
+          "checked_at": 1785977917.638972,
+          "current_source": {
+            "git_commit": "c43a519997a581357561981cd448b07a24df5fdb",
+            "git_dirty": true,
+            "source_fingerprint": "sha256:ccdc35c09745ebbdff4be5ae9b50646a04b785a27c84ecc685aa4fd0e345682a"
+          },
+          "descriptor_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/matching_identity/run_descriptor.json",
+          "descriptor_sha256": "eccbebe6e8f15ab6b9ceacd318112013de86e10dc72b9438b04186becb00373b",
+          "expected_runtime_identity": {
+            "protocol_version": 1,
+            "run_id": "plan02-source-probe",
+            "schema_version": 2
+          },
+          "fs_diloco_imported": true,
+          "gate_format_version": 1,
+          "gate_fs_diloco_imported": false,
+          "mismatches": [],
+          "project_root": "/work/xg24i002/x10041/fsb_decoupled_diloco",
+          "resolved_config_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/matching_identity/run_config.resolved.yaml",
+          "resolved_config_sha256": "ec90760cae734a0a0c2033cc232902087f252757d8d797e1f109605976da3cd3",
+          "returncode": 0,
+          "runtime_started": true,
+          "status": "PASS"
+        },
+        "protocol_mismatch": {
+          "bootstrap_marker_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/protocol_mismatch/bootstrap_complete.json",
+          "business_writes": 0,
+          "checked_at": 1785977918.6749454,
+          "current_source": {
+            "git_commit": "c43a519997a581357561981cd448b07a24df5fdb",
+            "git_dirty": true,
+            "source_fingerprint": "sha256:ccdc35c09745ebbdff4be5ae9b50646a04b785a27c84ecc685aa4fd0e345682a"
+          },
+          "descriptor_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/protocol_mismatch/run_descriptor.json",
+          "descriptor_sha256": "3bfcdd5069cf76d3bfe5007e4a181949af368d8b0ec69c7dd92f227db8571535",
+          "expected_runtime_identity": {
+            "protocol_version": 1,
+            "run_id": "plan02-source-probe",
+            "schema_version": 2
+          },
+          "fs_diloco_imported": false,
+          "gate_format_version": 1,
+          "gate_fs_diloco_imported": false,
+          "mismatches": [
+            "expected_protocol_version"
+          ],
+          "project_root": "/work/xg24i002/x10041/fsb_decoupled_diloco",
+          "resolved_config_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/protocol_mismatch/run_config.resolved.yaml",
+          "resolved_config_sha256": "ec90760cae734a0a0c2033cc232902087f252757d8d797e1f109605976da3cd3",
+          "returncode": 3,
+          "runtime_started": false,
+          "status": "BLOCKED"
+        },
+        "run_id_mismatch": {
+          "bootstrap_marker_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/run_id_mismatch/bootstrap_complete.json",
+          "business_writes": 0,
+          "checked_at": 1785977918.9543693,
+          "current_source": {
+            "git_commit": "c43a519997a581357561981cd448b07a24df5fdb",
+            "git_dirty": true,
+            "source_fingerprint": "sha256:ccdc35c09745ebbdff4be5ae9b50646a04b785a27c84ecc685aa4fd0e345682a"
+          },
+          "descriptor_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/run_id_mismatch/run_descriptor.json",
+          "descriptor_sha256": "9f9ef0bc465dd08183215a667c1d431ab8061055abe3cd04c6474d5ca9896865",
+          "expected_runtime_identity": {
+            "protocol_version": 1,
+            "run_id": "plan02-source-probe",
+            "schema_version": 2
+          },
+          "fs_diloco_imported": false,
+          "gate_format_version": 1,
+          "gate_fs_diloco_imported": false,
+          "mismatches": [
+            "expected_run_id"
+          ],
+          "project_root": "/work/xg24i002/x10041/fsb_decoupled_diloco",
+          "resolved_config_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/run_id_mismatch/run_config.resolved.yaml",
+          "resolved_config_sha256": "ec90760cae734a0a0c2033cc232902087f252757d8d797e1f109605976da3cd3",
+          "returncode": 3,
+          "runtime_started": false,
+          "status": "BLOCKED"
+        },
+        "schema_mismatch": {
+          "bootstrap_marker_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/schema_mismatch/bootstrap_complete.json",
+          "business_writes": 0,
+          "checked_at": 1785977918.8130236,
+          "current_source": {
+            "git_commit": "c43a519997a581357561981cd448b07a24df5fdb",
+            "git_dirty": true,
+            "source_fingerprint": "sha256:ccdc35c09745ebbdff4be5ae9b50646a04b785a27c84ecc685aa4fd0e345682a"
+          },
+          "descriptor_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/schema_mismatch/run_descriptor.json",
+          "descriptor_sha256": "46fb8e6bcaab63316f480bec93ed61083bc8636579e8a50cdb8ae7ec87f44ece",
+          "expected_runtime_identity": {
+            "protocol_version": 1,
+            "run_id": "plan02-source-probe",
+            "schema_version": 2
+          },
+          "fs_diloco_imported": false,
+          "gate_format_version": 1,
+          "gate_fs_diloco_imported": false,
+          "mismatches": [
+            "expected_schema_version"
+          ],
+          "project_root": "/work/xg24i002/x10041/fsb_decoupled_diloco",
+          "resolved_config_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/work_20260806-095900_2497333/source_pinning_work/schema_mismatch/run_config.resolved.yaml",
+          "resolved_config_sha256": "ec90760cae734a0a0c2033cc232902087f252757d8d797e1f109605976da3cd3",
+          "returncode": 3,
+          "runtime_started": false,
+          "status": "BLOCKED"
+        }
+      },
+      "elapsed_seconds": 2.41643689700868,
+      "hostname": "mg0004",
+      "matching_actor_business_writes": 1,
+      "mismatch_actor_business_writes": 0,
+      "probe": "source-pinning",
+      "source_identity": {
+        "git_commit": "c43a519997a581357561981cd448b07a24df5fdb",
+        "git_dirty": true,
+        "source_fingerprint": "sha256:ccdc35c09745ebbdff4be5ae9b50646a04b785a27c84ecc685aa4fd0e345682a"
+      },
+      "status": "PASS"
+    },
+    "sqlite_writer_lock": {
+      "availability_boundary": {
+        "killing_holder_releases_lock": true,
+        "paused_writer_transaction_blocks_takeover": true,
+        "uncommitted_state_rolled_back": true
+      },
+      "contender_elapsed_seconds": 0.26388484600465745,
+      "contender_error": "database is locked",
+      "contender_hostname": "mg0008",
+      "cross_node": {
+        "availability_boundary": {
+          "killing_holder_releases_lock": true,
+          "paused_writer_transaction_blocks_takeover": true,
+          "uncommitted_state_rolled_back": true
+        },
+        "contender_elapsed_seconds": 0.26388484600465745,
+        "contender_error": "database is locked",
+        "contender_hostname": "mg0008",
+        "elapsed_seconds": 0.29040623299079016,
+        "holder_exit_status": -9,
+        "holder_hostname": "mg0004",
+        "holder_pid": 2779428,
+        "holder_stopped_state": "T",
+        "host_count": 2,
+        "hostname": "mg0008",
+        "hostnames": [
+          "mg0004",
+          "mg0008"
+        ],
+        "integrity_check": [
+          "ok"
+        ],
+        "post_kill_rows": [
+          [
+            "successor",
+            "committed"
+          ]
+        ],
+        "pragmas": {
+          "journal_mode": "delete",
+          "synchronous": 2
+        },
+        "probe": "writer-lock-cross-node",
+        "role": "contender",
+        "status": "PASS",
+        "successor_hostname": "mg0008",
+        "visible_rows_before_kill": 0
+      },
+      "elapsed_seconds": 0.0022284270962700248,
+      "holder_exit_status": -9,
+      "holder_hostname": "mg0004",
+      "holder_pid": 2779428,
+      "holder_stopped_state": "T",
+      "host_count": 2,
+      "hostname": "mg0004",
+      "hostnames": [
+        "mg0004",
+        "mg0008"
+      ],
+      "integrity_check": [
+        "ok"
+      ],
+      "post_kill_rows": [
+        [
+          "successor",
+          "committed"
+        ]
+      ],
+      "pragmas": {
+        "journal_mode": "delete",
+        "synchronous": 2
+      },
+      "probe": "writer-lock-combine",
+      "role": "contender",
+      "single_node": {
+        "availability_boundary": {
+          "killing_holder_releases_lock": true,
+          "paused_writer_transaction_blocks_takeover": true,
+          "uncommitted_state_rolled_back": true
+        },
+        "contender_elapsed_seconds": 0.25649528997018933,
+        "contender_error": "database is locked",
+        "elapsed_seconds": 0.3355970160337165,
+        "holder_exit_status": -9,
+        "holder_pid": 2779111,
+        "holder_stopped_state": "T",
+        "hostname": "mg0004",
+        "integrity_check": [
+          "ok"
+        ],
+        "post_kill_rows": [
+          [
+            "successor",
+            "committed"
+          ]
+        ],
+        "pragmas": {
+          "journal_mode": "delete",
+          "synchronous": 2
+        },
+        "probe": "writer-lock",
+        "status": "PASS",
+        "visible_rows_before_kill": 0
+      },
+      "status": "PASS",
+      "successor_hostname": "mg0008",
+      "visible_rows_before_kill": 0
+    }
+  },
+  "status": "PASS"
+}

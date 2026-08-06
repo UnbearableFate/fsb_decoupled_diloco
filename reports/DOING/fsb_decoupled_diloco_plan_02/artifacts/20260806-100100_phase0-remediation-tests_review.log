@@ -1,0 +1,8 @@
+Currently Loaded Modulefiles:
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9
+
+Key:
+(symbolic-version)
+.......................                                                  [100%]
+23 passed in 12.45s
+PLAN02_PHASE0_TESTS_COMPLETE=2497331.opbs

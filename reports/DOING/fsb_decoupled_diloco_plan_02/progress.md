@@ -283,3 +283,89 @@ Artifacts:
 - `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-092200_phase0-remediation_review.log`.
 - `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-090551_phase0-feasibility_blocked.json`.
 - `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-090551_phase0-remediation_review.log`.
+
+## 2026-08-06T09:59:38+09:00 — Phase 0 second-review remediation PASS
+
+### Facts
+
+- The repeated independent reviews of review target `c43a519997a581357561981cd448b07a24df5fdb` against plan branch point `c1c61153548ff7b2543d3ce1bc764c19432b138e` both returned `CHANGES_REQUIRED`:
+  - `reports/DOING/code_review/fsb_decoupled_diloco_plan_02/phase-0/gpt-5.6-sol_c43a519997a581357561981cd448b07a24df5fdb.md`;
+  - `reports/DOING/code_review/fsb_decoupled_diloco_plan_02/phase-0/claude-opus-5_c43a519997a581357561981cd448b07a24df5fdb.md`.
+- Claude ran through a fresh non-interactive `claude --print` process with requested/actual model `claude-opus-5`, session `71f3d342-9272-47aa-9bd5-bd46790601d8`, `bypassPermissions`, no fallback argument, `permission_denials=[]`, and machine-readable result `REVIEW_REPORT_WRITTEN`. Codex saved its report before reading Claude's report.
+- The user-directed governance commit `d9fea98ae527cdf64f56edabce0f8525909d1e13` moved the completion gate from root `AGENTS.md` to scoped `plans/AGENTS.md` and replaced the Herdr workflow with verified non-interactive `claude -p`. It is intentionally part of the cumulative review diff and does not change Phase 0 executable source.
+- Review remediation added a true two-node FEAS-01 path: rank 0 on `mg0004` spawned and stopped the writer transaction, rank 1 on `mg0008` observed `database is locked`, saw zero uncommitted rows, requested `SIGKILL`, and then committed the successor row on `mg0008`. The retained evidence records two distinct hosts, holder state `T`, holder exit `-9`, rollback, successor commit, safe PRAGMAs, and integrity `ok`; the original single-node probe remains nested as the 1-node control.
+- FEAS-05 now connects the pre-import gate to a falsifiable guarded runtime. Matching identity imports `fs_diloco` only after gate success and writes exactly one control row; each of seven mismatches reports gate-import false, runtime-import false, runtime not started, and zero guarded writes. The shared probe DB changes from all-zero counts to exactly one matching `syncer_leader` row, with zero mismatch-owner rows.
+- `capture_source_identity.py` now includes a present ignored explicit file scope. The final manifest contains `uv.lock` (747,721 bytes, SHA-256 `240e2fd8dc4294b2e3aef8c5c2061e209549451a66632d8419c90bc374d64a8b`) even though repository policy keeps that environment-specific file out of Git.
+- Direct regressions now cover contention JSON hostname/PID publication, DB-side aggregation across two hosts, missing hostname failure, Checker one-host rejection, cross-node writer-lock combination, independent source/marker mismatch branches, orchestration consistency, missing business snapshots, and wall-clock discontinuity.
+- The first focused test attempt failed and is recorded in `failures.md`. After its two test-only root causes were fixed, compute PBS job `2497331.opbs` on `mg0004` ran:
+
+  ```text
+  .venv/bin/python -m pytest -q tests/test_plan02_feasibility.py tests/test_sqlite_probe.py tests/test_capture_source_identity.py tests/test_source_identity.py
+  ```
+
+- Result: `23 passed in 12.45s`, parent `Exit_status=0`, marker `PLAN02_PHASE0_TESTS_COMPLETE=2497331.opbs`.
+- Final static validation passed:
+
+  ```text
+  bash -n scripts/miyabi/*.pbs
+  rg -n '#PBS -W group_list=<group_id>' scripts/miyabi/*.pbs
+  .venv/bin/ruff check scripts/miyabi/capture_source_identity.py scripts/miyabi/check_plan02_feasibility.py scripts/miyabi/plan02_fault_probe.py scripts/miyabi/plan02_pbs_capability.py scripts/miyabi/plan02_phase0_aggregate.py scripts/miyabi/plan02_source_gate.py tests/test_capture_source_identity.py tests/test_plan02_feasibility.py tests/test_sqlite_probe.py
+  .venv/bin/python -m py_compile scripts/miyabi/capture_source_identity.py scripts/miyabi/check_plan02_feasibility.py scripts/miyabi/plan02_fault_probe.py scripts/miyabi/plan02_pbs_capability.py scripts/miyabi/plan02_phase0_aggregate.py scripts/miyabi/plan02_source_gate.py tests/test_capture_source_identity.py tests/test_plan02_feasibility.py tests/test_sqlite_probe.py
+  git diff --check
+  ```
+
+- The placeholder search produced no matches; all Plan 02 PBS scripts use literal group `xg24i002`.
+- The authoritative remediated full run was submitted with:
+
+  ```text
+  qsub -o /work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-095900_phase0-remediation_review.log -v PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,STAMP=20260806-095900 scripts/miyabi/run_plan02_phase0_feasibility.pbs
+  ```
+
+- Parent `2497333.opbs` used `debug-g`, `select=2:mpiprocs=4`, hosts `mg0004`/`mg0008`, finished in 58 seconds with `Exit_status=0`, and printed `PHASE0_CHECKER=PASS` plus `PLAN02_PHASE0_COMPLETE=.../20260806-095900_phase0-feasibility_pass.json`.
+- FEAS-01 through FEAS-05 all returned `PASS`. The 20-round clock interval was `[-0.002982041, 0.003113702]` seconds, absolute offset bound `0.003113702` seconds, and maximum wall/monotonic discontinuity `0.000000544` seconds versus the frozen 0.1-second limit.
+- Eight contention writers across both hosts committed `400/400` transactions with 4,139 handled busy events, zero starvation, 48 acquire and 352 renew actions, `journal_mode=DELETE`, `synchronous=FULL`, and integrity `ok`. Maximum writer wait was `7.372740368` seconds; this exceeds the Phase 1 starting suggestion of a 5-second busy timeout and must be treated as a P1-L1 tuning input, not copied as a validated default.
+- Scheduler evidence again contains real queued/prologue/running/finished states. Scalar `2497335.opbs` and array physical children `2497336[0].opbs`/`2497336[1].opbs` have exit zero and `run_count=1`; array children record `Rerunable=True`. The selected orchestration is `pbs_job_array`; the Checker now enforces consistency between capability and selection.
+- Final artifact SHA-256 is `56056fdafed7b0f1bd7f472ca78771f876edb3204cb0989ff97cf1159d9cdc56`. It records commit `c43a519997a581357561981cd448b07a24df5fdb`, `git_dirty=true`, and source fingerprint `sha256:ccdc35c09745ebbdff4be5ae9b50646a04b785a27c84ecc685aa4fd0e345682a`; recomputation on the current source tree matches exactly. The successful raw work directory was deleted by its guarded cleanup.
+- The requirement matrix marks FEAS-01 through FEAS-05 as `completion-candidate`, not phase-complete. FEAS-04 explicitly labels the older manifest-fallback artifact as historical cross-version evidence.
+
+### Finding dispositions
+
+Codex report for `c43a519…`:
+
+- `Medium — FEAS-05 zero-write evidence detached from actor`: **fixed** with the guarded positive-control runtime and per-case write counts described above.
+- `Low — orchestration/capability consistency`: **fixed** in the Checker with both array and fallback negative tests.
+- `Low — source-gate defensive branch coverage`: **fixed** with direct table-driven `check_gate()` tests for dirty-only, marker protocol, marker config checksum, and missing resolved config.
+- `Low — wall-clock discontinuity not bounded`: **fixed** with a 0.1-second frozen bound, aggregate field, Checker assertion, and negative test.
+
+Claude report for `c43a519…`:
+
+- `M1 — FEAS-01 only single-node`: **fixed** by the two-rank holder/contender/successor experiment while retaining the single-node control.
+- `M2 — hostname-ordering regression missing`: **fixed** with writer JSON hostname/PID assertions, direct contention aggregation, and Checker one-host negative cases.
+- `M3 — FEAS-05 non-observations`: **fixed** with matching positive signals and mismatch zero signals for runtime import and guarded DB writes.
+- `L1 — manual independent capability self-asserted`: **fixed** by renaming it `independent_job_query_supported` and deriving it from the real parent qstat result; actual restart remains correctly assigned to Phase 1.
+- `L2 — missing business snapshots and orchestration consistency fail-open`: **fixed** with typed exact-count snapshots and cross-field selection assertions.
+- `L3 — duplicate cache booleans`: **fixed** at the decision boundary. The retained descriptive field remains for artifact compatibility, but the Checker no longer treats it as independent evidence; it directly validates polluted epochs, canonical selection, business outcome, and repair.
+- `L4 — shared-SQLite module documentation drift`: **fixed** in `docs/modules/scripts.md` and `docs/07-operations.md`.
+- `L5 — governance change unrecorded`: **fixed** by the fact record in this entry.
+- `L6 — obsolete failure header`: **fixed** by the append-only correction in `failures.md`; prior text remains immutable.
+- `L7 — matrix prematurely complete`: **fixed** with explicit `completion-candidate` status until the phase-final gate passes.
+- `L8 — cross-version fallback citation`: **fixed** by labeling the 01:12 artifact as historical cross-version evidence.
+- `L9 — aggregate empty maximum`: **fixed**; all-starved inputs retain `maximum_writer_wait_seconds=null` and flow to structured Checker failure instead of raising during aggregation.
+- `L10 — queue latency coupled to BLOCKED`: **deferred-with-justification**. A successfully submitted but unobserved child is scheduler-uncertain, so claiming array unsupported and silently selecting fallback would be unsafe; `BLOCKED` is retryable and preserves the raw evidence. Owner: Phase 1 scheduler reconciliation/backoff implementation.
+- `L11 — ignored `uv.lock` absent from fingerprint`: **fixed** by explicit-file-scope capture and regression coverage.
+
+### Inferences
+
+- The Medium findings from both second-round reviews now have behavioral tests and new two-node evidence. Remaining deferred findings are Low severity and assigned to the Phase 1 work unit that implements their real protocol context.
+- Cross-node FEAS-01 and source-gated runtime writes change key acceptance evidence, so the next commit is another review target under the key-invariant repetition rule. Phase 1 remains blocked until that final independent gate passes.
+
+### Follow-up
+
+- Freeze this evidence-matched tree, repeat the independent dual review against the plan branch point, then create a phase-final commit only if both reports approve or all new findings are dispositioned without another key-invariant change.
+
+Artifacts:
+
+- `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-095900_phase0-feasibility_pass.json`.
+- `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-095900_phase0-remediation_review.log`.
+- `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-100100_phase0-remediation-tests_review.log`.
+- `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-100000_phase0-remediation-tests_review.log` (failed focused attempt; retained in full).

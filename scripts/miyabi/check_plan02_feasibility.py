@@ -53,6 +53,22 @@ def evaluate(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     lock_failures: list[str] = []
     boundary = lock.get("availability_boundary", {})
     _require(lock.get("status") == "PASS", "writer-lock probe did not pass", lock_failures)
+    _require(
+        lock.get("single_node", {}).get("status") == "PASS",
+        "single-node writer-lock evidence is missing",
+        lock_failures,
+    )
+    _require(
+        int(lock.get("host_count", 0)) >= 2,
+        "writer-lock probe did not cover two hosts",
+        lock_failures,
+    )
+    _require(
+        lock.get("holder_hostname") != lock.get("contender_hostname")
+        and lock.get("successor_hostname") == lock.get("contender_hostname"),
+        "writer-lock holder and successor were not placed on distinct hosts",
+        lock_failures,
+    )
     contender_error = str(lock.get("contender_error", "")).lower()
     _require(
         lock.get("holder_stopped_state") == "T",
@@ -94,15 +110,27 @@ def evaluate(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
         "uncommitted state survived holder death",
         lock_failures,
     )
-    _require(lock.get("integrity_check") == ["ok"], "writer-lock DB integrity failed", lock_failures)
-    requirements["FEAS-01"] = {"status": "PASS" if not lock_failures else "BLOCKED", "failures": lock_failures}
+    _require(
+        lock.get("integrity_check") == ["ok"], "writer-lock DB integrity failed", lock_failures
+    )
+    requirements["FEAS-01"] = {
+        "status": "PASS" if not lock_failures else "BLOCKED",
+        "failures": lock_failures,
+    }
 
     cache = payload.get("old_cache_writer", {})
     cache_failures: list[str] = []
     _require(cache.get("status") == "PASS", "old-cache probe did not pass", cache_failures)
-    _require(cache.get("counterexample_reproduced") is True, "old writer did not overwrite fixed cache", cache_failures)
-    _require(cache.get("cache_pollution_reported") is True, "cache pollution was not reported", cache_failures)
-    _require(cache.get("business_state_failed") is False, "cache pollution changed business state", cache_failures)
+    _require(
+        cache.get("counterexample_reproduced") is True,
+        "old writer did not overwrite fixed cache",
+        cache_failures,
+    )
+    _require(
+        cache.get("business_state_failed") is False,
+        "cache pollution changed business state",
+        cache_failures,
+    )
     expected_kinds = {"latest", "stop", "summary"}
     polluted_epochs = cache.get("polluted_cache_epochs", {})
     _require(
@@ -141,7 +169,10 @@ def evaluate(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
         "canonical scan was incomplete or silently empty",
         cache_failures,
     )
-    requirements["FEAS-02"] = {"status": "PASS" if not cache_failures else "BLOCKED", "failures": cache_failures}
+    requirements["FEAS-02"] = {
+        "status": "PASS" if not cache_failures else "BLOCKED",
+        "failures": cache_failures,
+    }
 
     clock_sqlite = payload.get("clock_sqlite", {})
     sqlite_failures: list[str] = []
@@ -154,26 +185,56 @@ def evaluate(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
         "clock probe did not use a two-way offset interval",
         sqlite_failures,
     )
-    _require(int(clock.get("host_count", 0)) >= 2, "clock probe did not cover two hosts", sqlite_failures)
-    _require(int(clock.get("rounds_completed", 0)) >= 3, "clock exchange had too few rounds", sqlite_failures)
-    _require(clock.get("intersection_valid") is True, "clock offset intervals did not intersect", sqlite_failures)
+    _require(
+        int(clock.get("host_count", 0)) >= 2, "clock probe did not cover two hosts", sqlite_failures
+    )
+    _require(
+        int(clock.get("rounds_completed", 0)) >= 3,
+        "clock exchange had too few rounds",
+        sqlite_failures,
+    )
+    _require(
+        clock.get("intersection_valid") is True,
+        "clock offset intervals did not intersect",
+        sqlite_failures,
+    )
+    _require(
+        clock.get("clock_stable") is True, "wall clock changed during exchange", sqlite_failures
+    )
+    _require(
+        float(clock.get("maximum_wall_monotonic_elapsed_delta_seconds", float("inf")))
+        <= float(clock.get("max_clock_discontinuity_seconds", 0.0)),
+        "wall/monotonic clock discontinuity exceeded the configured maximum",
+        sqlite_failures,
+    )
     _require(
         float(clock.get("absolute_offset_upper_bound_seconds", float("inf")))
         <= float(clock.get("max_clock_skew_seconds", 0.0)),
         "clock offset upper bound exceeded configured maximum",
         sqlite_failures,
     )
-    _require(clock.get("within_bound") is True, "observed clock bound exceeded configured maximum", sqlite_failures)
-    _require(visibility.get("same_committed_state") is True, "cross-node reopen did not see committed state", sqlite_failures)
+    _require(
+        clock.get("within_bound") is True,
+        "observed clock bound exceeded configured maximum",
+        sqlite_failures,
+    )
+    _require(
+        visibility.get("same_committed_state") is True,
+        "cross-node reopen did not see committed state",
+        sqlite_failures,
+    )
     _require(
         visibility.get("writer_hostname") != visibility.get("reader_hostname"),
         "visibility probe did not use distinct hosts",
         sqlite_failures,
     )
-    _require(int(contention.get("writer_count", 0)) >= 2, "contention probe had fewer than two writers", sqlite_failures)
     _require(
-        int(contention.get("distinct_db_writers", -1))
-        == int(contention.get("writer_count", 0)),
+        int(contention.get("writer_count", 0)) >= 2,
+        "contention probe had fewer than two writers",
+        sqlite_failures,
+    )
+    _require(
+        int(contention.get("distinct_db_writers", -1)) == int(contention.get("writer_count", 0)),
         "contention writer evidence did not match DB writers",
         sqlite_failures,
     )
@@ -190,29 +251,60 @@ def evaluate(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
         "contention transaction counts disagree",
         sqlite_failures,
     )
-    _require(contention.get("all_transactions_committed") is True, "contention lost transactions", sqlite_failures)
-    _require(int(contention.get("busy_errors", 0)) > 0, "contention produced no busy events", sqlite_failures)
-    _require(int(contention.get("starvation_count", -1)) == 0, "contention starvation occurred", sqlite_failures)
+    _require(
+        contention.get("all_transactions_committed") is True,
+        "contention lost transactions",
+        sqlite_failures,
+    )
+    _require(
+        int(contention.get("busy_errors", 0)) > 0,
+        "contention produced no busy events",
+        sqlite_failures,
+    )
+    _require(
+        int(contention.get("starvation_count", -1)) == 0,
+        "contention starvation occurred",
+        sqlite_failures,
+    )
     actions = contention.get("action_counts", {})
     _require(
         int(actions.get("acquire", 0)) > 0 and int(actions.get("renew", 0)) > 0,
         "contention did not exercise both acquire and renew",
         sqlite_failures,
     )
-    _require(contention.get("integrity_check") == ["ok"], "contention DB integrity failed", sqlite_failures)
+    _require(
+        contention.get("integrity_check") == ["ok"],
+        "contention DB integrity failed",
+        sqlite_failures,
+    )
     pragmas = contention.get("pragmas", {})
-    _require(str(pragmas.get("journal_mode", "")).lower() == "delete", "journal mode is not DELETE", sqlite_failures)
+    _require(
+        str(pragmas.get("journal_mode", "")).lower() == "delete",
+        "journal mode is not DELETE",
+        sqlite_failures,
+    )
     _require(int(pragmas.get("synchronous", -1)) == 2, "synchronous is not FULL", sqlite_failures)
-    requirements["FEAS-03"] = {"status": "PASS" if not sqlite_failures else "BLOCKED", "failures": sqlite_failures}
+    requirements["FEAS-03"] = {
+        "status": "PASS" if not sqlite_failures else "BLOCKED",
+        "failures": sqlite_failures,
+    }
 
     pbs = payload.get("pbs_capability", {})
     pbs_failures: list[str] = []
     _require(pbs.get("status") == "PASS", "PBS capability probe did not complete", pbs_failures)
-    _require(pbs.get("state_classifier_validated") is True, "PBS state classifier matrix failed", pbs_failures)
-    _require(pbs.get("scheduler_query_supported") is True, "scheduler query path is unavailable", pbs_failures)
     _require(
-        pbs.get("manual_independent_job_supported") is True,
-        "manual independent job path is unavailable",
+        pbs.get("state_classifier_validated") is True,
+        "PBS state classifier matrix failed",
+        pbs_failures,
+    )
+    _require(
+        pbs.get("scheduler_query_supported") is True,
+        "scheduler query path is unavailable",
+        pbs_failures,
+    )
+    _require(
+        pbs.get("independent_job_query_supported") is True,
+        "independent parent job query path is unavailable",
         pbs_failures,
     )
     if pbs.get("automatic_submission_supported") is True:
@@ -227,12 +319,14 @@ def evaluate(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
             "scheduler terminal-state query was not verified",
             pbs_failures,
         )
-    _require(
-        pbs.get("initial_learner_orchestration") in {"pbs_job_array", "independent_manifest"},
-        "no valid initial learner orchestration was selected",
-        pbs_failures,
-    )
-    if pbs.get("job_array_supported") is True:
+    orchestration = pbs.get("initial_learner_orchestration")
+    array_supported = pbs.get("job_array_supported") is True
+    if array_supported:
+        _require(
+            pbs.get("automatic_submission_supported") is True and orchestration == "pbs_job_array",
+            "array capability and selected orchestration are inconsistent",
+            pbs_failures,
+        )
         array_evidence = pbs.get("rerunable_job_evidence", {}).get("array", {})
         incarnations = array_evidence.get("physical_incarnations", {})
         _require(
@@ -244,11 +338,16 @@ def evaluate(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
             isinstance(incarnations, dict)
             and len(incarnations) == 2
             and all(
-                int(item.get("run_count", 0)) >= 1
-                and int(item.get("Exit_status", -1)) == 0
+                int(item.get("run_count", 0)) >= 1 and int(item.get("Exit_status", -1)) == 0
                 for item in incarnations.values()
             ),
             "array physical incarnation evidence is incomplete",
+            pbs_failures,
+        )
+    else:
+        _require(
+            orchestration == "independent_manifest",
+            "array fallback did not select the independent manifest",
             pbs_failures,
         )
     requirements["FEAS-04"] = {
@@ -263,7 +362,20 @@ def evaluate(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     source_failures: list[str] = []
     _require(source.get("status") == "PASS", "source pinning probe did not pass", source_failures)
     cases = source.get("cases", {})
-    _require(cases.get("matching_identity", {}).get("status") == "PASS", "matching source identity was rejected", source_failures)
+    matching_case = cases.get("matching_identity", {})
+    _require(
+        matching_case.get("status") == "PASS",
+        "matching source identity was rejected",
+        source_failures,
+    )
+    _require(
+        matching_case.get("gate_fs_diloco_imported") is False
+        and matching_case.get("runtime_started") is True
+        and matching_case.get("fs_diloco_imported") is True
+        and int(matching_case.get("business_writes", 0)) == 1,
+        "matching source identity did not reach the guarded runtime write",
+        source_failures,
+    )
     for name in (
         "commit_mismatch",
         "dirty_fingerprint_mismatch",
@@ -276,15 +388,53 @@ def evaluate(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
         case = cases.get(name, {})
         _require(case.get("status") == "BLOCKED", f"{name} did not fail closed", source_failures)
         _require(case.get("runtime_started") is False, f"{name} reached runtime", source_failures)
-        _require(case.get("fs_diloco_imported") is False, f"{name} imported fs_diloco", source_failures)
-    _require(int(source.get("mismatch_actor_business_writes", -1)) == 0, "mismatch actor wrote business state", source_failures)
-    _require(source.get("business_db_before") == source.get("business_db_after"), "source gate mutated business DB", source_failures)
-    requirements["FEAS-05"] = {"status": "PASS" if not source_failures else "BLOCKED", "failures": source_failures}
+        _require(
+            case.get("fs_diloco_imported") is False, f"{name} imported fs_diloco", source_failures
+        )
+        _require(
+            case.get("gate_fs_diloco_imported") is False,
+            f"{name} gate imported fs_diloco",
+            source_failures,
+        )
+        _require(
+            int(case.get("business_writes", -1)) == 0,
+            f"{name} wrote business state",
+            source_failures,
+        )
+    business_before = source.get("business_db_before")
+    business_after = source.get("business_db_after")
+    _require(
+        isinstance(business_before, dict)
+        and business_before.get("counts")
+        == {"syncer_leader": 0, "learner_instances": 0, "global_versions": 0},
+        "source-gate business DB did not start empty",
+        source_failures,
+    )
+    _require(
+        isinstance(business_after, dict)
+        and business_after.get("counts")
+        == {"syncer_leader": 1, "learner_instances": 0, "global_versions": 0},
+        "source-gate control runtime write was not isolated",
+        source_failures,
+    )
+    _require(
+        int(source.get("matching_actor_business_writes", 0)) == 1,
+        "matching actor did not write control row",
+        source_failures,
+    )
+    _require(
+        int(source.get("mismatch_actor_business_writes", -1)) == 0,
+        "mismatch actor wrote business state",
+        source_failures,
+    )
+    requirements["FEAS-05"] = {
+        "status": "PASS" if not source_failures else "BLOCKED",
+        "failures": source_failures,
+    }
 
     for requirement_id in REQUIREMENTS:
         failures.extend(
-            f"{requirement_id}: {failure}"
-            for failure in requirements[requirement_id]["failures"]
+            f"{requirement_id}: {failure}" for failure in requirements[requirement_id]["failures"]
         )
     return requirements, failures
 
@@ -303,7 +453,9 @@ def main() -> None:
         source = _read_object(args.input_json)
         requirements, failures = evaluate(source)
     except BaseException as exc:
-        requirements = {requirement_id: {"status": "BLOCKED", "failures": []} for requirement_id in REQUIREMENTS}
+        requirements = {
+            requirement_id: {"status": "BLOCKED", "failures": []} for requirement_id in REQUIREMENTS
+        }
         failures = [f"checker exception: {type(exc).__name__}: {exc}"]
     status = "PASS" if not failures else "BLOCKED"
     output = {

@@ -86,9 +86,7 @@ def _request_variables(value: str) -> dict[str, str]:
 def _safe_qstat_fields(fields: dict[str, str] | None) -> dict[str, Any] | None:
     if fields is None:
         return None
-    safe: dict[str, Any] = {
-        key: value for key, value in fields.items() if key in SAFE_QSTAT_FIELDS
-    }
+    safe: dict[str, Any] = {key: value for key, value in fields.items() if key in SAFE_QSTAT_FIELDS}
     request_variables = _request_variables(fields.get("Variable_List", ""))
     if request_variables:
         safe["request_variables"] = request_variables
@@ -154,9 +152,7 @@ def _submit_child(
     command = ["qsub", "-N", name, "-v", variables]
     start_at: str | None = None
     if start_delay_seconds > 0:
-        start_at = time.strftime(
-            "%Y%m%d%H%M.%S", time.localtime(time.time() + start_delay_seconds)
-        )
+        start_at = time.strftime("%Y%m%d%H%M.%S", time.localtime(time.time() + start_delay_seconds))
         command.extend(("-a", start_at))
     if array:
         command.extend(("-r", "y", "-J", "0-1"))
@@ -223,9 +219,7 @@ def _wait_for_child(
         time.sleep(0.1)
     artifacts = [json.loads(path.read_text(encoding="utf-8")) for path in artifact_paths]
     artifact_terminal_queries = {
-        str(artifact["pbs_job_id"]): _query_job(
-            str(artifact["pbs_job_id"]), historical=True
-        )
+        str(artifact["pbs_job_id"]): _query_job(str(artifact["pbs_job_id"]), historical=True)
         for artifact in artifacts
         if isinstance(artifact, dict) and artifact.get("pbs_job_id")
     }
@@ -255,9 +249,7 @@ def _wait_for_child(
     }
 
 
-def _observe_queued(
-    submission: dict[str, Any], *, timeout_seconds: float
-) -> list[dict[str, Any]]:
+def _observe_queued(submission: dict[str, Any], *, timeout_seconds: float) -> list[dict[str, Any]]:
     observations: list[dict[str, Any]] = []
     job_id = submission.get("job_id_raw")
     if not isinstance(job_id, str):
@@ -340,11 +332,11 @@ def probe(args: argparse.Namespace) -> dict[str, Any]:
         "scheduler_query_supported": bool(
             qstat_path and current_job and current_job["returncode"] == 0
         ),
-        "manual_independent_job_supported": bool(
+        "independent_job_query_supported": bool(
             qstat_path and current_job and current_job["returncode"] == 0
         ),
         "manual_independent_evidence": {
-            "operator_submitted_parent_job": True,
+            "parent_job_is_independent_scheduler_job": bool(args.parent_job_id),
             "parent_job_query_returncode": (
                 current_job["returncode"] if current_job is not None else None
             ),
@@ -373,9 +365,7 @@ def probe(args: argparse.Namespace) -> dict[str, Any]:
         array=False,
         start_delay_seconds=5.0,
     )
-    queued_observations = _observe_queued(
-        scalar, timeout_seconds=min(30.0, args.timeout_seconds)
-    )
+    queued_observations = _observe_queued(scalar, timeout_seconds=min(30.0, args.timeout_seconds))
     scalar["completion"] = _wait_for_child(
         scalar,
         probe_root=args.probe_root,
@@ -449,8 +439,7 @@ def probe(args: argparse.Namespace) -> dict[str, Any]:
                 completion.get("terminal_query"),
             ]
             if isinstance(observation, dict)
-            and observation.get("classification")
-            not in {"query_failed", "no_record"}
+            and observation.get("classification") not in {"query_failed", "no_record"}
         }
     )
     scalar_terminal_supported = (

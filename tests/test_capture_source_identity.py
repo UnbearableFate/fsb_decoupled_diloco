@@ -42,10 +42,12 @@ def test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources(tm
     (repo / "configs").mkdir()
     (repo / "fs_diloco" / "module.py").write_text("VALUE = 1\n", encoding="utf-8")
     (repo / "configs" / "run.yaml").write_text("run: {}\n", encoding="utf-8")
+    (repo / ".gitignore").write_text("uv.lock\n", encoding="utf-8")
+    (repo / "uv.lock").write_text("dependency = 1\n", encoding="utf-8")
     _git(repo, "init", "-q")
     _git(repo, "config", "user.email", "test@example.invalid")
     _git(repo, "config", "user.name", "Test User")
-    _git(repo, "add", "fs_diloco/module.py", "configs/run.yaml")
+    _git(repo, "add", ".gitignore", "fs_diloco/module.py", "configs/run.yaml")
     _git(repo, "commit", "-qm", "baseline")
 
     clean = _capture(repo, "clean")
@@ -54,6 +56,7 @@ def test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources(tm
     assert {entry["path"] for entry in clean["source_files"]} == {
         "configs/run.yaml",
         "fs_diloco/module.py",
+        "uv.lock",
     }
 
     (repo / "fs_diloco" / "module.py").write_text("VALUE = 2\n", encoding="utf-8")
@@ -65,6 +68,9 @@ def test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources(tm
     (repo / "fs_diloco" / "new_module.py").write_text("NEW = 1\n", encoding="utf-8")
     untracked_edit = _capture(repo, "untracked")
     assert untracked_edit["source_fingerprint"] != tracked_edit["source_fingerprint"]
-    assert "fs_diloco/new_module.py" in {
-        entry["path"] for entry in untracked_edit["source_files"]
-    }
+    assert "fs_diloco/new_module.py" in {entry["path"] for entry in untracked_edit["source_files"]}
+
+    (repo / "uv.lock").write_text("dependency = 2\n", encoding="utf-8")
+    ignored_lock_edit = _capture(repo, "ignored-lock")
+    assert ignored_lock_edit["git_dirty"] is True
+    assert ignored_lock_edit["source_fingerprint"] != untracked_edit["source_fingerprint"]
