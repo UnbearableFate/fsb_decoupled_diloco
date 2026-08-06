@@ -70,4 +70,6 @@ Final continuous Codex review `d114b51cf6b44c32bac2e4d4d5e16824676618de..92ccb5e
 
 Concurrency audit correction: sessions `befcf31c-16d5-4cb0-a45a-618d0f0b151f`, `3a8ce2bb-ae81-4fb3-8dc7-6d07804e1787`, and `40ed395f-bb6f-4d61-ac26-3b9a5eec72d2` were overlapping invocations by workspace processes that had not yet observed one another's result. All returned the same zero-usage HTTP 429 session-limit condition, no Claude report was produced, and no further invocation is made. This does not change the `skipped-session-limit` disposition or the final Codex approval.
 
+Final concurrency-audit correction: overlapping session `9ffc2980-403b-4e14-9a4c-aca710843876` reached the same boundary before the preceding results were visible and returned the same zero-usage HTTP 429 condition. The complete set therefore contains four overlapping sessions; no report or approval resulted, no further invocation is made, and the external disposition remains `skipped-session-limit`.
+
 Final append-only correction: the complete overlapping invocation set also includes session `9ffc2980-403b-4e14-9a4c-aca710843876`, for four zero-usage HTTP 429 results in total. No invocation produced a report, none is treated as approval, and no further attempt is made.

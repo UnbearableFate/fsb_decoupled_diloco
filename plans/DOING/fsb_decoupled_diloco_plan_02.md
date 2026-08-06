@@ -2,7 +2,7 @@
 
 计划 ID：`fsb_decoupled_diloco_plan_02`
 
-状态：Phase 0/1及Phase 2技术门禁已完成；Phase 2文档已同步，待双重代码审查与全计划current-state审查收口
+状态：已完成（Phase 0、Phase 1、Phase 2及全计划 current-state 审查/修缮门禁全部收口）
 
 实施报告目录：`reports/DOING/fsb_decoupled_diloco_plan_02/`
 
@@ -1309,3 +1309,5 @@ Phase 0关闭依据：最终边界commit为`1ba9a1a70e4ede6fdd5edf066f11f6921f11
 - [x] 1000 churn逻辑/物理状态有界；
 - [x] static full/fragment兼容回归通过；
 - [x] Phase 2 Checker `PASS`。
+
+Phase 2关闭依据：运行源 commit 为 `61f571bbe4460b257abe8452c2ea63df79515b29`；权威 completed artifact `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260807-014345_phase2-completed_pass.json`（SHA-256 `6dd6752ba0cf8d2ca85ec0d22b7f182b72de74f77bab271ca01e08e17b8a102c`）证明 MEM-01至 MEM-20全部 `PASS`、最终 v120、每周期 51 local steps、1,516,128 seen tokens与最多 9 个并发计算节点。最终 Codex 增量审查目标 `92ccb5e9ddfc73ad6a92676fb472acd3e3544f1d` 返回 `APPROVE`；按 `plans/AGENTS.md`，Claude Opus 5 因可核验的 session limit 记为 `skipped-session-limit`，不构成 Claude 审查通过声明，也不阻断计划关闭。

@@ -903,6 +903,10 @@ Artifacts:
 - Three workspace processes reached the same final external-review boundary before observing one another's session-limit result. Their fresh session IDs were `befcf31c-16d5-4cb0-a45a-618d0f0b151f`, `3a8ce2bb-ae81-4fb3-8dc7-6d07804e1787`, and `40ed395f-bb6f-4d61-ac26-3b9a5eec72d2`; all requested `claude-opus-5` for the exact `d114b51cf6b44c32bac2e4d4d5e16824676618de..92ccb5e9ddfc73ad6a92676fb472acd3e3544f1d` range and independently returned HTTP 429 with zero model usage and the explicit 06:00 Asia/Tokyo reset message.
 - These were overlapping invocations, not successful reviews. No Claude report exists, none is treated as approval, and no further invocation is made. The disposition remains `skipped-session-limit`; the saved Codex `APPROVE` report remains the required review gate.
 
+## 2026-08-07 02:24 JST — External-review concurrency audit final correction
+
+- A fourth overlapping workspace continuation used fresh session `9ffc2980-403b-4e14-9a4c-aca710843876` for the same exact final range and also returned the same zero-usage HTTP 429 session-limit result before the other results became visible. The complete concurrency audit therefore covers sessions `befcf31c-16d5-4cb0-a45a-618d0f0b151f`, `3a8ce2bb-ae81-4fb3-8dc7-6d07804e1787`, `40ed395f-bb6f-4d61-ac26-3b9a5eec72d2`, and `9ffc2980-403b-4e14-9a4c-aca710843876`. No Claude report was produced, none is treated as approval, and no further invocation is made; the policy disposition remains `skipped-session-limit`.
+
 ## 2026-08-07 02:21 JST — Corrected matched-run cleanup complete
 
 - Exact dry-run inventories against the retained matched-performance PASS artifact excluded both update histories. Cleanup then deleted 24 reconstructable files / `6,855,723` bytes from the static branch and 25 files / `4,442,315` bytes from the dynamic branch. These deletions are not recoverable.
