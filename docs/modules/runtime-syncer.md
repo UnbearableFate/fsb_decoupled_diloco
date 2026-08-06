@@ -92,7 +92,7 @@ HA正常收尾在写最终`process_exit`事件之前同步停止`LeaseRenewalThr
 - 每次合并的 applied/`superseded`/`too_stale`/`future_base` 状态都由 `commit_full_merge` 与 global row 同事务提交;
 - 全部 stopped 后先等待一个 grace/reingest 周期并重新判断 closure；重新打开则复位 grace 并回常规 discovery，仍闭合时只有 `closed_empty` 产生 `input_exhausted`；input-closed 分支不再额外执行一遍未使用的常规 discovery;
 - fragment 主循环使用同一 input-closed 判定与 grace/reingest 生命周期；每次 terminal merge 推进 global event 后重新计算目标片，最终 pending/selected fragment proposal 由统一 shutdown 终态化。
-- 每次成功合并后刷新`last_progress_time`；legacy/fragment在quorum等待超过`no_progress_timeout_seconds`时按既有语义停机，dynamic则以该原因在current version启动持久drain，controller/input closure前不发布普通terminal；
+- 每次成功合并后刷新`last_progress_time`；legacy/fragment在quorum等待超过`no_progress_timeout_seconds`时按既有语义停机，dynamic则以该原因启动持久drain，最多允许`max_terminal_merges`次额外merge且受global outer target约束，controller/input closure前不发布普通terminal；
 - 每次成功提交后执行 archive/GC,因此 active DB/checkpoint/proposal 面有界;
 - 一旦成功进入主循环，finally 序列为：HA先提交并发布 early stop generation（legacy直接 publish stop）→ 非 error 时等待 learner/末次摄取 → 只有全 stopped 才终态化未消费 proposal → summary → 非 error 的 archive/GC → HA以更高 generation成对发布最终 stop/summary；随后 W&B finish/关库。early generation、summary 或 maintenance 窗口崩溃都保持 terminal不完整，使 successor可执行幂等 repair。
 

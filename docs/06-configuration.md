@@ -166,7 +166,7 @@ HA 默认关闭，只允许 `fragments.enabled=false`；成员可为static或dyn
 | `drain_ack_timeout_seconds` | 300 | drain发布后健康instance ack等待预算；超时后以membership fence revoke |
 | `registration_visibility_grace_seconds` | 10 | input-closed前最后registration摄取/判定的可见性grace |
 | `proposal_visibility_grace_seconds` | 20 | final pointer进入frontier后的可见性grace |
-| `max_terminal_merges` | 1 | manual/budget/deadline close从current version起允许的最多额外merge；close transaction冻结最终上限 |
+| `max_terminal_merges` | 1 | manual/budget/deadline/no-progress close从current version起允许的最多额外merge；仍受global outer target约束，close transaction冻结最终上限；token close不使用该余量 |
 | `allow_preclose_admission_during_drain` | `false` | 是否允许close前已授权但尚未admit的process在drain中进入；正式路径保持false |
 
 ## liveness
@@ -176,7 +176,7 @@ HA 默认关闭，只允许 `fragments.enabled=false`；成员可为static或dyn
 | `heartbeat_interval_seconds` | 30.0 | learner 写心跳间隔 |
 | `stale_after_seconds` | 120.0 | 心跳超龄 → stale |
 | `dead_after_seconds` | 300.0 | 心跳超龄 → dead |
-| `no_progress_timeout_seconds` | 600.0 | syncer无合并进展的超时；legacy/fragment按既有停机语义处理，dynamic以`no_progress_timeout`原因在current version进入持久close/drain，并在controller closed且`dynamic_input_closed`前拒绝普通terminal。fragment learner在有全局外层目标时的final-progress wait也用它；full learner没有同类final wait，syncer等learner则使用下面的shutdown timeout |
+| `no_progress_timeout_seconds` | 600.0 | syncer无合并进展的超时；legacy/fragment按既有停机语义处理，dynamic以`no_progress_timeout`原因进入持久close/drain，冻结的上限至多允许`max_terminal_merges`次额外merge（仍受global outer target约束），并在controller closed且`dynamic_input_closed`前拒绝普通terminal。fragment learner在有全局外层目标时的final-progress wait也用它；full learner没有同类final wait，syncer等learner则使用下面的shutdown timeout |
 | `syncer_unresponsive_timeout_seconds` | `null` | learner 观察不到新版 latest 时的自保超时；`null` 沿用 `no_progress_timeout_seconds`，显式值必须 > 0 |
 | `learner_shutdown_timeout_seconds` | `null` | syncer 发布 stop 后等待 stopped 心跳的上限；`null` 为 `max(120, 2 × heartbeat_interval_seconds)`，大模型收尾更慢时可显式调大 |
 

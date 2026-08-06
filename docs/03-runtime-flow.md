@@ -193,7 +193,7 @@ tN++ syncer:末次摄取；若全部 stopped 则终态化未消费 proposal，�
 
 HA full 的差异是 `t0` 之前由独立 initializer完成 schema/descriptor；syncer/learner分别由不同 PBS job启动。任一时刻只有持 current token的 leader可提交。如果 leader在 vN DB commit后崩溃，successor先取得 epoch `e+1`，从 vN恢复并重发 current canonical head，再把下一次训练提交写成 vN+1，而不是从 fixed latest猜版本。
 
-dynamic HA在此基础上把`t0+`改为bootstrap registration/admission，并在运行中允许outbox补充replacement。global、token、manual、deadline、budget或no-progress条件进入close transaction后，admission关闭且`max_terminal_version`冻结；token在current version冻结上限，no-progress从current version启动持久drain并仍受`max_terminal_merges`约束，二者都不直接发布普通terminal。leader发布drain generation；健康learner在cycle边界写final pointer和ack，超时实例被revoke。所有request/registration可见性条件和ack/revoke条件都成立、`dynamic_input_closed`为真后才执行最后的有界merge并发布terminal control；successor恢复冻结reason和上限。
+dynamic HA在此基础上把`t0+`改为bootstrap registration/admission，并在运行中允许outbox补充replacement。global、token、manual、deadline、budget或no-progress条件进入close transaction后，admission关闭且`max_terminal_version`冻结；token在current version冻结上限，no-progress从current version启动持久drain，并与manual/budget/deadline一样至多允许`max_terminal_merges`次额外merge（仍受global outer target约束），二者都不直接发布普通terminal。leader发布drain generation；健康learner在cycle边界写final pointer和ack，超时实例被revoke。所有request/registration可见性条件和ack/revoke条件都成立、`dynamic_input_closed`为真后才执行最后的有界merge并发布terminal control；successor恢复冻结reason和上限。
 
 ## 7. 运行期观测点
 
