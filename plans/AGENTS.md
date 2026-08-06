@@ -85,7 +85,7 @@ reports/DOING/01/
 
 1. 每个新 plan 必须在独立 Git branch 上执行。
 2. 实现和初始关联测试组通过后，创建 review-target commit。审查覆盖的源代码和测试树必须与该 commit 一致；记录并排除审查范围外的既有改动。
-3. 每份审查报告必须记录完整的`base commit ID`和`target commit ID`。同一phase或plan-completion审查流的首次审查，base使用上一phase-final commit；第一phase使用plan branch point，plan-completion使用plan branch point。后续新审查必须以上一次审查的target作为本次base，以当前最新冻结commit作为target，只审查这段连续增量；同一target的重试仍使用原base/target。
+3. 每份审查报告必须记录完整的`base commit ID`和`target commit ID`。同一phase审查流的首次审查，base使用上一phase-final commit；第一phase使用plan branch point。后续新审查必须以上一次审查的target作为本次base，以当前最新冻结commit作为target，只审查这段连续增量；同一target的重试仍使用原base/target。plan-completion使用下文单独规定的全量current-state审查。
 4. 启动审查前确认base是target的ancestor；除同一target的显式重试外，禁止跳过、重叠或倒退审查范围。工作树中的未提交修改不属于target。
 5. `<plan-id>` 使用不含 `.md` 的计划文件名；`<phase_id>` 使用计划中稳定的 phase 标识；整个 plan 的审查使用 `plan-complete`。
 
@@ -104,6 +104,18 @@ claude -p \
 ```
 
 Codex同时独立审查同一`<base-commit>..<target-commit>`，并在读取Claude报告前保存自己的报告到同一目录。完成报告不可覆盖；重跑使用`-retryN`新文件。核验JSON中的实际模型和session ID；明确的Claude会话额度耗尽记为`skipped-session-limit`，不重试、不伪造报告且不阻断后续任务，Codex审查仍为必做门禁。其他模型/session/fallback/认证/权限错误均为`blocked`。
+
+### 完整 plan 结束后的全量代码审查
+
+一个plan的全部phase、Checker和文档同步完成后仍只是完成候选；进入下一个plan前，必须对最新冻结target执行一次多模型全量审查。报告仍记录base和target：base取上一次已完成审查的target（没有则取plan branch point），target取当前最新冻结commit；这里base只用于记录审查连续性，审查范围不是diff，而是target中`fs_diloco/`全部tracked代码的当前状态。
+
+Claude沿用上面的`claude -p`参数，`<phase-id>`使用`plan-complete`，prompt替换为：
+
+```text
+对commit <target-commit>中的fs_diloco/全部tracked代码做current-state完整审查。报告中记录base commit <base-commit>和target commit <target-commit>，但不要把审查限制在两者的diff；逐模块检查target当前实现，并列出覆盖的文件/模块清单。除了逻辑错误和回归风险，还要审查整体架构、分层与依赖方向、抽象和API边界、重复实现、可维护性、错误处理、并发与持久化不变量、恢复与兼容性、性能、可测试性、死代码以及文档漂移。按Critical/High/Medium/Low列出问题、证据、文件行号、影响、修改建议和缺失测试，最后给出APPROVE或CHANGES_REQUIRED。将报告写入<absolute-repo>/reports/DOING/code_review/<plan-id>/plan-complete/claude-opus-5_<target-commit>.md。你是只读reviewer，除该报告外不得修改文件或Git状态，不得qsub/qdel、删除run数据、commit、push或创建PR，也不得写入secret、token、凭据或完整环境变量。
+```
+
+Codex必须在读取Claude报告前，对同一target和同一全量范围完成独立审查。之后由Codex汇总所有可用报告，去重并处理冲突，在`reports/DOING/<plan-id>/plan-complete-remediation.md`形成按优先级和依赖排序的修改计划；每条finding必须标记为`fixed`、`rejected-with-evidence`或`deferred-with-justification`，并给出修改范围、RED测试和验证方法。Codex随后按计划修缮代码、补充测试、运行受影响的完整验证并同步文档；若产生代码修改，再以全量审查target为base、修缮后的最新冻结commit为target执行一次增量多模型审查。全量审查、意见汇总、必要修复、增量复审和验证完成前，不得把plan标为完成或开始下一个plan。
 
 ### 处置问题并验证
 
