@@ -639,3 +639,16 @@ Artifacts:
 
 - 该9节点workload每个learner约执行200以上local steps并完成10个global merge，超过50-local-step × 10-global-step文档同步基线；`docs/07-operations.md`已同步最终验证结果。这是HA恢复、协议和控制面性能证据，不产生训练质量结论。
 - runtime、matched性能和completed Checker现均绑定同一clean source/descriptor并通过，修复了本轮Codex High/Medium/Low accepted findings以及matched采样失败。Phase 1仍保持completion candidate，直到对Phase 0 base `1ba9a1a70e4ede6fdd5edf066f11f6921f111da5`至最终evidence target的累计diff完成最后一次必做Codex审查；Claude reviewer已在本轮按可核验会话限额记为`skipped-session-limit`且不重试、不阻断。
+
+## 2026-08-06 16:30 JST — Phase 1 completion gate APPROVE
+
+### Facts
+
+- 最终review target为`fefef86b68aa346afee93680ad9c494657412074`，comparison base为Phase 0 final `1ba9a1a70e4ede6fdd5edf066f11f6921f111da5`。target相对正式run使用的clean executable commit `36762854bfcbbc23b71ab838913023d64cf37b5e`只新增不可变evidence和同步文档，`fs_diloco`、configs、PBS scripts及tests树无差异。
+- 必做Codex不可变报告为`reports/DOING/code_review/fsb_decoupled_diloco_plan_02/phase-1/gpt-5.6-sol_fefef86b68aa346afee93680ad9c494657412074.md`。审查覆盖Phase 1累计diff、全部前序finding remediation、错误处理、并发/持久化不变量、测试覆盖、最终1+8、matched性能、Checker及文档；`Critical`、`High`、`Medium`和Phase 1范围内`Low` findings均为0，最终决定`APPROVE`。
+- Claude Opus 5在本轮较早的fresh `claude -p` session `4b13f9d7-973d-4298-9752-e756f6cd8cc8`已返回可核验session limit并按规则记为`skipped-session-limit`。没有Claude报告被创建或伪造；该skip不是approval，但不阻断Phase 1或后续任务，且不重试。
+- 正式completed Checker artifact `20260806-1624_phase1-completed-checker_pass.json`仍为`PASS`且SHA-256为`590129ac221c51679aafca517b92b86a92727e0d70908769021336609c58f74e`。requirement matrix的HA-01至HA-20已全部更新为`complete`并绑定最终/替换证据；Phase 1发布前自检项全部勾选。
+
+### Conclusion
+
+- Phase 1完成门禁关闭。Phase 2现在可以开始，但本轮没有启动Phase 2；dynamic instance递归发现的明确follow-up仍由Phase 2 MEM-02/MEM-20负责。

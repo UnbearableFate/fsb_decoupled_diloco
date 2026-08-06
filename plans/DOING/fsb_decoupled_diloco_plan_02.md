@@ -1276,21 +1276,21 @@ BLOCKED
 
 ### Phase 1
 
-- [ ] init/open-existing/open-readonly三条路径无隐式DDL，schema双版本一致；
-- [ ] 31个current mutator均映射到Legacy/Fenced store、transaction和RED test；
-- [ ] 所有HA业务 mutator transaction内 fence，fragment不用optional/no-op token；
-- [ ] raw writable escape hatch已移除或封闭；
-- [ ] learner只创建自己的instance目录；
-- [ ] old epoch不能改 current epoch checkpoint/control；
-- [ ] RunPaths递归扫描在maintenance/Checker/probe/liveness/analysis/metrics中非空且一致；
-- [ ] old epoch在GC循环中恢复不能删除current checkpoint，且测试确实删除预期orphan；
-- [ ] fixed cache污染不影响 learner/Checker；
-- [ ] learner watchdog按epoch heartbeat/claim/recovery判断，lower-epoch stop和长PBS排队不误杀；
-- [ ] candidate/epoch log单 writer；
-- [ ] claim reconciliation/backoff/budget完整且默认关闭；
-- [ ] transaction外 SIGSTOP takeover和 transaction内 availability boundary均通过；
-- [ ] active epoch/claim状态有界；
-- [ ] Phase 1 completed Checker `PASS`。
+- [x] init/open-existing/open-readonly三条路径无隐式DDL，schema双版本一致；
+- [x] 31个current mutator均映射到Legacy/Fenced store、transaction和RED test；
+- [x] 所有HA业务 mutator transaction内 fence，fragment不用optional/no-op token；
+- [x] raw writable escape hatch已移除或封闭；
+- [x] learner只创建自己的instance目录；
+- [x] old epoch不能改 current epoch checkpoint/control；
+- [x] RunPaths递归扫描在maintenance/Checker/probe/liveness/analysis/metrics中非空且一致；
+- [x] old epoch在GC循环中恢复不能删除current checkpoint，且测试确实删除预期orphan；
+- [x] fixed cache污染不影响 learner/Checker；
+- [x] learner watchdog按epoch heartbeat/claim/recovery判断，lower-epoch stop和长PBS排队不误杀；
+- [x] candidate/epoch log单 writer；
+- [x] claim reconciliation/backoff/budget完整且默认关闭；
+- [x] transaction外 SIGSTOP takeover和 transaction内 availability boundary均通过；
+- [x] active epoch/claim状态有界；
+- [x] Phase 1 completed Checker `PASS`。
 
 ### Phase 2
 
