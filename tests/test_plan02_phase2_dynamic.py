@@ -44,6 +44,7 @@ from fs_diloco.storage.paths import RunPaths, prepare_authority_dirs
 from fs_diloco.storage.schema_bootstrap import BootstrapIdentity, initialize_new_run
 from fs_diloco.storage.sqlite_store import DynamicMembershipFenceError
 from fs_diloco.tools.launch_phase2_matched import submit_jobs as submit_matched_jobs
+from fs_diloco.tools.wait_for_dynamic_admission import find_admitted_instance
 
 
 def dynamic_identity() -> BootstrapIdentity:
@@ -586,6 +587,44 @@ def test_bootstrap_scheduler_manifest_reconciles_external_jobs(
     finally:
         fenced.close()
         lease.close()
+
+
+def test_fault_injection_waits_for_the_physical_jobs_admission(tmp_path: Path) -> None:
+    shared_root = tmp_path / "run"
+    requests = shared_root / "control" / "registration_requests"
+    admissions = (
+        shared_root
+        / "control"
+        / "syncer_epochs"
+        / "e000002_owner"
+        / "membership"
+        / "admissions"
+    )
+    requests.mkdir(parents=True)
+    admissions.mkdir(parents=True)
+    instance_id = new_learner_instance_id()
+    (requests / f"{instance_id}.json").write_text(
+        json.dumps(
+            {
+                "instance_id": instance_id,
+                "pbs_job_id": "123.opbs",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert find_admitted_instance(shared_root, pbs_job_id="123") is None
+    (admissions / f"{instance_id}.json").write_text(
+        json.dumps(
+            {
+                "instance_id": instance_id,
+                "state": "admitted",
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert find_admitted_instance(shared_root, pbs_job_id="123") == instance_id
+    assert find_admitted_instance(shared_root, pbs_job_id="999.opbs") is None
 
 
 def test_logical_launch_request_admits_at_most_one_instance(tmp_path: Path) -> None:

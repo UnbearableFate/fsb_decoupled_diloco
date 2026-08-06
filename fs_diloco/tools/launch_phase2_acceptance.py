@@ -126,7 +126,7 @@ def submit_jobs(
         variables = f"{base_variables},BOOTSTRAP_SLOT={slot}"
         role = f"bootstrap_{slot}"
         if slot == 0:
-            variables += ",FS_DILOCO_TEST_TERMINATE_AFTER_SECONDS=8"
+            variables += ",FS_DILOCO_TEST_TERMINATE_AFTER_ADMISSION_SECONDS=8"
             role = "victim_bootstrap_0"
         elif kind == "g9" and slot == 1:
             variables += (
