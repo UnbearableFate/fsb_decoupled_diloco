@@ -890,10 +890,20 @@ Artifacts:
 ## 2026-08-07 02:20 JST — Plan-complete final incremental review APPROVE
 
 - Independent Codex report `plan-complete/gpt-5.6-sol_92ccb5e9ddfc73ad6a92676fb472acd3e3544f1d.md` reviewed continuous range `d114b51cf6b44c32bac2e4d4d5e16824676618de..92ccb5e9ddfc73ad6a92676fb472acd3e3544f1d` and returned `APPROVE` with no Critical/High/Medium/Low findings. It verifies that the three static regressions are removed and that final full-suite PBS `2502021.opbs` passed all 495 tests.
-- The required external invocation requested/canonical model `claude-opus-5`, fresh session `3a8ce2bb-ae81-4fb3-8dc7-6d07804e1787`, exact base/target, JSON output and the read-only permission constraints. It returned HTTP 429 with zero input/output/model usage and the explicit `You've hit your session limit · resets 6am (Asia/Tokyo)` result. Per `plans/AGENTS.md`, disposition is `skipped-session-limit`: no Claude report was written or fabricated, no retry is made, and the skip is not an approval but does not block closure.
+- The required external invocation requested `claude-opus-5`, exact base/target, JSON output and the read-only permission constraints. Fresh session `3a8ce2bb-ae81-4fb3-8dc7-6d07804e1787` and a concurrently launched continuation session `9ffc2980-403b-4e14-9a4c-aca710843876` both returned HTTP 429 with zero input/output/model usage and the explicit `You've hit your session limit · resets 6am (Asia/Tokyo)` result before either result was visible to the other continuation. Per `plans/AGENTS.md`, the external reviewer disposition is `skipped-session-limit`: no Claude report was written or fabricated, no further retry is made, and the skip is not an approval but does not block closure.
 - All Phase 2 and plan-complete findings are now `fixed` and validated; the phase-level continuous review and plan-complete current-state plus remediation reviews are closed.
 
 ## 2026-08-07 02:20 JST — Corrected G8 cleanup complete
 
 - After the PASS evidence, exact dry-run inventory, and final review evidence were persisted, the corrected cleaner deleted exactly five reconstructable files totaling `30,539` bytes from terminal run `plan02_phase2_g8_2501754`: one heartbeat, one repeated learner log, learner metrics, update manifest, and one terminal latest pointer. This deletion is not recoverable.
 - Authority SQLite, current checkpoints, control/configuration, representative learner/syncer logs, and every fsync-before-prune history remain. In particular, the 26,811-byte `metrics/update_history.jsonl` remains present. Audit manifest: `artifacts/20260807-0220_phase2-g8-cleanup.json` (`status=complete`).
+
+## 2026-08-07 02:23 JST — External-review concurrency audit correction
+
+- Three workspace processes reached the same final external-review boundary before observing one another's session-limit result. Their fresh session IDs were `befcf31c-16d5-4cb0-a45a-618d0f0b151f`, `3a8ce2bb-ae81-4fb3-8dc7-6d07804e1787`, and `40ed395f-bb6f-4d61-ac26-3b9a5eec72d2`; all requested `claude-opus-5` for the exact `d114b51cf6b44c32bac2e4d4d5e16824676618de..92ccb5e9ddfc73ad6a92676fb472acd3e3544f1d` range and independently returned HTTP 429 with zero model usage and the explicit 06:00 Asia/Tokyo reset message.
+- These were overlapping invocations, not successful reviews. No Claude report exists, none is treated as approval, and no further invocation is made. The disposition remains `skipped-session-limit`; the saved Codex `APPROVE` report remains the required review gate.
+
+## 2026-08-07 02:21 JST — Corrected matched-run cleanup complete
+
+- Exact dry-run inventories against the retained matched-performance PASS artifact excluded both update histories. Cleanup then deleted 24 reconstructable files / `6,855,723` bytes from the static branch and 25 files / `4,442,315` bytes from the dynamic branch. These deletions are not recoverable.
+- Both runs retain authority SQLite, current checkpoints, control/configuration, representative logs, and fsync-before-prune histories. Audit manifests: `artifacts/20260807-0221_phase2-matched-static-cleanup.json` and `artifacts/20260807-0221_phase2-matched-dynamic-cleanup.json`, each `status=complete`.

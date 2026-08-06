@@ -1,0 +1,166 @@
+{
+  "candidate_bytes": 4442315,
+  "candidate_count": 25,
+  "candidates": [
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "terminal heartbeat cache",
+      "relative_path": "heartbeats/learner_li_306bb22b-39ae-4a66-930c-a2886f379267.json",
+      "size_bytes": 1306
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "terminal heartbeat cache",
+      "relative_path": "heartbeats/learner_li_3d474425-3562-4604-95b3-6235e32946e0.json",
+      "size_bytes": 1305
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "terminal heartbeat cache",
+      "relative_path": "heartbeats/learner_li_656f5a43-3fea-4560-95e7-18ced68a9c78.json",
+      "size_bytes": 1306
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "terminal heartbeat cache",
+      "relative_path": "heartbeats/learner_li_9b5c5a88-0aec-40eb-b8ec-a6615ec3dd4d.json",
+      "size_bytes": 1307
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "terminal heartbeat cache",
+      "relative_path": "heartbeats/learner_li_a7340ca7-571e-47bf-bd99-ec1059ac6da4.json",
+      "size_bytes": 1293
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "terminal heartbeat cache",
+      "relative_path": "heartbeats/learner_li_a7e239db-e232-44ae-b594-f627098dd44c.json",
+      "size_bytes": 1307
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "terminal heartbeat cache",
+      "relative_path": "heartbeats/learner_li_adb4c973-e2aa-4549-b6a6-015a7fa7abe0.json",
+      "size_bytes": 1305
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "terminal heartbeat cache",
+      "relative_path": "heartbeats/learner_li_cbe7c4c9-8258-41f8-8408-f4b83cca207e.json",
+      "size_bytes": 1307
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "repeated successful learner log",
+      "relative_path": "logs/learner_li_3d474425-3562-4604-95b3-6235e32946e0.jsonl",
+      "size_bytes": 432274
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "repeated successful learner log",
+      "relative_path": "logs/learner_li_656f5a43-3fea-4560-95e7-18ced68a9c78.jsonl",
+      "size_bytes": 448698
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "repeated successful learner log",
+      "relative_path": "logs/learner_li_9b5c5a88-0aec-40eb-b8ec-a6615ec3dd4d.jsonl",
+      "size_bytes": 436295
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "repeated successful learner log",
+      "relative_path": "logs/learner_li_a7340ca7-571e-47bf-bd99-ec1059ac6da4.jsonl",
+      "size_bytes": 441313
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "repeated successful learner log",
+      "relative_path": "logs/learner_li_a7e239db-e232-44ae-b594-f627098dd44c.jsonl",
+      "size_bytes": 432756
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "repeated successful learner log",
+      "relative_path": "logs/learner_li_adb4c973-e2aa-4549-b6a6-015a7fa7abe0.jsonl",
+      "size_bytes": 447001
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "repeated successful learner log",
+      "relative_path": "logs/learner_li_cbe7c4c9-8258-41f8-8408-f4b83cca207e.jsonl",
+      "size_bytes": 456609
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "superseded raw telemetry",
+      "relative_path": "metrics/learner_metrics.csv",
+      "size_bytes": 462035
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "superseded raw telemetry",
+      "relative_path": "metrics/update_manifest.csv",
+      "size_bytes": 859929
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_li_306bb22b-39ae-4a66-930c-a2886f379267.json",
+      "size_bytes": 1867
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_li_3d474425-3562-4604-95b3-6235e32946e0.json",
+      "size_bytes": 1877
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_li_656f5a43-3fea-4560-95e7-18ced68a9c78.json",
+      "size_bytes": 1865
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_li_9b5c5a88-0aec-40eb-b8ec-a6615ec3dd4d.json",
+      "size_bytes": 1880
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_li_a7340ca7-571e-47bf-bd99-ec1059ac6da4.json",
+      "size_bytes": 1868
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_li_a7e239db-e232-44ae-b594-f627098dd44c.json",
+      "size_bytes": 1867
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_li_adb4c973-e2aa-4549-b6a6-015a7fa7abe0.json",
+      "size_bytes": 1862
+    },
+    {
+      "mtime_ns": 1786034587000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_li_cbe7c4c9-8258-41f8-8408-f4b83cca207e.json",
+      "size_bytes": 1883
+    }
+  ],
+  "completion_evidence": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260807-014003_phase2-matched-performance_pass.json",
+  "completion_evidence_sha256": "3f76774df42c8e303af1e2d0224597f22f7fdd3afb21adf60d3ee7f1cc87e7d0",
+  "deleted_bytes": 4442315,
+  "deleted_count": 25,
+  "format_version": 1,
+  "retained_representative_learner_log": "logs/learner_li_306bb22b-39ae-4a66-930c-a2886f379267.jsonl",
+  "run_id": "plan02_phase2_matched_61f571b_20260807014003_dynamic",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase2_matched_61f571b_20260807014003_dynamic",
+  "status": "complete",
+  "tool": "fs_diloco.tools.clean_run"
+}
