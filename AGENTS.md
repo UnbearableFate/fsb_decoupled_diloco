@@ -14,7 +14,8 @@ Before submitting any PBS script:
 
 1. Run `bash -n scripts/miyabi/*.pbs` in a safe static-validation environment.
 2. Replace every `#PBS -W group_list=<group_id>` placeholder with a valid, literal group ID.
-3. Do not submit the script until both checks are complete.
+3. Estimate the actual runtime from the workload and prior evidence, then request the shortest practical `walltime` with only a small safety margin. When a script's default is materially longer, override it explicitly in `qsub -l walltime=...`.
+4. Do not submit the script until these checks are complete.
 
 ## Documentation Synchronization
 

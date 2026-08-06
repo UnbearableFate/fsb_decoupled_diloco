@@ -268,6 +268,39 @@ Claude report:
 - `L12 — manifest fallback evidence link`: **fixed**. FEAS-04 now references both the authoritative array-capability artifact and the earlier real scheduler-rejection artifact that selected `independent_manifest`.
 - `L13 — writable cross-node verifier`: **fixed**. Cross-node visibility uses a SQLite URI `mode=ro` path that performs no DDL or writes; a regression verifies that readonly open cannot create a missing DB.
 
+## 2026-08-06T11:50:00+09:00 — Phase 1 Syncer HA completion candidate PASS
+
+### Facts
+
+- Phase 1 implements full/static HA behind `coordination.syncer_ha.enabled=false` by default. A one-time `init-run` is the only schema/authority creator; schema v2 freezes run/source/config identity. `open_existing` and `open_readonly` have no implicit DDL, and fragment + HA fails closed.
+- `LeaderLeaseStore` issues monotonic epochs. `FencedSQLiteStore` and its leader-bound adapter require an exact `LeaderToken` for all HA business mutation, revalidate it inside `BEGIN IMMEDIATE`, preserve named parameters and reject raw transaction/DDL escape. The frozen inventory contains all 31 legacy mutators; fragment mutators remain legacy-only.
+- Checkpoints and canonical latest/stop/summary are epoch-scoped. DB version/control manifests carry writer, publication ID, relative path, size and configured digest. The fixed control files are convenience caches; `EpochControlReader` trusts only the current DB epoch and matching manifest SHA. DB-first successor recovery is idempotent across all publication windows.
+- HA maintenance uses recursive `RunPaths` discovery, a fenced register/recheck/delete ledger, old-epoch orphan cleanup and bounded epoch history/control compaction. Candidate/epoch logs are owner-scoped. Optional learner-assisted recovery submission is disabled by default and, when enabled, reconciles qstat fingerprints with atomic claims, backoff, uncertainty and attempt/outstanding budgets before qsub; it never grants leadership.
+- PBS role scripts validate descriptor/source identity before runtime import. The learner array is rerunable; the syncer candidate and learners are independent jobs sharing only the run filesystem/SQLite. All newly submitted acceptance jobs used minute-scale walltime overrides derived from observed workload.
+
+### Associated tests and fault evidence
+
+- PBS `2497905.opbs` on compute host `mg0012` ran the focused Phase 1 suite and full repository suite: `20 passed`, then `397 passed`, exit 0. Artifact: `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-115000_phase1-test-suite_pass.json`.
+- PBS `2497906.opbs` completed the six publication failpoints (`weight_temp`, `after_weight`, `after_outer`, `sqlite_transaction`, `after_db_commit`, `after_latest`) for 10 repetitions each. All 60 child processes died by injected `SIGKILL`, successor recovery reached v2/epoch 3, and every stale write was rejected. Artifact: `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-113506_phase1-fault-matrix_pass.json`.
+- Two-node PBS `2497922.opbs` on `mg0019/mg0023` proved both lock boundaries. Transaction-outside takeover acquired epoch 2; transaction-inside acquire observed `database is locked` and no tentative value until the old writer was killed, then acquired epoch 2 with integrity preserved. Artifact: `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-113934_phase1-lock-boundary_pass.json`.
+
+### Independent 9-node acceptance and completed Checker
+
+- Launcher `2497948.opbs` initialized run `plan02_phase1_acceptance_2497948` and submitted crash candidate `2497950.opbs` (1-minute request), successor `2497951.opbs` (2 minutes) and rerunable 8-member learner array `2497952[].opbs` (2 minutes). The first leader was killed at `after_db_commit`; the successor acquired epoch 2 from a different PBS job and completed at v10.
+- All eight learners stopped cleanly after contributing. Their final local steps were 160–184, so the verified workload exceeds the repository's 50-local-step × 10-global-step baseline on the local-step axis. Complete training time was 15.135 seconds, terminal total was 5,120 tokens, and the run is recovery/coordination evidence rather than a quality result.
+- Read-only completed Checker `2497957.opbs` returned `PASS`: schema/protocol `2/3`, integrity `ok`, DELETE/FULL/query-only PRAGMAs, contiguous epochs 1–2, contiguous versions 0–10, terminal finalized by epoch 2, 11 weight/11 outer discoveries, 8 proposal pointers, one current syncer heartbeat, zero failure events across 2,712 log events, and bounded 47-page SQLite state.
+- Artifacts: `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-114613_phase1-independent-launch_pass.json` and `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-114700_phase1-completed-checker_pass.json`.
+
+### Documentation and remaining gate
+
+README, architecture, runtime/data flow, configuration, operations and module references now describe the verified HA authority chain, independent jobs, manual takeover, digest policy and 9-node result. PBS guidance requires a workload-based shortest practical walltime and explicit qsub override of materially longer defaults.
+
+Phase 1 remains a completion candidate until the frozen review-target commit, mandatory Codex review, optional Claude Opus 5 review or `skipped-session-limit` record, finding disposition and phase-final commit are complete. Phase 2 has not started.
+
+## 2026-08-06T12:00:10+09:00 — Phase 1 final associated tests PASS
+
+After documentation synchronization and the new PBS walltime rule, login-node static validation passed (`bash -n`, literal group IDs, Ruff, `py_compile`, `git diff --check`). PBS `2498031.opbs` requested the estimated minimum practical walltime of 1 minute, started immediately on `mg0007`, and used 27 seconds. Focused Phase 1 result was `20 passed in 1.60s`; the full repository result was `399 passed in 22.93s`; exit status was 0. This supersedes the earlier 397-test count only as the latest full-tree enumeration and does not alter that earlier run's immutable evidence. Artifact: `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-120100_phase1-final-test-suite_pass.json`.
+
 ### Inferences
 
 - The original High and all Medium review findings are remediated with executable regression coverage and new two-node evidence. Remaining deferrals are Low-severity historical-record or Phase 1 hardening items and do not weaken the Phase 0 feasibility conclusions.
@@ -401,3 +434,36 @@ Artifacts:
 ### Follow-up
 
 - Create the Phase 0 final commit, then begin Phase 1 work units in strict requirement order without rerunning the skipped external review.
+## 2026-08-06 12:28 JST — Phase 1 self-review regression group
+
+- 目标：验证 learner 纯文件系统 epoch reader、本地 monotonic lease safety、跨 observation recovery outstanding 预算、历史 qstat suspended reconciliation、当前 observation attempt 预算持久性、显式 PBS walltime 和 completed Checker canonical control gate的组合修改。
+- 修改：HA learner把 `error` terminal generation视为可恢复诊断而非最终 stop；recovery claim归档保留当前 stale observation并在归档 receipt-missing claim前执行 reconciliation；独立 launcher在创建 run root前校验提交 walltime；completed Checker要求一个 active version及与 DB terminal/current row一致的 canonical latest/stop/summary。
+- 静态验证：`.venv/bin/ruff check fs_diloco tests scripts/miyabi --output-format concise`、`git diff --check`、`bash -n scripts/miyabi/*.pbs scripts/miyabi/*.sh`和 PBS group placeholder扫描均通过。
+- 运行环境与命令：Miyabi `debug-g` compute node `mg0012`，PBS `2498172.opbs`；提交前按此前 27 秒证据估算并显式使用 `qsub -l walltime=00:01:00 scripts/miyabi/run_plan02_phase1_tests.pbs`。
+- 结果：focused `27 passed in 5.46s`；全量 `406 passed in 21.82s`；job `Exit_status=0`，实际 walltime `00:00:30`。结构化摘要：`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-122800_phase1-test-suite_pass.json`。
+- 边界：该轮在 dirty review candidate上运行，只证明关联回归；冻结 review-target commit后仍需重跑 fault/lock/1+8 acceptance与 completed Checker，才可进入 Phase 1完成门禁。
+
+## 2026-08-06 12:34 JST — Phase 1 claim/GC/digest adversarial regression PASS
+
+- 目标：补足 HA-04、HA-12、HA-14和 HA-15 的直接反例，验证 8 个并发 claimant不会利用 mkdir→claim.json窗口创建相邻 attempt，scheduler命令异常不会使 learner控制流异常退出，takeover发生在 GC claim与unlink之间时旧 token只能删除已冻结 orphan，以及 `off/checker/always` 三种 checkpoint digest发布语义。
+- 修改：missing claim.json使用 attempt目录mtime作为有界不确定起点；当前 observation直到看到更新 observation前不归档；PBS query/submit/fingerprint lookup把命令缺失和 timeout转为可审计失败结果；新增并发 claim、scheduler timeout、stale-GC takeover和三 digest模式测试。
+- 静态验证：Ruff、`git diff --check`、全部 PBS/shell `bash -n`和 literal group扫描通过。
+- 运行环境与命令：Miyabi `debug-g` node `mg0012`，PBS `2498225.opbs`；依据上一轮实际 30 秒继续使用最短可行 `qsub -l walltime=00:01:00 scripts/miyabi/run_plan02_phase1_tests.pbs`。
+- 结果：focused `33 passed in 5.15s`；全量 `412 passed in 21.23s`；job `Exit_status=0`，实际 walltime `00:00:28`。结构化摘要：`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-123410_phase1-test-suite_pass.json`。
+- 边界：仍是 dirty completion candidate证据；冻结 commit后的 final ladder尚未执行。
+
+## 2026-08-06 12:45 JST — Phase 1 completed-terminal repair regression PASS
+
+- 目标：验证正常 HA 终态在 early stop、summary 或 maintenance窗口中断后仍可由 successor取得新 epoch完成修复，并且只有 post-maintenance generation的 canonical stop/summary路径、owner、epoch与 SHA 全部匹配时，后续 candidate才拒绝取得运行权。
+- 修改：正常收尾先发布 early stop generation，maintenance成功后再提交并成对发布更高 terminal generation；candidate对 completed DB terminal验证两条 control publication及文件 SHA，不完整时允许 takeover；repair路径重建 latest/heartbeat/summary、重跑幂等 maintenance并发布更高 generation；新增端到端协议回归。
+- 静态验证：修改范围 Ruff、`git diff --check`、全部 PBS/shell `bash -n`和 literal group扫描通过。
+- 运行环境与命令：Miyabi `debug-g` node `mg0004`，PBS `2498346.opbs`；依据此前 28秒证据估算并显式使用最短可行 `qsub -l walltime=00:01:00 scripts/miyabi/run_plan02_phase1_tests.pbs`。
+- 结果：focused `34 passed in 5.56s`；全量 `413 passed in 22.70s`；job `Exit_status=0`，实际 walltime `00:00:31`。结构化摘要：`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-124537_phase1-test-suite_pass.json`。
+- 边界：这是 dirty completion candidate上的关联回归；冻结 review-target commit后仍需执行最终 fault/lock/1+8 acceptance与 completed Checker。
+
+## 2026-08-06 12:46 JST — Phase 1 two-generation terminal smoke PASS_WITH_FOLLOWUPS
+
+- 目标：在真实 GPU compute node运行完整 tiny HA训练，确认 early terminal generation使两个 learner停止，末次摄取与 maintenance后 DB terminal推进到 generation 2，并为该 generation登记 canonical stop和summary。
+- 命令与walltime：Miyabi `debug-g` node `mg0007`，PBS `2498353.opbs`；依据上一 smoke实际12秒，显式使用 `qsub -l walltime=00:01:00 scripts/miyabi/run_plan02_phase1_smoke.pbs`，实际walltime `00:00:12`。
+- 结果：job `Exit_status=0`；最终version 2、leader epoch 1且released、terminal generation 2；generation 1只有early stop，generation 2有stop/summary两条publication；staged Checker返回`PASS_WITH_FOLLOWUPS`。结构化摘要：`reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-124637_phase1-smoke_pass.json`。
+- 边界：本轮run使用dirty source fingerprint，只是协议回归；正式Phase 1证据仍须固定到clean review-target commit。

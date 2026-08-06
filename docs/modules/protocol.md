@@ -1,6 +1,14 @@
 # 模块参考:fs_diloco/protocol
 
-合并选择与加权、liveness 规则、fragment 索引/编解码/调度。`merge.py` 和 `fragment_scheduler.py` 是纯函数模块；`liveness.py` 会读心跳/写 DB，fragment index/codec 也包含 JSON 和 safetensors I/O 薄封装。
+合并选择与加权、liveness 规则、HA epoch control、fragment 索引/编解码/调度。`merge.py` 和 `fragment_scheduler.py` 是纯函数模块；`liveness.py` 会读心跳/写 DB，control/fragment index/codec也包含文件或 SQLite I/O。
+
+---
+
+## protocol/control_epoch.py — HA canonical control
+
+- `_publish_immutable_json()` 以 temp + fsync + hardlink实现 publish-once；目标已存在时只接受字节完全相同的幂等重试，冲突 fail closed。
+- `EpochControlPublisher` 只接受一个 `LeaderToken`：发布 epoch heartbeat；把 DB committed version重建为 immutable version pointer和 epoch head；在 fenced DB transaction登记 `control_publications`；最后 best-effort更新 fixed latest/stop/summary cache。canonical payload的 `published_at`来自稳定 DB row，以便同 epoch repair字节幂等。
+- `EpochControlReader` 不打开 SQLite；它扫描 bounded epoch目录，要求目录名、run/epoch/owner、自校验 heartbeat或 canonical head一致，以最高合法 epoch作为 current。head精确绑定 immutable pointer相对路径和 SHA，canonical stop带排除自身字段计算的 `payload_sha256`并在采用前重算；最高 epoch尚无 head时返回未就绪而不回退。返回 latest时把相对 checkpoint路径解析到 run root；fixed cache和目录 mtime都不参与选择。
 
 ---
 

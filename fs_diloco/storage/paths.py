@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterator
 
 from .atomic_io import ensure_dir
 from ..core.constants import GLOBAL_WEIGHT_TEMPLATE, OUTER_OPTIM_TEMPLATE
@@ -22,8 +24,16 @@ class RunPaths:
         return self.shared_root / "weights"
 
     @property
+    def weight_epochs(self) -> Path:
+        return self.weights / "epochs"
+
+    @property
     def optim(self) -> Path:
         return self.shared_root / "optim"
+
+    @property
+    def optim_epochs(self) -> Path:
+        return self.optim / "epochs"
 
     @property
     def updates_latest(self) -> Path:
@@ -61,6 +71,26 @@ class RunPaths:
     @property
     def metrics(self) -> Path:
         return self.shared_root / "metrics"
+
+    @property
+    def syncer_epochs(self) -> Path:
+        return self.control / "syncer_epochs"
+
+    @property
+    def syncer_launch_claims(self) -> Path:
+        return self.control / "syncer_launch_claims"
+
+    @property
+    def bootstrap_complete_json(self) -> Path:
+        return self.control / "bootstrap_complete.json"
+
+    @property
+    def run_descriptor_json(self) -> Path:
+        return self.control / "run_descriptor.json"
+
+    @property
+    def run_source_manifest_json(self) -> Path:
+        return self.control / "run_source_manifest.json"
 
     @property
     def eval_checkpoints(self) -> Path:
@@ -107,6 +137,14 @@ class RunPaths:
     def global_version_history_jsonl(self) -> Path:
         return self.metrics / "global_version_history.jsonl"
 
+    @property
+    def syncer_epoch_history_jsonl(self) -> Path:
+        return self.metrics / "syncer_epoch_history.jsonl"
+
+    @property
+    def recovery_submission_history_jsonl(self) -> Path:
+        return self.metrics / "recovery_submission_history.jsonl"
+
     def update_pointer_path(self, learner_id: str) -> Path:
         return self.updates_latest / f"{learner_id}.json"
 
@@ -122,11 +160,90 @@ class RunPaths:
     def outer_optim_path(self, version: int) -> Path:
         return self.optim / OUTER_OPTIM_TEMPLATE.format(version=version)
 
+    @staticmethod
+    def owner_short(owner_id: str) -> str:
+        return hashlib.sha256(owner_id.encode("utf-8")).hexdigest()[:12]
+
+    def syncer_epoch_dir(self, epoch: int, owner_id: str) -> Path:
+        return self.syncer_epochs / f"e{int(epoch):06d}_{self.owner_short(owner_id)}"
+
+    def syncer_heartbeat_path(self, epoch: int, owner_id: str) -> Path:
+        return self.syncer_epoch_dir(epoch, owner_id) / "heartbeat.json"
+
+    def epoch_latest_dir(self, epoch: int, owner_id: str) -> Path:
+        return self.syncer_epoch_dir(epoch, owner_id) / "latest"
+
+    def epoch_head_path(self, epoch: int, owner_id: str) -> Path:
+        return self.epoch_latest_dir(epoch, owner_id) / "head.json"
+
+    def epoch_version_pointer_path(self, epoch: int, owner_id: str, version: int) -> Path:
+        return self.epoch_latest_dir(epoch, owner_id) / f"v{int(version):06d}.json"
+
+    def epoch_terminal_dir(self, epoch: int, owner_id: str) -> Path:
+        return self.syncer_epoch_dir(epoch, owner_id) / "terminal"
+
+    def epoch_stop_path(self, epoch: int, owner_id: str, generation: int) -> Path:
+        return self.epoch_terminal_dir(epoch, owner_id) / f"stop_g{int(generation):06d}.json"
+
+    def epoch_summary_path(self, epoch: int, owner_id: str, generation: int) -> Path:
+        return self.epoch_terminal_dir(epoch, owner_id) / f"summary_g{int(generation):06d}.json"
+
+    def epoch_weight_path(
+        self, epoch: int, owner_id: str, version: int, publication_id: str
+    ) -> Path:
+        publication_short = publication_id.replace("-", "")[:12]
+        return (
+            self.weight_epochs
+            / f"e{int(epoch):06d}"
+            / self.owner_short(owner_id)
+            / f"global_v{int(version):06d}_p{publication_short}.safetensors"
+        )
+
+    def epoch_outer_optim_path(
+        self, epoch: int, owner_id: str, version: int, publication_id: str
+    ) -> Path:
+        publication_short = publication_id.replace("-", "")[:12]
+        return (
+            self.optim_epochs
+            / f"e{int(epoch):06d}"
+            / self.owner_short(owner_id)
+            / f"outer_v{int(version):06d}_p{publication_short}.safetensors"
+        )
+
+    def relative(self, path: str | Path) -> str:
+        return str(Path(path).resolve().relative_to(self.shared_root.resolve()))
+
+    def iter_epoch_weights(self) -> Iterator[Path]:
+        if self.weight_epochs.is_dir():
+            yield from sorted(self.weight_epochs.rglob("*.safetensors"))
+
+    def iter_epoch_optim(self) -> Iterator[Path]:
+        if self.optim_epochs.is_dir():
+            yield from sorted(self.optim_epochs.rglob("*.safetensors"))
+
+    def iter_syncer_heartbeats(self) -> Iterator[Path]:
+        if self.syncer_epochs.is_dir():
+            yield from sorted(self.syncer_epochs.glob("e*_*/heartbeat.json"))
+
+    def iter_instance_heartbeats(self) -> Iterator[Path]:
+        yield from self.iter_syncer_heartbeats()
+        if self.heartbeats.is_dir():
+            yield from sorted(self.heartbeats.rglob("*.json"))
+
+    def iter_instance_pointers(self) -> Iterator[Path]:
+        if self.updates_latest.is_dir():
+            yield from sorted(self.updates_latest.rglob("*.json"))
+
+    def iter_instance_payloads(self) -> Iterator[Path]:
+        if self.updates_payloads.is_dir():
+            yield from sorted(self.updates_payloads.rglob("*.safetensors"))
+
     def fragment_weight_path(self, fragment_id: int, version: int) -> Path:
         return self.fragment_weights / f"fragment_{fragment_id:03d}" / f"v{version:06d}.safetensors"
 
     def fragment_outer_optim_path(self, fragment_id: int, version: int) -> Path:
         return self.fragment_optim / f"fragment_{fragment_id:03d}" / f"v{version:06d}.safetensors"
+
 
 def prepare_run_dirs(paths: RunPaths, num_learners: int) -> None:
     for directory in [
@@ -146,3 +263,34 @@ def prepare_run_dirs(paths: RunPaths, num_learners: int) -> None:
     for index in range(num_learners):
         learner_id = f"learner_{index:03d}"
         ensure_dir(paths.update_payload_dir(learner_id))
+
+
+def prepare_authority_dirs(paths: RunPaths) -> None:
+    """Create the fixed run authority directories during explicit initialization."""
+    for directory in (
+        paths.control,
+        paths.weights,
+        paths.weight_epochs,
+        paths.optim,
+        paths.optim_epochs,
+        paths.updates_latest,
+        paths.updates_payloads,
+        paths.fragments,
+        paths.fragment_weights,
+        paths.fragment_optim,
+        paths.heartbeats,
+        paths.logs,
+        paths.metrics,
+        paths.syncer_epochs,
+        paths.syncer_launch_claims,
+    ):
+        ensure_dir(directory)
+
+
+def prepare_learner_instance_dir(paths: RunPaths, learner_id: str) -> Path:
+    """Create only a learner-owned payload directory under an initialized run."""
+    required_parents = (paths.control, paths.updates_latest, paths.updates_payloads)
+    missing = [str(path) for path in required_parents if not path.is_dir()]
+    if missing:
+        raise RuntimeError(f"run authority directories are missing: {missing}")
+    return ensure_dir(paths.update_payload_dir(learner_id))

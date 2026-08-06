@@ -7,7 +7,7 @@
 | 角色 | 数量 | GPU | 入口 | 关键本地状态 |
 |---|---|---|---|---|
 | learner | N(`sync.num_learners`) | `choose_device()` 有 CUDA 时选首张可见卡，否则 CPU；PBS 通常每进程隔离 1 张 | `python -m fs_diloco.learner --config ... --learner-id learner_000` | 模型副本、内层 AdamW、数据分片迭代器 |
-| syncer | 1 | `syncer.device=cuda` 时 1 张；也可用 CPU | `python -m fs_diloco.syncer --config ...` | 全局参数扁平向量 θ、外层优化器状态、共享 run 内的持久 SQLite |
+| syncer | 1 active；HA 模式可同时存在多个候选但只有一个 leader | `syncer.device=cuda` 时 1 张；也可用 CPU | `python -m fs_diloco.syncer --config ...` | 全局参数扁平向量 θ、外层优化器状态、共享 run 内的持久 SQLite、HA 模式的 `LeaderToken` |
 
 进程间没有任何直接连接。所有协调通过共享目录 `run.shared_root` 完成。dataclass 默认值是 `null`，解析时回退到 `<project_root 或 cwd>/runs/fs_diloco/<run_id>`；仓库随附的正式配置显式使用主工作树的绝对 `runs/fs_diloco/{run_id}` 模板，避免从其他 worktree 启动时把产物写散。
 
@@ -18,9 +18,9 @@
 1. **大张量一律 safetensors**(权重、外层优化器状态、update 向量、fragment)。
 2. **按介质选择一致性原语**:JSON pointer/control/heartbeat 与 safetensors 通过 `storage/atomic_io.py` 的“同目录临时文件 → 文件 fsync → chmod → `os.replace`”发布，读者只会看到旧文件或完整新文件；SQLite 用 rollback-journal 事务；每 actor JSONL、syncer CSV 和历史 JSONL 为单写者追加。`learner_metrics.csv` 与 `update_manifest.csv` 则由多个 learner 无锁共享追加，只是 best-effort 遥测，不是提交权威。atomic helper 不 fsync 父目录，保证的是运行期原子可见性，而不是断电后目录项必然持久。
 3. **proposal pointer 是提交标记**:learner 先写不可变张量 payload，再原子替换固定 pointer。全量模式为每 learner 一个 `updates/latest/learner_XXX.json`；fragment 模式为每 `(learner, fragment)` 一个 `updates/latest/learner_XXX_fNNN.json`。syncer 每轮只枚举 `N` 或 `N×K` 个固定路径，持久 frontier 在两种模式都防重放；只有 fragment 路径额外用进程内 stat signature 跳过未变化 pointer 的 JSON 解析。runtime 不扫描历史 payload metadata。
-4. **`control/latest.json` 是 learner 轮询的唯一全局指针**。learner 不扫描权重目录、不读数据库。
+4. **global pointer 按模式选择**。legacy full/fragment 的 learner 轮询 `control/latest.json`；HA full 的 learner不打开 SQLite，而是从 bounded `control/syncer_epochs/`选择最高合法 epoch，再校验该 epoch 的 canonical head、pointer path和 SHA。两者都不扫描权重目录；HA fixed cache 只是便利面，不是权威。
 5. **心跳 JSON 只是带代际边界的存活提示**,不参与训练版本权威链。`stopped` 只证明当前 syncer 代际的输入闭合；full resume 会 fence 旧 pointer 内容，直到 learner 原子发布不同内容的新心跳。
-6. **SQLite 是共享目录中的持久提交记录**:`control/syncer_metadata.sqlite3`,使用 rollback journal(`journal_mode=DELETE`)、`synchronous=FULL`、60 秒 busy timeout。只有 syncer 改业务表,但不同计算节点可以重开并恢复同一 run;不使用 WAL、节点本地副本或 DB dump。
+6. **SQLite 是共享目录中的持久提交记录**:`control/syncer_metadata.sqlite3`,使用 rollback journal(`journal_mode=DELETE`)和 `synchronous=FULL`。legacy 只有单 syncer writer；HA 候选先取得单调 epoch，leader 的每个业务 transaction 在 `BEGIN IMMEDIATE` 后校验 epoch/owner，旧 token随后不能 renew或提交。不同计算节点可以重开并恢复同一 run；不使用 WAL、节点本地副本或 DB dump。
 7. **learner 的 global adoption 由单一策略状态机决定**:`replace`/直接 adoption 整体覆盖并重置内层 optimizer moments；scheduler 对象可重建，但始终恢复到累计 local-step 相位。rebase/prediction reconcile 在合成尚未发布的本地差值后保留完整内层训练状态。不存在与此并行的配置布尔开关。
 8. **外层优化器是显式扁平向量实现**(`modeling/outer_optim.py`),不复用 `torch.optim`,以便把优化器状态精确序列化成 safetensors 并跨 resume 保持一致。
 
@@ -150,7 +150,7 @@ syncer 停止条件(任一):
 - 无进展超时 → `no_progress_timeout`;
 - 异常 → `error`。
 
-成功完成初始化/恢复并进入主循环后，syncer 才在 `finally` 中按顺序尝试发布 `control/stop.json`、等待/末次摄取、写 summary、maintenance 和 W&B 收尾；startup/init/resume 自身异常发生在这层 `try` 之前，不走该序列。主循环收尾若前一步自身抛异常，后续步骤不会被独立保证执行，最内层 finally 仍会尝试 finish W&B 并关 DB。非 `error` 退出会在可配置 shutdown 窗口内等待 learner 收尾并继续摄取；只有全部 learner 确认 stopped 时才将未消费 proposal 终态化。等待超时保持 active 引用不变并记录未确认状态。最终 archive/GC 只在非 error 收尾路径执行；error 路径不把未消费输入伪装成正常终态。fragment 的强制最终 materialize 也只在非 error 路径执行。
+成功完成初始化/恢复并进入主循环后，syncer 才在 `finally` 中收尾；startup/init/resume 自身异常发生在这层 `try` 之前，不走该序列。legacy 路径按 stop、等待/末次摄取、summary、maintenance 和 W&B 顺序执行。HA 路径先提交并发布 early stop generation，让 learner停止；完成 summary 与 maintenance 后再以更高 generation 成对发布最终 canonical stop/summary。candidate只有验证最终 generation 对应的两条 DB publication记录及文件 SHA后才将 run 判为不可重启；任一步崩溃留下的不完整 terminal由 successor以新 epoch幂等修复。主循环收尾若前一步自身抛异常，后续步骤不会被独立保证执行，最内层 finally 仍会尝试 finish W&B 并关 DB。非 `error` 退出会在可配置 shutdown 窗口内等待 learner 收尾并继续摄取；只有全部 learner 确认 stopped 时才将未消费 proposal 终态化。等待超时保持 active 引用不变并记录未确认状态。最终 archive/GC 只在非 error 收尾路径执行；error 路径不把未消费输入伪装成正常终态。fragment 的强制最终 materialize 也只在非 error 路径执行。
 
 learner 的常规停止条件由 `training.completion_mode` 决定，full 与 fragment 共用同一判定。默认 `local_or_global` 在 `max_local_steps` 达标或看到 `stop.json` 时停止；`global_only` 则把 `max_local_steps` 视为名义训练/调度 horizon,达到后继续训练与上传,只在 syncer 达到全局目标并发布 `stop.json` 后退出。若 syncer 未发布 stop 就失去进展，watchdog 提供独立的 `syncer_unresponsive` 自保退出。训练主循环的退出路径写 `status=stopped` 的最终心跳；watchdog 路径同时写 `status_reason=syncer_unresponsive`。启动阶段在进入 runner `try` 前失败则没有这项保证。
 
@@ -176,3 +176,13 @@ full 模式可为研究评估显式开启 `sync.capture_terminal_predecessor_for
 - **历史与活跃状态分离**:applied/dropped update 和旧 global row 先追加并 fsync 到 `metrics/*_history.jsonl`;终态 payload 路径与 active-row 删除在同一 SQLite 事务中写入 `gc_pending`/提交。分析器合并 live DB 与 archive 并按主键去重;运行时不回读 archive;
 - **reference-driven GC**:只保留 DB 当前 global/fragment checkpoint、latest 引用的 materialized full、active update payload 和每 learner 固定 pointer。未发布孤儿经过至少两倍 heartbeat/scan 周期的 grace 后删除;已终态化引用由有界 `gc_pending` 立即回收，删除成功或文件已不存在后清行。
 - **learner 读侧 GC 竞态防护**：读取 latest 与打开其 weight/outer 文件之间若 syncer 已发布并回收旧 current，full direct/rebase/prediction 与 fragment initial/incremental 都等待严格更新的 pointer 并重跑整个加载回调；成功状态以实际加载版本为准，预算耗尽则保留 `FileNotFoundError` 链 fail closed。
+
+## 10. Full-mode Syncer HA
+
+`coordination.syncer_ha.enabled=true` 只支持 full + static membership。启动顺序是 initializer → 独立 syncer candidate job → 独立 rerunable learner array。initializer 是唯一 DDL writer：它发布 resolved config、source manifest、run descriptor、schema v2 数据库和最后的 bootstrap-complete marker；candidate 与 learner 在 import runtime 前校验 descriptor/source/config identity，既有或不完整 run 均 fail closed。
+
+`LeaderLeaseStore` 在同一个 SQLite 中分配不复用的 epoch。candidate acquire 成功后才得到 `FencedSQLiteStore` 的 leader-bound 写面；所有 HA business mutator 都必须携带 `LeaderToken(epoch, owner_id)`，并在持锁 transaction 内重验。旧 writer 在 transaction 外暂停时可在 lease 到期后接管；若它暂停在 SQLite write transaction 内，新 candidate 必须等待 scheduler/operator 终止旧 writer并释放锁。这是明确的可用性边界，不会以双 writer换取接管速度。
+
+每个 epoch 的 checkpoint 与 canonical `head/stop/summary` 使用互不冲突的目录。SQLite committed row和 `control_publications` manifest 是 successor/Checker恢复依据；successor 从 DB current version恢复，修复同 epoch缺失 control，再提交严格的 `N+1`。learner侧 `EpochControlReader`扫描有界 epoch目录，以自校验 heartbeat或 canonical head识别最高合法 epoch，并用 head内的 pointer path/SHA校验 immutable latest；若最高 epoch尚无 head则等待而不回退。fixed cache允许被旧 epoch覆盖。maintenance先以 fenced transaction登记候选，删除前重查引用，并压缩旧 epoch目录/history；默认 `io.checkpoint_digest_mode=off`，以唯一 path、必填 size和 safetensors loadability验证大文件。
+
+这一链路已在一个独立 1-syncer + 8-learner 的 9 节点 run 中验证：第一候选在 DB commit 后、control publication 前被 `SIGKILL`，successor跨 PBS job取得下一 epoch并完成 10 次 global merge；8 个 learner都贡献了更新。结构化结果保存在 Plan 02 Phase 1 implementation report 中；这是恢复/协调验证，不是训练质量结论。

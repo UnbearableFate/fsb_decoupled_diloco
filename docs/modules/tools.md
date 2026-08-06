@@ -2,6 +2,12 @@
 
 离线工具默认只读 run；明确的导出、CSV、validation attachment 命令例外。`analysis`、trace 比较和 CSV 抽取主要用标准库，可在没有 GPU 的环境运行。
 
+## `tools/init_run.py` 与 `tools/launch_independent_run.py`
+
+- `init_run.initialize_run()` 是 HA新 run唯一 initializer。它拒绝 HA关闭、fragment、缺失 source identity、非显式允许的 dirty snapshot和任何已存在 run root；写 resolved config、source manifest、immutable descriptor后，以 `schema_bootstrap.initialize_new_run()`发布 schema v2 DB和 bootstrap marker。
+- `python -m fs_diloco.tools.init_run` 接受 `--config/--run-id/--shared-root/--project-root`；`--allow-dirty-snapshot`只用于受控验证，正式 run应从 clean source初始化。
+- `launch_independent_run.launch()` 组合 initializer与独立 syncer qsub、rerunable learner array qsub；默认只返回命令，显式 `--submit`才提交。`--submit`要求先提供按 workload估算的 `--syncer-walltime/--learner-walltime`，并在创建 immutable run root前完成格式校验；两个 qsub都显式带 `-l walltime=...`，不会继承通用 PBS脚本的保守默认值。
+
 ## `tools/analysis.py`
 
 ### 读取与统计 helper

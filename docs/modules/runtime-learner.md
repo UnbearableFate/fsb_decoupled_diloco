@@ -6,6 +6,8 @@ learner 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.m
 
 ## runtime/learner.py
 
+HA full启动先调用 `load_run_descriptor()` 和 bootstrap identity gate，再用 `prepare_learner_instance_dir()`只创建自身目录。`EpochControlReader`替代 fixed latest/stop读取且不打开 SQLite：它扫描 bounded epoch目录，只接受目录名、run/epoch/owner、自校验 heartbeat、head→immutable pointer SHA和 canonical stop自校验 SHA都一致的最高 epoch；最高 epoch没有 head时不回退旧 epoch。learner只把非空且非 `error` 的 canonical terminal视为最终 stop；`error` generation仍允许 recovery claim和 successor resume。learner watchdog区分普通无进展、current heartbeat陈旧、recovery claim/job仍 outstanding和 canonical repair窗口；后两者在配置预算内等待。`coordination.recovery_submission.enabled=false`时不执行 qsub。
+
 ### CLI 与入口
 
 - **`parse_args(argv)`** — `--config`(必填)、`--learner-id`(必填)、`--run-id`、`--shared-root`、`--num-learners`,以及与 syncer 对称的实验覆盖参数:`--training-seed`、`--scan-interval-seconds`、`--syncer-device`、`--syncer-publish-dtype`、`--staleness-lambda`、`--max-staleness-versions`、`--global-adoption-strategy`、`--completion-mode`、`--parallel-checkpoint-writes`、`--materialize-full-every-events`、`--ingest-during-publish`、`--capture-terminal-predecessor-for-eval`(launcher 把同一组覆盖传给两类进程,保证 resolved config 一致)。

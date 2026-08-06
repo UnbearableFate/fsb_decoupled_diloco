@@ -216,3 +216,26 @@ After `claude --help` reconfirmed every required option, Opus 5 should review th
 
 - The same external Claude account session limit remains the sole blocker. This is the second consecutive failure of the final Claude review experiment; no source modification can falsify it before the stated reset.
 - Do not launch a third attempt before 13:30 Asia/Tokyo. After reset, use a fresh session and the documented `claude-opus-5-retry1_f404fbd4831adcd9ffb8e6229a0004b1affe9f4e.md` path, then continue the gate only if the process returns successfully and the report/metadata checks pass.
+
+## 2026-08-06T11:10:00+09:00 — Phase 1 initial validation failures
+
+### Experiment identity and observed facts
+
+- `phase1-associated-tests` attempt 1, PBS `2497697.opbs` on `mg0003`, exit 1 after 2 seconds: focused result was 14 passed/1 failed because HA+fragment validation reported the generic recovery-submission dependency before the required fragment incompatibility. The validation order was corrected and the same branch was added to the focused config matrix.
+- `phase1-smoke` attempt 1, PBS `2497708.opbs` on `mg0027`, exit 1 after 9 seconds: `_FencedConnection` converted named-parameter mappings to a tuple of keys, so SQLite inserted column-name strings instead of metadata values. Parameter normalization now preserves mappings; the RED regression asserts exact stored values.
+- `phase1-smoke` attempt 2, PBS `2497742.opbs` on `mg0009`, exit 271: HA GC keyword arguments were passed to `LeaderLeaseStore` rather than the fenced business store. Store wiring was corrected and GC registration/recheck coverage added. This was the second consecutive smoke failure, not the third; no failure-escalation review threshold was reached.
+
+### Falsification and outcome
+
+The replacements progressed through focused/full results 18/395, then 20/397, and the tiny HA smoke reached staged `PASS_WITH_FOLLOWUPS`. The final associated-suite evidence is retained at `reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-115000_phase1-test-suite_pass.json`.
+
+## 2026-08-06T11:35:12+09:00 — Phase 1 fault-matrix attempt 1
+
+PBS `2497902.opbs` on `mg0035` exited 1 after 7 seconds. The `weight_temp` failpoint ran before the publication directory existed, and same-epoch repair rebuilt canonical latest with `time.time()`, causing an immutable-byte collision. The checkpoint worker now creates its unique publication directory before that failpoint; canonical `published_at` comes from the stable DB version row. A same-epoch repeated-repair RED test was added. Replacement job `2497906.opbs` passed all 60 crash cases.
+
+## 2026-08-06T11:44:00+09:00 — Phase 1 independent-launch attempts 1 and 2
+
+- Attempt 1, launcher `2497930.opbs` on `mg0036`, exit 1 after 1 second: shell redirection targeted a file below the not-yet-created run root, so the shell failed before `init-run` could create that root. Initializer stdout was moved to the already-existing report artifact directory.
+- Attempt 2, launcher `2497931.opbs`, exit 0, submitted child jobs `2497932.opbs`, `2497933.opbs` and `2497934[].opbs` with the generic scripts' 24-hour resource default. qstat estimated a materially later start. The exact queued children were canceled with authorized `qdel`; no live run data was removed. The acceptance launcher now overrides debug queue walltimes to 1 minute for the injected-crash candidate and 2 minutes for successor/learners.
+
+Attempt 3, `2497948.opbs`, submitted the short-walltime children and completed successfully. This scheduling correction also established the repository rule that every future qsub must estimate the shortest practical walltime from the workload and prior observations, overriding a materially longer script default.

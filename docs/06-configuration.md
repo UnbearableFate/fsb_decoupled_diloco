@@ -89,6 +89,30 @@ relative-L2 也未累积增长；但 checkpoint 字节减半的同时，测得�
 62.47%，完整时间均值高 2.01%。因此 `publish_dtype` 继续默认 `float32`，BF16 只保留为
 显式实验/容量选项；若要改默认必须另行评审，而不能只凭质量门禁通过。
 
+## coordination — full-mode Syncer HA
+
+HA 默认关闭，只允许 `fragments.enabled=false`。`recovery_submission.enabled=true` 还要求 HA 已开启；它创建候选 job，不授予 leadership。
+
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `syncer_ha.enabled` | `false` | 启用 initializer + monotonic leader epoch + fenced business transaction + epoch canonical control |
+| `syncer_ha.lease_duration_seconds` | 90.0 | lease有效期；必须覆盖 renew间隔和允许的最大 clock skew |
+| `syncer_ha.renew_interval_seconds` | 10.0 | active leader renew周期 |
+| `syncer_ha.max_clock_skew_seconds` | 2.0 | lease安全计算接受的跨节点时钟偏差上限 |
+| `syncer_ha.heartbeat_interval_seconds` / `heartbeat_stale_after_seconds` | 5.0 / 30.0 | syncer epoch heartbeat发布周期与 learner判陈旧门槛 |
+| `syncer_ha.lease_busy_timeout_ms` | 5000 | lease/fenced transaction等待 SQLite writer lock的上限；超时 fail closed，不绕过锁 |
+| `syncer_ha.candidate_acquire_poll_seconds` / `candidate_wait_seconds` | 5.0 / 180.0 | loser candidate轮询周期与总等待预算 |
+| `syncer_ha.learner_recovery_wait_seconds` | 1800.0 | learner看到 syncer失去进展后允许 recovery claim/job完成的总预算 |
+| `syncer_ha.canonical_repair_wait_seconds` | 120.0 | DB commit已存在而 canonical control尚待 successor修复的等待预算 |
+| `syncer_ha.max_retained_epoch_dirs` | 32 | maintenance保留的 recent epoch控制/目录上限；更旧历史先归档 |
+| `recovery_submission.enabled` | `false` | learner-assisted candidate qsub总开关；默认人工 restart |
+| `recovery_submission.claim_timeout_seconds` / `reconciliation_interval_seconds` / `uncertainty_timeout_seconds` | 120 / 60 / 300 | mkdir claim、qstat reconciliation和 unknown状态保留预算 |
+| `recovery_submission.backoff_initial_seconds` / `backoff_max_seconds` | 60 / 900 | 同 observation失败后的指数 backoff范围 |
+| `recovery_submission.max_attempts_per_observation` / `max_outstanding_candidates` | 3 / 1 | observation尝试预算和 scheduler中未完成候选上限 |
+| `recovery_submission.claim_retention_seconds` | 3600 | 已终态 claim的保留/归档窗口 |
+| `recovery_submission.candidate_pbs_script` | `scripts/miyabi/run_syncer_candidate.pbs` | qsub候选脚本；scheduler提交前仍执行 descriptor/source gate |
+| `recovery_submission.candidate_walltime` | `null` | 自动 recovery启用时必填的 workload估算 `HH:MM:SS`；每次 qsub显式传 `-l walltime=...`，避免继承通用脚本的过长默认 |
+
 ## liveness
 
 | 字段 | 默认 | 说明 |
@@ -148,6 +172,7 @@ LR 进度使用 learner 启动以来已完成的累计 `local_step`。第 k 个 
 | `tensor_dtype` | `float32` | learner update 的构造/落盘 dtype(`float32`/`bfloat16`/`float16`；syncer 读取时转换为 `syncer.compute_dtype`)。本仓库的 GPT-2 1L debug 与两种 50x10 对照配置使用 `bfloat16` |
 | `atomic_write` | `true` | ⚠ 未消费(始终原子写) |
 | `compute_sha256` | `false` | 上传时计算张量文件摘要(分析工具可校验完整性) |
+| `checkpoint_digest_mode` | `off` | HA global weight/outer摘要策略：`off`只校验唯一path、size和loadability；`checker`仅 completed Checker离线计算；`always`在publisher关键路径计算并持久化。YAML 1.1把未加引号的 `off`解析为布尔false时也会规范化为字符串 `off` |
 
 checkpoint/update 保留数量不再是配置项。syncer 的 maintenance 按权威引用集合自动保留一个 current global weight/outer、每个 fragment 一个 current weight/outer、latest 引用的一个 materialized full、active DB proposal payload 与固定 proposal pointers;历史先归档后回收。归档 JSONL 只追加、运行时不回读；归档后尚待删除的 payload 由 SQLite `gc_pending` 有界集合跨崩溃记忆。未发布孤儿的 grace 为 `max(2 × heartbeat_interval_seconds, 2 × scan_interval_seconds)`。
 

@@ -7,7 +7,8 @@
 | 名称 | 当前值/行为 |
 |---|---|
 | `FORMAT_VERSION` | `1`；param/fragment index、latest、proposal、heartbeat、stop、summary 等主 runtime JSON 的格式版本；source identity、评估结果等工具产物有各自 schema。 |
-| `PROTOCOL_VERSION` | `3`；写入 run identity，full resume 要求精确相等。 |
+| `PROTOCOL_VERSION` | `3`；写入 run identity，full resume/HA descriptor要求精确相等。 |
+| `HA_SCHEMA_VERSION` / `SYNCER_HEARTBEAT_FORMAT_VERSION` / `CONTROL_EPOCH_FORMAT_VERSION` | `2 / 1 / 1`；分别冻结 HA SQLite schema、syncer epoch heartbeat和 canonical control格式。 |
 | `DEFAULT_RUNS_DIR` / `LEARNER_ID_PREFIX` | `runs/fs_diloco` / `learner_`。 |
 | `UPDATE_STATUS_PENDING`, `UPDATE_STATUS_SELECTED`, `UPDATE_STATUS_APPLIED`, `UPDATE_STATUS_DROPPED`, `UPDATE_STATUS_FAILED` | `pending/selected/applied/dropped/failed`；`failed` 目前没有运行时转入路径。 |
 | `LEARNER_STATUS_UNKNOWN`, `LEARNER_STATUS_ACTIVE`, `LEARNER_STATUS_STALE`, `LEARNER_STATUS_DEAD`, `LEARNER_STATUS_STOPPED` | `unknown/active/stale/dead/stopped`。 |
@@ -21,7 +22,13 @@
 
 ### 配置类型
 
-`Config` 组合 `RunSection`、`InitSection`、`ModelSection`、`DataSection`、`SyncSection`（内嵌 `GraceWindowSection`）、`SyncerSection`、`LivenessSection`、`TrainingSection`、`InnerOptimizerSection`、`OuterOptimizerSection`、`IOSection`、`LearnerSection`（内嵌 `PredictionSection`）、`FragmentSection`、`FailureSimSection`、`WandbSection`。这些 dataclass 本身只提供默认值；跨字段约束在 `resolve_config()` 执行。
+`Config` 组合 `RunSection`、`InitSection`、`ModelSection`、`DataSection`、`SyncSection`（内嵌 `GraceWindowSection`）、`SyncerSection`、`CoordinationSection`（内嵌 `SyncerHASection` 和 `RecoverySubmissionSection`）、`LivenessSection`、`TrainingSection`、`InnerOptimizerSection`、`OuterOptimizerSection`、`IOSection`、`LearnerSection`（内嵌 `PredictionSection`）、`FragmentSection`、`FailureSimSection`、`WandbSection`。这些 dataclass 本身只提供默认值；跨字段约束在 `resolve_config()` 执行。
+
+## `core/run_descriptor.py`
+
+- `LoadedRunDescriptor` 绑定规范化 `RunPaths`、descriptor payload、resolved `Config` 和 `BootstrapIdentity`。
+- `load_run_descriptor()` 校验 descriptor自摘要、预期 job identity、protocol/schema/mode、canonical config/source路径及其 SHA、source manifest自摘要，并要求 resolved config中的 run/source identity完全一致。
+- `load_run_descriptor_from_environment()` 从 `FS_DILOCO_SHARED_ROOT` 及可选的 expected run/commit/fingerprint/descriptor变量调用同一 gate；独立 PBS角色在 runtime业务写前使用它。
 
 ### 加载与转换
 

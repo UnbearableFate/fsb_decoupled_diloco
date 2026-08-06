@@ -99,6 +99,45 @@ class SyncerSection:
 
 
 @dataclass
+class SyncerHASection:
+    enabled: bool = False
+    lease_duration_seconds: float = 90.0
+    renew_interval_seconds: float = 10.0
+    max_clock_skew_seconds: float = 2.0
+    heartbeat_interval_seconds: float = 5.0
+    heartbeat_stale_after_seconds: float = 30.0
+    lease_busy_timeout_ms: int = 5000
+    candidate_acquire_poll_seconds: float = 5.0
+    candidate_wait_seconds: float = 180.0
+    learner_recovery_wait_seconds: float = 1800.0
+    canonical_repair_wait_seconds: float = 120.0
+    max_retained_epoch_dirs: int = 32
+
+
+@dataclass
+class RecoverySubmissionSection:
+    enabled: bool = False
+    claim_timeout_seconds: float = 120.0
+    reconciliation_interval_seconds: float = 60.0
+    uncertainty_timeout_seconds: float = 300.0
+    backoff_initial_seconds: float = 60.0
+    backoff_max_seconds: float = 900.0
+    max_attempts_per_observation: int = 3
+    max_outstanding_candidates: int = 1
+    claim_retention_seconds: float = 3600.0
+    candidate_pbs_script: str = "scripts/miyabi/run_syncer_candidate.pbs"
+    candidate_walltime: str | None = None
+
+
+@dataclass
+class CoordinationSection:
+    syncer_ha: SyncerHASection = field(default_factory=SyncerHASection)
+    recovery_submission: RecoverySubmissionSection = field(
+        default_factory=RecoverySubmissionSection
+    )
+
+
+@dataclass
 class LivenessSection:
     heartbeat_interval_seconds: float = 30.0
     stale_after_seconds: float = 120.0
@@ -150,6 +189,7 @@ class IOSection:
     tensor_dtype: str = "float32"
     atomic_write: bool = True
     compute_sha256: bool = False
+    checkpoint_digest_mode: str = "off"
 
 
 @dataclass
@@ -203,6 +243,7 @@ class Config:
     data: DataSection = field(default_factory=DataSection)
     sync: SyncSection = field(default_factory=SyncSection)
     syncer: SyncerSection = field(default_factory=SyncerSection)
+    coordination: CoordinationSection = field(default_factory=CoordinationSection)
     liveness: LivenessSection = field(default_factory=LivenessSection)
     training: TrainingSection = field(default_factory=TrainingSection)
     inner_optimizer: InnerOptimizerSection = field(default_factory=InnerOptimizerSection)
@@ -382,9 +423,7 @@ def resolve_config(
         root = Path(project_root or os.getcwd())
         config.run.shared_root = str(root / DEFAULT_RUNS_DIR / config.run.run_id)
     else:
-        config.run.shared_root = config.run.shared_root.replace(
-            "{run_id}", config.run.run_id
-        )
+        config.run.shared_root = config.run.shared_root.replace("{run_id}", config.run.run_id)
     if num_learners is not None:
         config.sync.num_learners = int(num_learners)
         config.sync.quorum_max = min(config.sync.quorum_max, config.sync.num_learners)
@@ -414,9 +453,7 @@ def resolve_config(
     if parallel_checkpoint_writes is not None:
         config.syncer.parallel_checkpoint_writes = bool(parallel_checkpoint_writes)
     if materialize_full_every_events is not None:
-        config.fragments.materialize_full_every_events = int(
-            materialize_full_every_events
-        )
+        config.fragments.materialize_full_every_events = int(materialize_full_every_events)
     if config.sync.scan_interval_seconds <= 0.0:
         raise ValueError("sync.scan_interval_seconds must be > 0")
     if config.sync.staleness_lambda < 0.0:
@@ -439,19 +476,14 @@ def resolve_config(
             raise ValueError(f"unsupported syncer.{field_name}: {configured}")
         setattr(config.syncer, field_name, dtype_aliases[configured])
     if config.sync.grace_window.mode not in {"fixed", "adaptive_fastest_upload_eta"}:
-        raise ValueError(
-            f"unsupported sync.grace_window.mode: {config.sync.grace_window.mode}"
-        )
+        raise ValueError(f"unsupported sync.grace_window.mode: {config.sync.grace_window.mode}")
     for field_name in ("fixed_seconds", "initial_seconds", "max_seconds"):
         if float(getattr(config.sync.grace_window, field_name)) < 0.0:
             raise ValueError(f"sync.grace_window.{field_name} must be >= 0")
     if config.training.completion_mode not in {"local_or_global", "global_only"}:
-        raise ValueError(
-            f"unsupported training.completion_mode: {config.training.completion_mode}"
-        )
+        raise ValueError(f"unsupported training.completion_mode: {config.training.completion_mode}")
     if config.training.completion_mode == "global_only" and (
-        config.sync.stop_after_outer_steps is None
-        and config.sync.stop_after_global_tokens is None
+        config.sync.stop_after_outer_steps is None and config.sync.stop_after_global_tokens is None
     ):
         raise ValueError(
             "training.completion_mode=global_only requires a configured global stop target"
@@ -460,21 +492,16 @@ def resolve_config(
         config.liveness.syncer_unresponsive_timeout_seconds is not None
         and config.liveness.syncer_unresponsive_timeout_seconds <= 0.0
     ):
-        raise ValueError(
-            "liveness.syncer_unresponsive_timeout_seconds must be > 0 when set"
-        )
+        raise ValueError("liveness.syncer_unresponsive_timeout_seconds must be > 0 when set")
     if (
         config.liveness.learner_shutdown_timeout_seconds is not None
         and config.liveness.learner_shutdown_timeout_seconds <= 0.0
     ):
-        raise ValueError(
-            "liveness.learner_shutdown_timeout_seconds must be > 0 when set"
-        )
+        raise ValueError("liveness.learner_shutdown_timeout_seconds must be > 0 when set")
     config.inner_optimizer.scheduler = config.inner_optimizer.scheduler.lower()
     if config.inner_optimizer.scheduler not in {"none", "cosine"}:
         raise ValueError(
-            "unsupported inner_optimizer.scheduler: "
-            f"{config.inner_optimizer.scheduler}"
+            f"unsupported inner_optimizer.scheduler: {config.inner_optimizer.scheduler}"
         )
     if config.inner_optimizer.warmup_steps < 0:
         raise ValueError("inner_optimizer.warmup_steps must be >= 0")
@@ -483,9 +510,7 @@ def resolve_config(
     scheduler_total_steps = config.inner_optimizer.scheduler_total_steps
     if config.inner_optimizer.scheduler == "cosine":
         if scheduler_total_steps is None:
-            raise ValueError(
-                "inner_optimizer.scheduler_total_steps is required for cosine"
-            )
+            raise ValueError("inner_optimizer.scheduler_total_steps is required for cosine")
         if int(scheduler_total_steps) <= config.inner_optimizer.warmup_steps:
             raise ValueError(
                 "inner_optimizer.scheduler_total_steps must be greater than "
@@ -493,6 +518,12 @@ def resolve_config(
             )
     elif scheduler_total_steps is not None and int(scheduler_total_steps) <= 0:
         raise ValueError("inner_optimizer.scheduler_total_steps must be > 0 when set")
+    ha = config.coordination.syncer_ha
+    recovery = config.coordination.recovery_submission
+    if ha.enabled and config.fragments.enabled:
+        raise ValueError("coordination.syncer_ha is not supported with fragments")
+    if recovery.enabled and not ha.enabled:
+        raise ValueError("coordination.recovery_submission requires coordination.syncer_ha.enabled")
     if config.fragments.enabled:
         if config.fragments.num_fragments < 1:
             raise ValueError("fragments.num_fragments must be >= 1")
@@ -506,13 +537,109 @@ def resolve_config(
             config.fragments.materialize_full_every_events is None
             or int(config.fragments.materialize_full_every_events) <= 0
         ):
-            raise ValueError(
-                "fragments.materialize_full_every_events must be a positive integer"
-            )
+            raise ValueError("fragments.materialize_full_every_events must be a positive integer")
         if config.learner.global_adoption_strategy != "replace":
             raise ValueError(
                 "learner.global_adoption_strategy is only supported by the full learner"
             )
+    if ha.renew_interval_seconds <= 0.0:
+        raise ValueError("coordination.syncer_ha.renew_interval_seconds must be > 0")
+    if ha.lease_duration_seconds < 5.0 * ha.renew_interval_seconds:
+        raise ValueError(
+            "coordination.syncer_ha.lease_duration_seconds must be at least "
+            "5 * renew_interval_seconds"
+        )
+    if ha.max_clock_skew_seconds < 0.0:
+        raise ValueError("coordination.syncer_ha.max_clock_skew_seconds must be >= 0")
+    if not 0.0 < ha.heartbeat_interval_seconds <= ha.renew_interval_seconds:
+        raise ValueError(
+            "coordination.syncer_ha.heartbeat_interval_seconds must be > 0 and "
+            "<= renew_interval_seconds"
+        )
+    if ha.heartbeat_stale_after_seconds < 3.0 * ha.heartbeat_interval_seconds:
+        raise ValueError(
+            "coordination.syncer_ha.heartbeat_stale_after_seconds must be at least "
+            "3 * heartbeat_interval_seconds"
+        )
+    if ha.lease_duration_seconds < (
+        ha.heartbeat_stale_after_seconds + 2.0 * ha.max_clock_skew_seconds
+    ):
+        raise ValueError(
+            "coordination.syncer_ha.lease_duration_seconds must cover "
+            "heartbeat_stale_after_seconds + 2 * max_clock_skew_seconds"
+        )
+    if not 0 < ha.lease_busy_timeout_ms <= ha.renew_interval_seconds * 1000.0:
+        raise ValueError(
+            "coordination.syncer_ha.lease_busy_timeout_ms must be > 0 and <= "
+            "renew_interval_seconds * 1000"
+        )
+    if not 0.0 < ha.candidate_acquire_poll_seconds <= ha.renew_interval_seconds:
+        raise ValueError(
+            "coordination.syncer_ha.candidate_acquire_poll_seconds must be > 0 "
+            "and <= renew_interval_seconds"
+        )
+    if ha.candidate_wait_seconds < (ha.lease_duration_seconds + ha.max_clock_skew_seconds):
+        raise ValueError(
+            "coordination.syncer_ha.candidate_wait_seconds must cover "
+            "lease_duration_seconds + max_clock_skew_seconds"
+        )
+    if ha.learner_recovery_wait_seconds < ha.candidate_wait_seconds:
+        raise ValueError(
+            "coordination.syncer_ha.learner_recovery_wait_seconds must be >= candidate_wait_seconds"
+        )
+    if ha.canonical_repair_wait_seconds < 2.0 * ha.heartbeat_interval_seconds:
+        raise ValueError(
+            "coordination.syncer_ha.canonical_repair_wait_seconds must be at "
+            "least 2 * heartbeat_interval_seconds"
+        )
+    if ha.max_retained_epoch_dirs < 1:
+        raise ValueError("coordination.syncer_ha.max_retained_epoch_dirs must be >= 1")
+    for field_name in (
+        "claim_timeout_seconds",
+        "reconciliation_interval_seconds",
+        "uncertainty_timeout_seconds",
+        "backoff_initial_seconds",
+        "backoff_max_seconds",
+        "claim_retention_seconds",
+    ):
+        if float(getattr(recovery, field_name)) <= 0.0:
+            raise ValueError(f"coordination.recovery_submission.{field_name} must be > 0")
+    if recovery.backoff_max_seconds < recovery.backoff_initial_seconds:
+        raise ValueError(
+            "coordination.recovery_submission.backoff_max_seconds must be >= "
+            "backoff_initial_seconds"
+        )
+    if recovery.max_attempts_per_observation < 1:
+        raise ValueError(
+            "coordination.recovery_submission.max_attempts_per_observation must be >= 1"
+        )
+    if recovery.max_outstanding_candidates < 1:
+        raise ValueError("coordination.recovery_submission.max_outstanding_candidates must be >= 1")
+    if recovery.enabled:
+        candidate_walltime = recovery.candidate_walltime
+        parts = [] if candidate_walltime is None else candidate_walltime.split(":")
+        if (
+            len(parts) != 3
+            or not all(part.isdigit() for part in parts)
+            or len(parts[0]) < 2
+            or len(parts[1]) != 2
+            or len(parts[2]) != 2
+            or int(parts[1]) >= 60
+            or int(parts[2]) >= 60
+            or all(int(part) == 0 for part in parts)
+        ):
+            raise ValueError(
+                "coordination.recovery_submission.candidate_walltime must be an "
+                "explicit estimated HH:MM:SS value when recovery submission is enabled"
+            )
+    if config.io.checkpoint_digest_mode is False:
+        # PyYAML 1.1 treats an unquoted ``off`` scalar as boolean false.
+        config.io.checkpoint_digest_mode = "off"
+    elif not isinstance(config.io.checkpoint_digest_mode, str):
+        raise ValueError("io.checkpoint_digest_mode must be a string")
+    config.io.checkpoint_digest_mode = config.io.checkpoint_digest_mode.lower()
+    if config.io.checkpoint_digest_mode not in {"off", "checker", "always"}:
+        raise ValueError("io.checkpoint_digest_mode must be one of: off, checker, always")
     from ..runtime.adoption import validate_global_adoption_strategy
 
     validate_global_adoption_strategy(config)

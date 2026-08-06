@@ -1,0 +1,15 @@
+{
+  "crash_syncer_job_id": "2498070.opbs",
+  "descriptor_sha256": "4ff83467bcd0f1055e929828cc536f71e466efa6e16f73d5e8c44e83c0ba74dc",
+  "launcher_job_id": "2498068.opbs",
+  "learner_array_job_id": "2498072[].opbs",
+  "run_id": "plan02_phase1_acceptance_2498068",
+  "shared_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068",
+  "status": "PASS",
+  "successor_syncer_job_id": "2498071.opbs",
+  "takeover_injection": {
+    "action": "SIGKILL",
+    "failpoint": "after_db_commit",
+    "successor_dependency": "afterany"
+  }
+}

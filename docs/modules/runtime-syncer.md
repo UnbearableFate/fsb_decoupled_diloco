@@ -2,6 +2,16 @@
 
 syncer 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.md) 第 4、5 节;合并算法见 [02-architecture.md](../02-architecture.md) 第 4 节。
 
+HA full仍只有一个 active合并/发布者，但允许多个独立 candidate process。入口先用 run descriptor/bootstrap gate选择 legacy或 HA路径；HA candidate只有 acquire单调 `LeaderToken`后才构造 leader-bound store、加载模型/DB state并初始化 W&B。successor从 DB current committed row恢复；每次 publish使用 epoch唯一 checkpoint path，fenced commit后发布 canonical control。正常或异常收尾都不会让 stale token写 terminal/maintenance状态；正常收尾先发布 early stop generation，完成 summary/maintenance 后再发布更高的完整 generation。若两阶段之间崩溃，successor取得新 epoch重建 latest/heartbeat/summary并重跑幂等 maintenance 后完成终态；异常生成的 `error` terminal可诊断但不阻止 successor acquire/resume，也不让 learner提前停止。
+
+## runtime/syncer_ha.py
+
+- `acquire_candidate()` 以 source/config identity创建 owner-scoped candidate日志，轮询 `LeaderLeaseStore`直到取得 token、terminal已完整发布或等待预算耗尽；只有 DB terminal 对应 generation 的 canonical stop/summary publication路径、owner、epoch与 SHA 均有效才视为完成，缺一时允许 successor取得 token执行 terminal repair；loser没有业务 mutator。
+- `open_leader_store()` 用已验证 bootstrap identity打开 `FencedSQLiteStore`并返回绑定 current token的 runtime store。
+- `LeaseRenewalThread` 周期 renew并用 `EpochControlPublisher`写 syncer heartbeat；连续异常被保留并由主线程检查，停止时只释放自己的 exact token。
+
+`runtime/pbs_scheduler.py` 规范化 PBS job ID和 qstat字段，把 queued/prologue/running/suspended/finished/unknown分类；candidate qsub带唯一 request fingerprint、shared root、descriptor SHA和配置中显式估算的短 walltime。qstat/qsub命令缺失或 timeout被转成 `query_failed`/失败 receipt，不向上抛出并终止 learner。`runtime/launch_outbox.py` 用 deterministic observation key和 atomic mkdir选出单个 attempt winner，再按当前/历史 qstat结果、uncertainty窗口、指数 backoff、最大尝试和跨 observation的全局 outstanding预算 reconcile；mkdir后 claim.json尚未可见的窗口用 attempt目录mtime保守计作 live claim，submission receipt丢失时会先按 fingerprint查 scheduler，而不是立即重复 qsub。当前 stale observation的 attempts不会因 claim retention被归档并重置预算，只有看到新 observation后才允许把旧终态 claim写入 history。
+
 ## CLI 与入口
 
 - **`parse_args(argv)`** — `--config`(必填)、`--run-id`、`--shared-root`、`--num-learners`,以及实验覆盖参数:`--training-seed`、`--scan-interval-seconds`、`--syncer-device`、`--syncer-publish-dtype`、`--staleness-lambda`、`--max-staleness-versions`、`--global-adoption-strategy`、`--completion-mode`、`--parallel-checkpoint-writes`、`--materialize-full-every-events`、`--ingest-during-publish`、`--capture-terminal-predecessor-for-eval`(与 learner 的 parse_args 对称)。
@@ -80,7 +90,7 @@ syncer 进程实现。整体流程见 [03-runtime-flow.md](../03-runtime-flow.md
 - fragment 主循环使用同一 input-closed 判定与 grace/reingest 生命周期；每次 terminal merge 推进 global event 后重新计算目标片，最终 pending/selected fragment proposal 由统一 shutdown 终态化。
 - 每次成功合并后刷新 `last_progress_time`;quorum 等待期间超过 `no_progress_timeout_seconds` 即停机;
 - 每次成功提交后执行 archive/GC,因此 active DB/checkpoint/proposal 面有界;
-- 一旦成功进入主循环，finally 序列为:publish stop → 非 error 时等待 learner/末次摄取 → 只有全 stopped 才终态化未消费 proposal → summary；archive/GC 只在非 error 执行，随后 W&B finish/关库。
+- 一旦成功进入主循环，finally 序列为：HA先提交并发布 early stop generation（legacy直接 publish stop）→ 非 error 时等待 learner/末次摄取 → 只有全 stopped 才终态化未消费 proposal → summary → 非 error 的 archive/GC → HA以更高 generation成对发布最终 stop/summary；随后 W&B finish/关库。early generation、summary 或 maintenance 窗口崩溃都保持 terminal不完整，使 successor可执行幂等 repair。
 
 ### fragment 模式(`run_fragment_syncer`)
 

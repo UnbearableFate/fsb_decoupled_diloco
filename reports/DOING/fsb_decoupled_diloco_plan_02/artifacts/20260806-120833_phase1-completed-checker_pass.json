@@ -1,0 +1,551 @@
+{
+  "boundedness": {
+    "active_claim_dirs": 0,
+    "epoch_dirs": 1,
+    "gc_candidate_rows": 20,
+    "sqlite_freelist_count": 2,
+    "sqlite_page_count": 48
+  },
+  "checked_at": 1785985717.6472876,
+  "checker": "plan02_phase1",
+  "checkpoint_evidence": [
+    {
+      "active": false,
+      "artifact_kind": "weight",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/weights/epochs/e000001/18eb27d41a26/global_v000000_p5052f404167d.safetensors",
+      "size_bytes": 8352,
+      "version": 0
+    },
+    {
+      "active": false,
+      "artifact_kind": "optim",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/optim/epochs/e000001/18eb27d41a26/outer_v000000_p5052f404167d.safetensors",
+      "size_bytes": 16592,
+      "version": 0
+    },
+    {
+      "active": false,
+      "artifact_kind": "weight",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/weights/epochs/e000002/85e075f13859/global_v000001_p13083941b6b7.safetensors",
+      "size_bytes": 8352,
+      "version": 1
+    },
+    {
+      "active": false,
+      "artifact_kind": "optim",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/optim/epochs/e000002/85e075f13859/outer_v000001_p13083941b6b7.safetensors",
+      "size_bytes": 16592,
+      "version": 1
+    },
+    {
+      "active": false,
+      "artifact_kind": "weight",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/weights/epochs/e000002/85e075f13859/global_v000002_pe390aabfbbf1.safetensors",
+      "size_bytes": 8352,
+      "version": 2
+    },
+    {
+      "active": false,
+      "artifact_kind": "optim",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/optim/epochs/e000002/85e075f13859/outer_v000002_pe390aabfbbf1.safetensors",
+      "size_bytes": 16592,
+      "version": 2
+    },
+    {
+      "active": false,
+      "artifact_kind": "weight",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/weights/epochs/e000002/85e075f13859/global_v000003_pe8645f2ef167.safetensors",
+      "size_bytes": 8352,
+      "version": 3
+    },
+    {
+      "active": false,
+      "artifact_kind": "optim",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/optim/epochs/e000002/85e075f13859/outer_v000003_pe8645f2ef167.safetensors",
+      "size_bytes": 16592,
+      "version": 3
+    },
+    {
+      "active": false,
+      "artifact_kind": "weight",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/weights/epochs/e000002/85e075f13859/global_v000004_p6d94f9a6f24c.safetensors",
+      "size_bytes": 8352,
+      "version": 4
+    },
+    {
+      "active": false,
+      "artifact_kind": "optim",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/optim/epochs/e000002/85e075f13859/outer_v000004_p6d94f9a6f24c.safetensors",
+      "size_bytes": 16592,
+      "version": 4
+    },
+    {
+      "active": false,
+      "artifact_kind": "weight",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/weights/epochs/e000002/85e075f13859/global_v000005_pc2d322405c0f.safetensors",
+      "size_bytes": 8352,
+      "version": 5
+    },
+    {
+      "active": false,
+      "artifact_kind": "optim",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/optim/epochs/e000002/85e075f13859/outer_v000005_pc2d322405c0f.safetensors",
+      "size_bytes": 16592,
+      "version": 5
+    },
+    {
+      "active": false,
+      "artifact_kind": "weight",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/weights/epochs/e000002/85e075f13859/global_v000006_pa5cdefc64aa1.safetensors",
+      "size_bytes": 8352,
+      "version": 6
+    },
+    {
+      "active": false,
+      "artifact_kind": "optim",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/optim/epochs/e000002/85e075f13859/outer_v000006_pa5cdefc64aa1.safetensors",
+      "size_bytes": 16592,
+      "version": 6
+    },
+    {
+      "active": false,
+      "artifact_kind": "weight",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/weights/epochs/e000002/85e075f13859/global_v000007_p0589ec80881e.safetensors",
+      "size_bytes": 8352,
+      "version": 7
+    },
+    {
+      "active": false,
+      "artifact_kind": "optim",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/optim/epochs/e000002/85e075f13859/outer_v000007_p0589ec80881e.safetensors",
+      "size_bytes": 16592,
+      "version": 7
+    },
+    {
+      "active": false,
+      "artifact_kind": "weight",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/weights/epochs/e000002/85e075f13859/global_v000008_pf36fcc0f3e64.safetensors",
+      "size_bytes": 8352,
+      "version": 8
+    },
+    {
+      "active": false,
+      "artifact_kind": "optim",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/optim/epochs/e000002/85e075f13859/outer_v000008_pf36fcc0f3e64.safetensors",
+      "size_bytes": 16592,
+      "version": 8
+    },
+    {
+      "active": false,
+      "artifact_kind": "weight",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/weights/epochs/e000002/85e075f13859/global_v000009_p649a31f066c9.safetensors",
+      "size_bytes": 8352,
+      "version": 9
+    },
+    {
+      "active": false,
+      "artifact_kind": "optim",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/optim/epochs/e000002/85e075f13859/outer_v000009_p649a31f066c9.safetensors",
+      "size_bytes": 16592,
+      "version": 9
+    },
+    {
+      "active": true,
+      "artifact_kind": "weight",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/weights/epochs/e000002/85e075f13859/global_v000010_pbf6c2fd38114.safetensors",
+      "size_bytes": 8352,
+      "version": 10
+    },
+    {
+      "active": true,
+      "artifact_kind": "optim",
+      "exists": true,
+      "observed_sha256": null,
+      "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068/optim/epochs/e000002/85e075f13859/outer_v000010_pbf6c2fd38114.safetensors",
+      "size_bytes": 16592,
+      "version": 10
+    }
+  ],
+  "control_publications": [
+    {
+      "created_at": 1785985673.3350303,
+      "exists": true,
+      "kind": "latest",
+      "logical_generation": 0,
+      "observed_sha256": "a8a0f781e69ca651f95cb2d8ad3abe22722e22bd88e70d1e9f416ce7e283c01c",
+      "published_by_epoch": 2,
+      "published_by_owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "relative_path": "control/syncer_epochs/e000002_85e075f13859/latest/v000000.json",
+      "sha256": "a8a0f781e69ca651f95cb2d8ad3abe22722e22bd88e70d1e9f416ce7e283c01c"
+    },
+    {
+      "created_at": 1785985693.4776819,
+      "exists": true,
+      "kind": "latest",
+      "logical_generation": 1,
+      "observed_sha256": "c71a06b09bf7139830ae0d314c9dd6016292e5398df17f309af2712b337f5945",
+      "published_by_epoch": 2,
+      "published_by_owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "relative_path": "control/syncer_epochs/e000002_85e075f13859/latest/v000001.json",
+      "sha256": "c71a06b09bf7139830ae0d314c9dd6016292e5398df17f309af2712b337f5945"
+    },
+    {
+      "created_at": 1785985693.9179642,
+      "exists": true,
+      "kind": "latest",
+      "logical_generation": 2,
+      "observed_sha256": "4d5f77879365e4d1cb7547d41913bab4c84e01c063789c403a038ac8c430899e",
+      "published_by_epoch": 2,
+      "published_by_owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "relative_path": "control/syncer_epochs/e000002_85e075f13859/latest/v000002.json",
+      "sha256": "4d5f77879365e4d1cb7547d41913bab4c84e01c063789c403a038ac8c430899e"
+    },
+    {
+      "created_at": 1785985694.3257453,
+      "exists": true,
+      "kind": "latest",
+      "logical_generation": 3,
+      "observed_sha256": "813d4d59c11a99411aeade67293052ad0fb1d3cfcbff9767f3913bc28f55287b",
+      "published_by_epoch": 2,
+      "published_by_owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "relative_path": "control/syncer_epochs/e000002_85e075f13859/latest/v000003.json",
+      "sha256": "813d4d59c11a99411aeade67293052ad0fb1d3cfcbff9767f3913bc28f55287b"
+    },
+    {
+      "created_at": 1785985694.7840574,
+      "exists": true,
+      "kind": "latest",
+      "logical_generation": 4,
+      "observed_sha256": "e18072dbcc587d0f622c0175fc168496de81356c3604eae6a12b6df827e12d39",
+      "published_by_epoch": 2,
+      "published_by_owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "relative_path": "control/syncer_epochs/e000002_85e075f13859/latest/v000004.json",
+      "sha256": "e18072dbcc587d0f622c0175fc168496de81356c3604eae6a12b6df827e12d39"
+    },
+    {
+      "created_at": 1785985695.2488763,
+      "exists": true,
+      "kind": "latest",
+      "logical_generation": 5,
+      "observed_sha256": "822c676b3fb8382856c15f161b46f96638bd91e5775e0afe50e8c28722638958",
+      "published_by_epoch": 2,
+      "published_by_owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "relative_path": "control/syncer_epochs/e000002_85e075f13859/latest/v000005.json",
+      "sha256": "822c676b3fb8382856c15f161b46f96638bd91e5775e0afe50e8c28722638958"
+    },
+    {
+      "created_at": 1785985695.8370242,
+      "exists": true,
+      "kind": "latest",
+      "logical_generation": 6,
+      "observed_sha256": "72047226d0f3e7fe7a8fa0fbc3789a0c78782ec6c4dd8d62b4fb6e5f9c0121e5",
+      "published_by_epoch": 2,
+      "published_by_owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "relative_path": "control/syncer_epochs/e000002_85e075f13859/latest/v000006.json",
+      "sha256": "72047226d0f3e7fe7a8fa0fbc3789a0c78782ec6c4dd8d62b4fb6e5f9c0121e5"
+    },
+    {
+      "created_at": 1785985696.2911084,
+      "exists": true,
+      "kind": "latest",
+      "logical_generation": 7,
+      "observed_sha256": "69a5cc1d3de6c92db5dba4b204127c46063ec2a0f8174446ff42b23be5cd27aa",
+      "published_by_epoch": 2,
+      "published_by_owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "relative_path": "control/syncer_epochs/e000002_85e075f13859/latest/v000007.json",
+      "sha256": "69a5cc1d3de6c92db5dba4b204127c46063ec2a0f8174446ff42b23be5cd27aa"
+    },
+    {
+      "created_at": 1785985696.8611171,
+      "exists": true,
+      "kind": "latest",
+      "logical_generation": 8,
+      "observed_sha256": "966e392939fdb4758bbfa866b7750941b6945c73ac987f9095546c814b4009e5",
+      "published_by_epoch": 2,
+      "published_by_owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "relative_path": "control/syncer_epochs/e000002_85e075f13859/latest/v000008.json",
+      "sha256": "966e392939fdb4758bbfa866b7750941b6945c73ac987f9095546c814b4009e5"
+    },
+    {
+      "created_at": 1785985697.3250794,
+      "exists": true,
+      "kind": "latest",
+      "logical_generation": 9,
+      "observed_sha256": "a9fbc94f90fbbd2bc8c0a9fa9e2fb92ed596874359645d81ea34a83d8b1e11ec",
+      "published_by_epoch": 2,
+      "published_by_owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "relative_path": "control/syncer_epochs/e000002_85e075f13859/latest/v000009.json",
+      "sha256": "a9fbc94f90fbbd2bc8c0a9fa9e2fb92ed596874359645d81ea34a83d8b1e11ec"
+    },
+    {
+      "created_at": 1785985697.922651,
+      "exists": true,
+      "kind": "latest",
+      "logical_generation": 10,
+      "observed_sha256": "c4db287083d6bd1d7dd6b66eea935d70def65c5559b5a5761d38a5e972c23dd8",
+      "published_by_epoch": 2,
+      "published_by_owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "relative_path": "control/syncer_epochs/e000002_85e075f13859/latest/v000010.json",
+      "sha256": "c4db287083d6bd1d7dd6b66eea935d70def65c5559b5a5761d38a5e972c23dd8"
+    },
+    {
+      "created_at": 1785985698.1920755,
+      "exists": true,
+      "kind": "stop",
+      "logical_generation": 1,
+      "observed_sha256": "4aa14cf71707c95c84bc567ae361845300a6a90ad1790cc2b2c393803ae27527",
+      "published_by_epoch": 2,
+      "published_by_owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "relative_path": "control/syncer_epochs/e000002_85e075f13859/terminal/stop_g000001.json",
+      "sha256": "4aa14cf71707c95c84bc567ae361845300a6a90ad1790cc2b2c393803ae27527"
+    },
+    {
+      "created_at": 1785985699.5762517,
+      "exists": true,
+      "kind": "summary",
+      "logical_generation": 1,
+      "observed_sha256": "fe8a6c4bc1ca1c1baac167bd8fb005dd196894404462e77838bbb53240f3620e",
+      "published_by_epoch": 2,
+      "published_by_owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "relative_path": "control/syncer_epochs/e000002_85e075f13859/terminal/summary_g000001.json",
+      "sha256": "fe8a6c4bc1ca1c1baac167bd8fb005dd196894404462e77838bbb53240f3620e"
+    }
+  ],
+  "discovery": {
+    "epoch_optim": {
+      "expected_min": 1,
+      "observed": 11
+    },
+    "epoch_weights": {
+      "expected_min": 1,
+      "observed": 11
+    },
+    "instance_payloads": {
+      "expected_min": 0,
+      "observed": 0
+    },
+    "instance_pointers": {
+      "expected_min": 0,
+      "observed": 8
+    },
+    "syncer_heartbeats": {
+      "expected_min": 1,
+      "observed": 1
+    }
+  },
+  "epochs": [
+    {
+      "acquired_at": 1785985673.1553319,
+      "config_sha256": "e50ed9cec884ce00fb8f0c626bab041775e6e6687a938ca1bd0c3c1f65afc633",
+      "epoch": 1,
+      "final_at": 1785985689.216493,
+      "final_state": "expired",
+      "hostname": "mg0008",
+      "last_renewed_at": 1785985673.1553319,
+      "owner_id": "2498070.opbs:mg0008:1843340:1e2e5245-e55b-448a-8a0e-81f2e952c5e4",
+      "pbs_job_id": "2498070.opbs",
+      "pid": 1843340,
+      "source_fingerprint": "sha256:f980b08eb38d31b62a66664532f93c2cb6450cd0059e4637e8ad842d02692299",
+      "superseded_by_epoch": 2
+    },
+    {
+      "acquired_at": 1785985689.216493,
+      "config_sha256": "e50ed9cec884ce00fb8f0c626bab041775e6e6687a938ca1bd0c3c1f65afc633",
+      "epoch": 2,
+      "final_at": 1785985700.0738652,
+      "final_state": "released",
+      "hostname": "mg0004",
+      "last_renewed_at": 1785985700.0738652,
+      "owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "pbs_job_id": "2498071.opbs",
+      "pid": 2809855,
+      "source_fingerprint": "sha256:f980b08eb38d31b62a66664532f93c2cb6450cd0059e4637e8ad842d02692299",
+      "superseded_by_epoch": null
+    }
+  ],
+  "errors": [],
+  "failure_event_scan": {
+    "event_count": 4276,
+    "failure_count": 0,
+    "failure_events": []
+  },
+  "fixed_cache": {
+    "authoritative_reader": "epoch_control_sqlite_manifest",
+    "latest_matches_canonical_identity": true,
+    "latest_present": true,
+    "stop_matches_canonical_identity": true,
+    "stop_present": true
+  },
+  "identity": {
+    "config_sha256": "e50ed9cec884ce00fb8f0c626bab041775e6e6687a938ca1bd0c3c1f65afc633",
+    "mode": "full",
+    "run_id": "plan02_phase1_acceptance_2498068",
+    "source_fingerprint": "sha256:f980b08eb38d31b62a66664532f93c2cb6450cd0059e4637e8ad842d02692299"
+  },
+  "leader": {
+    "acquired_at": 1785985689.216493,
+    "epoch": 2,
+    "heartbeat_seq": 4,
+    "hostname": "mg0004",
+    "lease_expires_at": 1785985700.0738652,
+    "owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+    "pbs_job_id": "2498071.opbs",
+    "pid": 2809855,
+    "renewed_at": 1785985700.0738652,
+    "singleton": 1,
+    "state": "released"
+  },
+  "mode": "phase1-completed",
+  "mutator_inventory": {
+    "frozen_count": 31,
+    "observed_count": 31,
+    "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/plans/artifacts/plan02_phase1_mutator_inventory.json"
+  },
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2498068",
+  "schema": {
+    "created_at": 1785985664.456416,
+    "integrity_check": [
+      "ok"
+    ],
+    "mode": "full",
+    "pragmas": {
+      "journal_mode": "delete",
+      "query_only": 1,
+      "synchronous": 2,
+      "user_version": 2
+    },
+    "protocol_version": 3,
+    "schema_version": 2,
+    "singleton": 1
+  },
+  "status": "PASS",
+  "terminal": {
+    "final_version": 10,
+    "finalized_at": 1785985698.1920755,
+    "finalized_by_epoch": 2,
+    "finalized_by_owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+    "generation": 1,
+    "singleton": 1,
+    "stop_reason": "stop_after_outer_steps",
+    "total_seen_tokens": 5120
+  },
+  "version_to_epoch": [
+    {
+      "epoch": 1,
+      "owner_id": "2498070.opbs:mg0008:1843340:1e2e5245-e55b-448a-8a0e-81f2e952c5e4",
+      "publication_id": "5052f404167d48b3973ee1640117bdc7",
+      "version": 0
+    },
+    {
+      "epoch": 2,
+      "owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "publication_id": "13083941b6b74fa58efc30e8ce3dc722",
+      "version": 1
+    },
+    {
+      "epoch": 2,
+      "owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "publication_id": "e390aabfbbf1469abf6d1e2f16471029",
+      "version": 2
+    },
+    {
+      "epoch": 2,
+      "owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "publication_id": "e8645f2ef1674bbab93ec7bce918edde",
+      "version": 3
+    },
+    {
+      "epoch": 2,
+      "owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "publication_id": "6d94f9a6f24c4ce694c38726685e731c",
+      "version": 4
+    },
+    {
+      "epoch": 2,
+      "owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "publication_id": "c2d322405c0f4e6099042933b6a6920f",
+      "version": 5
+    },
+    {
+      "epoch": 2,
+      "owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "publication_id": "a5cdefc64aa14ddabec4dfa47dc26710",
+      "version": 6
+    },
+    {
+      "epoch": 2,
+      "owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "publication_id": "0589ec80881e42119dce230b00ee7665",
+      "version": 7
+    },
+    {
+      "epoch": 2,
+      "owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "publication_id": "f36fcc0f3e6440deb5e92e4f8d599142",
+      "version": 8
+    },
+    {
+      "epoch": 2,
+      "owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "publication_id": "649a31f066c945028c2618ff3edb15bb",
+      "version": 9
+    },
+    {
+      "epoch": 2,
+      "owner_id": "2498071.opbs:mg0004:2809855:2c3e858a-5afd-4526-83cf-44120274821f",
+      "publication_id": "bf6c2fd3811443099913b618a3ad578c",
+      "version": 10
+    }
+  ],
+  "warnings": [],
+  "watchdog_recovery": {
+    "candidate_wait_seconds": 20.0,
+    "canonical_repair_wait_seconds": 10.0,
+    "claims": [],
+    "heartbeat_stale_after_seconds": 5.0,
+    "learner_recovery_wait_seconds": 45.0,
+    "recovery_submission_enabled": false
+  }
+}

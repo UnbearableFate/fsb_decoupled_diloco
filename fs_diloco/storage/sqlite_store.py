@@ -167,14 +167,55 @@ class SQLiteStore:
         outer_optimizer: str,
         status: str = GLOBAL_STATUS_COMMITTED,
         notes: str | None = None,
+        commit_epoch: int | None = None,
+        commit_owner_id: str | None = None,
+        publication_id: str | None = None,
+        weight_size_bytes: int | None = None,
+        optim_size_bytes: int | None = None,
+        weight_sha256: str | None = None,
+        optim_sha256: str | None = None,
     ) -> None:
-        self.conn.execute(
-            """
+        if publication_id is None:
+            self.conn.execute(
+                """
+                INSERT INTO global_versions(
+                    version, weight_path, optim_path, created_at, num_updates,
+                    total_update_tokens, total_seen_tokens, outer_optimizer, status, notes
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(version) DO UPDATE SET
+                    weight_path=excluded.weight_path,
+                    optim_path=excluded.optim_path,
+                    num_updates=excluded.num_updates,
+                    total_update_tokens=excluded.total_update_tokens,
+                    total_seen_tokens=excluded.total_seen_tokens,
+                    outer_optimizer=excluded.outer_optimizer,
+                    status=excluded.status,
+                    notes=excluded.notes
+                """,
+                (
+                    version,
+                    weight_path,
+                    optim_path,
+                    time.time(),
+                    num_updates,
+                    total_update_tokens,
+                    total_seen_tokens,
+                    outer_optimizer,
+                    status,
+                    notes,
+                ),
+            )
+        else:
+            self.conn.execute(
+                """
             INSERT INTO global_versions(
                 version, weight_path, optim_path, created_at, num_updates, total_update_tokens,
-                total_seen_tokens, outer_optimizer, status, notes
+                total_seen_tokens, outer_optimizer, status, notes, commit_epoch,
+                commit_owner_id, publication_id, weight_size_bytes, optim_size_bytes,
+                weight_sha256, optim_sha256
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(version) DO UPDATE SET
                 weight_path=excluded.weight_path,
                 optim_path=excluded.optim_path,
@@ -183,21 +224,35 @@ class SQLiteStore:
                 total_seen_tokens=excluded.total_seen_tokens,
                 outer_optimizer=excluded.outer_optimizer,
                 status=excluded.status,
-                notes=excluded.notes
+                notes=excluded.notes,
+                commit_epoch=excluded.commit_epoch,
+                commit_owner_id=excluded.commit_owner_id,
+                publication_id=excluded.publication_id,
+                weight_size_bytes=excluded.weight_size_bytes,
+                optim_size_bytes=excluded.optim_size_bytes,
+                weight_sha256=excluded.weight_sha256,
+                optim_sha256=excluded.optim_sha256
             """,
-            (
-                version,
-                weight_path,
-                optim_path,
-                time.time(),
-                num_updates,
-                total_update_tokens,
-                total_seen_tokens,
-                outer_optimizer,
-                status,
-                notes,
-            ),
-        )
+                (
+                    version,
+                    weight_path,
+                    optim_path,
+                    time.time(),
+                    num_updates,
+                    total_update_tokens,
+                    total_seen_tokens,
+                    outer_optimizer,
+                    status,
+                    notes,
+                    commit_epoch,
+                    commit_owner_id,
+                    publication_id,
+                    weight_size_bytes,
+                    optim_size_bytes,
+                    weight_sha256,
+                    optim_sha256,
+                ),
+            )
         self.conn.commit()
 
     @staticmethod
@@ -227,6 +282,13 @@ class SQLiteStore:
         outer_optimizer: str,
         identity: dict[str, Any],
         config_snapshot: dict[str, Any],
+        commit_epoch: int | None = None,
+        commit_owner_id: str | None = None,
+        publication_id: str | None = None,
+        weight_size_bytes: int | None = None,
+        optim_size_bytes: int | None = None,
+        weight_sha256: str | None = None,
+        optim_sha256: str | None = None,
     ) -> dict[str, Any]:
         """Create v0 and its run identity in one transaction."""
         now = time.time()
@@ -238,28 +300,51 @@ class SQLiteStore:
             ).fetchone()[0]
             if int(existing) != 0:
                 raise RuntimeError("non-resume initialization found an existing committed version")
-            self.conn.execute(
-                """
-                INSERT INTO global_versions(
-                    version, weight_path, optim_path, created_at, num_updates,
-                    total_update_tokens, total_seen_tokens, outer_optimizer, status, notes
-                ) VALUES (0, ?, ?, ?, 0, 0, 0, ?, ?, ?)
-                """,
-                (
-                    weight_path,
-                    optim_path,
-                    now,
-                    outer_optimizer,
-                    GLOBAL_STATUS_COMMITTED,
-                    "initialized",
-                ),
-            )
-            self._set_run_state_in_transaction(
-                self.conn, "identity", identity, now=now
-            )
-            self._set_run_state_in_transaction(
-                self.conn, "config", config_snapshot, now=now
-            )
+            if publication_id is None:
+                self.conn.execute(
+                    """
+                    INSERT INTO global_versions(
+                        version, weight_path, optim_path, created_at, num_updates,
+                        total_update_tokens, total_seen_tokens, outer_optimizer, status, notes
+                    ) VALUES (0, ?, ?, ?, 0, 0, 0, ?, ?, ?)
+                    """,
+                    (
+                        weight_path,
+                        optim_path,
+                        now,
+                        outer_optimizer,
+                        GLOBAL_STATUS_COMMITTED,
+                        "initialized",
+                    ),
+                )
+            else:
+                self.conn.execute(
+                    """
+                    INSERT INTO global_versions(
+                        version, weight_path, optim_path, created_at, num_updates,
+                        total_update_tokens, total_seen_tokens, outer_optimizer, status, notes,
+                        commit_epoch, commit_owner_id, publication_id, weight_size_bytes,
+                        optim_size_bytes, weight_sha256, optim_sha256
+                    ) VALUES (0, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        weight_path,
+                        optim_path,
+                        now,
+                        outer_optimizer,
+                        GLOBAL_STATUS_COMMITTED,
+                        "initialized",
+                        commit_epoch,
+                        commit_owner_id,
+                        publication_id,
+                        weight_size_bytes,
+                        optim_size_bytes,
+                        weight_sha256,
+                        optim_sha256,
+                    ),
+                )
+            self._set_run_state_in_transaction(self.conn, "identity", identity, now=now)
+            self._set_run_state_in_transaction(self.conn, "config", config_snapshot, now=now)
             self.conn.commit()
         except Exception:
             self.conn.rollback()
@@ -281,6 +366,13 @@ class SQLiteStore:
         total_seen_tokens: int,
         outer_optimizer: str,
         max_staleness_versions: int,
+        commit_epoch: int | None = None,
+        commit_owner_id: str | None = None,
+        publication_id: str | None = None,
+        weight_size_bytes: int | None = None,
+        optim_size_bytes: int | None = None,
+        weight_sha256: str | None = None,
+        optim_sha256: str | None = None,
         before_commit: Callable[[], None] | None = None,
     ) -> dict[str, Any]:
         """Atomically commit a full merge and every resulting update transition."""
@@ -338,25 +430,55 @@ class SQLiteStore:
                         f"update {update_id} staleness {stale} exceeds {max_staleness_versions}"
                     )
 
-            self.conn.execute(
-                """
-                INSERT INTO global_versions(
-                    version, weight_path, optim_path, created_at, num_updates,
-                    total_update_tokens, total_seen_tokens, outer_optimizer, status, notes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
-                """,
-                (
-                    target_version,
-                    weight_path,
-                    optim_path,
-                    now,
-                    len(selected_ids),
-                    int(total_update_tokens),
-                    int(total_seen_tokens),
-                    outer_optimizer,
-                    GLOBAL_STATUS_COMMITTED,
-                ),
-            )
+            if publication_id is None:
+                self.conn.execute(
+                    """
+                    INSERT INTO global_versions(
+                        version, weight_path, optim_path, created_at, num_updates,
+                        total_update_tokens, total_seen_tokens, outer_optimizer, status, notes
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                    """,
+                    (
+                        target_version,
+                        weight_path,
+                        optim_path,
+                        now,
+                        len(selected_ids),
+                        int(total_update_tokens),
+                        int(total_seen_tokens),
+                        outer_optimizer,
+                        GLOBAL_STATUS_COMMITTED,
+                    ),
+                )
+            else:
+                self.conn.execute(
+                    """
+                    INSERT INTO global_versions(
+                        version, weight_path, optim_path, created_at, num_updates,
+                        total_update_tokens, total_seen_tokens, outer_optimizer, status, notes,
+                        commit_epoch, commit_owner_id, publication_id, weight_size_bytes,
+                        optim_size_bytes, weight_sha256, optim_sha256
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        target_version,
+                        weight_path,
+                        optim_path,
+                        now,
+                        len(selected_ids),
+                        int(total_update_tokens),
+                        int(total_seen_tokens),
+                        outer_optimizer,
+                        GLOBAL_STATUS_COMMITTED,
+                        commit_epoch,
+                        commit_owner_id,
+                        publication_id,
+                        weight_size_bytes,
+                        optim_size_bytes,
+                        weight_sha256,
+                        optim_sha256,
+                    ),
+                )
             for update_id in selected_ids:
                 row = by_id[update_id]
                 self.conn.execute(
@@ -558,7 +680,10 @@ class SQLiteStore:
                 "SELECT last_observed_update_id FROM proposal_frontiers WHERE learner_id = ?",
                 (metadata["learner_id"],),
             ).fetchone()
-            if frontier is not None and frontier["last_observed_update_id"] == metadata["update_id"]:
+            if (
+                frontier is not None
+                and frontier["last_observed_update_id"] == metadata["update_id"]
+            ):
                 self.conn.rollback()
                 return False
             self.conn.execute(
@@ -762,10 +887,7 @@ class SQLiteStore:
                     status=excluded.status,
                     status_reason=excluded.status_reason
                 """,
-                [
-                    (learner_id, LEARNER_STATUS_UNKNOWN, "resumed")
-                    for learner_id in learner_ids
-                ],
+                [(learner_id, LEARNER_STATUS_UNKNOWN, "resumed") for learner_id in learner_ids],
             )
             generation = {
                 "resume_id": str(resume_id),
@@ -834,9 +956,7 @@ class SQLiteStore:
         self.conn.commit()
         return cur.rowcount
 
-    def drop_ineligible_updates(
-        self, current_version: int, max_staleness_versions: int
-    ) -> int:
+    def drop_ineligible_updates(self, current_version: int, max_staleness_versions: int) -> int:
         future = self.conn.execute(
             """
             UPDATE updates
@@ -952,9 +1072,7 @@ class SQLiteStore:
 
     def fragment_proposal_frontiers(self) -> dict[tuple[str, int], str]:
         return {
-            (str(row["learner_id"]), int(row["fragment_id"])): str(
-                row["last_observed_update_id"]
-            )
+            (str(row["learner_id"]), int(row["fragment_id"])): str(row["last_observed_update_id"])
             for row in self.conn.execute(
                 """
                 SELECT learner_id, fragment_id, last_observed_update_id
@@ -1058,18 +1176,13 @@ class SQLiteStore:
 
     def gc_pending_paths(self) -> set[Path]:
         rows = self.conn.execute("SELECT file_path FROM gc_pending").fetchall()
-        return {
-            Path(str(row["file_path"])).resolve(strict=False)
-            for row in rows
-        }
+        return {Path(str(row["file_path"])).resolve(strict=False) for row in rows}
 
     def gc_pending_count(self) -> int:
         return int(self.conn.execute("SELECT COUNT(*) FROM gc_pending").fetchone()[0])
 
     def clear_gc_pending_paths(self, paths: Iterable[str | Path]) -> int:
-        values = sorted(
-            {str(Path(path).resolve(strict=False)) for path in paths}
-        )
+        values = sorted({str(Path(path).resolve(strict=False)) for path in paths})
         if not values:
             return 0
         before = self.conn.total_changes
@@ -1198,9 +1311,10 @@ class SQLiteStore:
                 """,
                 (metadata["learner_id"], int(metadata["fragment_id"])),
             ).fetchone()
-            if frontier is not None and frontier["last_observed_update_id"] == metadata[
-                "update_id"
-            ]:
+            if (
+                frontier is not None
+                and frontier["last_observed_update_id"] == metadata["update_id"]
+            ):
                 self.conn.rollback()
                 return False
             self.conn.execute(

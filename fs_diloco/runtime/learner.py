@@ -16,7 +16,7 @@ from typing import Any
 
 import torch
 
-from ..core.config import Config, resolve_config
+from ..core.config import Config, config_to_dict, resolve_config
 from ..core.constants import (
     FORMAT_VERSION,
     LEARNER_STATUS_ACTIVE,
@@ -46,8 +46,10 @@ from ..protocol.fragment_codec import (
 )
 from ..protocol.fragment_index import load_fragment_index
 from ..protocol.fragment_scheduler import select_fragment
+from ..protocol.control_epoch import EpochControlReader
 from ..storage.atomic_io import atomic_write_json, file_size, safe_read_json, sha256_file
-from ..storage.paths import RunPaths, prepare_run_dirs
+from ..core.run_descriptor import load_run_descriptor
+from ..storage.paths import RunPaths, prepare_learner_instance_dir, prepare_run_dirs
 from ..storage.tensor_codec import (
     dtype_from_name,
     load_global_weights_flat,
@@ -62,6 +64,8 @@ from .adoption import (
     make_global_adoption_strategy,
 )
 from .failure_sim import maybe_crash, maybe_sleep_jitter, should_skip_upload
+from .launch_outbox import RecoveryClaimManager, recovery_observation_key
+from .pbs_scheduler import PBSScheduler
 
 
 PREDICTION_WORKING_VECTOR_COUNT = 14
@@ -292,8 +296,81 @@ def wait_for_json(
     raise TimeoutError(f"timed out waiting for {path}")
 
 
+_EPOCH_CONTROL_READERS: dict[Path, EpochControlReader] = {}
+
+
+def _epoch_control_reader(
+    paths: RunPaths, *, run_id: str | None = None
+) -> EpochControlReader | None:
+    if not paths.bootstrap_complete_json.is_file():
+        return None
+    key = paths.shared_root.resolve()
+    reader = _EPOCH_CONTROL_READERS.get(key)
+    if reader is None:
+        if run_id is None:
+            descriptor = safe_read_json(paths.run_descriptor_json)
+            if not isinstance(descriptor, dict) or not descriptor.get("run_id"):
+                raise RuntimeError("HA epoch control requires a valid run descriptor")
+            run_id = str(descriptor["run_id"])
+        reader = EpochControlReader(paths, run_id=run_id)
+        _EPOCH_CONTROL_READERS[key] = reader
+    elif run_id is not None and reader.run_id != run_id:
+        raise RuntimeError("cached HA epoch control reader run_id mismatch")
+    return reader
+
+
+def close_epoch_control_reader(paths: RunPaths) -> None:
+    reader = _EPOCH_CONTROL_READERS.pop(paths.shared_root.resolve(), None)
+    if reader is not None:
+        reader.close()
+
+
+def read_authoritative_latest(paths: RunPaths) -> dict[str, Any] | None:
+    reader = _epoch_control_reader(paths)
+    if reader is not None:
+        return reader.read_current_latest()
+    return safe_read_json(paths.latest_json)
+
+
+def wait_for_authoritative_latest(
+    paths: RunPaths,
+    *,
+    timeout_seconds: float = 1800.0,
+    poll_seconds: float = 1.0,
+) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        payload = read_authoritative_latest(paths)
+        if payload is not None:
+            return payload
+        time.sleep(poll_seconds)
+    raise TimeoutError("timed out waiting for canonical latest control")
+
+
+def _terminal_is_final(payload: dict[str, Any] | None) -> bool:
+    if payload is None:
+        return False
+    reason = payload.get("stop_reason", payload.get("reason"))
+    return reason not in (None, "", "error")
+
+
+def read_authoritative_terminal(
+    paths: RunPaths,
+    *,
+    run_id: str | None = None,
+) -> dict[str, Any] | None:
+    reader = _epoch_control_reader(paths, run_id=run_id)
+    if reader is not None:
+        payload = reader.read_current_terminal()
+        # An HA syncer records an error generation for diagnosis, but error is
+        # explicitly resumable.  Learners must keep waiting/reconciling rather
+        # than treating that generation as the final stop authority.
+        return payload if _terminal_is_final(payload) else None
+    return safe_read_json(paths.stop_json)
+
+
 def read_latest_if_newer(paths: RunPaths, last_loaded_global_version: int) -> dict[str, Any] | None:
-    payload = safe_read_json(paths.latest_json)
+    payload = read_authoritative_latest(paths)
     if payload is None:
         return None
     if int(payload.get("version", -1)) <= last_loaded_global_version:
@@ -321,7 +398,7 @@ def wait_for_latest_if_newer(
         if payload is not None:
             return payload, time.monotonic() - started
         remaining = deadline - time.monotonic()
-        if remaining <= 0.0 or paths.stop_json.exists():
+        if remaining <= 0.0 or read_authoritative_terminal(paths) is not None:
             return None, time.monotonic() - started
         time.sleep(min(poll_seconds, remaining))
 
@@ -534,10 +611,7 @@ def load_or_refresh_latest(
                 poll_seconds=poll_seconds,
             )
             waited_seconds += waited
-            if (
-                newer_latest is None
-                or int(newer_latest.get(version_field, -1)) <= current_version
-            ):
+            if newer_latest is None or int(newer_latest.get(version_field, -1)) <= current_version:
                 first_missing.add_note(
                     "latest load retries exhausted: "
                     f"retry_count={retry_count}, waited_seconds={waited_seconds:.6f}, "
@@ -558,7 +632,7 @@ def _latest_load_retry_kwargs(config: Config) -> dict[str, float]:
 
 
 def stop_requested(paths: RunPaths, local_step: int, config: Config) -> bool:
-    if paths.stop_json.exists():
+    if read_authoritative_terminal(paths) is not None:
         return True
     if config.training.completion_mode == "global_only":
         return False
@@ -578,6 +652,11 @@ class SyncerProgressWatchdog:
     last_observed_version: int
     last_signal_monotonic: float
     last_signal_wall: float
+    highest_observed_epoch: int = 0
+    highest_observed_owner_id: str | None = None
+    last_heartbeat_seq: int = 0
+    last_heartbeat_monotonic: float | None = None
+    last_heartbeat_wall: float | None = None
 
     @classmethod
     def start(
@@ -591,13 +670,15 @@ class SyncerProgressWatchdog:
         timeout_seconds = float(timeout_seconds)
         if timeout_seconds <= 0.0:
             raise ValueError("watchdog timeout_seconds must be > 0")
+        monotonic_now = time.monotonic() if now_monotonic is None else float(now_monotonic)
+        wall_now = time.time() if now_wall is None else float(now_wall)
         return cls(
             timeout_seconds=timeout_seconds,
             last_observed_version=int(initial_version),
-            last_signal_monotonic=(
-                time.monotonic() if now_monotonic is None else float(now_monotonic)
-            ),
-            last_signal_wall=time.time() if now_wall is None else float(now_wall),
+            last_signal_monotonic=monotonic_now,
+            last_signal_wall=wall_now,
+            last_heartbeat_monotonic=monotonic_now,
+            last_heartbeat_wall=wall_now,
         )
 
     def observe(
@@ -621,17 +702,41 @@ class SyncerProgressWatchdog:
         now = time.monotonic() if now_monotonic is None else float(now_monotonic)
         return max(0.0, now - self.last_signal_monotonic)
 
+    def observe_heartbeat(
+        self,
+        payload: dict[str, Any],
+        *,
+        now_monotonic: float | None = None,
+        now_wall: float | None = None,
+    ) -> bool:
+        epoch = int(payload["epoch"])
+        owner_id = str(payload["owner_id"])
+        sequence = int(payload["heartbeat_seq"])
+        if epoch < self.highest_observed_epoch:
+            return False
+        if epoch == self.highest_observed_epoch:
+            if self.highest_observed_owner_id not in (None, owner_id):
+                return False
+            if sequence <= self.last_heartbeat_seq:
+                return False
+        self.highest_observed_epoch = epoch
+        self.highest_observed_owner_id = owner_id
+        self.last_heartbeat_seq = sequence
+        self.last_signal_monotonic = (
+            time.monotonic() if now_monotonic is None else float(now_monotonic)
+        )
+        self.last_signal_wall = time.time() if now_wall is None else float(now_wall)
+        self.last_heartbeat_monotonic = self.last_signal_monotonic
+        self.last_heartbeat_wall = self.last_signal_wall
+        return True
+
     def deadline_reached(self, *, now_monotonic: float | None = None) -> bool:
         return self.seconds_since_signal(now_monotonic=now_monotonic) >= self.timeout_seconds
 
 
 def syncer_watchdog_timeout_seconds(config: Config) -> float:
     configured = config.liveness.syncer_unresponsive_timeout_seconds
-    return float(
-        config.liveness.no_progress_timeout_seconds
-        if configured is None
-        else configured
-    )
+    return float(config.liveness.no_progress_timeout_seconds if configured is None else configured)
 
 
 def confirm_syncer_unresponsive(
@@ -639,14 +744,34 @@ def confirm_syncer_unresponsive(
     paths: RunPaths,
     *,
     version_field: str,
+    config: Config | None = None,
     now_monotonic: float | None = None,
     now_wall: float | None = None,
 ) -> bool:
     """Confirm a reached deadline against stop/latest before self-stopping."""
 
-    now_monotonic = (
-        time.monotonic() if now_monotonic is None else float(now_monotonic)
-    )
+    now_monotonic = time.monotonic() if now_monotonic is None else float(now_monotonic)
+    reader = _epoch_control_reader(paths, run_id=None if config is None else config.run.run_id)
+    if reader is not None:
+        heartbeat = reader.read_current_heartbeat()
+        if heartbeat is not None:
+            watchdog.observe_heartbeat(
+                heartbeat,
+                now_monotonic=now_monotonic,
+                now_wall=now_wall,
+            )
+        if read_authoritative_terminal(paths) is not None:
+            return False
+        if config is None:
+            raise ValueError("HA watchdog confirmation requires config")
+        heartbeat_signal = (
+            watchdog.last_heartbeat_monotonic
+            if watchdog.last_heartbeat_monotonic is not None
+            else watchdog.last_signal_monotonic
+        )
+        return max(0.0, now_monotonic - heartbeat_signal) >= float(
+            config.coordination.syncer_ha.learner_recovery_wait_seconds
+        )
     if not watchdog.deadline_reached(now_monotonic=now_monotonic):
         return False
     if paths.stop_json.exists():
@@ -718,8 +843,7 @@ def inner_lr_multiplier(config: Config, completed_local_steps: int) -> float:
         1.0,
         max(
             0.0,
-            float(completed_local_steps - warmup_steps)
-            / float(int(total_steps) - warmup_steps),
+            float(completed_local_steps - warmup_steps) / float(int(total_steps) - warmup_steps),
         ),
     )
     cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
@@ -859,9 +983,7 @@ def rebase_local_delta_onto_global(
             )
 
         local_delta.sub_(reference)
-        delta_norm = float(
-            torch.linalg.vector_norm(local_delta, ord=2, dtype=torch.float32).item()
-        )
+        delta_norm = float(torch.linalg.vector_norm(local_delta, ord=2, dtype=torch.float32).item())
         local_delta.add_(global_flat)
         return local_delta, delta_norm
 
@@ -942,8 +1064,7 @@ def _predict_next_global_weight_on_placement(
         dtype=placement.dtype,
     )
     if any(
-        int(tensor.numel()) != expected_numel
-        for tensor in (local_flat, global_flat, outer_theta)
+        int(tensor.numel()) != expected_numel for tensor in (local_flat, global_flat, outer_theta)
     ):
         raise ValueError("prediction inputs do not match the parameter index")
     if not torch.equal(global_flat, outer_theta):
@@ -1166,8 +1287,7 @@ def load_fragment_latest_into_model(
             int(param_index["total_numel"]),
         )
         versions = {
-            int(fragment_id): int(info["version"])
-            for fragment_id, info in fragments.items()
+            int(fragment_id): int(info["version"]) for fragment_id, info in fragments.items()
         }
         event = int(candidate.get("global_merge_event", candidate.get("version", 0)))
         return flat, versions, event
@@ -1209,9 +1329,7 @@ def adopt_fragment_updates(
         changed: list[int] = []
         versions = dict(initial_versions)
         flat = flatten_trainable_params(model, param_index, dtype=torch.float32)
-        for fragment_id_text, info in sorted(
-            fragments.items(), key=lambda item: int(item[0])
-        ):
+        for fragment_id_text, info in sorted(fragments.items(), key=lambda item: int(item[0])):
             fragment_id = int(fragment_id_text)
             version = int(info["version"])
             if version <= int(initial_versions.get(fragment_id, -1)):
@@ -1280,9 +1398,7 @@ def apply_fragment_adoption(
     completed_local_steps: int,
     paths: RunPaths | None = None,
     adopt_fn: Callable[..., tuple[int, dict[int, int], list[int]]] = adopt_fragment_updates,
-    rebuild_inner_state_fn: Callable[..., tuple[Any, Any]] = (
-        build_inner_optimizer_and_scheduler
-    ),
+    rebuild_inner_state_fn: Callable[..., tuple[Any, Any]] = (build_inner_optimizer_and_scheduler),
 ) -> FragmentAdoptionResult:
     """Apply one fragment latest snapshot with call-site-specific legacy semantics."""
 
@@ -1740,9 +1856,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                         timeout_seconds=syncer_watchdog.timeout_seconds,
                         seconds_since_signal=syncer_watchdog.seconds_since_signal(),
                         last_signal_at=syncer_watchdog.last_signal_wall,
-                        last_observed_global_merge_event=(
-                            syncer_watchdog.last_observed_version
-                        ),
+                        last_observed_global_merge_event=(syncer_watchdog.last_observed_version),
                         local_step=local_step,
                     )
                     break
@@ -1917,11 +2031,8 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
 
         def attempt_final_fragment_adoption() -> None:
             target_event = config.sync.stop_after_outer_steps
-            if (
-                not had_error
-                and watchdog_stop_reason is None
-                and target_event is not None
-            ):
+            if not had_error and watchdog_stop_reason is None and target_event is not None:
+
                 def write_final_wait_heartbeat() -> None:
                     write_heartbeat(
                         paths=paths,
@@ -1937,9 +2048,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                         last_update_id=last_update_id,
                         resource_metrics=training_resources,
                         learning_rate=current_inner_learning_rate(optimizer),
-                        scheduler_total_steps=(
-                            config.inner_optimizer.scheduler_total_steps
-                        ),
+                        scheduler_total_steps=(config.inner_optimizer.scheduler_total_steps),
                     )
                     logger.event(
                         "heartbeat_written",
@@ -1951,15 +2060,9 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                 wait_for_final_fragment_progress(
                     paths=paths,
                     target_global_merge_event=int(target_event),
-                    current_global_merge_event_fn=(
-                        lambda: last_loaded_global_merge_event
-                    ),
-                    no_progress_timeout_seconds=(
-                        config.liveness.no_progress_timeout_seconds
-                    ),
-                    heartbeat_interval_seconds=(
-                        config.liveness.heartbeat_interval_seconds
-                    ),
+                    current_global_merge_event_fn=(lambda: last_loaded_global_merge_event),
+                    no_progress_timeout_seconds=(config.liveness.no_progress_timeout_seconds),
+                    heartbeat_interval_seconds=(config.liveness.heartbeat_interval_seconds),
                     poll_seconds=config.sync.stop_file_poll_seconds,
                     handle_latest_fn=lambda maybe_latest: handle_fragment_latest(
                         maybe_latest,
@@ -1972,9 +2075,7 @@ def run_fragment_learner(config: Config, learner_id: str) -> None:
                     logger=logger,
                 )
             maybe_latest = (
-                safe_read_json(paths.latest_json)
-                if watchdog_stop_reason is None
-                else None
+                safe_read_json(paths.latest_json) if watchdog_stop_reason is None else None
             )
             if maybe_latest and maybe_latest.get("latest_kind") == "fragment":
                 handle_fragment_latest(
@@ -2120,7 +2221,21 @@ def run_learner(config: Config, learner_id: str) -> None:
         run_fragment_learner(config, learner_id)
         return
     paths = RunPaths(Path(config.run.shared_root or "."))
-    prepare_run_dirs(paths, config.sync.num_learners)
+    loaded_descriptor = None
+    if config.coordination.syncer_ha.enabled:
+        loaded = load_run_descriptor(
+            paths.shared_root,
+            expected_run_id=config.run.run_id,
+            expected_git_commit=config.run.git_commit,
+            expected_source_fingerprint=config.run.source_fingerprint,
+            expected_descriptor_sha256=os.environ.get("FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256"),
+        )
+        if config_to_dict(loaded.config) != config_to_dict(config):
+            raise RuntimeError("learner config differs from the immutable resolved run descriptor")
+        prepare_learner_instance_dir(paths, learner_id)
+        loaded_descriptor = loaded
+    else:
+        prepare_run_dirs(paths, config.sync.num_learners)
     logger = JsonlLogger(paths.logs / f"{learner_id}.jsonl", learner_id)
     log_uncaught_exception(logger)
     learner_index = learner_index_from_id(learner_id)
@@ -2141,7 +2256,14 @@ def run_learner(config: Config, learner_id: str) -> None:
     param_index = load_param_index(paths.param_index_json)
     current_index = build_param_index(model, model_name_or_path=config.model.name_or_path)
     validate_compatible_index(current_index, param_index)
-    initial_latest = wait_for_json(paths.latest_json)
+    initial_latest = wait_for_authoritative_latest(
+        paths,
+        timeout_seconds=(
+            config.coordination.syncer_ha.learner_recovery_wait_seconds
+            if config.coordination.syncer_ha.enabled
+            else 1800.0
+        ),
+    )
     initial_load = load_or_refresh_latest(
         paths=paths,
         latest=initial_latest,
@@ -2160,6 +2282,16 @@ def run_learner(config: Config, learner_id: str) -> None:
         timeout_seconds=syncer_watchdog_timeout_seconds(config),
         initial_version=last_loaded_global_version,
     )
+    recovery_manager = None
+    next_recovery_reconciliation = 0.0
+    if config.coordination.recovery_submission.enabled:
+        assert loaded_descriptor is not None
+        recovery_manager = RecoveryClaimManager(
+            paths=paths,
+            config=config.coordination.recovery_submission,
+            scheduler=PBSScheduler(),
+            descriptor_sha256=str(loaded_descriptor.descriptor["descriptor_sha256"]),
+        )
     last_loaded_latest = latest
     optimizer, scheduler = build_inner_optimizer_and_scheduler(
         model,
@@ -2334,19 +2466,68 @@ def run_learner(config: Config, learner_id: str) -> None:
                                 version=action.adoption.version,
                                 local_step=local_step,
                                 interval_step=interval_step,
-                                mid_cycle_adoption_count=(
-                                    mid_cycle_adoptions.adoption_count
-                                ),
+                                mid_cycle_adoption_count=(mid_cycle_adoptions.adoption_count),
                             )
                         base_global_version = last_loaded_global_version
+                if (
+                    recovery_manager is not None
+                    and time.monotonic() >= next_recovery_reconciliation
+                ):
+                    control_reader = _epoch_control_reader(paths, run_id=config.run.run_id)
+                    assert control_reader is not None
+                    recovery_heartbeat = control_reader.read_current_heartbeat()
+                    if recovery_heartbeat is not None:
+                        syncer_watchdog.observe_heartbeat(recovery_heartbeat)
+                    heartbeat_signal = (
+                        syncer_watchdog.last_heartbeat_monotonic
+                        if syncer_watchdog.last_heartbeat_monotonic is not None
+                        else syncer_watchdog.last_signal_monotonic
+                    )
+                    heartbeat_stale = (
+                        time.monotonic() - heartbeat_signal
+                        >= config.coordination.syncer_ha.heartbeat_stale_after_seconds
+                    )
+                    if heartbeat_stale:
+                        leader = control_reader.current_leader() or {}
+                        highest_epoch = int((recovery_heartbeat or leader).get("epoch", 0))
+                        heartbeat_seq = int((recovery_heartbeat or leader).get("heartbeat_seq", 0))
+                        fingerprint = str(
+                            (recovery_heartbeat or {}).get("payload_sha256", "missing-heartbeat")
+                        )
+                        observation_key = recovery_observation_key(
+                            run_id=config.run.run_id or "",
+                            highest_epoch=highest_epoch,
+                            heartbeat_seq=heartbeat_seq,
+                            heartbeat_fingerprint=fingerprint,
+                        )
+                        claim_result = recovery_manager.maybe_submit(
+                            observation_key=observation_key,
+                            claimant_id=(f"{learner_id}:{socket.gethostname()}:{os.getpid()}"),
+                            terminal_published=(read_authoritative_terminal(paths) is not None),
+                        )
+                        logger.event(
+                            "syncer_recovery_reconciled",
+                            state=claim_result.state,
+                            observation_key=observation_key,
+                            attempt=claim_result.attempt,
+                            job_id=claim_result.job_id,
+                        )
+                    next_recovery_reconciliation = time.monotonic() + float(
+                        config.coordination.recovery_submission.reconciliation_interval_seconds
+                    )
                 if confirm_syncer_unresponsive(
                     syncer_watchdog,
                     paths,
                     version_field="version",
+                    config=config,
                 ):
-                    watchdog_stop_reason = "syncer_unresponsive"
+                    watchdog_stop_reason = (
+                        "syncer_recovery_exhausted"
+                        if config.coordination.syncer_ha.enabled
+                        else "syncer_unresponsive"
+                    )
                     logger.event(
-                        "syncer_unresponsive",
+                        watchdog_stop_reason,
                         timeout_seconds=syncer_watchdog.timeout_seconds,
                         seconds_since_signal=syncer_watchdog.seconds_since_signal(),
                         last_signal_at=syncer_watchdog.last_signal_wall,
@@ -2359,7 +2540,9 @@ def run_learner(config: Config, learner_id: str) -> None:
                 break
 
             adoption_ctx = current_adoption_context()
-            if paths.stop_json.exists() and adoption_strategy.on_stop(adoption_ctx):
+            if read_authoritative_terminal(paths) is not None and adoption_strategy.on_stop(
+                adoption_ctx
+            ):
                 continue
             cycle_end_action = adoption_strategy.on_cycle_end(adoption_ctx)
             if cycle_end_action.adoption is not None:
@@ -2487,8 +2670,8 @@ def run_learner(config: Config, learner_id: str) -> None:
     finally:
         resource_monitor.stop()
         training_resources = finite_resource_metrics(resource_monitor.training_snapshot())
-        if paths.stop_json.exists():
-            stop_payload = safe_read_json(paths.stop_json) or {}
+        stop_payload = read_authoritative_terminal(paths)
+        if stop_payload is not None:
             logger.event("stop_seen", reason=stop_payload.get("reason"))
         write_heartbeat(
             paths=paths,
@@ -2511,6 +2694,7 @@ def run_learner(config: Config, learner_id: str) -> None:
             status_reason=watchdog_stop_reason,
             **training_resources,
         )
+        close_epoch_control_reader(paths)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -2528,9 +2712,7 @@ def main(argv: list[str] | None = None) -> None:
         staleness_lambda=args.staleness_lambda,
         max_staleness_versions=args.max_staleness_versions,
         global_adoption_strategy=args.global_adoption_strategy,
-        capture_terminal_predecessor_for_eval=(
-            args.capture_terminal_predecessor_for_eval
-        ),
+        capture_terminal_predecessor_for_eval=(args.capture_terminal_predecessor_for_eval),
         completion_mode=args.completion_mode,
         parallel_checkpoint_writes=args.parallel_checkpoint_writes,
         materialize_full_every_events=args.materialize_full_every_events,

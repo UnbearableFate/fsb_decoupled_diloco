@@ -75,3 +75,5 @@
 ## PBS 脚本边界
 
 `scripts/miyabi/*.pbs` 是资源/进程编排层，不改变 Python 协议：它们通过 CLI/环境覆盖 resolve 配置，在共享 root 启动角色，收集退出码，再运行针对该实验的 analysis/checker。每个脚本的节点数、角色布局、用途和 5000-step fragment launcher 的当前默认配置错位，统一列在 [07-operations.md 的 Miyabi PBS 批作业章节](../07-operations.md#4-miyabi-pbs-批作业)。任何提交前必须先 `bash -n scripts/miyabi/*.pbs`，并把每个 `#PBS -W group_list=...` 换成当前账户可用的字面 group ID。
+
+Plan 02 Phase 1新增 `run_syncer_candidate.pbs` 与 `run_static_learner.pbs`：它们读取 run descriptor、比对本地 source identity后才 import runtime；后者支持 rerunable PBS array。`run_plan02_phase1_acceptance_launcher.pbs` 只负责 initializer和三个短 walltime child submission，用 after-any依赖在故障候选后启动 successor。tests/smoke/lock/fault/checker脚本分别验证 pytest、端到端 tiny、双节点 writer-lock、60-case crash matrix和 completed只读门禁。提交任何脚本时还应按 workload和已有实测估算最短可行 walltime，并以 `qsub -l walltime=...`覆盖过长默认值。

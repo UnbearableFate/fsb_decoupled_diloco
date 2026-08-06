@@ -1,0 +1,64 @@
+#!/bin/bash
+#PBS -N fsdiloco_static_learner
+#PBS -q regular-g
+#PBS -W group_list=xg24i002
+#PBS -l select=1:mpiprocs=1
+#PBS -l walltime=24:00:00
+#PBS -j oe
+
+set -eEuo pipefail
+trap 'echo "[ERROR] static learner failed at line $LINENO" >&2' ERR
+
+: "${FS_DILOCO_SHARED_ROOT:?FS_DILOCO_SHARED_ROOT is required}"
+DESCRIPTOR="$FS_DILOCO_SHARED_ROOT/control/run_descriptor.json"
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+LEARNER_INDEX="${PBS_ARRAY_INDEX:-${LEARNER_INDEX:?PBS_ARRAY_INDEX or LEARNER_INDEX is required}}"
+printf -v LEARNER_ID 'learner_%03d' "$LEARNER_INDEX"
+
+readarray -t descriptor_fields < <(
+  "$PYTHON_BIN" - "$DESCRIPTOR" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    descriptor = json.load(handle)
+print(descriptor["resolved_config_path"])
+print(descriptor["descriptor_sha256"])
+print(descriptor["git_commit"])
+print(descriptor["source_fingerprint"])
+print(int(bool(descriptor["git_dirty"])))
+PY
+)
+CONFIG="${descriptor_fields[0]}"
+export FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256="${descriptor_fields[1]}"
+export FS_DILOCO_EXPECTED_GIT_COMMIT="${descriptor_fields[2]}"
+export FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT="${descriptor_fields[3]}"
+EXPECTED_GIT_DIRTY="${descriptor_fields[4]}"
+
+cd "$PROJECT_ROOT"
+readarray -t actual_source < <(
+  "$PYTHON_BIN" - "$PROJECT_ROOT" <<'PY'
+import sys
+
+sys.path.insert(0, sys.argv[1] + "/scripts/miyabi")
+from capture_source_identity import capture
+
+identity = capture(__import__("pathlib").Path(sys.argv[1]))
+print(identity["git_commit"])
+print(identity["source_fingerprint"])
+print(int(identity["git_dirty"]))
+PY
+)
+test "${actual_source[0]}" = "$FS_DILOCO_EXPECTED_GIT_COMMIT"
+test "${actual_source[1]}" = "$FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT"
+test "${actual_source[2]}" = "$EXPECTED_GIT_DIRTY"
+export FS_DILOCO_GIT_COMMIT="$FS_DILOCO_EXPECTED_GIT_COMMIT"
+export FS_DILOCO_SOURCE_FINGERPRINT="$FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT"
+export FS_DILOCO_GIT_DIRTY="$EXPECTED_GIT_DIRTY"
+export FS_DILOCO_REQUIRE_SOURCE_IDENTITY=1
+
+"$PYTHON_BIN" -m fs_diloco.learner \
+  --config "$CONFIG" \
+  --shared-root "$FS_DILOCO_SHARED_ROOT" \
+  --learner-id "$LEARNER_ID"

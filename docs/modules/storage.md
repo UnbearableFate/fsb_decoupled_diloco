@@ -109,6 +109,22 @@ fragment 模式(与上面逐一对应,多了 fragment 维度):
 
 ## storage/maintenance.py — 归档与引用驱动 GC
 
+### HA storage modules
+
+`storage/schema_bootstrap.py` 把 schema创建从普通连接中拆出：`initialize_new_run()` 在同目录临时 DB中一次性建完整 schema v2、写 identity/PRAGMA并原子发布 DB，最后写 bootstrap marker；`open_existing()` 只打开并核验完整 bootstrap，不执行 DDL/ALTER；`open_readonly()` 用 URI `mode=ro` + `query_only=ON`。
+
+`storage/leader_lease.py` 定义不可变 `LeaderToken(run_id, epoch, owner_id)`、`make_owner_id()`、`LeaderLeaseStore`和线程安全的 `LeaseSafetyTracker`。acquire/renew/release都使用 `BEGIN IMMEDIATE`，epoch由 history最大值递增且不复用；renew和release必须 exact-owner匹配，过期 token抛 `StaleLeaderTokenError`。renew线程只在 DB renew提交成功后推进 tracker；每个业务 transaction在开始和 commit前同时检查 exact token、DB wall-clock安全边界与共享的本地 monotonic安全边界。
+
+`storage/fenced_store.py` 保留 legacy `SQLiteStore`作为内部数据实现，同时封闭 raw connection：
+
+- `FencedSQLiteStore` 的 HA mutator都显式接收 token，并在同一个持锁 transaction内校验 current epoch/owner、执行业务 SQL、提交；SQL wrapper拒绝 transaction控制、DDL/PRAGMA/ATTACH等逃逸。
+- `LeaderBoundSQLiteStore` 把固定 token绑定成 runtime兼容接口，不允许调用者切换 token。
+- `ReadOnlySQLiteStore` 只暴露查询，供 Checker和analysis使用；learner canonical control reader是纯 filesystem reader，不打开 SQLite。
+
+`RunPaths` 为 HA增加 descriptor/bootstrap、epoch weight/optim/control、candidate/epoch log、syncer heartbeat、launch claim和 HA history路径；`iter_epoch_*`与既有 iterator统一递归发现。`prepare_authority_dirs()`只供 initializer/leader，`prepare_learner_instance_dir()`只创建该 learner自己的 heartbeat/update/log目录。
+
+HA maintenance在归档 legacy active历史之外，还归档/压缩 `syncer_epochs`、逐项登记 `gc_candidates`、删除前重新验证 DB live引用，并删除旧 epoch无引用 orphan。任何 ledger或DB mutation都经过 current leader token；文件删除发生在 transaction外，下一轮以幂等 ledger完成。
+
 - **`_append_jsonl_fsync()`** — 先 materialize rows，非空时逐行 JSON append、flush+fsync，返回行数；不做去重或原子替换。
 - **`_unlink()`** — 删除成功 true，不存在 false，其他错误传播；**`_resolved_paths()`** 对集合做 `resolve(strict=False)`；**`_pointer_state()`** 只读固定 pointer 的合法 `update_id/learner_id/file_path/fragment_id`，按 pair 保留最后扫描值。
 - **`archive_and_prune(store, paths)`** — 把 terminal update 与非 current version 行追加到 `metrics/update_history.jsonl` / `global_version_history.jsonl`,flush+fsync 成功后才以 `gc_pending + active row delete` 的 SQLite 事务剪枝。崩溃重试可形成重复 archive 行,分析器按 identity 去重。

@@ -1,0 +1,30 @@
+{
+  "bootstrap": {
+    "bootstrap_generation": 1,
+    "config_sha256": "5e0bd34ec3d0c206b7023df9ae7510813064ca789007f5a23f80e2a1fa41d8cb",
+    "created_at": 1785984107.274586,
+    "mode": "full",
+    "protocol_version": 3,
+    "run_id": "plan02_phase1_acceptance_2497931",
+    "schema_version": 2,
+    "source_fingerprint": "sha256:5c8136e6e7e193b55719f6558b87608f5db6d9f52985b70c49fbb13b21ba16bb"
+  },
+  "descriptor": {
+    "bootstrap_slots": 8,
+    "created_at": 1785984107.2707937,
+    "descriptor_sha256": "386bccf81b76982d3e9a6024b0c8af3e94fcc33c14cf83b2a2e895739d142699",
+    "format_version": 1,
+    "git_commit": "1ba9a1a70e4ede6fdd5edf066f11f6921f111da5",
+    "git_dirty": true,
+    "mode": "full_ha_static",
+    "protocol_version": 3,
+    "resolved_config_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2497931/control/run_config.resolved.yaml",
+    "resolved_config_sha256": "5e0bd34ec3d0c206b7023df9ae7510813064ca789007f5a23f80e2a1fa41d8cb",
+    "run_id": "plan02_phase1_acceptance_2497931",
+    "schema_version": 2,
+    "shared_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2497931",
+    "source_fingerprint": "sha256:5c8136e6e7e193b55719f6558b87608f5db6d9f52985b70c49fbb13b21ba16bb",
+    "source_manifest_path": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan02_phase1_acceptance_2497931/control/run_source_manifest.json",
+    "source_manifest_sha256": "f4882b4ad0e171fc34c801078f8ac5bfa78a180d3091546f4332c36385204c3c"
+  }
+}

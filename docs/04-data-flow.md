@@ -2,7 +2,7 @@
 
 ## 1. 共享目录布局
 
-一次 run 的 `shared_root` 由 `storage/paths.py: RunPaths` 定义、`prepare_run_dirs()` 创建。dataclass 默认 null 会回退到项目根/cwd 下的 `runs/fs_diloco/<run_id>`；仓库正式配置显式使用主工作树绝对模板：
+一次 run 的 `shared_root` 由 `storage/paths.py: RunPaths` 定义。legacy runtime用 `prepare_run_dirs()` 创建；HA initializer用 `prepare_authority_dirs()`，learner只用 `prepare_instance_dirs(instance_id)`，因此 learner不会创建 authority目录。dataclass 默认 null 会回退到项目根/cwd 下的 `runs/fs_diloco/<run_id>`；仓库正式配置显式使用主工作树绝对模板：
 
 ```
 <shared_root>/
@@ -52,6 +52,26 @@
 ```
 
 SQLite 与 run 同生命周期、固定在 `control/syncer_metadata.sqlite3`。它不使用 WAL 或节点本地 shadow copy;计算节点切换后直接重开同一个文件。
+
+HA full在上述兼容布局之外增加以下权威面：
+
+```text
+<shared_root>/
+├── control/
+│   ├── run_descriptor.json / run_source_manifest.json / bootstrap_complete.json
+│   ├── syncer_epochs/eNNNNNN/
+│   │   ├── latest/vVVVVVV.json       # immutable canonical head
+│   │   ├── latest/head.json          # 当前 epoch canonical head
+│   │   └── terminal/{stop,summary}_gNNNNNN.json
+│   └── launch_claims/<observation>/attempt_NNNNNN.lock/
+├── weights/epochs/eNNNNNN/<publication>/global_vVVVVVV.safetensors
+├── optim/epochs/eNNNNNN/<publication>/outer_vVVVVVV.safetensors
+├── heartbeats/syncer_epochs/eNNNNNN/<owner>.json
+├── logs/syncer_candidates/<owner>.jsonl
+└── logs/syncer_epochs/eNNNNNN/<owner>.jsonl
+```
+
+大文件路径在 publication前即唯一确定且不复用；数据库只保存相对 run-root路径、size、publication ID和可选 digest。`syncer_leader` 是 current token，`syncer_epochs` 保留/归档 epoch历史，`control_publications` 把 canonical artifact路径及 JSON SHA绑定到 epoch和 logical generation。successor/Checker用这些 DB row；learner不打开 SQLite，而是验证最高合法 filesystem epoch的 heartbeat/head及 head内 pointer SHA。fixed `control/latest.json`、`stop.json`、`summary.json` 仍会 best-effort更新，但 HA reader和 completed Checker不以其内容作为权威。
 
 `eval_checkpoints/` 只在显式研究开关开启且 input-closed terminal selection 低于
 `quorum_min` 时创建。manifest 的 source version/checksum/selected/quorum 是评估溯源；
@@ -122,7 +142,7 @@ fragment 模式(`fragment_latest_payload`,`latest_kind` 用于区分):
 | `local_cycle_{cpu,gpu}_utilization_peak_percent` | 本 update 对应的上一 local 训练周期 CPU/GPU 利用率最高值 |
 | `local_cycle_step_time_seconds_mean` | 上一 local 训练周期内逐训练 step 耗时的算术平均值 |
 | `local_cycle_step_count` / `local_cycle_resource_sample_count` | 上一周期的计时 step 数与资源采样数 |
-| `file_path` / `file_size_bytes` / `sha256` | 张量文件指针(sha256 仅在 `io.compute_sha256` 开启时计算) |
+| `file_path` / `file_size_bytes` / `sha256` | learner proposal张量指针（proposal SHA仍由 `io.compute_sha256` 控制）；HA global checkpoint另由 `io.checkpoint_digest_mode`控制 digest，默认不计算 |
 | `created_at` / `committed_at` | learner 节点 wall clock 的张量写完时间 / 元数据提交时间；跨节点仅作研究证据与排序，不参与秒级 deadline 减法 |
 | `ingested_at`（SQLite） | syncer 节点 wall clock 的首次入库时间；适合离线证据，不参与进程内 adaptive deadline |
 

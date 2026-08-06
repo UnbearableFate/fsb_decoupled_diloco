@@ -21,6 +21,7 @@ from typing import Any
 import torch
 
 from ..core.config import Config, config_to_dict, resolve_config, write_resolved_config
+from ..core.run_descriptor import load_run_descriptor
 from ..core.constants import (
     FORMAT_VERSION,
     GLOBAL_STATUS_COMMITTED,
@@ -55,6 +56,7 @@ from ..protocol.fragment_codec import (
 )
 from ..protocol.fragment_index import build_fragment_index, save_fragment_index
 from ..protocol.fragment_scheduler import select_fragment
+from ..protocol.control_epoch import EpochControlPublisher
 from ..protocol.liveness import (
     capture_heartbeat_fences,
     ingest_heartbeats,
@@ -75,8 +77,10 @@ from ..storage.atomic_io import (
     sha256_file,
 )
 from ..storage.maintenance import run_maintenance
+from ..storage.fenced_store import LeaderBoundSQLiteStore
 from ..storage.paths import RunPaths, prepare_run_dirs
 from ..storage.sqlite_store import SQLiteStore
+from .syncer_ha import LeaseRenewalThread, acquire_candidate, open_leader_store
 from ..storage.tensor_codec import (
     dtype_from_name,
     load_global_weights_flat,
@@ -112,6 +116,7 @@ def maybe_capture_terminal_predecessor_for_eval(
     terminal_drain: bool,
     version: int,
     selected: list[dict[str, Any]],
+    store: SQLiteStore | LeaderBoundSQLiteStore | None = None,
 ) -> dict[str, Any] | None:
     """Retain pre-merge evidence without creating another runtime authority."""
     if (
@@ -122,10 +127,15 @@ def maybe_capture_terminal_predecessor_for_eval(
         return None
 
     source = paths.global_weight_path(version)
+    if isinstance(store, LeaderBoundSQLiteStore):
+        version_row = store.get_global_version(version)
+        if version_row is None:
+            raise RuntimeError(f"global version {version} is missing from SQLite")
+        source = Path(str(version_row["weight_path"]))
+        if not source.is_absolute():
+            source = paths.shared_root / source
     if not source.is_file():
-        raise FileNotFoundError(
-            f"authoritative terminal predecessor weight is missing: {source}"
-        )
+        raise FileNotFoundError(f"authoritative terminal predecessor weight is missing: {source}")
     ensure_dir(paths.eval_checkpoints)
     stem = f"terminal_predecessor_v{version:06d}"
     checkpoint = paths.eval_checkpoints / f"{stem}.safetensors"
@@ -152,9 +162,7 @@ def maybe_capture_terminal_predecessor_for_eval(
     if manifest_path.exists():
         existing_manifest = safe_read_json(manifest_path)
         if existing_manifest is None:
-            raise RuntimeError(
-                f"terminal predecessor manifest is unreadable: {manifest_path}"
-            )
+            raise RuntimeError(f"terminal predecessor manifest is unreadable: {manifest_path}")
         if not checkpoint.is_file():
             raise RuntimeError(
                 f"committed terminal predecessor checkpoint is missing: {checkpoint}"
@@ -202,9 +210,7 @@ def maybe_capture_terminal_predecessor_for_eval(
     checkpoint_sha = f"sha256:{sha256_file(checkpoint)}"
     source_sha_after = f"sha256:{sha256_file(source)}"
     if source_sha_after != source_sha or checkpoint_sha != source_sha:
-        raise RuntimeError(
-            "terminal predecessor source changed or checkpoint copy is inconsistent"
-        )
+        raise RuntimeError("terminal predecessor source changed or checkpoint copy is inconsistent")
     manifest: dict[str, Any] = {
         **expected_identity,
         "checkpoint_sha256": checkpoint_sha,
@@ -414,10 +420,30 @@ def publish_global(
     during_checkpoint_wait: Callable[[], dict[str, int] | int | None] | None = None,
     checkpoint_poll_seconds: float = 0.2,
 ) -> dict[str, Any]:
-    weight_path = paths.global_weight_path(version)
-    optim_path = paths.outer_optim_path(version)
+    ha_store = store if isinstance(store, LeaderBoundSQLiteStore) else None
+    publication_id = uuid.uuid4().hex if ha_store is not None else None
+    if ha_store is None:
+        weight_path = paths.global_weight_path(version)
+        optim_path = paths.outer_optim_path(version)
+    else:
+        assert publication_id is not None
+        weight_path = paths.epoch_weight_path(
+            ha_store.token.epoch,
+            ha_store.token.owner_id,
+            version,
+            publication_id,
+        )
+        optim_path = paths.epoch_outer_optim_path(
+            ha_store.token.epoch,
+            ha_store.token.owner_id,
+            version,
+            publication_id,
+        )
+        if weight_path.exists() or optim_path.exists():
+            raise RuntimeError(f"HA checkpoint publication collision: {publication_id}")
     if os.environ.get("FS_DILOCO_PUBLICATION_FAILPOINT") == "weight_temp":
         temp_path = weight_path.parent / f".{weight_path.name}.injected.tmp"
+        temp_path.parent.mkdir(parents=True, exist_ok=True)
         with temp_path.open("wb") as handle:
             handle.write(b"incomplete-weight")
             handle.flush()
@@ -475,23 +501,53 @@ def publish_global(
         publish_weight_seconds, publish_weight_bytes = write_weight()
         publish_outer_seconds, publish_outer_bytes = write_outer()
     publish_checkpoint_seconds = time.monotonic() - checkpoint_started
+    weight_sha256 = None
+    optim_sha256 = None
+    if ha_store is not None and config.io.checkpoint_digest_mode == "always":
+        weight_sha256 = sha256_file(weight_path)
+        optim_sha256 = sha256_file(optim_path)
+    database_weight_path = paths.relative(weight_path) if ha_store is not None else str(weight_path)
+    database_optim_path = paths.relative(optim_path) if ha_store is not None else str(optim_path)
     sqlite_start = time.monotonic()
     if version == 0:
+        publication_fields = (
+            {
+                "publication_id": publication_id,
+                "weight_size_bytes": publish_weight_bytes,
+                "optim_size_bytes": publish_outer_bytes,
+                "weight_sha256": weight_sha256,
+                "optim_sha256": optim_sha256,
+            }
+            if ha_store is not None
+            else {}
+        )
         row = store.initialize_full_run(
-            weight_path=str(weight_path),
-            optim_path=str(optim_path),
+            weight_path=database_weight_path,
+            optim_path=database_optim_path,
             outer_optimizer=config.outer_optimizer.name,
             identity=run_identity(config),
             config_snapshot=config_to_dict(config),
+            **publication_fields,
         )
     else:
         if predecessor_version is None or selected_updates is None or effective_weights is None:
             raise ValueError("full merge publication requires predecessor and selected updates")
+        publication_fields = (
+            {
+                "publication_id": publication_id,
+                "weight_size_bytes": publish_weight_bytes,
+                "optim_size_bytes": publish_outer_bytes,
+                "weight_sha256": weight_sha256,
+                "optim_sha256": optim_sha256,
+            }
+            if ha_store is not None
+            else {}
+        )
         row = store.commit_full_merge(
             predecessor_version=predecessor_version,
             target_version=version,
-            weight_path=str(weight_path),
-            optim_path=str(optim_path),
+            weight_path=database_weight_path,
+            optim_path=database_optim_path,
             selected_updates=selected_updates,
             effective_weights=effective_weights,
             total_update_tokens=total_update_tokens,
@@ -499,22 +555,26 @@ def publish_global(
             outer_optimizer=config.outer_optimizer.name,
             max_staleness_versions=config.sync.max_staleness_versions,
             before_commit=lambda: publication_failpoint("sqlite_transaction"),
+            **publication_fields,
         )
     sqlite_commit_seconds = time.monotonic() - sqlite_start
     publication_failpoint("after_db_commit")
-    atomic_write_json(
-        paths.latest_json,
-        latest_payload(
-            config=config,
-            paths=paths,
-            version=version,
-            weight_path=weight_path,
-            optim_path=optim_path,
-            total_update_tokens=total_update_tokens,
-            total_seen_tokens=total_seen_tokens,
-            created_at=float(row["created_at"]),
-        ),
-    )
+    if ha_store is not None:
+        EpochControlPublisher(paths, ha_store.fenced_store, ha_store.token).publish_latest(row)
+    else:
+        atomic_write_json(
+            paths.latest_json,
+            latest_payload(
+                config=config,
+                paths=paths,
+                version=version,
+                weight_path=weight_path,
+                optim_path=optim_path,
+                total_update_tokens=total_update_tokens,
+                total_seen_tokens=total_seen_tokens,
+                created_at=float(row["created_at"]),
+            ),
+        )
     publication_failpoint("after_latest")
     return {
         **row,
@@ -584,9 +644,7 @@ def should_materialize_fragment_full(config: Config, global_merge_event: int) ->
     if target is not None and global_merge_event >= int(target):
         return True
     if interval is None or int(interval) <= 0:
-        raise ValueError(
-            "fragments.materialize_full_every_events must be a positive integer"
-        )
+        raise ValueError("fragments.materialize_full_every_events must be a positive integer")
     return global_merge_event % int(interval) == 0
 
 
@@ -678,8 +736,9 @@ def initialize_run(
     outer_state = init_outer_state(theta, config.outer_optimizer)
     theta, outer_state = align_state_to_publication_dtype(config, theta, outer_state)
     atomic_write_json(paths.param_index_json, param_index)
-    write_resolved_config(config, paths.resolved_config_yaml)
-    write_resolved_config(config, paths.run_root_config_yaml)
+    if not isinstance(store, LeaderBoundSQLiteStore):
+        write_resolved_config(config, paths.resolved_config_yaml)
+        write_resolved_config(config, paths.run_root_config_yaml)
     publish_global(
         config=config,
         paths=paths,
@@ -839,16 +898,24 @@ def resume_run(
     committed = store.latest_global_version()
     if committed is None:
         raise RuntimeError("resume requires a committed global version in persistent SQLite")
-    stop_payload = safe_read_json(paths.stop_json)
-    summary_payload = safe_read_json(paths.summary_json)
-    terminal_reasons = {
-        str(payload.get(key))
-        for payload, key in (
-            (stop_payload or {}, "reason"),
-            (summary_payload or {}, "stop_reason"),
+    if isinstance(store, LeaderBoundSQLiteStore):
+        terminal = store.terminal_state()
+        terminal_reasons = (
+            set()
+            if terminal is None or terminal.get("stop_reason") in (None, "", "error")
+            else {str(terminal["stop_reason"])}
         )
-        if payload.get(key) not in (None, "", "error")
-    }
+    else:
+        stop_payload = safe_read_json(paths.stop_json)
+        summary_payload = safe_read_json(paths.summary_json)
+        terminal_reasons = {
+            str(payload.get(key))
+            for payload, key in (
+                (stop_payload or {}, "reason"),
+                (summary_payload or {}, "stop_reason"),
+            )
+            if payload.get(key) not in (None, "", "error")
+        }
     if terminal_reasons:
         raise RuntimeError(
             "resume cannot reopen a completed run; use a new run_id/shared_root "
@@ -860,6 +927,10 @@ def resume_run(
     validate_compatible_index(current_index, param_index)
     weight_path = Path(str(committed["weight_path"]))
     optim_path = Path(str(committed["optim_path"]))
+    if not weight_path.is_absolute():
+        weight_path = paths.shared_root / weight_path
+    if not optim_path.is_absolute():
+        optim_path = paths.shared_root / optim_path
     if not weight_path.is_file() or not optim_path.is_file():
         raise FileNotFoundError(
             f"committed checkpoint is incomplete: weight={weight_path}, outer={optim_path}"
@@ -890,33 +961,36 @@ def resume_run(
         resume_id=resume_id,
         resumed_at=resumed_at,
         expected_learner_ids=(
-            learner_id_from_index(index)
-            for index in range(config.sync.num_learners)
+            learner_id_from_index(index) for index in range(config.sync.num_learners)
         ),
         heartbeat_fences=heartbeat_fences,
     )
-    for marker_name, marker_path in (
-        ("stop", paths.stop_json),
-        ("summary", paths.summary_json),
-    ):
-        if marker_path.exists():
-            ensure_dir(paths.logs)
-            os.replace(
-                marker_path,
-                paths.logs / f"resume_{resume_id}_previous_{marker_name}.json",
-            )
+    if not isinstance(store, LeaderBoundSQLiteStore):
+        for marker_name, marker_path in (
+            ("stop", paths.stop_json),
+            ("summary", paths.summary_json),
+        ):
+            if marker_path.exists():
+                ensure_dir(paths.logs)
+                os.replace(
+                    marker_path,
+                    paths.logs / f"resume_{resume_id}_previous_{marker_name}.json",
+                )
     total_seen_tokens = int(committed["total_seen_tokens"])
-    repaired_latest = latest_payload(
-        config=config,
-        paths=paths,
-        version=int(committed["version"]),
-        weight_path=weight_path,
-        optim_path=optim_path,
-        total_update_tokens=int(committed["total_update_tokens"]),
-        total_seen_tokens=total_seen_tokens,
-        created_at=float(committed["created_at"]),
-    )
-    atomic_write_json(paths.latest_json, repaired_latest)
+    if isinstance(store, LeaderBoundSQLiteStore):
+        EpochControlPublisher(paths, store.fenced_store, store.token).publish_latest(committed)
+    else:
+        repaired_latest = latest_payload(
+            config=config,
+            paths=paths,
+            version=int(committed["version"]),
+            weight_path=weight_path,
+            optim_path=optim_path,
+            total_update_tokens=int(committed["total_update_tokens"]),
+            total_seen_tokens=total_seen_tokens,
+            created_at=float(committed["created_at"]),
+        )
+        atomic_write_json(paths.latest_json, repaired_latest)
     maintenance = run_maintenance(
         store,
         paths,
@@ -1037,6 +1111,7 @@ class UpdateFirstSeenRegistry:
             ]
         )
 
+
 def update_first_seen_capacity(config: Config) -> int:
     num_fragments = int(config.fragments.num_fragments) if config.fragments.enabled else 1
     return max(64, 4 * int(config.sync.num_learners) * max(1, num_fragments))
@@ -1065,9 +1140,7 @@ def ingest_update_metadata(
     inserted = 0
     if config.fragments.enabled:
         metadata_paths = [
-            paths.fragment_update_pointer_path(
-                learner_id_from_index(learner_index), fragment_id
-            )
+            paths.fragment_update_pointer_path(learner_id_from_index(learner_index), fragment_id)
             for learner_index in range(config.sync.num_learners)
             for fragment_id in range(config.fragments.num_fragments)
         ]
@@ -1080,10 +1153,7 @@ def ingest_update_metadata(
         signature = _pointer_signature(path) if config.fragments.enabled else None
         if signature is None and config.fragments.enabled:
             continue
-        if (
-            signature is not None
-            and store.pointer_signature_is_cached(path, signature)
-        ):
+        if signature is not None and store.pointer_signature_is_cached(path, signature):
             continue
         payload = safe_read_json(path)
         if payload is None or not validate_update_metadata(payload, config=config, paths=paths):
@@ -1103,9 +1173,7 @@ def ingest_update_metadata(
                 first_seen.observe(
                     str(payload["update_id"]),
                     learner_id=str(payload["learner_id"]),
-                    fragment_id=(
-                        int(payload["fragment_id"]) if config.fragments.enabled else None
-                    ),
+                    fragment_id=(int(payload["fragment_id"]) if config.fragments.enabled else None),
                 )
     if inserted:
         logger.event("metadata_ingested", count=inserted)
@@ -1181,9 +1249,7 @@ def interval_breakdown(
     accounted = sum(components.values())
     tolerance = max(1e-9, float(total_seconds) * 1e-9)
     if accounted > float(total_seconds) + tolerance:
-        raise ValueError(
-            f"interval components exceed total: {accounted} > {float(total_seconds)}"
-        )
+        raise ValueError(f"interval components exceed total: {accounted} > {float(total_seconds)}")
     return {
         "discovery_seconds": components["discovery_seconds"],
         "idle_seconds": components["idle_seconds"],
@@ -1659,9 +1725,7 @@ def wait_for_learner_shutdown(
         if remaining <= 0:
             break
         time.sleep(min(1.0, remaining))
-    learners_by_id = {
-        str(row["learner_id"]): row for row in store.list_learners()
-    }
+    learners_by_id = {str(row["learner_id"]): row for row in store.list_learners()}
     unconfirmed_learners = []
     for learner_id in sorted(expected):
         row = learners_by_id.get(learner_id)
@@ -1787,6 +1851,115 @@ def write_training_summary(
         all_learners_stopped=all_learners_stopped,
     )
     return summary
+
+
+def _terminal_summary_matches(
+    payload: dict[str, Any] | None,
+    *,
+    config: Config,
+    terminal: dict[str, Any],
+) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    try:
+        return (
+            payload.get("run_id") == config.run.run_id
+            and payload.get("stop_reason") == terminal["stop_reason"]
+            and int(payload.get("final_version", -1)) == int(terminal["final_version"])
+            and int(payload.get("total_seen_tokens", -1)) == int(terminal["total_seen_tokens"])
+        )
+    except (TypeError, ValueError):
+        return False
+
+
+def _summary_for_terminal_repair(
+    *,
+    paths: RunPaths,
+    store: LeaderBoundSQLiteStore,
+    config: Config,
+    terminal: dict[str, Any],
+) -> dict[str, Any]:
+    candidates = (
+        store.get_run_state("summary"),
+        safe_read_json(paths.summary_json),
+    )
+    for candidate in candidates:
+        if _terminal_summary_matches(candidate, config=config, terminal=terminal):
+            assert isinstance(candidate, dict)
+            return dict(candidate)
+    descriptor = safe_read_json(paths.run_descriptor_json) or {}
+    completed_at = float(terminal["finalized_at"])
+    started_at = float(descriptor.get("created_at", completed_at))
+    return {
+        "format_version": FORMAT_VERSION,
+        "run_id": config.run.run_id,
+        "stop_reason": str(terminal["stop_reason"]),
+        "final_version": int(terminal["final_version"]),
+        "total_seen_tokens": int(terminal["total_seen_tokens"]),
+        "training_started_at": started_at,
+        "training_completed_at": completed_at,
+        "complete_training_time_seconds": max(0.0, completed_at - started_at),
+        "all_learners_stopped": all_expected_learners_stopped(store, config),
+        "learner_resources": learner_resource_summary(
+            paths=paths,
+            store=store,
+            config=config,
+        ),
+        "terminal_summary_reconstructed": True,
+    }
+
+
+def repair_completed_ha_terminal(
+    *,
+    paths: RunPaths,
+    store: LeaderBoundSQLiteStore,
+    lease_store: Any,
+    config: Config,
+    logger: JsonlLogger,
+) -> dict[str, Any]:
+    """Finish a normal terminal generation interrupted before its full publication."""
+    previous = store.terminal_state()
+    if previous is None or previous.get("stop_reason") in (None, "", "error"):
+        raise RuntimeError("terminal repair requires a completed terminal row")
+    committed = store.latest_global_version()
+    if committed is None or int(committed["version"]) != int(previous["final_version"]):
+        raise RuntimeError("terminal repair DB version does not match terminal state")
+    summary = _summary_for_terminal_repair(
+        paths=paths,
+        store=store,
+        config=config,
+        terminal=previous,
+    )
+    store.set_run_state("summary", summary)
+    maintenance = run_maintenance(
+        store,
+        paths,
+        heartbeat_interval_seconds=config.liveness.heartbeat_interval_seconds,
+        scan_interval_seconds=config.sync.scan_interval_seconds,
+        input_closed=bool(summary.get("all_learners_stopped")),
+    )
+    generation = int(previous["generation"]) + 1
+    repaired = store.finalize_terminal_state(
+        generation=generation,
+        stop_reason=str(previous["stop_reason"]),
+        final_version=int(previous["final_version"]),
+        total_seen_tokens=int(previous["total_seen_tokens"]),
+    )
+    publisher = EpochControlPublisher(paths, store.fenced_store, store.token)
+    publisher.repair_latest_from_db()
+    lease_row = lease_store.observe()
+    if lease_row is None:
+        raise RuntimeError("terminal repair leader row disappeared")
+    publisher.publish_heartbeat(lease_row)
+    publisher.publish_terminal(repaired, summary=summary)
+    logger.event(
+        "terminal_repair_completed",
+        previous_generation=int(previous["generation"]),
+        generation=generation,
+        final_version=int(repaired["final_version"]),
+        **maintenance,
+    )
+    return repaired
 
 
 def _fragment_staleness_stats(
@@ -2405,14 +2578,59 @@ def run_syncer(config: Config) -> None:
     run_start_monotonic = time.monotonic()
     device = resolve_syncer_device(config)
     paths = RunPaths(Path(config.run.shared_root or "."))
-    prepare_run_dirs(paths, config.sync.num_learners)
     database_path = sqlite_path(config)
-    if config.init.resume and not database_path.is_file():
-        raise FileNotFoundError(
-            f"resume requires persistent SQLite at {database_path}; latest.json is not authoritative"
+    ha_mode = bool(config.coordination.syncer_ha.enabled)
+    lease_store = None
+    leader_token = None
+    lease_renewer = None
+    if ha_mode:
+        loaded = load_run_descriptor(
+            paths.shared_root,
+            expected_run_id=config.run.run_id,
+            expected_git_commit=config.run.git_commit,
+            expected_source_fingerprint=config.run.source_fingerprint,
+            expected_descriptor_sha256=os.environ.get("FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256"),
         )
-    store = SQLiteStore(database_path)
-    logger = JsonlLogger(paths.logs / "syncer.jsonl", "syncer")
+        if config_to_dict(loaded.config) != config_to_dict(config):
+            raise RuntimeError(
+                "candidate config differs from the immutable resolved run descriptor"
+            )
+        lease_store, leader_token, lease_safety_tracker, _candidate_logger = acquire_candidate(
+            paths=paths,
+            identity=loaded.identity,
+            config=config,
+        )
+        store = open_leader_store(
+            paths=paths,
+            identity=loaded.identity,
+            config=config,
+            token=leader_token,
+            safety_tracker=lease_safety_tracker,
+        )
+        logger = JsonlLogger(
+            paths.logs
+            / "syncers"
+            / f"e{leader_token.epoch:06d}_{paths.owner_short(leader_token.owner_id)}.jsonl",
+            "syncer",
+        )
+        lease_renewer = LeaseRenewalThread(
+            paths=paths,
+            identity=loaded.identity,
+            config=config,
+            token=leader_token,
+            fenced_store=store.fenced_store,
+            safety_tracker=lease_safety_tracker,
+        )
+        lease_renewer.start()
+    else:
+        prepare_run_dirs(paths, config.sync.num_learners)
+        if config.init.resume and not database_path.is_file():
+            raise FileNotFoundError(
+                "resume requires persistent SQLite at "
+                f"{database_path}; latest.json is not authoritative"
+            )
+        store = SQLiteStore(database_path)
+        logger = JsonlLogger(paths.logs / "syncer.jsonl", "syncer")
     log_uncaught_exception(logger)
     hostname = socket.gethostname()
     logger.event(
@@ -2424,16 +2642,53 @@ def run_syncer(config: Config) -> None:
         device=str(device),
         compute_dtype=config.syncer.compute_dtype,
         publish_dtype=config.syncer.publish_dtype,
+        leader_epoch=None if leader_token is None else leader_token.epoch,
+        leader_owner_id=None if leader_token is None else leader_token.owner_id,
         cuda_visible_devices=os.environ.get("CUDA_VISIBLE_DEVICES"),
     )
-    wandb_run = init_wandb_run(
-        config=config,
-        paths=paths,
-        logger=logger,
-        device=device,
-        hostname=hostname,
-    )
+    if ha_mode:
+        existing_terminal = store.terminal_state()
+        if existing_terminal is not None and existing_terminal.get("stop_reason") not in (
+            None,
+            "",
+            "error",
+        ):
+            assert lease_store is not None and leader_token is not None
+            try:
+                repaired = repair_completed_ha_terminal(
+                    paths=paths,
+                    store=store,
+                    lease_store=lease_store,
+                    config=config,
+                    logger=logger,
+                )
+                logger.event(
+                    "process_exit",
+                    reason="terminal_repaired",
+                    version=int(repaired["final_version"]),
+                )
+            finally:
+                try:
+                    if lease_renewer is not None:
+                        lease_renewer.stop()
+                finally:
+                    try:
+                        store.close()
+                    finally:
+                        try:
+                            lease_store.release(leader_token)
+                        finally:
+                            lease_store.close()
+            return
+    wandb_run = None
     if config.fragments.enabled:
+        wandb_run = init_wandb_run(
+            config=config,
+            paths=paths,
+            logger=logger,
+            device=device,
+            hostname=hostname,
+        )
         run_fragment_syncer(
             config=config,
             paths=paths,
@@ -2445,30 +2700,54 @@ def run_syncer(config: Config) -> None:
             run_start_monotonic=run_start_monotonic,
         )
         return
-    if config.init.resume:
-        version, theta, outer_state, param_index, total_seen_tokens = resume_run(
-            config,
-            paths,
-            store,
-            logger,
+    try:
+        resume_requested = store.committed_global_count() > 0 if ha_mode else config.init.resume
+        if resume_requested:
+            version, theta, outer_state, param_index, total_seen_tokens = resume_run(
+                config,
+                paths,
+                store,
+                logger,
+                device=device,
+            )
+            resume_generation = store.get_run_state("resume_generation") or {}
+            heartbeat_fences = {
+                str(learner_id): str(fingerprint)
+                for learner_id, fingerprint in dict(
+                    resume_generation.get("heartbeat_fences") or {}
+                ).items()
+            }
+        else:
+            version, theta, outer_state, param_index, total_seen_tokens = initialize_run(
+                config,
+                paths,
+                store,
+                logger,
+                device=device,
+            )
+            heartbeat_fences = {}
+        if lease_renewer is not None:
+            lease_renewer.enable_heartbeats()
+        wandb_run = init_wandb_run(
+            config=config,
+            paths=paths,
+            logger=logger,
             device=device,
+            hostname=hostname,
         )
-        resume_generation = store.get_run_state("resume_generation") or {}
-        heartbeat_fences = {
-            str(learner_id): str(fingerprint)
-            for learner_id, fingerprint in dict(
-                resume_generation.get("heartbeat_fences") or {}
-            ).items()
-        }
-    else:
-        version, theta, outer_state, param_index, total_seen_tokens = initialize_run(
-            config,
-            paths,
-            store,
-            logger,
-            device=device,
-        )
-        heartbeat_fences = {}
+    except Exception:
+        if lease_renewer is not None:
+            try:
+                lease_renewer.stop()
+            except Exception:
+                logger.exception("lease_renewer_stop_failed")
+        store.close()
+        if lease_store is not None and leader_token is not None:
+            try:
+                lease_store.release(leader_token)
+            finally:
+                lease_store.close()
+        raise
 
     first_seen = UpdateFirstSeenRegistry(capacity=update_first_seen_capacity(config))
     last_progress_time = time.time()
@@ -2481,6 +2760,8 @@ def run_syncer(config: Config) -> None:
     terminal_grace_complete = False
     try:
         while True:
+            if lease_renewer is not None:
+                lease_renewer.raise_if_failed()
             if (
                 config.sync.stop_after_outer_steps is not None
                 and version >= config.sync.stop_after_outer_steps
@@ -2624,6 +2905,7 @@ def run_syncer(config: Config) -> None:
                 terminal_drain=terminal_drain,
                 version=version,
                 selected=selected,
+                store=store,
             )
             if terminal_predecessor is not None:
                 logger.event(
@@ -2844,10 +3126,7 @@ def run_syncer(config: Config) -> None:
                         "syncer/outer_step_seconds": outer_seconds,
                         "syncer/publish_seconds": publish_seconds,
                         "syncer/sqlite_commit_seconds": sqlite_commit_seconds,
-                        **{
-                            f"syncer/{key}": value
-                            for key, value in publication_metrics.items()
-                        },
+                        **{f"syncer/{key}": value for key, value in publication_metrics.items()},
                         "syncer/maintenance_seconds": maintenance_seconds,
                         "syncer/stale_updates_dropped": dropped,
                         "syncer/effective_staleness_mean": staleness_evidence[
@@ -2893,13 +3172,29 @@ def run_syncer(config: Config) -> None:
         raise
     finally:
         try:
-            publish_stop(
-                paths,
-                config=config,
-                reason=stop_reason,
-                version=version,
-                total_seen_tokens=total_seen_tokens,
-            )
+            terminal_row = None
+            if isinstance(store, LeaderBoundSQLiteStore):
+                previous_terminal = store.terminal_state()
+                generation = (
+                    1 if previous_terminal is None else int(previous_terminal["generation"]) + 1
+                )
+                terminal_row = store.finalize_terminal_state(
+                    generation=generation,
+                    stop_reason=stop_reason,
+                    final_version=version,
+                    total_seen_tokens=total_seen_tokens,
+                )
+                EpochControlPublisher(paths, store.fenced_store, store.token).publish_terminal(
+                    terminal_row
+                )
+            else:
+                publish_stop(
+                    paths,
+                    config=config,
+                    reason=stop_reason,
+                    version=version,
+                    total_seen_tokens=total_seen_tokens,
+                )
             logger.event("stop_published", reason=stop_reason, version=version)
             all_learners_stopped = wait_for_learner_shutdown(
                 paths=paths,
@@ -2928,7 +3223,7 @@ def run_syncer(config: Config) -> None:
                         count=finalized,
                         reason=stop_reason,
                     )
-            write_training_summary(
+            summary = write_training_summary(
                 paths=paths,
                 store=store,
                 config=config,
@@ -2950,6 +3245,20 @@ def run_syncer(config: Config) -> None:
                     input_closed=all_learners_stopped,
                 )
                 logger.event("state_maintenance_completed", **maintenance)
+                if terminal_row is not None:
+                    terminal_row = store.finalize_terminal_state(
+                        generation=int(terminal_row["generation"]) + 1,
+                        stop_reason=stop_reason,
+                        final_version=version,
+                        total_seen_tokens=total_seen_tokens,
+                    )
+                    EpochControlPublisher(paths, store.fenced_store, store.token).publish_terminal(
+                        terminal_row, summary=summary
+                    )
+            elif terminal_row is not None:
+                EpochControlPublisher(paths, store.fenced_store, store.token).publish_terminal(
+                    terminal_row, summary=summary
+                )
             if wandb_run is not None:
                 wandb_run.summary["stop_reason"] = stop_reason
                 wandb_run.summary["final_version"] = version
@@ -2960,7 +3269,19 @@ def run_syncer(config: Config) -> None:
                 if wandb_run is not None:
                     wandb_run.finish(exit_code=1 if stop_reason == "error" else 0)
             finally:
+                if lease_renewer is not None:
+                    try:
+                        lease_renewer.stop()
+                    except Exception:
+                        logger.exception("lease_renewer_stop_failed")
                 store.close()
+                if lease_store is not None and leader_token is not None:
+                    try:
+                        lease_store.release(leader_token)
+                    except Exception:
+                        logger.exception("leader_release_failed")
+                    finally:
+                        lease_store.close()
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -2978,9 +3299,7 @@ def main(argv: list[str] | None = None) -> None:
         staleness_lambda=args.staleness_lambda,
         max_staleness_versions=args.max_staleness_versions,
         global_adoption_strategy=args.global_adoption_strategy,
-        capture_terminal_predecessor_for_eval=(
-            args.capture_terminal_predecessor_for_eval
-        ),
+        capture_terminal_predecessor_for_eval=(args.capture_terminal_predecessor_for_eval),
         completion_mode=args.completion_mode,
         parallel_checkpoint_writes=args.parallel_checkpoint_writes,
         materialize_full_every_events=args.materialize_full_every_events,

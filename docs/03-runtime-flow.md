@@ -36,7 +36,20 @@ fragment 模式(`initialize_fragment_run`)额外:构建并发布 `fragment_index
 5. 读取并校验当前每个固定 heartbeat pointer，保存其完整内容 SHA256 fence；在一个 SQLite 事务中将崩溃遗留的全部 `selected` 行重置为 `pending`，把预期 learner 行重置为 `unknown/resumed` 并清空本代 `hostname/pid/last_seen/last_heartbeat_path`，同时写入 `run_state.resume_generation`；
 6. 切代事务成功后，把仍存在的 stop/summary marker（不可读，或可读但相应 reason 为空/`error`）用 `os.replace` 归档到 `logs/resume_*`；原子重建 `latest.json`,执行 archive/GC 后继续主循环。摄取层忽略与 fence 完全相同的旧 heartbeat，learner 原子替换为新 active 后才重新打开本代输入。重复 resume 不增加 global row,也不会重复应用 update；任一可读 stop reason 或 summary stop_reason 表示非 error 终态时拒绝 resume，不要求两个文件成对存在或彼此一致。
 
-### 1.4 learner 启动(`run_learner` / `run_fragment_learner`)
+### 1.4 HA full 初始化与 takeover
+
+HA full 不复用上面的 legacy `initialize_run/resume_run` 入口：
+
+1. operator/launcher 先运行 `python -m fs_diloco.tools.init_run`。它要求新 run root，冻结 source manifest、resolved config和 run descriptor，由 `initialize_new_run()` 创建完整 schema v2，最后写 `bootstrap_complete.json`；
+2. `run_syncer_candidate.pbs` 和 `run_static_learner.pbs` 分别在独立 PBS job 中读取 descriptor，并在 import runtime 前比对 git commit、dirty状态和 source fingerprint；
+3. candidate用 `open_existing()` 验证 bootstrap后轮询 `LeaderLeaseStore.acquire()`。只有成功者获得 `LeaderToken`并打开 leader-bound fenced store，loser不初始化 W&B、不写业务表；
+4. 第一 epoch从模型创建 v0。successor从 SQLite current committed row恢复权重/outer/selected状态，校验文件 size及所选 digest模式，修复 DB已提交但 canonical control尚未发布的窗口；
+5. 每次 checkpoint先写到 `weights/epochs/eNNNNNN/` 和 `optim/epochs/eNNNNNN/` 的唯一 publication path，然后 fenced DB transaction提交 version/updates/control manifest，最后发布同 epoch canonical head并 best-effort刷新 fixed cache；
+6. leader周期 renew lease并发布独立 epoch heartbeat；renew成功同时推进供业务 transaction 共用的本地 monotonic 安全水位。正常结束先提交并发布只含 stop 的 early terminal generation 让 learner 停止，完成末次摄取、summary 与 maintenance 后再提交更高 generation 并成对发布 canonical stop/summary。candidate 只有在 DB terminal 与这对最终 control publication 的路径、owner、epoch 和 SHA 全部一致时才拒绝重新取得运行权；中途崩溃留下的不完整 normal terminal 可由 successor 取得新 epoch并修复。`error` generation只保留诊断/恢复依据，不是 learner stop authority，learner继续 recovery reconciliation，successor仍可取得新 epoch并覆盖为更高 generation的正常终态。
+
+learner启动时只创建自身 instance目录且不打开 SQLite。`EpochControlReader`从 bounded epoch目录选择含合法 self-check heartbeat或 canonical head的最高 epoch；head再绑定 immutable pointer path和 SHA，terminal必须位于同一 epoch/owner目录并通过自身 `payload_sha256`复算。最高 epoch暂缺 head时返回未就绪而不回退。fixed cache被旧 process覆盖、低于 current epoch或 identity不符时直接忽略。watchdog在 leader heartbeat陈旧但 recovery claim仍在排队/运行或 canonical repair窗口内时继续等待。learner-assisted qsub默认关闭；启用时也只有 claim/reconciliation能力，不会直接授予 leadership。同一 stale observation的 attempt目录在看到更新 observation前不会被归档，因此 retention不会重置每 observation预算；跨 observation的 outstanding上限按全部 active claim计算。
+
+### 1.5 learner 启动(`run_learner` / `run_fragment_learner`)
 
 1. 建目录、开 JSONL 日志、按 `seed + learner_index` 设随机种子、选 GPU;
 2. 加载模型与 tokenizer(HF `gpt2` 等,或 `synthetic-tiny` 冒烟模型);
@@ -135,8 +148,11 @@ while True:
   collect_runtime_artifacts():按 DB/latest/pointer 引用只保留当前 checkpoint 与 live payload
   记 syncer_metrics.csv 与 W&B;v = v+1;刷新进展时间戳
 finally:
-  发布 stop.json(带 reason)→ 等待 stopped 心跳/末次摄取 → 终态化剩余 proposal
-  → summary → (非 error 才 archive/GC) → W&B finish → 关库
+  HA:提交/发布 early stop generation；legacy:发布 stop.json(带 reason)
+  → 等待 stopped 心跳/末次摄取 → 终态化剩余 proposal → summary
+  → (非 error 才 archive/GC)
+  → HA:提交并成对发布 post-maintenance stop/summary generation
+  → W&B finish → 关库
 ```
 
 该 finally 只覆盖已经成功完成初始化/恢复并进入主循环的阶段；startup/init/resume 异常发生得更早，不走这套 stop/summary/finish/close。主循环 finally 中 stop、wait/ingest、summary 和 maintenance 是同一顺序 try；前一步如果自身抛异常，不保证后续步骤继续，但最内层 finally 仍尝试 W&B finish 和 DB close。
@@ -163,6 +179,8 @@ tN   达到 stop_after_outer_steps → syncer 发布 stop.json并等待 learners
 tN+  learners: 看到 stop.json(或已在有限步 final wait),写 stopped 心跳退出
 tN++ syncer:末次摄取；若全部 stopped 则终态化未消费 proposal，写 summary/archive/GC 后退出
 ```
+
+HA full 的差异是 `t0` 之前由独立 initializer完成 schema/descriptor；syncer/learner分别由不同 PBS job启动。任一时刻只有持 current token的 leader可提交。如果 leader在 vN DB commit后崩溃，successor先取得 epoch `e+1`，从 vN恢复并重发 current canonical head，再把下一次训练提交写成 vN+1，而不是从 fixed latest猜版本。
 
 ## 7. 运行期观测点
 

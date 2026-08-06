@@ -1,0 +1,131 @@
+#!/bin/bash
+#PBS -N fsdiloco_plan02_p1_smoke
+#PBS -q debug-g
+#PBS -W group_list=xg24i002
+#PBS -l select=1:mpiprocs=1
+#PBS -l walltime=00:01:00
+#PBS -j oe
+
+set -eEuo pipefail
+
+syncer_pid=""
+learner_pids=()
+cleanup() {
+  local pid
+  for pid in "$syncer_pid" "${learner_pids[@]}"; do
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+    fi
+  done
+}
+trap cleanup EXIT
+trap 'echo "[ERROR] Phase 1 smoke failed at line $LINENO" >&2' ERR
+
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+module list 2>&1 | cat
+
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+RUN_ID="${RUN_ID:-plan02_p1_smoke_${PBS_JOBID%%.*}}"
+SHARED_ROOT="${SHARED_ROOT:-$PROJECT_ROOT/runs/fs_diloco/$RUN_ID}"
+CONFIG="$PROJECT_ROOT/configs/fs_diloco_tiny_ha_static.yaml"
+IDENTITY_ROOT="${TMPDIR:?TMPDIR is required}/plan02_source_identity"
+
+cd "$PROJECT_ROOT"
+hostname
+printf 'PBS_JOBID=%s\nPBS_NODEFILE=%s\nRUN_ID=%s\nSHARED_ROOT=%s\n' \
+  "${PBS_JOBID:-}" "${PBS_NODEFILE:-}" "$RUN_ID" "$SHARED_ROOT"
+
+"$PYTHON_BIN" scripts/miyabi/capture_source_identity.py \
+  --project-root "$PROJECT_ROOT" \
+  --output-json "$IDENTITY_ROOT.json" \
+  --output-env "$IDENTITY_ROOT.env"
+source "$IDENTITY_ROOT.env"
+
+"$PYTHON_BIN" -m fs_diloco.tools.init_run \
+  --config "$CONFIG" \
+  --run-id "$RUN_ID" \
+  --shared-root "$SHARED_ROOT" \
+  --project-root "$PROJECT_ROOT" \
+  --allow-dirty-snapshot
+
+"$PYTHON_BIN" -m fs_diloco.syncer \
+  --config "$SHARED_ROOT/control/run_config.resolved.yaml" \
+  --shared-root "$SHARED_ROOT" &
+syncer_pid=$!
+
+for learner_index in 0 1; do
+  printf -v learner_id 'learner_%03d' "$learner_index"
+  "$PYTHON_BIN" -m fs_diloco.learner \
+    --config "$SHARED_ROOT/control/run_config.resolved.yaml" \
+    --shared-root "$SHARED_ROOT" \
+    --learner-id "$learner_id" &
+  learner_pids+=("$!")
+done
+
+for learner_pid in "${learner_pids[@]}"; do
+  wait "$learner_pid"
+done
+wait "$syncer_pid"
+syncer_pid=""
+
+"$PYTHON_BIN" - "$SHARED_ROOT" <<'PY'
+import json
+import sqlite3
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+conn = sqlite3.connect(root / "control/syncer_metadata.sqlite3")
+conn.row_factory = sqlite3.Row
+versions = [dict(row) for row in conn.execute("SELECT * FROM global_versions ORDER BY version")]
+leader = dict(conn.execute("SELECT * FROM syncer_leader WHERE singleton=1").fetchone())
+terminal = dict(conn.execute("SELECT * FROM terminal_state WHERE singleton=1").fetchone())
+terminal_publications = [
+    dict(row)
+    for row in conn.execute(
+        """
+        SELECT kind, logical_generation, published_by_epoch, published_by_owner_id
+        FROM control_publications
+        WHERE kind IN ('stop', 'summary') AND logical_generation = ?
+        ORDER BY kind
+        """,
+        (terminal["generation"],),
+    )
+]
+assert [row["version"] for row in versions] == [2], versions
+assert all(row["commit_epoch"] == 1 for row in versions)
+assert leader["state"] == "released"
+assert terminal["final_version"] == 2
+assert terminal["generation"] == 2
+assert [row["kind"] for row in terminal_publications] == ["stop", "summary"]
+assert all(row["published_by_epoch"] == 1 for row in terminal_publications)
+assert all(
+    row["published_by_owner_id"] == terminal["finalized_by_owner_id"]
+    for row in terminal_publications
+)
+assert list((root / "weights/epochs/e000001").rglob("*.safetensors"))
+assert list((root / "optim/epochs/e000001").rglob("*.safetensors"))
+history_versions = [
+    json.loads(line)["version"]
+    for line in (root / "metrics/global_version_history.jsonl").read_text().splitlines()
+]
+assert history_versions == [0, 1], history_versions
+print(
+    json.dumps(
+        {
+            "versions": versions,
+            "leader": leader,
+            "terminal": terminal,
+            "terminal_publications": terminal_publications,
+        },
+        default=str,
+    )
+)
+PY
+
+"$PYTHON_BIN" scripts/miyabi/check_plan02_phase1.py \
+  --run-root "$SHARED_ROOT" \
+  --mode phase1-staged
+
+trap - EXIT

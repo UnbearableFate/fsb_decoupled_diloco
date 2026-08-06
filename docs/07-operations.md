@@ -57,6 +57,39 @@ python -m fs_diloco.learner \
 `--require-resume-progress --resume-artifact <path>` 同时验证 DB/latest/checkpoint、旧 heartbeat
 fence、新代 active 与下一次 commit；stdout 仍只有三值结果。
 
+### 2.1 HA full：初始化、独立作业与人工接管
+
+HA 配置只支持 full + static membership。先在同一 source tree捕获 identity并运行唯一 initializer；run root必须不存在：
+
+```bash
+python scripts/miyabi/capture_source_identity.py \
+  --project-root "$PWD" --output-json /tmp/fsdiloco-source.json \
+  --output-env /tmp/fsdiloco-source.env
+source /tmp/fsdiloco-source.env
+python -m fs_diloco.tools.init_run \
+  --config configs/fs_diloco_tiny_ha_static.yaml \
+  --run-id my_ha_run --shared-root /shared/runs/my_ha_run \
+  --project-root "$PWD"
+```
+
+从 `control/run_descriptor.json` 读取 `descriptor_sha256`，然后分别提交角色。下面的 walltime只是 tiny示例；正式提交应根据 inner/global steps、已测单步和发布时间重新估算，并使用能覆盖预期运行和短收尾的最短值：
+
+```bash
+vars='FS_DILOCO_SHARED_ROOT=/shared/runs/my_ha_run,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=<sha>,PROJECT_ROOT=/absolute/project'
+qsub -l walltime=00:02:00 -v "$vars" scripts/miyabi/run_syncer_candidate.pbs
+qsub -l walltime=00:02:00 -r y -J 0-7 -v "$vars" scripts/miyabi/run_static_learner.pbs
+```
+
+syncer异常退出后，只需用相同 descriptor变量重新 `qsub` 一个 `run_syncer_candidate.pbs`。不要删除 fixed cache、DB或旧 epoch目录；successor从 DB恢复并修复 canonical control。异常 leader可能留下 canonical `error` generation，它是诊断记录而不是最终 stop，learner会继续等待/reconcile，successor可将它推进为更高 generation的正常终态。若旧 process暂停在 write transaction内并持续持有 SQLite lock，先通过 operator确认并终止那个旧 job，再提交/等待 successor；系统不会自动 `qdel`。`coordination.recovery_submission.enabled` 默认false，开启后 learner只能去重并提交 candidate，candidate仍必须竞争 lease。
+
+completed run用只读 Checker验收：
+
+```bash
+python scripts/miyabi/check_plan02_phase1.py \
+  --run-root /shared/runs/my_ha_run --mode phase1-completed \
+  --output /absolute/report/path/phase1-completed-checker_pass.json
+```
+
 ## 3. 本地冒烟(无 GPU、无外网)
 
 ```bash
@@ -72,7 +105,7 @@ scripts/local/clean_run.sh --delete --keep-latest-global runs/fs_diloco
 
 ## 4. Miyabi PBS 批作业
 
-任何 PBS 提交前必须先运行 `bash -n scripts/miyabi/*.pbs`，并逐个确认 `#PBS -W group_list=...` 是当前账户可用的**字面 group ID**，不能保留 `<group_id>` placeholder；两项未完成时不要 `qsub`。
+任何 PBS 提交前必须先运行 `bash -n scripts/miyabi/*.pbs`，并逐个确认 `#PBS -W group_list=...` 是当前账户可用的**字面 group ID**，不能保留 `<group_id>` placeholder。还要按工作量、已有实测和收尾预算估算尽可能短的 walltime；若脚本默认明显过长，在命令行用 `qsub -l walltime=HH:MM:SS`覆盖。三项未完成时不要 `qsub`。
 
 | 脚本 | 规模 | 用途 |
 |---|---|---|
@@ -89,6 +122,8 @@ scripts/local/clean_run.sh --delete --keep-latest-global runs/fs_diloco
 | `run_9node_fragment_gpt2_wikitext2_50x10.pbs` / `run_9node_no_fragment_gpt2_wikitext2_50x10.pbs` | 9 节点 | 8 learner、inner steps=50、outer steps=10 的 fragment/no-fragment 对照实验 |
 | `run_1node_lm_eval.pbs` | 1 节点 | checkpoint 导出 + lm-eval |
 | `run_1node_validation_eval.pbs` | 1 节点 | 使用 run resolved config 的专用 validation loss/ppl；校验非空 token、有限指标、checkpoint/source identity 并原子附加 summary |
+| `run_syncer_candidate.pbs` / `run_static_learner.pbs` | 各 1 节点独立 job | HA full候选和 static learner array；两者在 runtime import前校验 descriptor/source identity，提交时应覆盖成 workload所需的短 walltime |
+| `run_plan02_phase1_{tests,smoke,faults,lock,acceptance_launcher,checker}.pbs` | 1或2节点 | Phase 1关联测试、故障矩阵、SQLite lock边界、独立 1+8 launcher和只读 completed Checker；验证脚本使用分钟级 walltime |
 
 提交与自定义(以 9 节点为例):
 

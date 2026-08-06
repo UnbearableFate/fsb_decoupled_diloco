@@ -1,0 +1,30 @@
+{
+  "status": "PASS",
+  "experiment_id": "plan02-phase1-associated-tests",
+  "environment": {
+    "scheduler": "Miyabi PBS",
+    "queue": "debug-g",
+    "compute_host": "mg0012",
+    "pbs_job_id": "2497905.opbs",
+    "exit_status": 0,
+    "observed_walltime": "00:00:27"
+  },
+  "commands": [
+    ".venv/bin/python -m pytest -q tests/test_plan02_phase1_ha.py",
+    ".venv/bin/python -m pytest -q"
+  ],
+  "results": {
+    "phase1_focused": "20 passed",
+    "repository_full": "397 passed"
+  },
+  "coverage_summary": [
+    "schema bootstrap and readonly/open-existing mode gates",
+    "monotonic lease epochs, exact-owner renew/release, stale-token rejection",
+    "31-method fenced mutator surface and raw SQL/DDL escape rejection",
+    "epoch checkpoint/control publication, cache pollution, idempotent repair",
+    "DB-first recovery across publication failpoints",
+    "HA GC ledger, old-epoch orphan deletion, recursive discovery",
+    "recovery claim contention, reconciliation, backoff, budget and terminal fence",
+    "legacy full and fragment compatibility defaults"
+  ]
+}

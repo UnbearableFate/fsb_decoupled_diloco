@@ -2,7 +2,7 @@
 
 Filesystem-backed Decoupled DiLoCo research prototype for Miyabi-G.
 
-Milestone 1 uses independent learners (one CUDA device each when available, with a CPU fallback used by local synthetic runs) and one configurable CPU/GPU syncer process. Learners train GPT-style causal language models locally and publish immutable `safetensors` payloads behind atomically replaced proposal pointers (one per learner in full mode, one per learner/fragment pair in fragment mode). The syncer records authoritative state in a persistent SQLite database in the shared run directory, applies token/staleness-weighted merging with quorum and grace-window behavior on its configured device and dtype, steps an explicit flat-vector outer optimizer, optionally logs syncer-side training telemetry to W&B, and publishes global weights in the configured publication dtype through `control/latest.json`.
+Milestone 1 uses independent learners (one CUDA device each when available, with a CPU fallback used by local synthetic runs) and one configurable CPU/GPU syncer process. Learners train GPT-style causal language models locally and publish immutable `safetensors` payloads behind atomically replaced proposal pointers (one per learner in full mode, one per learner/fragment pair in fragment mode). The syncer records authoritative state in a persistent SQLite database in the shared run directory, applies token/staleness-weighted merging with quorum and grace-window behavior on its configured device and dtype, steps an explicit flat-vector outer optimizer, optionally logs syncer-side training telemetry to W&B, and publishes global weights in the configured publication dtype. Full mode optionally enables independently scheduled syncer high availability: a one-time initializer freezes the run descriptor, SQLite issues monotonic leader epochs, every business mutation is fenced in its transaction, and learners adopt epoch-scoped canonical controls instead of trusting the fixed `control/latest.json` cache.
 
 The implementation intentionally does not use `torch.distributed`, NCCL, RPC, Ray, DeepSpeed, FSDP, or PCCL for milestone 1 communication.
 
@@ -71,9 +71,10 @@ python -m fs_diloco.analysis runs/fs_diloco/<RUN_ID>
 - `updates/latest/learner_XXX.json` is each full-mode learner's bounded proposal surface; it points to an immutable payload.
 - Fragment mode uses one fixed `updates/latest/learner_XXX_fNNN.json` pointer per learner/fragment pair.
 - Heartbeat JSON files are liveness hints.
-- `control/latest.json` is the only global pointer learners poll.
+- With HA disabled, `control/latest.json` is the global pointer learners poll. With full-mode HA enabled, learners select the highest valid filesystem epoch and verify its canonical head/pointer checksum without opening SQLite; fixed `latest.json`/`stop.json`/`summary.json` files are repairable convenience caches only.
 - `control/syncer_metadata.sqlite3` is the authoritative commit record and is opened directly from the shared filesystem with rollback journaling and `synchronous=FULL`.
 - Recovery is DB-first: `latest.json` is a rebuildable learner-facing cache, not a recovery authority.
+- HA checkpoints and controls use epoch-unique paths. A stale leader may finish writes only in its old epoch namespace; after a successor epoch commits, its token cannot mutate business state.
 - The bounded tensor surface retains current checkpoints, fixed proposal pointers, payloads referenced by active DB rows, and short-lived `gc_pending` payloads awaiting deletion; terminal metadata history is archived in append-only JSONL files.
 - Full-mode adoption is strategy-dependent: `replace` overwrites the model and resets AdamW moments, while rebase/prediction reconciliation preserves unpublished local progress and optimizer state. Fragment adoption only replaces changed fragments and resets the optimizer only when configured.
 - Outer optimizers are explicit flat-vector SGD, momentum/Nesterov, and AdamW-style implementations.

@@ -1,0 +1,79 @@
+#!/bin/bash
+#PBS -N fsdiloco_p1_lock
+#PBS -q debug-g
+#PBS -W group_list=xg24i002
+#PBS -l select=2:mpiprocs=1
+#PBS -l walltime=00:01:00
+#PBS -j oe
+
+set -eEuo pipefail
+trap 'echo "[ERROR] Phase 1 lock probe failed at line $LINENO" >&2' ERR
+
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+STAMP="${STAMP:-$(date +%Y%m%d-%H%M%S)}"
+JOB_ID_SHORT="${PBS_JOBID%%.*}"
+REPORT_ROOT="$PROJECT_ROOT/reports/DOING/fsb_decoupled_diloco_plan_02"
+WORK_DIR="$PROJECT_ROOT/runs/fs_diloco/plan02_phase1_lock_${JOB_ID_SHORT}"
+OUTPUT="$REPORT_ROOT/artifacts/${STAMP}_phase1-lock-boundary_pass.json"
+PROBE="$PROJECT_ROOT/scripts/miyabi/plan02_phase1_lock_probe.py"
+
+: "${PBS_NODEFILE:?PBS_NODEFILE is required}"
+cd "$PROJECT_ROOT"
+mkdir -p "$WORK_DIR" "$REPORT_ROOT/artifacts"
+mapfile -t HOSTS < <(sort -u "$PBS_NODEFILE")
+test "${#HOSTS[@]}" -eq 2
+printf 'HOST %s\n' "${HOSTS[@]}"
+
+for kind in outside inside; do
+  CASE_ROOT="$WORK_DIR/$kind"
+  mkdir -p "$CASE_ROOT"
+  mpirun --bind-to none --map-by ppr:1:node -np 2 \
+    /usr/bin/env \
+      "PYTHON_BIN=$PYTHON_BIN" \
+      "PROBE=$PROBE" \
+      "CASE_ROOT=$CASE_ROOT" \
+      "RUN_ID=phase1-lock-${kind}-${JOB_ID_SHORT}" \
+      "KIND=$kind" \
+    bash -lc '
+      set -eEuo pipefail
+      rank="${OMPI_COMM_WORLD_RANK:?missing rank}"
+      if [[ "$rank" -eq 0 ]]; then role=holder; else role=contender; fi
+      "$PYTHON_BIN" "$PROBE" "$role" \
+        --case-root "$CASE_ROOT" --run-id "$RUN_ID" --kind "$KIND" \
+        --output "$CASE_ROOT/${role}.json"
+    '
+done
+
+"$PYTHON_BIN" - "$WORK_DIR" "$OUTPUT" "${PBS_JOBID:-}" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+output = Path(sys.argv[2])
+cases = {}
+for kind in ("outside", "inside"):
+    cases[kind] = {
+        role: json.loads((root / kind / f"{role}.json").read_text())
+        for role in ("holder", "contender")
+    }
+assert cases["outside"]["contender"]["successor_epoch"] == 2
+assert cases["inside"]["contender"]["successor_epoch"] == 2
+assert cases["inside"]["contender"]["blocked_error"]
+assert cases["inside"]["contender"]["tentative_value"] is None
+payload = {
+    "status": "PASS",
+    "pbs_job_id": sys.argv[3],
+    "hosts": sorted({row["hostname"] for case in cases.values() for row in case.values()}),
+    "cases": cases,
+}
+output.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n")
+with output.open("rb") as handle:
+    os.fsync(handle.fileno())
+print("PASS")
+PY
+
+printf 'PLAN02_PHASE1_LOCK_ARTIFACT=%s\n' "$OUTPUT"

@@ -1,0 +1,186 @@
+{
+  "schema_version": 1,
+  "frozen_count": 31,
+  "generated_from": "fs_diloco/storage/sqlite_store.py",
+  "full_common": [
+    {
+      "method": "set_run_state",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore",
+      "ha_transaction": "guarded BEGIN IMMEDIATE through _FencedConnection",
+      "ha_token": "required",
+      "red_test": "test_fenced_store_rejects_raw_and_superseded_writes"
+    },
+    {
+      "method": "upsert_global_version",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore",
+      "ha_transaction": "guarded BEGIN IMMEDIATE with publication metadata",
+      "ha_token": "required",
+      "red_test": "test_ha_gc_registers_then_rechecks_and_deletes_only_archived_publication"
+    },
+    {
+      "method": "_set_run_state_in_transaction",
+      "legacy_owner": "LegacySQLiteStore private transaction helper",
+      "ha_owner": "FencedSQLiteStore internal guarded connection only",
+      "ha_transaction": "caller's guarded transaction",
+      "ha_token": "inherited from guarded caller",
+      "red_test": "test_fenced_store_rejects_raw_and_superseded_writes"
+    },
+    {
+      "method": "initialize_full_run",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore",
+      "ha_transaction": "explicit BEGIN IMMEDIATE; pre-commit fence",
+      "ha_token": "required",
+      "red_test": "test_epoch_control_ignores_fixed_cache_pollution_and_repairs_takeover"
+    },
+    {
+      "method": "commit_full_merge",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore",
+      "ha_transaction": "explicit BEGIN IMMEDIATE; before/after write fence",
+      "ha_token": "required",
+      "red_test": "test_all_fenced_public_mutators_require_token"
+    },
+    {
+      "method": "upsert_learner",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore",
+      "ha_transaction": "guarded BEGIN IMMEDIATE",
+      "ha_token": "required",
+      "red_test": "test_all_fenced_public_mutators_require_token"
+    },
+    {
+      "method": "update_learner_status",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore",
+      "ha_transaction": "guarded BEGIN IMMEDIATE",
+      "ha_token": "required",
+      "red_test": "test_all_fenced_public_mutators_require_token"
+    },
+    {
+      "method": "insert_update_metadata",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore",
+      "ha_transaction": "explicit BEGIN IMMEDIATE; named parameters preserved",
+      "ha_token": "required",
+      "red_test": "test_fenced_named_parameter_mutation_preserves_metadata_values"
+    },
+    {
+      "method": "mark_updates_selected",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore",
+      "ha_transaction": "guarded BEGIN IMMEDIATE; epoch trigger",
+      "ha_token": "required",
+      "red_test": "test_all_fenced_public_mutators_require_token"
+    },
+    {
+      "method": "mark_updates_applied",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore",
+      "ha_transaction": "guarded BEGIN IMMEDIATE; epoch trigger",
+      "ha_token": "required",
+      "red_test": "test_all_fenced_public_mutators_require_token"
+    },
+    {
+      "method": "reset_selected_to_pending",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore",
+      "ha_transaction": "guarded BEGIN IMMEDIATE",
+      "ha_token": "required",
+      "red_test": "test_all_fenced_public_mutators_require_token"
+    },
+    {
+      "method": "reset_all_selected_to_pending",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore",
+      "ha_transaction": "guarded BEGIN IMMEDIATE",
+      "ha_token": "required",
+      "red_test": "test_all_fenced_public_mutators_require_token"
+    },
+    {
+      "method": "prepare_full_resume",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore",
+      "ha_transaction": "explicit BEGIN IMMEDIATE; pre-commit fence",
+      "ha_token": "required",
+      "red_test": "test_fenced_store_rejects_raw_and_superseded_writes"
+    },
+    {
+      "method": "drop_updates",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore",
+      "ha_transaction": "guarded BEGIN IMMEDIATE; epoch trigger",
+      "ha_token": "required",
+      "red_test": "test_all_fenced_public_mutators_require_token"
+    },
+    {
+      "method": "drop_obsolete_updates",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore",
+      "ha_transaction": "guarded BEGIN IMMEDIATE; epoch trigger",
+      "ha_token": "required",
+      "red_test": "test_all_fenced_public_mutators_require_token"
+    },
+    {
+      "method": "drop_ineligible_updates",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore",
+      "ha_transaction": "single guarded BEGIN IMMEDIATE for both updates",
+      "ha_token": "required",
+      "red_test": "test_all_fenced_public_mutators_require_token"
+    },
+    {
+      "method": "finalize_unconsumed_updates",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore full only",
+      "ha_transaction": "guarded BEGIN IMMEDIATE; epoch trigger",
+      "ha_token": "required",
+      "red_test": "test_all_fenced_public_mutators_require_token"
+    },
+    {
+      "method": "drop_superseded_updates",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore",
+      "ha_transaction": "single guarded BEGIN IMMEDIATE across learner loop",
+      "ha_token": "required",
+      "red_test": "test_all_fenced_public_mutators_require_token"
+    },
+    {
+      "method": "delete_archived_rows",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore with gc_candidates ledger",
+      "ha_transaction": "explicit guarded transaction",
+      "ha_token": "required",
+      "red_test": "test_ha_gc_registers_then_rechecks_and_deletes_only_archived_publication"
+    },
+    {
+      "method": "clear_gc_pending_paths",
+      "legacy_owner": "LegacySQLiteStore",
+      "ha_owner": "FencedSQLiteStore for proposal payload ledger only",
+      "ha_transaction": "guarded BEGIN IMMEDIATE",
+      "ha_token": "required",
+      "red_test": "test_all_fenced_public_mutators_require_token"
+    }
+  ],
+  "fragment_legacy": [
+    "upsert_fragment_definition",
+    "upsert_fragment_version",
+    "insert_fragment_update_metadata",
+    "mark_fragment_updates_selected",
+    "mark_fragment_updates_applied",
+    "reset_fragment_selected_to_pending",
+    "reset_all_fragment_selected_to_pending",
+    "drop_fragment_updates",
+    "drop_obsolete_fragment_updates",
+    "drop_ineligible_fragment_updates",
+    "drop_superseded_fragment_updates"
+  ],
+  "fragment_policy": {
+    "owner": "LegacySQLiteStore only",
+    "transaction": "unchanged Plan 01 legacy behavior",
+    "ha_token": "forbidden; fragment plus HA fails closed",
+    "red_test": "test_all_fenced_public_mutators_require_token"
+  }
+}
