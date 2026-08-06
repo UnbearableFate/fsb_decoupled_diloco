@@ -880,3 +880,20 @@ Artifacts:
 
 - Append-only review correction `plan-complete/gpt-5.6-sol_d114b51cf6b44c32bac2e4d4d5e16824676618de-retry1.md` found that target `d114b51` had reintroduced three Low Ruff violations while mechanically formatting the files. Disposition `fixed`: restore constants import ordering, the typed local evidence-query function, and removal of the unused `json` import.
 - Full-source Ruff lint, Ruff format for the three touched files, Python compilation, and `git diff --check` pass. Final full-suite PBS `2502021.opbs` requested `00:00:50` and passed all `495` tests in `24.57s`. The cleanup, persistence and merge behavior remains the already reviewed and validated implementation; this last correction is static-only.
+
+## 2026-08-07 02:22 JST — Plan-complete incremental review APPROVE
+
+- Final continuous Codex report `reports/DOING/code_review/fsb_decoupled_diloco_plan_02/plan-complete/gpt-5.6-sol_92ccb5e9ddfc73ad6a92676fb472acd3e3544f1d.md` reviewed `d114b51cf6b44c32bac2e4d4d5e16824676618de..92ccb5e9ddfc73ad6a92676fb472acd3e3544f1d` and returned `APPROVE` with no Critical/High/Medium/Low findings. It closes the three Low lint findings from the append-only `d114b51` correction and leaves the one High/three Medium plan-complete remediation dispositions fixed.
+- Required external invocation requested canonical `claude-opus-5` with fresh session `befcf31c-16d5-4cb0-a45a-618d0f0b151f`; JSON returned HTTP 429, zero usage, and `You've hit your session limit · resets 6am (Asia/Tokyo)`. It is `skipped-session-limit`, not approval, was not retried, and no Claude report was fabricated.
+- The final verified state retains Phase 2 formal G7/G8/G9, matched-performance and completed-Checker PASS artifacts, has 495/495 tests passing on compute PBS `2502021`, preserves future update archives in cleanup, and records the one historical main-G9 archive loss honestly. Phase 2 and the plan-complete gate are closed.
+
+## 2026-08-07 02:20 JST — Plan-complete final incremental review APPROVE
+
+- Independent Codex report `plan-complete/gpt-5.6-sol_92ccb5e9ddfc73ad6a92676fb472acd3e3544f1d.md` reviewed continuous range `d114b51cf6b44c32bac2e4d4d5e16824676618de..92ccb5e9ddfc73ad6a92676fb472acd3e3544f1d` and returned `APPROVE` with no Critical/High/Medium/Low findings. It verifies that the three static regressions are removed and that final full-suite PBS `2502021.opbs` passed all 495 tests.
+- The required external invocation requested/canonical model `claude-opus-5`, fresh session `3a8ce2bb-ae81-4fb3-8dc7-6d07804e1787`, exact base/target, JSON output and the read-only permission constraints. It returned HTTP 429 with zero input/output/model usage and the explicit `You've hit your session limit · resets 6am (Asia/Tokyo)` result. Per `plans/AGENTS.md`, disposition is `skipped-session-limit`: no Claude report was written or fabricated, no retry is made, and the skip is not an approval but does not block closure.
+- All Phase 2 and plan-complete findings are now `fixed` and validated; the phase-level continuous review and plan-complete current-state plus remediation reviews are closed.
+
+## 2026-08-07 02:20 JST — Corrected G8 cleanup complete
+
+- After the PASS evidence, exact dry-run inventory, and final review evidence were persisted, the corrected cleaner deleted exactly five reconstructable files totaling `30,539` bytes from terminal run `plan02_phase2_g8_2501754`: one heartbeat, one repeated learner log, learner metrics, update manifest, and one terminal latest pointer. This deletion is not recoverable.
+- Authority SQLite, current checkpoints, control/configuration, representative learner/syncer logs, and every fsync-before-prune history remain. In particular, the 26,811-byte `metrics/update_history.jsonl` remains present. Audit manifest: `artifacts/20260807-0220_phase2-g8-cleanup.json` (`status=complete`).
