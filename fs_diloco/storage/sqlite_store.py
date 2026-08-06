@@ -10,11 +10,6 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Iterable
 
-from .atomic_io import ensure_dir
-
-
-class DynamicMembershipFenceError(RuntimeError):
-    """A selected proposal lost its dynamic incarnation before final commit."""
 from ..core.constants import (
     GLOBAL_STATUS_COMMITTED,
     LEARNER_STATUS_UNKNOWN,
@@ -23,6 +18,11 @@ from ..core.constants import (
     UPDATE_STATUS_PENDING,
     UPDATE_STATUS_SELECTED,
 )
+from .atomic_io import ensure_dir
+
+
+class DynamicMembershipFenceError(RuntimeError):
+    """A selected proposal lost its dynamic incarnation before final commit."""
 
 
 def _schema_text() -> str:

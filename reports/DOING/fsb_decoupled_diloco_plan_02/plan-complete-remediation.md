@@ -51,3 +51,11 @@ No other Critical, High, Medium, or Low finding was produced by the available cu
 3. Dry-run the corrected cleaner against a retained completed run and confirm `metrics/update_history.jsonl` is absent from the inventory.
 4. Record all four dispositions as `fixed`, including the irreversible main-G9 archive loss and the still-auditable detached formal evidence.
 5. Perform a continuous incremental Codex review from `550296db7eab0dbcc2abcb4d124c81acd162fd8c` to the remediation target; invoke the required external reviewer once after saving the Codex report.
+
+## Validation update
+
+All four dispositions above are now **fixed and validated**. The pre-fix RED jobs were `2501969.opbs` and `2501974.opbs`; the affected group passed as `2501991.opbs` (`20 passed`), and complete-tree jobs `2501992.opbs` and `2501995.opbs` each passed all `495` tests. Static gates and a corrected G8 cleanup dry-run also passed; the dry-run retained `metrics/update_history.jsonl`. Only the continuous incremental review remains open.
+
+The subsequent formatting-only target `d114b51cf6b44c32bac2e4d4d5e16824676618de` received an append-only review correction after its first report overstated the static result. Its Low Ruff finding is **fixed**: constants imports again precede declarations, the query helper is a typed local function, and the unused `json` import is absent. Ruff lint/format and Python compilation pass, and final full PBS `2502021.opbs` passed all 495 tests in 24.57 seconds. Because this is a lint-only correction with no behavior change, no behavioral RED was required.
+
+Append-only review correction for formatting target `d114b51` produced one Low static finding; it is **fixed and validated** by full-source Ruff lint, format checking of the three files, Python compilation, and full PBS `2502021.opbs` (`495 passed`).
