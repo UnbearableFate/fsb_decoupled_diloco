@@ -501,6 +501,7 @@ class LearnerLaunchOutbox:
                 shared_root=self.paths.shared_root,
                 descriptor_sha256=self.descriptor_sha256,
                 walltime=str(self.config.learner_walltime),
+                queue=getattr(self.config, "learner_queue", None),
             )
             if submission.get("returncode") == 0 and submission.get("job_id_raw"):
                 results.append(

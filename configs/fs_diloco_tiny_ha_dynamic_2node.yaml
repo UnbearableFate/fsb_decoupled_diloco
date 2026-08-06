@@ -83,6 +83,7 @@ scaling:
   starvation_observation_seconds: 1.0
   learner_pbs_script: scripts/miyabi/run_dynamic_learner.pbs
   learner_walltime: 00:01:00
+  learner_queue: debug-g
 
 terminal:
   admission_close_policy: global_target_or_launch_budget

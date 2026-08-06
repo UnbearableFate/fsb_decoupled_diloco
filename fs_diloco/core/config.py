@@ -176,6 +176,7 @@ class ScalingSection:
     starvation_observation_seconds: float = 120.0
     learner_pbs_script: str = "scripts/miyabi/run_dynamic_learner.pbs"
     learner_walltime: str | None = None
+    learner_queue: str | None = None
 
 
 @dataclass
@@ -676,6 +677,14 @@ def resolve_config(
                 "scaling.learner_walltime must be an explicit estimated HH:MM:SS "
                 "value when scaling is enabled"
             )
+        if scaling.learner_queue is not None and (
+            not scaling.learner_queue
+            or any(
+                not (character.isalnum() or character in "_.-")
+                for character in scaling.learner_queue
+            )
+        ):
+            raise ValueError("scaling.learner_queue contains unsafe PBS characters")
     for field_name in (
         "startup_grace_seconds",
         "productive_upload_grace_factor",

@@ -35,7 +35,7 @@ from fs_diloco.protocol.merge import select_one_per_dynamic_member
 from fs_diloco.runtime import learner as learner_runtime
 from fs_diloco.runtime.syncer import dynamic_non_target_close_request
 from fs_diloco.runtime.launch_outbox import LearnerLaunchOutbox
-from fs_diloco.runtime.pbs_scheduler import PBSJobObservation
+from fs_diloco.runtime.pbs_scheduler import PBSJobObservation, PBSScheduler
 from fs_diloco.storage.atomic_io import safe_read_json
 from fs_diloco.storage.fenced_store import FencedSQLiteStore, ReadOnlySQLiteStore
 from fs_diloco.storage.leader_lease import LeaderLeaseStore, LeaseSafetyTracker
@@ -892,6 +892,38 @@ class MockScheduler:
     def submit_learner(self, **_kwargs: Any) -> dict[str, Any]:
         self.submissions += 1
         return {"returncode": 0, "job_id_raw": "123.opbs"}
+
+
+def test_pbs_learner_submission_can_override_acceptance_queue(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands: list[list[str]] = []
+
+    def run(command: list[str], **_kwargs: Any) -> SimpleNamespace:
+        commands.append(command)
+        return SimpleNamespace(returncode=0, stdout="456.opbs\n", stderr="")
+
+    monkeypatch.setattr("fs_diloco.runtime.pbs_scheduler.subprocess.run", run)
+    result = PBSScheduler().submit_learner(
+        script=tmp_path / "learner.pbs",
+        launch_request_id="launch-request",
+        shared_root=tmp_path / "run",
+        descriptor_sha256="descriptor",
+        walltime="00:02:00",
+        queue="debug-g",
+    )
+    assert result["job_id_raw"] == "456.opbs"
+    assert commands[0][commands[0].index("-q") + 1] == "debug-g"
+    with pytest.raises(ValueError, match="unsafe PBS"):
+        PBSScheduler().submit_learner(
+            script=tmp_path / "learner.pbs",
+            launch_request_id="launch-request",
+            shared_root=tmp_path / "run",
+            descriptor_sha256="descriptor",
+            walltime="00:02:00",
+            queue="debug-g,other",
+        )
 
 
 def test_launch_outbox_reconciles_qsub_windows_and_retains_scheduler_capacity(

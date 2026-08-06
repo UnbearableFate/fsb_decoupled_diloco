@@ -227,6 +227,7 @@ class PBSScheduler:
         shared_root: str | Path,
         descriptor_sha256: str,
         walltime: str,
+        queue: str | None = None,
     ) -> dict[str, Any]:
         if not launch_request_id or any(
             character in launch_request_id for character in ",=\n\r"
@@ -240,16 +241,30 @@ class PBSScheduler:
             )
         )
         name = f"diloco_l_{launch_request_id[-10:]}"
+        if queue is not None and (
+            not queue
+            or any(
+                not (character.isalnum() or character in "_.-")
+                for character in queue
+            )
+        ):
+            raise ValueError("learner queue contains unsafe PBS characters")
         command = [
             self.qsub_binary,
             "-N",
             name,
-            "-l",
-            f"walltime={walltime}",
-            "-v",
-            variables,
-            str(Path(script)),
         ]
+        if queue is not None:
+            command.extend(("-q", queue))
+        command.extend(
+            (
+                "-l",
+                f"walltime={walltime}",
+                "-v",
+                variables,
+                str(Path(script)),
+            )
+        )
         try:
             completed = subprocess.run(
                 command,

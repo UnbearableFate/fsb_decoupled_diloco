@@ -709,3 +709,9 @@ Artifacts:
 - G8 clean-source rerun `plan02_phase2_g8_2501215` passed takeover, victim/replacement, stream reuse, and dynamic drain evidence.
 - Extended the G9/matched target to v120 after a measured scale-job queue cycle outlasted the v60 horizon; projected runtime remains within the 150-second syncer walltime with practical teardown margin.
 - Focused PBS `2501249.opbs` passed 18 tests in 7.24 seconds; full compatibility PBS `2501250.opbs` passed 470 tests in 24.48 seconds.
+
+## 2026-08-07 00:00 JST — acceptance scale queue routing
+
+- Added optional validated `scaling.learner_queue`; production remains unset, while G8/G9 acceptance explicitly routes scale replacements to `debug-g` instead of inheriting the learner script's long production queue.
+- Manually removed only doomed experiment jobs `2501271.opbs` and `2501281.opbs` after PBS estimated a five-hour replacement delay; no unrelated job was touched.
+- Focused PBS `2501290.opbs` passed 19 tests in 7.71 seconds; full compatibility PBS `2501291.opbs` passed 471 tests in 24.22 seconds.
