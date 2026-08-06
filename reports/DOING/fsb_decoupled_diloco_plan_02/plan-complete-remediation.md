@@ -5,7 +5,7 @@
 - Phase 2 supplemental Codex report: `reports/DOING/code_review/fsb_decoupled_diloco_plan_02/phase-2/gpt-5.6-sol_180a243256798565bafd385467830a66b8d724c9.md`. It reviewed the cumulative Phase 2 remediation/cleanup surface and returned `CHANGES_REQUIRED` for one High and two Medium findings. Although concurrent review publication caused this report's range to overlap the later continuous reports, its findings are accepted and retained; they are not discarded because of the bookkeeping overlap.
 - Plan-complete continuity base: `68fdb0ab538b56bb2e99245fb55c1ff3f3c9d364`.
 - Full current-state target: `550296db7eab0dbcc2abcb4d124c81acd162fd8c`.
-- Plan-complete Codex report: `reports/DOING/code_review/fsb_decoupled_diloco_plan_02/plan-complete/gpt-5.6-sol_550296db7eab0dbcc2abcb4d124c81acd162fd8c.md`, decision `CHANGES_REQUIRED` for one Medium finding.
+- Plan-complete Codex reports: primary `reports/DOING/code_review/fsb_decoupled_diloco_plan_02/plan-complete/gpt-5.6-sol_550296db7eab0dbcc2abcb4d124c81acd162fd8c.md` and append-only supplement `gpt-5.6-sol_550296db7eab0dbcc2abcb4d124c81acd162fd8c-retry1.md`; together they return `CHANGES_REQUIRED` for one High and three Medium findings.
 - External reviewer: `skipped-session-limit`. The required plan-complete invocation requested `claude-opus-5` with fresh session `915d9f41-d440-41a1-b91d-471b03d07d8f`; its JSON returned HTTP 429, zero model usage, and the explicit reset-at-06:00 Asia/Tokyo session-limit message. No report was fabricated and the skip does not block Codex remediation.
 
 ## Finding dispositions and ordered remediation
