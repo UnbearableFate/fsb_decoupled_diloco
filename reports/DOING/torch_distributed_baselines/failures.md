@@ -183,3 +183,18 @@
   each node-local supervisor, and verify both algorithms for at least 50 real-model,
   real-dataset steps on interactive one-node and two-node allocations before another
   formal submission.
+
+## 2026-08-06 22:09 JST — formal-resubmit-queue-01 (consecutive failure 1)
+
+- Environment: `miyabi-g1` control plane; no job was accepted.
+- Command: first formal resubmission attempted to override the script queue with
+  `qsub -q small-g`.
+- Expected: PBS accepts the eight-node, one-hour request in the small regular-G class.
+- Actual: `qsub: Access to queue is denied`; shell fail-fast stopped before either job
+  ID was created.
+- Confirmed cause: `small-g` is the scheduler's child/classification shown by
+  `qstat --rsc`, while submissions target the parent queue `regular-g` already declared
+  in both scripts. Earlier accepted jobs were classified into `small-g` after being
+  submitted through `regular-g`.
+- Next change: retain the validated one-hour override but submit through the scripts'
+  literal `regular-g` queue.

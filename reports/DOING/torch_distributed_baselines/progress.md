@@ -248,3 +248,39 @@
   `interactive_2n_periodic_real50_20260806_2206`.
 - Gate result: the user-required real-model/real-dataset 1-node and 2-node interactive
   tests have passed; fresh formal 8-node submissions are now permitted.
+
+## 2026-08-06 22:10 JST — corrected formal 8-node jobs submitted
+
+- Source: branch `codex/torch_ddp_baselines`, commit
+  `208a74b310195473115dbc382f2b50dc7f43181f`, runtime fingerprint
+  `sha256:c0a0ac669f01c5ac6486e9aa0152ae1d563e4aaa90a4358a63068947d1db8669`;
+  pre-submission runtime source state was clean.
+- DDP: job `2500637.opbs`, run
+  `20260806_220900_torch_ddp_gpt2_wikitext2_8n_5k`.
+- Periodic average: job `2500638.opbs`, run
+  `20260806_220900_torch_periodic_average_gpt2_wikitext2_8n_5k`.
+- Both requests were accepted through `regular-g` and classified into `small-g`, with
+  `select=8:mpiprocs=1` and `walltime=01:00:00`. The two-node measurements place 5000
+  optimizer steps at roughly 18--20 minutes before eight-node scaling and teardown;
+  one hour leaves margin for wider collectives, startup variance, W&B, and final
+  checkpoint publication while remaining materially below the scripts' two-hour
+  default.
+- Initial state: both jobs queued. Acceptance still requires eight CUDA ranks, finite
+  loss with a healthy downward trend through at least step 200, and uninterrupted
+  continuation toward step 5000.
+
+## 2026-08-06 22:16 JST — formal jobs moved to the earlier short queue
+
+- Live queue discovery showed `short-g` accepts up to eight nodes and up to eight
+  hours. The same validated one-hour requests were accepted there as DDP job
+  `2500653.opbs` / run
+  `20260806_221500_torch_ddp_gpt2_wikitext2_8n_5k` and periodic-average job
+  `2500654.opbs` / run
+  `20260806_221500_torch_periodic_average_gpt2_wikitext2_8n_5k`.
+- Scheduler estimates were 01:46 JST for DDP and 02:46 JST for periodic average,
+  versus 04:59 JST for both regular-queue requests. After confirming the replacements
+  were queued and their run roots did not yet exist, the original queued jobs
+  `2500637.opbs` and `2500638.opbs` were canceled before execution. No compute or run
+  data was lost.
+- The active formal jobs remain `2500653.opbs` and `2500654.opbs`; their source commit,
+  fingerprint, eight-node shape, and one-hour walltime are unchanged.
