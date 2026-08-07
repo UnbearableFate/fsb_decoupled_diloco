@@ -38,6 +38,7 @@ fs-diloco-export-run-metrics = "fs_diloco.tools.run_metrics_csv:main"
 fs-diloco-lm-eval = "fs_diloco.tools.eval_lm_harness:main"
 fs-diloco-validation-eval = "fs_diloco.tools.validation_eval:main"
 fs-diloco-publish-quality-gate = "fs_diloco.tools.publish_quality_gate:main"
+fs-diloco-torch-baseline = "fs_diloco.baselines.train:main"
 
 [tool.ruff]
 line-length = 100

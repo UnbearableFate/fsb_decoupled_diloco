@@ -10,6 +10,9 @@ REPOSITORY_CONFIG_PATHS = sorted(Path("configs").rglob("*.yaml"))
 PRIMARY_RUNS_ROOT = Path(
     "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco"
 )
+TORCH_BASELINE_RUNS_ROOT = Path(
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/torch_baselines"
+)
 
 
 def test_config_defaults_and_cli_overrides(tmp_path):
@@ -33,10 +36,15 @@ def test_config_defaults_and_cli_overrides(tmp_path):
 @pytest.mark.parametrize("path", REPOSITORY_CONFIG_PATHS)
 def test_repository_configs_use_primary_worktree_run_root(path):
     loaded = load_config(path)
-    assert loaded.run.shared_root == str(PRIMARY_RUNS_ROOT / "{run_id}")
+    expected_root = (
+        TORCH_BASELINE_RUNS_ROOT
+        if loaded.torch_baseline.enabled
+        else PRIMARY_RUNS_ROOT
+    )
+    assert loaded.run.shared_root == str(expected_root / "{run_id}")
 
     resolved = resolve_config(path, run_id="path_check")
-    assert resolved.run.shared_root == str(PRIMARY_RUNS_ROOT / "path_check")
+    assert resolved.run.shared_root == str(expected_root / "path_check")
 
 
 def test_shared_root_template_is_expanded_in_cli_override(tmp_path):

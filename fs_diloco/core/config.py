@@ -289,6 +289,13 @@ class WandbSection:
 
 
 @dataclass
+class TorchBaselineSection:
+    enabled: bool = False
+    backend: str = "nccl"
+    require_distinct_hosts: bool = True
+
+
+@dataclass
 class Config:
     run: RunSection = field(default_factory=RunSection)
     init: InitSection = field(default_factory=InitSection)
@@ -309,6 +316,7 @@ class Config:
     fragments: FragmentSection = field(default_factory=FragmentSection)
     failure_sim: FailureSimSection = field(default_factory=FailureSimSection)
     wandb: WandbSection = field(default_factory=WandbSection)
+    torch_baseline: TorchBaselineSection = field(default_factory=TorchBaselineSection)
 
 
 def _coerce_scalar(value: Any, target_type: Any) -> Any:
@@ -865,6 +873,22 @@ def resolve_config(
         raise ValueError("learner.post_publish_latest_wait_seconds must be >= 0")
     if config.learner.post_publish_latest_poll_seconds <= 0.0:
         raise ValueError("learner.post_publish_latest_poll_seconds must be > 0")
+    config.torch_baseline.backend = config.torch_baseline.backend.lower()
+    if config.torch_baseline.backend not in {"gloo", "nccl"}:
+        raise ValueError(
+            f"unsupported torch_baseline.backend: {config.torch_baseline.backend}"
+        )
+    if config.torch_baseline.enabled:
+        if config.sync.num_learners < 1:
+            raise ValueError("torch baseline requires sync.num_learners >= 1")
+        if config.training.max_local_steps is None:
+            raise ValueError(
+                "torch baseline requires training.max_local_steps to be configured"
+            )
+        if int(config.training.max_local_steps) <= 0:
+            raise ValueError("torch baseline training.max_local_steps must be > 0")
+        if int(config.training.inner_steps) <= 0:
+            raise ValueError("torch baseline training.inner_steps must be > 0")
     config.training.block_size = config.data.block_size
     return config
 

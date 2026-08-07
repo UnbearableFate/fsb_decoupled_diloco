@@ -1,0 +1,56 @@
+run:
+  name: torch_baseline_tiny_2rank
+  run_id: null
+  shared_root: /work/xg24i002/x10041/fsb_decoupled_diloco/runs/torch_baselines/{run_id}
+  log_level: INFO
+
+model:
+  name_or_path: synthetic-tiny
+  dtype: float32
+  compile: false
+  synthetic_vocab_size: 32
+  synthetic_hidden_size: 8
+
+data:
+  dataset_name: synthetic
+  dataset_config_name: null
+  block_size: 8
+  streaming: false
+  shuffle_blocks: true
+
+sync:
+  num_learners: 2
+  quorum_min: 2
+  quorum_max: 2
+
+training:
+  inner_steps: 2
+  micro_batch_size: 2
+  gradient_accumulation_steps: 2
+  block_size: 8
+  max_local_steps: 4
+  completion_mode: local_or_global
+  precision: fp32
+  seed: 1337
+  log_every_steps: 1
+  grad_clip: 1.0
+
+inner_optimizer:
+  name: adamw
+  lr: 1.0e-3
+  betas: [0.9, 0.95]
+  eps: 1.0e-8
+  weight_decay: 0.0
+  scheduler: cosine
+  warmup_steps: 1
+  scheduler_total_steps: 4
+  min_lr_ratio: 0.1
+
+wandb:
+  enabled: false
+  mode: disabled
+
+torch_baseline:
+  enabled: true
+  backend: gloo
+  require_distinct_hosts: false
