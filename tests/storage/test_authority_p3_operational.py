@@ -897,7 +897,7 @@ def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: 
         assert rejected["request_state"] == "stale_rejected"
         assert rejected["launch_state"] == "submitted"
 
-        clock.now = 200.0
+        clock.now = 110.0
         second_uncertain = leader.transition_candidate_launch_request(
             command_id="second-uncertain",
             request_id=row["request_id"],
@@ -906,7 +906,7 @@ def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: 
             evidence_source="live+historical:no_record",
             uncertainty_timeout_seconds=30.0,
         )
-        clock.now = 231.0
+        clock.now = 141.0
         reviewed = leader.transition_candidate_launch_request(
             command_id="manual-review",
             request_id=row["request_id"],
@@ -914,7 +914,7 @@ def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: 
             state="manual_review",
             evidence_source="deadline",
         )
-        assert second_uncertain["uncertainty_deadline"] == 230.0
+        assert second_uncertain["uncertainty_deadline"] == 140.0
         failed_request = SchedulerOperatorRequest(
             format_version=1,
             request_id="scheduler-op-failed",

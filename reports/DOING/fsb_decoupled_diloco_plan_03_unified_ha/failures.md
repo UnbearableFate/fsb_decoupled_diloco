@@ -334,3 +334,10 @@
 - 第一项是operator-release RED在`submitted`状态直接请求`mark_failed`，而协议只允许operator override处理`submission_unknown/terminal_uncertain/manual_review`；修复fixture为positive evidence后再次进入独立uncertainty episode、越过新deadline到manual_review，再应用terminal disposition并核对reservation release。
 - 第二项identity-mode RED只重写`.identity`，因此更早的complete-manifest object hash正确fail closed；修复fixture同时重签外层immutable complete manifest，使测试精确到达descriptor-derived mode与identity mode交叉检查，production validator不放宽。
 - Evidence：`artifacts/20260809-071013_p3-incremental-remediation-tests-attempt1_fail.{json,log}`；pre-test operational checker artifact为`artifacts/20260809-070955_p3-remediation-requirements_review.json`。
+
+## 2026-08-09 07:12 JST — P3 incremental-remediation validation attempt 2
+
+- PBS job `2509032.opbs` on `mg0005`；静态门禁继续全部通过，identity-mode RED已通过，focused suite为`295 passed, 1 failed in 10.66s`，full suite未运行。
+- 唯一失败是operator-release fixture把virtual wall clock从100推进到200后才启动第二个uncertainty episode，超过默认90秒leader lease的safety boundary；authority正确抛`StaleLeaderTokenError`。这不是reservation/deadline实现缺陷。
+- 修复仅把第二episode放在110、deadline 140、manual review 141，仍严格晚于旧episode deadline 130且位于leader lease内；若attempt3仍失败，则在任何第四次运行前按三连败规则进行全面复审。
+- Evidence：`artifacts/20260809-071243_p3-incremental-remediation-tests-attempt2_fail.{json,log}`；pre-test operational checker artifact为`artifacts/20260809-071224_p3-remediation-requirements_review.json`。

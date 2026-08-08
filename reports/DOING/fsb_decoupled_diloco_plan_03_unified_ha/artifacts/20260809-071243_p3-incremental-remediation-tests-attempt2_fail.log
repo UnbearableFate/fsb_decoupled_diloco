@@ -1,0 +1,168 @@
+Currently Loaded Modulefiles:
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9
+
+Key:
+(symbolic-version)
+mg0005
+PBS_JOBID=2509032.opbs
+python=3.13.13
+platform=Linux-5.14.0-427.13.1.el9_4.aarch64+64k-aarch64-with-glibc2.34
+hypothesis=6.165.2
+pytest=9.1.1
+torch=2.13.0+cu132
+All checks passed!
+40 files already formatted
+PASS
+........................................................................ [ 24%]
+.....F.................................................................. [ 48%]
+........................................................................ [ 72%]
+........................................................................ [ 97%]
+........                                                                 [100%]
+=================================== FAILURES ===================================
+______ test_scheduler_operator_request_is_expected_state_cas_and_audited _______
+
+tmp_path = PosixPath('/tmp/2509032.5886/pytest-of-x10041/pytest-0/test_scheduler_operator_reques0')
+
+    def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: Path) -> None:
+        clock = Clock()
+        with _open_static(tmp_path, clock) as authority:
+            leader = authority.open_leader(
+                authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
+            )
+            row = leader.record_candidate_launch_request(
+                command_id="record-launch",
+                request_id="candidate-request-1",
+                observation_key="heartbeat-1",
+                request_sha256="a" * 64,
+            )
+            with pytest.raises(ValueError, match="invalid scheduler transition"):
+                leader.transition_candidate_launch_request(
+                    command_id="invalid-direct-admit",
+                    request_id=row["request_id"],
+                    expected_state="planned",
+                    state="admitted",
+                    evidence_source="invalid",
+                )
+            submitting = leader.transition_candidate_launch_request(
+                command_id="submitting",
+                request_id=row["request_id"],
+                expected_state="planned",
+                state="submitting",
+                evidence_source="qsub_started",
+            )
+            with pytest.raises(ValueError, match="persistent timeout"):
+                leader.transition_candidate_launch_request(
+                    command_id="missing-deadline",
+                    request_id=submitting["request_id"],
+                    expected_state="submitting",
+                    state="submission_unknown",
+                    evidence_source="qsub_receipt_missing",
+                )
+            unknown = leader.transition_candidate_launch_request(
+                command_id="submission-unknown",
+                request_id=submitting["request_id"],
+                expected_state="submitting",
+                state="submission_unknown",
+                evidence_source="qsub_receipt_missing",
+                uncertainty_timeout_seconds=30.0,
+            )
+            uncertain = leader.transition_candidate_launch_request(
+                command_id="uncertain",
+                request_id=unknown["request_id"],
+                expected_state="submission_unknown",
+                state="terminal_uncertain",
+                evidence_source="live+historical:no_record",
+                uncertainty_timeout_seconds=30.0,
+            )
+            request = SchedulerOperatorRequest(
+                format_version=1,
+                request_id="scheduler-op-1",
+                launch_request_id=row["request_id"],
+                action=SchedulerOperatorAction.CONFIRM_JOB_ID,
+                expected_state_sha256=scheduler_state_sha256(uncertain),
+                reason="operator found accounting receipt",
+                created_at=101.0,
+                scheduler_job_id="123.opbs",
+                evidence_source="accounting_record",
+            )
+            applied = leader.apply_scheduler_operator_request(
+                command_id="apply-operator", operator_request=request
+            )
+            assert applied["request_state"] == "applied"
+            assert applied["launch_state"] == "submitted"
+
+            with sqlite3.connect(tmp_path / "authority.sqlite3") as connection:
+                connection.row_factory = sqlite3.Row
+                submitted = dict(
+                    connection.execute(
+                        "SELECT * FROM candidate_launch_outbox WHERE request_id=?",
+                        (row["request_id"],),
+                    ).fetchone()
+                )
+            assert submitted["first_uncertain_at"] is None
+            assert submitted["uncertainty_deadline"] is None
+            assert submitted["reservation_released_at"] is None
+
+            stale = SchedulerOperatorRequest(
+                format_version=1,
+                request_id="scheduler-op-stale",
+                launch_request_id=row["request_id"],
+                action=SchedulerOperatorAction.MARK_FAILED,
+                expected_state_sha256="f" * 64,
+                reason="stale view",
+                created_at=102.0,
+            )
+            rejected = leader.apply_scheduler_operator_request(
+                command_id="apply-stale", operator_request=stale
+            )
+            assert rejected["request_state"] == "stale_rejected"
+            assert rejected["launch_state"] == "submitted"
+
+            clock.now = 200.0
+>           second_uncertain = leader.transition_candidate_launch_request(
+                command_id="second-uncertain",
+                request_id=row["request_id"],
+                expected_state="submitted",
+                state="terminal_uncertain",
+                evidence_source="live+historical:no_record",
+                uncertainty_timeout_seconds=30.0,
+            )
+
+tests/storage/test_authority_p3_operational.py:901:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+fs_diloco/storage/authority.py:1909: in transition_candidate_launch_request
+    return self._command(command_id, "transition_candidate_launch_request", request, operation)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+fs_diloco/storage/authority.py:4517: in _command
+    self._authority._verify_token(self.token)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <fs_diloco.storage.authority.LeaderAuthority object at 0x40014c31f950>
+token = LeaderToken(run_id='run-v4', epoch=1, owner_id='owner')
+require_safe_expiry = True
+
+    def _verify_token(self, token: LeaderToken, *, require_safe_expiry: bool = True) -> sqlite3.Row:
+        if token.run_id != self._identity.run_id:
+            raise StaleLeaderTokenError("leader token belongs to another run")
+        if self._lease_safety_check is not None:
+            self._lease_safety_check(token)
+        row = self._connection.execute(
+            """
+            SELECT * FROM syncer_leader
+            WHERE singleton=1 AND epoch=? AND owner_id=? AND state='active'
+            """,
+            (token.epoch, token.owner_id),
+        ).fetchone()
+        if row is None:
+            raise StaleLeaderTokenError("leader token has been superseded or released")
+        expiry = float(row["lease_expires_at"])
+        boundary = expiry - self._max_clock_skew_seconds if require_safe_expiry else expiry
+        if float(self._wall_clock()) > boundary:
+>           raise StaleLeaderTokenError("leader token crossed the lease safety boundary")
+E           fs_diloco.storage.leader_lease.StaleLeaderTokenError: leader token crossed the lease safety boundary
+
+fs_diloco/storage/authority.py:784: StaleLeaderTokenError
+=========================== short test summary info ============================
+FAILED tests/storage/test_authority_p3_operational.py::test_scheduler_operator_request_is_expected_state_cas_and_audited
+1 failed, 295 passed in 10.66s
+[ERROR] Failed at line 96

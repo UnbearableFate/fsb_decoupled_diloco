@@ -1,0 +1,29 @@
+{
+  "artifact_version": 1,
+  "errors": [
+    {
+      "cause": "The revised operator-release fixture advanced its injected wall clock past the leader lease safety boundary before starting the second uncertainty episode.",
+      "test": "tests/storage/test_authority_p3_operational.py::test_scheduler_operator_request_is_expected_state_cas_and_audited"
+    }
+  ],
+  "exit_status": 1,
+  "focused": {
+    "failed": 1,
+    "passed": 295,
+    "seconds": 10.66
+  },
+  "host": "mg0005",
+  "job_id": "2509032.opbs",
+  "phase": "P3-operational-robustness-incremental-remediation",
+  "requirements_artifact": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-071224_p3-remediation-requirements_review.json",
+  "requirements_artifact_sha256": "8b0d8f8ce671b8cf6e37712d24c86693646063cba93bf5f6136764dc08f3f022",
+  "resources": {
+    "elapsed": "00:00:19",
+    "nodes": 1,
+    "queue": "debug-g",
+    "requested_walltime": "00:10:00"
+  },
+  "root_log_sha256": "b23c65039f9d144115d245ba9cb7f663d2f98bbfe6d7a5378a605655d797d048",
+  "source_commit": "ea1b8d49f4b1430536e421873cc8c9e0325af551",
+  "status": "FAIL"
+}
