@@ -89,7 +89,12 @@ def verify_proposal_payload(
                 ReadStatus.IDENTITY_MISMATCH,
                 diagnostic="payload must be a regular non-symlink file",
             )
-        flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        flags = (
+            os.O_RDONLY
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_NONBLOCK", 0)
+        )
         descriptor = os.open(path, flags)
         try:
             opened = os.fstat(descriptor)
@@ -133,10 +138,45 @@ def verify_proposal_payload(
                 tensor_schema = _inspect_safetensors(descriptor, file_size=size)
             except ValueError as exc:
                 return ReadResult(ReadStatus.MALFORMED, diagnostic=str(exc))
-            current_name = path.lstat()
-            if (current_name.st_dev, current_name.st_ino) != (
+            verification_digest = hashlib.sha256()
+            offset = 0
+            while offset < size:
+                chunk = os.pread(descriptor, min(chunk_size, size - offset), offset)
+                if not chunk:
+                    return ReadResult(
+                        ReadStatus.IDENTITY_MISMATCH,
+                        diagnostic="payload became truncated during identity recheck",
+                    )
+                verification_digest.update(chunk)
+                offset += len(chunk)
+            if verification_digest.digest() != digest.digest():
+                return ReadResult(
+                    ReadStatus.IDENTITY_MISMATCH,
+                    diagnostic="payload content changed during tensor schema inspection",
+                    fingerprint=verification_digest.hexdigest(),
+                )
+            final = os.fstat(descriptor)
+            if (
                 opened.st_dev,
                 opened.st_ino,
+                opened.st_size,
+                opened.st_mtime_ns,
+                opened.st_ctime_ns,
+            ) != (
+                final.st_dev,
+                final.st_ino,
+                final.st_size,
+                final.st_mtime_ns,
+                final.st_ctime_ns,
+            ):
+                return ReadResult(
+                    ReadStatus.IDENTITY_MISMATCH,
+                    diagnostic="payload changed while its tensor schema was being inspected",
+                )
+            current_name = path.lstat()
+            if (current_name.st_dev, current_name.st_ino) != (
+                final.st_dev,
+                final.st_ino,
             ):
                 return ReadResult(
                     ReadStatus.IDENTITY_MISMATCH,
@@ -192,8 +232,8 @@ def verify_proposal_payload(
             relative_path=proposal.payload_relative_path,
             size_bytes=size,
             sha256=digest_value,
-            device=int(after.st_dev),
-            inode=int(after.st_ino),
+            device=int(final.st_dev),
+            inode=int(final.st_ino),
         ),
         fingerprint=digest_value,
     )

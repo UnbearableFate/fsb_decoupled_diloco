@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -212,3 +213,130 @@ def test_typed_receipt_proposal_selection_and_v1_commit_flow(tmp_path: Path) -> 
         assert committed.version == 1
         assert committed.predecessor_version == 0
         assert committed.direct_weight_tokens_applied == 6
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"cycle_id": "20000000-0000-4000-8000-000000000001"},
+        {
+            "processed_tokens_this_cycle": 8,
+            "effective_tokens_this_update": 5,
+            "local_discarded_tokens_this_cycle": 3,
+        },
+        {"retained_tokens_since_base": 7},
+        {"data_cursor_start": 1, "data_cursor_end": 9},
+    ],
+)
+def test_proposal_must_match_every_shared_receipt_field(
+    tmp_path: Path, changes: dict[str, object]
+) -> None:
+    clock = Clock()
+    with open_authority(tmp_path, clock) as authority:
+        token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
+        leader = authority.open_leader(token)
+        binding = leader.bind_or_replace_static_attempt(
+            command_id="bind-1",
+            learner_id="learner-0",
+            logical_launch_id="launch-0",
+            attempt_id="attempt-1",
+        )
+        fence = {
+            "kind": "static",
+            "learner_id": binding.learner_id,
+            "logical_launch_id": binding.logical_launch_id,
+            "attempt_id": binding.attempt_id,
+            "binding_generation": binding.binding_generation,
+        }
+        receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence))
+        leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
+        payload = proposal_payload(receipt_sha256=receipt.immutable_sha256(), fence=fence)
+        payload.update(changes)
+        proposal = FullUpdateProposalV2.from_dict(payload)
+
+        with pytest.raises(ValueError, match="immutable fields"):
+            leader.ingest_proposal(command_id="proposal-mismatch", proposal=proposal)
+
+        connection = sqlite3.connect(tmp_path / "authority.sqlite3")
+        try:
+            assert connection.execute("SELECT COUNT(*) FROM updates").fetchone()[0] == 0
+            assert (
+                connection.execute("SELECT COUNT(*) FROM proposal_observations").fetchone()[0] == 0
+            )
+        finally:
+            connection.close()
+
+
+def test_newer_accepted_proposal_supersedes_old_pending_after_insert(tmp_path: Path) -> None:
+    clock = Clock()
+    with open_authority(tmp_path, clock) as authority:
+        token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
+        leader = authority.open_leader(token)
+        binding = leader.bind_or_replace_static_attempt(
+            command_id="bind-1",
+            learner_id="learner-0",
+            logical_launch_id="launch-0",
+            attempt_id="attempt-1",
+        )
+        fence = {
+            "kind": "static",
+            "learner_id": binding.learner_id,
+            "logical_launch_id": binding.logical_launch_id,
+            "attempt_id": binding.attempt_id,
+            "binding_generation": binding.binding_generation,
+        }
+        first_receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence))
+        leader.ingest_cycle_receipt(command_id="receipt-1", receipt=first_receipt)
+        first = FullUpdateProposalV2.from_dict(
+            proposal_payload(receipt_sha256=first_receipt.immutable_sha256(), fence=fence)
+        )
+        leader.ingest_proposal(command_id="proposal-1", proposal=first)
+        second_receipt = CycleReceiptV1.from_dict(
+            receipt_payload(
+                cycle_seq=2,
+                previous_receipt_id=first_receipt.receipt_id,
+                previous_receipt_sha256=first_receipt.immutable_sha256(),
+                cursor_start=8,
+                cursor_end=16,
+                fence=fence,
+            )
+        )
+        leader.ingest_cycle_receipt(command_id="receipt-2", receipt=second_receipt)
+        second = FullUpdateProposalV2.from_dict(
+            proposal_payload(
+                cycle_seq=2,
+                receipt_sha256=second_receipt.immutable_sha256(),
+                fence=fence,
+            )
+        )
+
+        assert leader.ingest_proposal(command_id="proposal-2", proposal=second).value == "accepted"
+
+        connection = sqlite3.connect(tmp_path / "authority.sqlite3")
+        try:
+            statuses = dict(connection.execute("SELECT update_id, status FROM updates"))
+            assert statuses == {first.update_id: "dropped", second.update_id: "pending"}
+            fate = connection.execute(
+                "SELECT direct_fate, fate_reason FROM token_fates WHERE receipt_id=?",
+                (first_receipt.receipt_id,),
+            ).fetchone()
+            assert fate == ("dropped", "superseded_by_newer_cycle")
+        finally:
+            connection.close()
+
+
+def test_overlong_command_id_fails_before_mutation(tmp_path: Path) -> None:
+    clock = Clock()
+    with open_authority(tmp_path, clock) as authority:
+        token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
+        leader = authority.open_leader(token)
+
+        with pytest.raises(ValueError, match="safe protocol identity"):
+            leader.bind_or_replace_static_attempt(
+                command_id="c" * 129,
+                learner_id="learner-0",
+                logical_launch_id="launch-0",
+                attempt_id="attempt-1",
+            )
+
+        assert authority.read.static_binding("learner-0") is None

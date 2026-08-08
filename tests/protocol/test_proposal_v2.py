@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import pytest
 
@@ -86,3 +87,14 @@ def test_proposal_v2_rejects_unknown_fields_versions_and_duplicate_json_keys() -
 def test_proposal_v2_enforces_json_size_limit() -> None:
     with pytest.raises(ValueError, match="exceeds"):
         FullUpdateProposalV2.from_json("{} " * 100, max_bytes=8)
+
+
+def test_direct_proposal_construction_cannot_bypass_validation() -> None:
+    proposal = FullUpdateProposalV2.from_dict(proposal_payload())
+
+    with pytest.raises(ValueError, match="payload_relative_path"):
+        replace(proposal, payload_relative_path="/tmp/untrusted.safetensors")
+    with pytest.raises(ValueError, match="processed tokens"):
+        replace(proposal, processed_tokens_this_cycle=9)
+    with pytest.raises(ValueError, match="finite"):
+        replace(proposal, created_at=math.inf)

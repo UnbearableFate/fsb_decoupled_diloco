@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import pytest
 
+from fs_diloco.protocol.contributor import StaticContributorFence
 from fs_diloco.protocol.cycle_receipt import CycleReceiptV1
 from tests.support.v4_protocol import receipt_payload
 
@@ -73,3 +75,16 @@ def test_cycle_receipt_rejects_unknown_field_and_version() -> None:
     version["cycle_receipt_format_version"] = 2
     with pytest.raises(ValueError, match="unsupported cycle_receipt_format_version"):
         CycleReceiptV1.from_dict(version)
+
+
+def test_direct_receipt_and_fence_construction_cannot_bypass_validation() -> None:
+    receipt = CycleReceiptV1.from_dict(receipt_payload())
+
+    with pytest.raises(ValueError, match="processed tokens"):
+        replace(receipt, processed_tokens_this_cycle=9)
+    with pytest.raises(ValueError, match="planned_update_id"):
+        replace(receipt, planned_update_id="not-a-uuid")
+    with pytest.raises(ValueError, match="finite"):
+        replace(receipt, created_at=math.nan)
+    with pytest.raises(ValueError, match="kind"):
+        StaticContributorFence("dynamic", "learner-0", "launch-0", "attempt-1", 1)

@@ -317,8 +317,14 @@ CREATE TABLE global_versions (
 
 CREATE UNIQUE INDEX idx_publication_target_committed
     ON publication_intents(target_version) WHERE state = 'committed';
-CREATE UNIQUE INDEX idx_active_update_per_contributor
-    ON updates(stable_contributor_key, status) WHERE status IN ('pending', 'selected');
+-- Pending supersession is an insert-then-terminalize transition inside one
+-- authority transaction, so an immediate UNIQUE index cannot represent it.
+-- The authority command owns the at-most-one-pending invariant at commit;
+-- selected rows remain independently constrained here.
+CREATE UNIQUE INDEX idx_selected_update_per_contributor
+    ON updates(stable_contributor_key) WHERE status = 'selected';
+CREATE INDEX idx_pending_update_per_contributor
+    ON updates(stable_contributor_key, cycle_seq) WHERE status = 'pending';
 CREATE INDEX idx_updates_status ON updates(status, base_global_version);
 CREATE INDEX idx_observations_contributor
     ON proposal_observations(stable_contributor_key, observation_id);

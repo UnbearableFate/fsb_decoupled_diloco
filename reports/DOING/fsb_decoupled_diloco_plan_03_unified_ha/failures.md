@@ -198,3 +198,21 @@
 - 实际：Ruff对合法bash从`set -eEuo pipefail`起报告51个Python `invalid-syntax`并退出非零；未qsub、未运行pytest。`bash -n scripts/miyabi/*.pbs`已经独立PASS，因此没有PBS语法缺陷。
 - 已确认根因：一次性静态wrapper的文件类型选择错误，不是source或PBS失败。
 - 下一轮：保持repo不变，Ruff参数仅包含`.py`文件；PBS继续只用`bash -n`及literal group扫描。两者均通过后再提交compute job。
+
+## 2026-08-09 02:10 JST — `p1-phase-review-0fa1286`（代码审查门禁 CHANGES_REQUIRED）
+
+- 审查范围：base `889051d15dfd126e1b9c80eaa222a996570d8423` 至 review-target `0fa1286b7da1782a913fb02f56a1a8d1b27a2c4e` 的完整diff；Codex报告为 `reports/DOING/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P1-typed-foundation/gpt-5.6-sol_0fa1286b7da1782a913fb02f56a1a8d1b27a2c4e.md`，结论 `CHANGES_REQUIRED`。
+- Claude reviewer：fresh session `860fca8a-f4f1-4f8d-bade-6544cecab83d` 在返回任何token/report前收到HTTP 429 `You've hit your session limit`，按用户及`plans/AGENTS.md`要求记为`skipped-session-limit`且未重试；可核验metadata为同目录 `claude-opus-5_0fa1286..._attempt1_invocation.json` 和 `_skipped-session-limit.json`。该跳过不阻断Codex修缮。
+- 已接受finding：H1 direct dataclass可绕过typed decoder；H2 proposal未与receipt全部重复immutable字段交叉核对；H3 static attempt replacement非原子且遗留旧work；H4 immediate partial UNIQUE与insert-then-supersede协议冲突；H5 P1文字把完整未来映射误写为已实现门禁；M1 v4 loader错误删除整个`init`路径；M2 same-FD schema检查后缺final fstat且FIFO替换可阻塞；M3未验证busy timeout；L1 command ID上限与typed result decoder不一致。
+- 事实与影响：这些问题未被job `2508645.opbs`的`233 focused / 620 full`覆盖；它们分别允许无效typed对象进入authority、receipt attribution/token ledger分裂、static restart卡住、连续proposal无法摄取、phase完成声明失真及filesystem/config/open边界不完整。
+- 修订逻辑：为proposal/receipt/fence直接构造增加共享不变量验证；ingest逐字段绑定receipt；pending唯一性改由单一authority事务在insert后终结较旧row并保留selected DB约束；static replacement在一个command中abandon batch/intent并terminalize旧fence；42项mapping增加精确owner-phase机器核对并修正文案；补齐config、same-FD/FIFO、busy-timeout和统一command ID验证。
+- RED/验证条件：新增direct construction、receipt-field mismatch、consecutive pending、prepared static replacement、mutation-during-inspection、FIFO race、busy-timeout drift、empty-init/removed-switch和129字符command ID负例；修复后必须在compute节点重跑P1 focused组与full suite，且Checker、Ruff、PBS静态门禁全部通过。若失败，先另行记录实际job/log再修改。
+
+## 2026-08-09 02:20 JST — `p1-review-remediation-validation-attempt1`（连续失败 1 次）
+
+- 环境/命令：Miyabi-G compute node `mg0008`，PBS job `2508666.opbs`，`debug-g`单节点、literal group `xg24i002`、10分钟walltime；`qsub scripts/miyabi/run_plan03_phase1_tests.pbs`。Ruff和Plan03 Checker均PASS，focused suite运行到`1 failed, 246 passed in 20.80s`后fail-fast，未进入full suite。
+- 预期：payload在第一次digest之后、safetensors schema检查期间被same-inode覆写时，final same-FD identity验证返回`IDENTITY_MISMATCH`。
+- 实际：`test_payload_mutation_during_schema_inspection_fails_identity_check`返回`ReadStatus.OK`。新增final `fstat`存在，但本地shared filesystem在等长覆写发生于同一timestamp粒度内时，`size/mtime_ns/ctime_ns`均未形成可观察差异；第一次旧内容digest仍被作为成功fingerprint，schema检查读取了新内容。
+- 原始证据：`artifacts/20260809-022000_p1-review-remediation-validation-attempt1_fail.log`，SHA-256 `0023d20f7d9f0a7a8f4ee2ed75ecb2fc46c40ef6875e5eb86aba6f2d81a407ef`（仅规范化行尾空白）。失败fixture未留下run/checkpoint；只保留完整PBS日志。
+- 已确认根因：仅比较inode metadata不能在目标filesystem上证明两轮read之间内容不变；不是测试误替换pathname，也不是final fstat位置错误。review M2所需的不变量是同一fd内容身份，必须直接复核bytes。
+- 下一轮：在schema/finite检查之后从同一fd重新计算完整SHA-256，并要求与第一轮digest完全相同，再执行final fstat/pathname inode检查；等长快速覆写将由内容hash而非timestamp检测。重跑相同focused+full PBS门禁；新测试若通过且full通过则连续失败计数归零。

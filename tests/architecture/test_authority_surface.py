@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import ast
+import csv
+import json
 from pathlib import Path
 
 from fs_diloco.storage.authority import LeaderAuthority, LeaderSession
@@ -37,6 +39,36 @@ def test_named_write_commands_are_explicit_methods() -> None:
     }
 
     assert expected <= set(LeaderSession.__dict__)
+
+
+def test_all_frozen_mutators_have_one_target_and_owner_phase() -> None:
+    disposition_path = (
+        ROOT / "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/"
+        "20260808-224000_p0-mutator-disposition_review.csv"
+    )
+    mapping_path = (
+        ROOT / "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/"
+        "20260809-020000_p1-mutator-migration_review.json"
+    )
+    with disposition_path.open(encoding="utf-8", newline="") as handle:
+        frozen = {row["old_name"] for row in csv.DictReader(handle)}
+    mapping = json.loads(mapping_path.read_text(encoding="utf-8"))["old_mutator_owners"]
+
+    assert set(mapping) == frozen
+    assert len(frozen) == 42
+    assert all(
+        isinstance(value, list)
+        and len(value) == 2
+        and value[0]
+        and value[1]
+        in {
+            "P1-typed-foundation",
+            "P2-correctness-measurement",
+            "P3-operational-robustness",
+            "P4-mandatory-fenced-runtime",
+        }
+        for value in mapping.values()
+    )
 
 
 def test_authority_module_does_not_construct_legacy_schema_or_proxy_store() -> None:

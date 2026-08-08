@@ -23,6 +23,14 @@ class StaticContributorFence:
     attempt_id: str
     binding_generation: int
 
+    def __post_init__(self) -> None:
+        if self.kind != "static":
+            raise ValueError("static contributor fence kind must be 'static'")
+        identity(self.learner_id, name="learner_id")
+        identity(self.logical_launch_id, name="logical_launch_id")
+        identity(self.attempt_id, name="attempt_id")
+        strict_int(self.binding_generation, name="binding_generation", minimum=1)
+
     @property
     def stable_contributor_key(self) -> str:
         return self.learner_id
@@ -73,6 +81,17 @@ class DynamicContributorFence:
     stream_epoch: int
     admission_generation: int
     admission_token_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.kind != "dynamic":
+            raise ValueError("dynamic contributor fence kind must be 'dynamic'")
+        identity(self.instance_id, name="instance_id")
+        identity(self.placement_id, name="placement_id")
+        strict_int(self.placement_epoch, name="placement_epoch", minimum=1)
+        strict_int(self.stream_id, name="stream_id", minimum=0)
+        strict_int(self.stream_epoch, name="stream_epoch", minimum=1)
+        strict_int(self.admission_generation, name="admission_generation", minimum=1)
+        sha256(self.admission_token_sha256, name="admission_token_sha256")
 
     @property
     def stable_contributor_key(self) -> str:

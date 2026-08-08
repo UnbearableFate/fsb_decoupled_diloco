@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core.versions import AUTHORITY_SCHEMA_VERSION, PROTOCOL_VERSION
+from ..protocol._validation import identity as validate_identity
 from ..protocol.authority import (
     ContributorProgress,
     ProposalDisposition,
@@ -283,6 +284,7 @@ def _validate_open(
     marker: Path,
     identity: AuthorityIdentity,
     mode: str,
+    busy_timeout_ms: int,
 ) -> AuthorityMetadata:
     marker_payload = read_json(marker)
     if not isinstance(marker_payload, Mapping):
@@ -339,6 +341,8 @@ def _validate_open(
         raise AuthoritySchemaError("journal_mode must be DELETE")
     if int(connection.execute("PRAGMA synchronous").fetchone()[0]) != 2:
         raise AuthoritySchemaError("synchronous must be FULL")
+    if int(connection.execute("PRAGMA busy_timeout").fetchone()[0]) != int(busy_timeout_ms):
+        raise AuthoritySchemaError("busy_timeout does not match the configured value")
     return AuthorityMetadata(
         schema_version=AUTHORITY_SCHEMA_VERSION,
         protocol_version=PROTOCOL_VERSION,
@@ -424,6 +428,7 @@ class LeaderAuthority:
                 marker=_marker_path(path, marker_path),
                 identity=identity,
                 mode=mode,
+                busy_timeout_ms=busy_timeout_ms,
             )
         except Exception:
             connection.close()
@@ -621,13 +626,28 @@ class LeaderSession:
         attempt_id: str,
         expected_generation: int | None = None,
         allow_logical_replacement: bool = False,
+        replacement_reason: str | None = None,
     ) -> StaticBinding:
+        validate_identity(learner_id, name="learner_id")
+        validate_identity(logical_launch_id, name="logical_launch_id")
+        validate_identity(attempt_id, name="attempt_id")
+        if expected_generation is not None and (
+            isinstance(expected_generation, bool)
+            or not isinstance(expected_generation, int)
+            or expected_generation < 0
+        ):
+            raise ValueError("expected_generation must be a non-negative integer")
+        if not isinstance(allow_logical_replacement, bool):
+            raise ValueError("allow_logical_replacement must be a boolean")
+        if replacement_reason is not None and not replacement_reason:
+            raise ValueError("replacement_reason must not be empty")
         request = {
             "learner_id": learner_id,
             "logical_launch_id": logical_launch_id,
             "attempt_id": attempt_id,
             "expected_generation": expected_generation,
             "allow_logical_replacement": allow_logical_replacement,
+            "replacement_reason": replacement_reason,
         }
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
@@ -669,10 +689,25 @@ class LeaderSession:
                     and row["status"] == "active"
                 ):
                     return dict(row)
+                history_status = str(row["status"])
                 if row["status"] == "active":
-                    raise MembershipFenceError(
-                        "the current static attempt must be terminal before replacement"
+                    if expected_generation is None or replacement_reason is None:
+                        raise MembershipFenceError(
+                            "active static replacement requires expected_generation and reason"
+                        )
+                    old_fence = StaticContributorFence(
+                        kind="static",
+                        learner_id=str(row["learner_id"]),
+                        logical_launch_id=str(row["logical_launch_id"]),
+                        attempt_id=str(row["attempt_id"]),
+                        binding_generation=current_generation,
                     )
+                    self._terminalize_fenced_updates(
+                        connection,
+                        fence_json=_canonical_json(old_fence.as_dict()),
+                        reason=replacement_reason,
+                    )
+                    history_status = "replaced"
                 if row["logical_launch_id"] != logical_launch_id and not allow_logical_replacement:
                     raise MembershipFenceError(
                         "a new logical launch requires explicit replacement authorization"
@@ -690,7 +725,7 @@ class LeaderSession:
                         current_generation,
                         row["logical_launch_id"],
                         row["attempt_id"],
-                        row["status"],
+                        history_status,
                         row["bound_by_epoch"],
                         row["bound_at"],
                         self.token.epoch,
@@ -723,13 +758,24 @@ class LeaderSession:
         return _decode_static_binding(result)
 
     def mark_static_attempt_terminal(
-        self, *, command_id: str, fence: StaticContributorFence
+        self,
+        *,
+        command_id: str,
+        fence: StaticContributorFence,
+        reason: str = "static_attempt_terminal",
     ) -> StaticBinding:
-        request = fence.as_dict()
+        if not reason:
+            raise ValueError("terminal reason must not be empty")
+        request = {"fence": fence.as_dict(), "reason": reason}
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
             self._require_current_fence(connection, fence)
             now = float(self._authority._wall_clock())
+            self._terminalize_fenced_updates(
+                connection,
+                fence_json=_canonical_json(fence.as_dict()),
+                reason=reason,
+            )
             connection.execute(
                 """
                 UPDATE static_contributor_bindings SET status='terminal', terminal_at=?
@@ -883,6 +929,22 @@ class LeaderSession:
                 or int(receipt["cycle_seq"]) != proposal.cycle_seq
             ):
                 raise ValueError("proposal does not match its cycle receipt")
+            receipt_fields = {
+                "run_id": proposal.run_id,
+                "stable_contributor_key": proposal.stable_contributor_key,
+                "cycle_id": proposal.cycle_id,
+                "processed_tokens_this_cycle": proposal.processed_tokens_this_cycle,
+                "effective_tokens_this_cycle": proposal.effective_tokens_this_update,
+                "local_discarded_tokens_this_cycle": (proposal.local_discarded_tokens_this_cycle),
+                "retained_tokens_since_base": proposal.retained_tokens_since_base,
+                "data_cursor_start": proposal.data_cursor_start,
+                "data_cursor_end": proposal.data_cursor_end,
+                "fence_kind": proposal.contributor_fence.kind,
+                "fence_json": _canonical_json(proposal.contributor_fence.as_dict()),
+                "proposal_expected": 1,
+            }
+            if any(receipt[name] != value for name, value in receipt_fields.items()):
+                raise ValueError("proposal immutable fields do not match its cycle receipt")
             existing = connection.execute(
                 "SELECT * FROM updates WHERE update_id=?", (proposal.update_id,)
             ).fetchone()
@@ -969,6 +1031,65 @@ class LeaderSession:
                     now,
                 ),
             )
+            older_pending = connection.execute(
+                """
+                SELECT update_id, cycle_receipt_id FROM updates
+                WHERE stable_contributor_key=? AND status='pending' AND update_id<>?
+                    AND cycle_seq < ?
+                """,
+                (
+                    proposal.stable_contributor_key,
+                    proposal.update_id,
+                    proposal.cycle_seq,
+                ),
+            ).fetchall()
+            for row in older_pending:
+                connection.execute(
+                    """
+                    UPDATE updates SET status='dropped', dropped_by_epoch=?,
+                        drop_reason='superseded_by_newer_cycle'
+                    WHERE update_id=? AND status='pending'
+                    """,
+                    (self.token.epoch, row["update_id"]),
+                )
+                connection.execute(
+                    """
+                    UPDATE token_fates SET direct_fate='dropped',
+                        fate_reason='superseded_by_newer_cycle', updated_by_epoch=?, updated_at=?
+                    WHERE receipt_id=?
+                    """,
+                    (self.token.epoch, now, row["cycle_receipt_id"]),
+                )
+            newer_pending = connection.execute(
+                """
+                SELECT 1 FROM updates
+                WHERE stable_contributor_key=? AND status='pending' AND update_id<>?
+                    AND cycle_seq > ?
+                LIMIT 1
+                """,
+                (
+                    proposal.stable_contributor_key,
+                    proposal.update_id,
+                    proposal.cycle_seq,
+                ),
+            ).fetchone()
+            if newer_pending is not None:
+                connection.execute(
+                    """
+                    UPDATE updates SET status='dropped', dropped_by_epoch=?,
+                        drop_reason='superseded_before_arrival'
+                    WHERE update_id=? AND status='pending'
+                    """,
+                    (self.token.epoch, proposal.update_id),
+                )
+                connection.execute(
+                    """
+                    UPDATE token_fates SET direct_fate='dropped',
+                        fate_reason='superseded_before_arrival', updated_by_epoch=?, updated_at=?
+                    WHERE receipt_id=?
+                    """,
+                    (self.token.epoch, now, proposal.cycle_receipt_id),
+                )
             self._record_observation(connection, proposal, ProposalDisposition.ACCEPTED)
             return {"disposition": ProposalDisposition.ACCEPTED.value}
 
@@ -1067,84 +1188,12 @@ class LeaderSession:
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
             self._require_current_fence(connection, fence)
-            affected = connection.execute(
-                """
-                SELECT update_id, cycle_receipt_id, selected_batch_id
-                FROM updates
-                WHERE fence_json=? AND status IN ('pending', 'selected')
-                """,
-                (_canonical_json(fence.as_dict()),),
-            ).fetchall()
-            batch_ids = sorted(
-                {str(row["selected_batch_id"]) for row in affected if row["selected_batch_id"]}
-            )
             now = float(self._authority._wall_clock())
-            for batch_id in batch_ids:
-                connection.execute(
-                    """
-                    UPDATE publication_intents
-                    SET state='abandoned', abandoned_at=?, abandon_reason=?
-                    WHERE selection_batch_id=? AND state='prepared'
-                    """,
-                    (now, reason, batch_id),
-                )
-                connection.execute(
-                    """
-                    UPDATE selection_batches
-                    SET state='abandoned', abandoned_at=?, abandon_reason=?
-                    WHERE batch_id=? AND state IN ('selected', 'prepared')
-                    """,
-                    (now, reason, batch_id),
-                )
-                batch_updates = connection.execute(
-                    """
-                    SELECT u.* FROM selection_batch_updates AS b
-                    JOIN updates AS u ON u.update_id=b.update_id
-                    WHERE b.batch_id=? AND u.status='selected'
-                    """,
-                    (batch_id,),
-                ).fetchall()
-                for row in batch_updates:
-                    if row["fence_json"] == _canonical_json(fence.as_dict()):
-                        continue
-                    try:
-                        self._require_current_fence_json(connection, str(row["fence_json"]))
-                    except MembershipFenceError:
-                        replacement_status = "dropped"
-                        drop_reason = "stale_fence_during_retirement"
-                    else:
-                        replacement_status = "pending"
-                        drop_reason = None
-                    connection.execute(
-                        """
-                        UPDATE updates SET status=?, selected_batch_id=NULL,
-                            selected_by_epoch=NULL, dropped_by_epoch=?, drop_reason=?
-                        WHERE update_id=? AND status='selected'
-                        """,
-                        (
-                            replacement_status,
-                            self.token.epoch if replacement_status == "dropped" else None,
-                            drop_reason,
-                            row["update_id"],
-                        ),
-                    )
-            update_ids = tuple(str(row["update_id"]) for row in affected)
-            for row in affected:
-                connection.execute(
-                    """
-                    UPDATE updates SET status='dropped', selected_batch_id=NULL,
-                        selected_by_epoch=NULL, dropped_by_epoch=?, drop_reason=?
-                    WHERE update_id=? AND status IN ('pending', 'selected')
-                    """,
-                    (self.token.epoch, reason, row["update_id"]),
-                )
-                connection.execute(
-                    """
-                    UPDATE token_fates SET direct_fate='dropped', fate_reason=?,
-                        updated_by_epoch=?, updated_at=? WHERE receipt_id=?
-                    """,
-                    (reason, self.token.epoch, now, row["cycle_receipt_id"]),
-                )
+            update_ids = self._terminalize_fenced_updates(
+                connection,
+                fence_json=_canonical_json(fence.as_dict()),
+                reason=reason,
+            )
             connection.execute(
                 """
                 UPDATE learner_instances
@@ -1644,6 +1693,122 @@ class LeaderSession:
         )
         return int(cursor.lastrowid)
 
+    def _terminalize_fenced_updates(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        fence_json: str,
+        reason: str,
+    ) -> tuple[str, ...]:
+        """Drop one stale fence's work and reconcile every affected durable batch."""
+
+        affected = connection.execute(
+            """
+            SELECT update_id, cycle_receipt_id, selected_batch_id
+            FROM updates
+            WHERE fence_json=? AND status IN ('pending', 'selected')
+            """,
+            (fence_json,),
+        ).fetchall()
+        batch_ids = sorted(
+            {str(row["selected_batch_id"]) for row in affected if row["selected_batch_id"]}
+        )
+        now = float(self._authority._wall_clock())
+        for batch_id in batch_ids:
+            connection.execute(
+                """
+                UPDATE publication_intents
+                SET state='abandoned', abandoned_at=?, abandon_reason=?
+                WHERE selection_batch_id=? AND state='prepared'
+                """,
+                (now, reason, batch_id),
+            )
+            connection.execute(
+                """
+                UPDATE selection_batches
+                SET state='abandoned', abandoned_at=?, abandon_reason=?
+                WHERE batch_id=? AND state IN ('selected', 'prepared')
+                """,
+                (now, reason, batch_id),
+            )
+            batch_updates = connection.execute(
+                """
+                SELECT u.* FROM selection_batch_updates AS b
+                JOIN updates AS u ON u.update_id=b.update_id
+                WHERE b.batch_id=? AND u.status='selected'
+                """,
+                (batch_id,),
+            ).fetchall()
+            for row in batch_updates:
+                row_fence_json = str(row["fence_json"])
+                if row_fence_json == fence_json:
+                    replacement_status = "dropped"
+                    drop_reason = reason
+                else:
+                    try:
+                        self._require_current_fence_json(connection, row_fence_json)
+                    except MembershipFenceError:
+                        replacement_status = "dropped"
+                        drop_reason = "stale_fence_during_reconciliation"
+                    else:
+                        pending = connection.execute(
+                            """
+                            SELECT 1 FROM updates
+                            WHERE stable_contributor_key=? AND status='pending'
+                            LIMIT 1
+                            """,
+                            (row["stable_contributor_key"],),
+                        ).fetchone()
+                        replacement_status = "pending" if pending is None else "dropped"
+                        drop_reason = (
+                            None if pending is None else "superseded_during_reconciliation"
+                        )
+                connection.execute(
+                    """
+                    UPDATE updates SET status=?, selected_batch_id=NULL,
+                        selected_by_epoch=NULL, dropped_by_epoch=?, drop_reason=?
+                    WHERE update_id=? AND status='selected'
+                    """,
+                    (
+                        replacement_status,
+                        self.token.epoch if replacement_status == "dropped" else None,
+                        drop_reason,
+                        row["update_id"],
+                    ),
+                )
+                if replacement_status == "dropped":
+                    connection.execute(
+                        """
+                        UPDATE token_fates SET direct_fate='dropped', fate_reason=?,
+                            updated_by_epoch=?, updated_at=? WHERE receipt_id=?
+                        """,
+                        (
+                            drop_reason,
+                            self.token.epoch,
+                            now,
+                            row["cycle_receipt_id"],
+                        ),
+                    )
+        update_ids = tuple(str(row["update_id"]) for row in affected)
+        for row in affected:
+            cursor = connection.execute(
+                """
+                UPDATE updates SET status='dropped', selected_batch_id=NULL,
+                    selected_by_epoch=NULL, dropped_by_epoch=?, drop_reason=?
+                WHERE update_id=? AND status IN ('pending', 'selected')
+                """,
+                (self.token.epoch, reason, row["update_id"]),
+            )
+            if cursor.rowcount:
+                connection.execute(
+                    """
+                    UPDATE token_fates SET direct_fate='dropped', fate_reason=?,
+                        updated_by_epoch=?, updated_at=? WHERE receipt_id=?
+                    """,
+                    (reason, self.token.epoch, now, row["cycle_receipt_id"]),
+                )
+        return update_ids
+
     def _require_current_fence(
         self,
         connection: sqlite3.Connection,
@@ -1710,8 +1875,7 @@ class LeaderSession:
         request: Mapping[str, Any],
         operation: Callable[[sqlite3.Connection], dict[str, Any]],
     ) -> dict[str, Any]:
-        if not command_id or len(command_id) > 192:
-            raise ValueError("command_id must be 1..192 characters")
+        validate_identity(command_id, name="command_id")
         request_json = _canonical_json(dict(request))
         request_sha = hashlib.sha256(request_json.encode("utf-8")).hexdigest()
         connection = self._authority._connection

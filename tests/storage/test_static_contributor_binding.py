@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 from pathlib import Path
 
 import pytest
 
 from fs_diloco.protocol.contributor import StaticContributorFence, StaticMembershipScope
+from fs_diloco.protocol.cycle_receipt import CycleReceiptV1
+from fs_diloco.protocol.proposal import FullUpdateProposalV2
 from fs_diloco.storage.authority import (
     AuthorityIdentity,
     LeaderAuthority,
     MembershipFenceError,
     initialize_authority_v4,
 )
+from tests.support.v4_protocol import proposal_payload, receipt_payload
 
 
 def test_static_binding_requires_terminal_old_attempt_and_increments_generation(
@@ -32,7 +36,7 @@ def test_static_binding_requires_terminal_old_attempt_and_increments_generation(
             logical_launch_id="launch-0",
             attempt_id="attempt-1",
         )
-        with pytest.raises(MembershipFenceError, match="must be terminal"):
+        with pytest.raises(MembershipFenceError, match="requires expected_generation"):
             leader.bind_or_replace_static_attempt(
                 command_id="bind-while-active",
                 learner_id="learner-0",
@@ -99,3 +103,98 @@ def test_new_static_logical_launch_requires_explicit_replacement(tmp_path: Path)
         )
         assert replacement.logical_launch_id == "launch-1"
         assert replacement.binding_generation == 2
+
+
+def test_active_static_replacement_atomically_abandons_prepared_work(tmp_path: Path) -> None:
+    identity = AuthorityIdentity(
+        "run-v4", "source-fingerprint", hashlib.sha256(b"config").hexdigest()
+    )
+    scope = StaticMembershipScope(("learner-0",))
+    database = tmp_path / "authority.sqlite3"
+    initialize_authority_v4(database, identity, scope, wall_clock=lambda: 100.0)
+    with LeaderAuthority(database, identity, scope, wall_clock=lambda: 100.0) as authority:
+        token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
+        leader = authority.open_leader(token)
+        binding = leader.bind_or_replace_static_attempt(
+            command_id="bind-1",
+            learner_id="learner-0",
+            logical_launch_id="launch-0",
+            attempt_id="attempt-1",
+        )
+        fence = StaticContributorFence(
+            "static",
+            binding.learner_id,
+            binding.logical_launch_id,
+            binding.attempt_id,
+            binding.binding_generation,
+        )
+        receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence.as_dict()))
+        leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
+        proposal = FullUpdateProposalV2.from_dict(
+            proposal_payload(receipt_sha256=receipt.immutable_sha256(), fence=fence.as_dict())
+        )
+        leader.ingest_proposal(command_id="proposal-1", proposal=proposal)
+        leader.initialize_v0(
+            command_id="initialize-v0",
+            publication_id="publication-v0",
+            weight_relative_path="weights/epochs/e1/v0.safetensors",
+            weight_size=4,
+            weight_sha256="a" * 64,
+            optim_relative_path="optim/epochs/e1/v0.safetensors",
+            optim_size=4,
+            optim_sha256="b" * 64,
+        )
+        batch = leader.try_select_batch(command_id="select-v1", quorum_min=1, quorum_max=1)
+        assert batch is not None
+        leader.prepare_publication(
+            command_id="prepare-v1",
+            publication_id="publication-v1",
+            target_version=1,
+            selection_batch_id=batch.batch_id,
+            weight_relative_path="weights/epochs/e1/v1.safetensors",
+            weight_size=4,
+            weight_sha256="c" * 64,
+            optim_relative_path="optim/epochs/e1/v1.safetensors",
+            optim_size=4,
+            optim_sha256="d" * 64,
+        )
+
+        replacement = leader.bind_or_replace_static_attempt(
+            command_id="replace-active",
+            learner_id="learner-0",
+            logical_launch_id="launch-0",
+            attempt_id="attempt-2",
+            expected_generation=1,
+            replacement_reason="process_restart",
+        )
+
+        assert replacement.binding_generation == 2
+        assert replacement.attempt_id == "attempt-2"
+        connection = sqlite3.connect(database)
+        try:
+            assert (
+                connection.execute(
+                    "SELECT status FROM updates WHERE update_id=?", (proposal.update_id,)
+                ).fetchone()[0]
+                == "dropped"
+            )
+            assert (
+                connection.execute(
+                    "SELECT state FROM selection_batches WHERE batch_id=?", (batch.batch_id,)
+                ).fetchone()[0]
+                == "abandoned"
+            )
+            assert (
+                connection.execute(
+                    "SELECT state FROM publication_intents WHERE publication_id='publication-v1'"
+                ).fetchone()[0]
+                == "abandoned"
+            )
+            assert (
+                connection.execute(
+                    "SELECT direct_fate FROM token_fates WHERE receipt_id=?", (receipt.receipt_id,)
+                ).fetchone()[0]
+                == "dropped"
+            )
+        finally:
+            connection.close()

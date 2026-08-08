@@ -700,7 +700,7 @@ Phase ID：`P1-typed-foundation`
 1. 新增 typed objects：`FullUpdateProposalV2`、`CycleReceiptV1`、`ProposalDisposition`、`ContributorFence`（static binding/dynamic membership variants）、`SelectionCandidate/Batch`、`PublicationIntent`、`ReadResult`、`LaunchState`、`TerminalState`。
 2. 把 JSON/DB row decode 限制在 boundary；merge、selection、token service 不再接收 `dict[str, Any]`。
 3. 实现完整 base/dynamic v4 DDL、schema metadata/DDL hash/open validation，以及base static logical-launch binding；旧 schema 只读。
-4. 实现 `LeaderAuthority` explicit commands 和 read model；迁移 42-mutator 表中的 retained commands，删除 `__getattr__` dispatch 和 raw connection escape。
+4. 实现 `LeaderAuthority` command shell、read model和P1 foundation所需的显式命令；把42-mutator表逐项固定为`旧mutator → 删除或唯一coarse command → blocking owner phase`。P2-P4 concern-specific行为在各自phase实现并作为对应phase的阻塞门禁；不得用“已有未来映射”冒充P1已实现，也不得在等待后续phase期间暴露`__getattr__` dispatch或raw connection escape。
 5. 实现统一 config validator 和版本常量；保留v1-v3 query-only legacy config decoder。
 6. 从 `runtime.learner` 把 optimizer/scheduler 构建 helper 提取到 `modeling`，让 `fs_diloco/baselines` 不再反向 import runtime。
 
@@ -725,7 +725,7 @@ tests/test_torch_baseline_*.py
 
 - fresh static/dynamic v4 DB 均可初始化、reopen、integrity check；
 - application/protocol 不接收 raw proposal dict；
-- retained public mutation 全部映射到 explicit fenced command；
+- 42个旧mutator逐项具有可机器核对的删除/合并目标与唯一owner phase，P1已实现的foundation mutation全部通过explicit fenced command；P2-P4 deferred command必须在各自owner phase完成后才能切换runtime；
 - static DB 不依赖 dynamic tables，但旧/重复logical launch受base binding generation fence；
 - P0 golden semantic projection 完全不变；
 - torch baseline config/focused tests通过；

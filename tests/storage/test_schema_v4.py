@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from fs_diloco.protocol.contributor import DynamicMembershipScope, StaticMembershipScope
+from fs_diloco.storage import authority as authority_module
 from fs_diloco.storage.authority import (
     AuthorityIdentity,
     AuthoritySchemaError,
@@ -94,3 +95,20 @@ def test_dynamic_stream_pool_is_initialized_by_explicit_fenced_command(tmp_path:
             0,
             1,
         )
+
+
+def test_v4_open_verifies_configured_busy_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database = tmp_path / "authority.sqlite3"
+    scope = StaticMembershipScope(("learner-0",))
+    initialize_authority_v4(database, identity(), scope)
+    configure = authority_module._configure_connection
+
+    def configure_wrong_timeout(connection: sqlite3.Connection, *, busy_timeout_ms: int) -> None:
+        configure(connection, busy_timeout_ms=busy_timeout_ms + 1)
+
+    monkeypatch.setattr(authority_module, "_configure_connection", configure_wrong_timeout)
+
+    with pytest.raises(AuthoritySchemaError, match="busy_timeout"):
+        LeaderAuthority(database, identity(), scope, busy_timeout_ms=5000)

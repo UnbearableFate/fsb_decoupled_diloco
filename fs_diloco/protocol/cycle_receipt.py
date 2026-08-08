@@ -19,7 +19,12 @@ from ._validation import (
     strict_int,
     uuid4_string,
 )
-from .contributor import ContributorFence, decode_contributor_fence
+from .contributor import (
+    ContributorFence,
+    DynamicContributorFence,
+    StaticContributorFence,
+    decode_contributor_fence,
+)
 
 
 @dataclass(frozen=True)
@@ -43,6 +48,73 @@ class CycleReceiptV1:
     planned_payload_sha256: str | None
     contributor_fence: ContributorFence
     created_at: float
+
+    def __post_init__(self) -> None:
+        version = strict_int(
+            self.cycle_receipt_format_version,
+            name="cycle_receipt_format_version",
+            minimum=1,
+        )
+        if version != CYCLE_RECEIPT_FORMAT_VERSION:
+            raise ValueError(f"unsupported cycle_receipt_format_version: {version}")
+        identity(self.run_id, name="run_id")
+        stable_key = identity(self.stable_contributor_key, name="stable_contributor_key")
+        sequence = strict_int(self.cycle_seq, name="cycle_seq", minimum=1)
+        uuid4_string(self.cycle_id, name="cycle_id")
+        identity(self.receipt_id, name="receipt_id")
+        if sequence == 1:
+            if self.previous_receipt_id is not None or self.previous_receipt_sha256 is not None:
+                raise ValueError("cycle 1 must not name a previous receipt")
+        else:
+            identity(self.previous_receipt_id, name="previous_receipt_id")
+            sha256(self.previous_receipt_sha256, name="previous_receipt_sha256")
+        processed = strict_int(
+            self.processed_tokens_this_cycle,
+            name="processed_tokens_this_cycle",
+            minimum=1,
+        )
+        effective = strict_int(
+            self.effective_tokens_this_cycle,
+            name="effective_tokens_this_cycle",
+            minimum=0,
+        )
+        discarded = strict_int(
+            self.local_discarded_tokens_this_cycle,
+            name="local_discarded_tokens_this_cycle",
+            minimum=0,
+        )
+        if processed != effective + discarded:
+            raise ValueError("processed tokens must equal effective plus local-discarded tokens")
+        retained = strict_int(
+            self.retained_tokens_since_base,
+            name="retained_tokens_since_base",
+            minimum=0,
+        )
+        if retained < effective:
+            raise ValueError("retained_tokens_since_base must cover effective tokens")
+        cursor_start = strict_int(self.data_cursor_start, name="data_cursor_start", minimum=0)
+        cursor_end = strict_int(self.data_cursor_end, name="data_cursor_end", minimum=1)
+        if cursor_end <= cursor_start:
+            raise ValueError("data_cursor_end must be greater than data_cursor_start")
+        expected = strict_bool(self.proposal_expected, name="proposal_expected")
+        if expected:
+            uuid4_string(self.planned_update_id, name="planned_update_id")
+            sha256(self.planned_payload_sha256, name="planned_payload_sha256")
+            if effective <= 0:
+                raise ValueError("a proposal cannot be planned for a zero-effective cycle")
+        elif self.planned_update_id is not None or self.planned_payload_sha256 is not None:
+            raise ValueError("an upload-skipped receipt must not name a planned proposal")
+        if not isinstance(
+            self.contributor_fence,
+            (StaticContributorFence, DynamicContributorFence),
+        ):
+            raise ValueError("contributor_fence must be a typed contributor fence")
+        if self.contributor_fence.stable_contributor_key != stable_key:
+            raise ValueError("contributor fence does not match stable_contributor_key")
+        created_at = strict_float(self.created_at, name="created_at")
+        if created_at < 0.0:
+            raise ValueError("created_at must be >= 0")
+        object.__setattr__(self, "created_at", created_at)
 
     @classmethod
     def from_json(cls, raw: bytes | str, *, max_bytes: int = 256 * 1024) -> "CycleReceiptV1":

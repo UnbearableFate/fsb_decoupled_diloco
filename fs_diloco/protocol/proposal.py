@@ -20,7 +20,12 @@ from ._validation import (
     strict_int,
     uuid4_string,
 )
-from .contributor import ContributorFence, decode_contributor_fence
+from .contributor import (
+    ContributorFence,
+    DynamicContributorFence,
+    StaticContributorFence,
+    decode_contributor_fence,
+)
 
 
 def canonical_update_relative_path(stable_contributor_key: str, update_id: str) -> str:
@@ -69,6 +74,76 @@ class FullUpdateProposalV2:
     tensor_dtype: str
     tensor_numel: int
     created_at: float
+
+    def __post_init__(self) -> None:
+        version = strict_int(
+            self.proposal_format_version, name="proposal_format_version", minimum=1
+        )
+        if version != PROPOSAL_FORMAT_VERSION:
+            raise ValueError(f"unsupported proposal_format_version: {version}")
+        identity(self.run_id, name="run_id")
+        stable_key = identity(self.stable_contributor_key, name="stable_contributor_key")
+        strict_int(self.cycle_seq, name="cycle_seq", minimum=1)
+        uuid4_string(self.cycle_id, name="cycle_id")
+        update_id = uuid4_string(self.update_id, name="update_id")
+        identity(self.cycle_receipt_id, name="cycle_receipt_id")
+        sha256(self.cycle_receipt_sha256, name="cycle_receipt_sha256")
+        strict_int(self.base_global_version, name="base_global_version", minimum=0)
+        local_start = strict_int(self.local_step_start, name="local_step_start", minimum=0)
+        local_end = strict_int(self.local_step_end, name="local_step_end", minimum=1)
+        inner_steps = strict_int(self.inner_steps, name="inner_steps", minimum=1)
+        if local_end != local_start + inner_steps:
+            raise ValueError("local_step_end must equal local_step_start + inner_steps")
+        processed = strict_int(
+            self.processed_tokens_this_cycle,
+            name="processed_tokens_this_cycle",
+            minimum=1,
+        )
+        effective = strict_int(
+            self.effective_tokens_this_update,
+            name="effective_tokens_this_update",
+            minimum=1,
+        )
+        discarded = strict_int(
+            self.local_discarded_tokens_this_cycle,
+            name="local_discarded_tokens_this_cycle",
+            minimum=0,
+        )
+        if processed != effective + discarded:
+            raise ValueError("processed tokens must equal effective plus local-discarded tokens")
+        retained = strict_int(
+            self.retained_tokens_since_base,
+            name="retained_tokens_since_base",
+            minimum=1,
+        )
+        if retained < effective:
+            raise ValueError("retained_tokens_since_base must cover effective tokens")
+        cursor_start = strict_int(self.data_cursor_start, name="data_cursor_start", minimum=0)
+        cursor_end = strict_int(self.data_cursor_end, name="data_cursor_end", minimum=1)
+        if cursor_end <= cursor_start:
+            raise ValueError("data_cursor_end must be greater than data_cursor_start")
+        if not isinstance(
+            self.contributor_fence,
+            (StaticContributorFence, DynamicContributorFence),
+        ):
+            raise ValueError("contributor_fence must be a typed contributor fence")
+        if self.contributor_fence.stable_contributor_key != stable_key:
+            raise ValueError("contributor fence does not match stable_contributor_key")
+        _validate_relative_path(
+            self.payload_relative_path,
+            expected=canonical_update_relative_path(stable_key, update_id),
+        )
+        strict_int(self.payload_size, name="payload_size", minimum=1)
+        sha256(self.payload_sha256, name="payload_sha256")
+        sha256(self.tensor_schema_sha256, name="tensor_schema_sha256")
+        tensor_dtype = nonempty_string(self.tensor_dtype, name="tensor_dtype")
+        if tensor_dtype not in {"float32", "bfloat16"}:
+            raise ValueError(f"unsupported tensor_dtype: {tensor_dtype}")
+        strict_int(self.tensor_numel, name="tensor_numel", minimum=1)
+        created_at = strict_float(self.created_at, name="created_at")
+        if created_at < 0.0:
+            raise ValueError("created_at must be >= 0")
+        object.__setattr__(self, "created_at", created_at)
 
     @classmethod
     def from_json(cls, raw: bytes | str, *, max_bytes: int = 256 * 1024) -> "FullUpdateProposalV2":

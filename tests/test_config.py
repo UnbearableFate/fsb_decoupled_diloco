@@ -14,12 +14,8 @@ from fs_diloco.core.config_v4 import (
 
 CONFIG_PATHS = sorted(Path("configs").glob("*.yaml"))
 REPOSITORY_CONFIG_PATHS = sorted(Path("configs").rglob("*.yaml"))
-PRIMARY_RUNS_ROOT = Path(
-    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco"
-)
-TORCH_BASELINE_RUNS_ROOT = Path(
-    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/torch_baselines"
-)
+PRIMARY_RUNS_ROOT = Path("/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco")
+TORCH_BASELINE_RUNS_ROOT = Path("/work/xg24i002/x10041/fsb_decoupled_diloco/runs/torch_baselines")
 
 
 def test_config_defaults_and_cli_overrides(tmp_path):
@@ -43,11 +39,7 @@ def test_config_defaults_and_cli_overrides(tmp_path):
 @pytest.mark.parametrize("path", REPOSITORY_CONFIG_PATHS)
 def test_repository_configs_use_primary_worktree_run_root(path):
     loaded = load_config(path)
-    expected_root = (
-        TORCH_BASELINE_RUNS_ROOT
-        if loaded.torch_baseline.enabled
-        else PRIMARY_RUNS_ROOT
-    )
+    expected_root = TORCH_BASELINE_RUNS_ROOT if loaded.torch_baseline.enabled else PRIMARY_RUNS_ROOT
     assert loaded.run.shared_root == str(expected_root / "{run_id}")
 
     resolved = resolve_config(path, run_id="path_check")
@@ -283,9 +275,7 @@ def test_rejects_unsupported_grace_mode(tmp_path, mode):
 
 
 def test_wait_only_5000_config_uses_post_publish_grace_without_rebase():
-    config = resolve_config(
-        "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_wait2p5.yaml"
-    )
+    config = resolve_config("configs/fs_diloco_gpt2_wikitext2_8l_5000steps_wait2p5.yaml")
     assert config.training.max_local_steps == 5000
     assert config.model.dtype == "bfloat16"
     assert config.io.tensor_dtype == "bfloat16"
@@ -343,9 +333,7 @@ def test_predict_5000_wait_variants_differ_only_in_wait_and_run_metadata():
 
 
 def test_predict_wait_zero_5000_config_stops_only_at_global_target():
-    config = resolve_config(
-        "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_predict.yaml"
-    )
+    config = resolve_config("configs/fs_diloco_gpt2_wikitext2_8l_5000steps_predict.yaml")
     assert config.training.max_local_steps == 5000
     assert config.training.completion_mode == "global_only"
     assert config.sync.stop_after_outer_steps == 50
@@ -356,9 +344,7 @@ def test_predict_wait_zero_5000_config_stops_only_at_global_target():
 
 
 def test_terminal_capture_profile_reaches_input_exhaustion_before_global_stop():
-    config = resolve_config(
-        "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_terminal_capture.yaml"
-    )
+    config = resolve_config("configs/fs_diloco_gpt2_wikitext2_8l_5000steps_terminal_capture.yaml")
 
     assert config.training.max_local_steps == 5000
     assert config.training.completion_mode == "local_or_global"
@@ -587,6 +573,7 @@ def test_v4_loader_accepts_explicit_full_schema_and_direct_weight_stop(tmp_path)
     path.write_text(
         """
 config_schema_version: 1
+init: {}
 sync:
   stop_after_outer_steps: null
   stop_after_direct_weight_tokens_applied: 100
@@ -601,3 +588,11 @@ maintenance: {}
 
     assert config.stop_after_direct_weight_tokens_applied == 100
     assert config.config_schema_version == 1
+
+
+def test_v4_direct_construction_rejects_removed_syncer_ha_switch():
+    config = ConfigV4()
+    config.shared.coordination.syncer_ha.enabled = True
+
+    with pytest.raises(ValueError, match="syncer_ha is removed"):
+        config.validate(ConfigProfile.FULL_V4)

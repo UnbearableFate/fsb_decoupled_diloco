@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import struct
 from typing import Any
 from pathlib import Path
@@ -127,3 +128,48 @@ def test_payload_rename_race_fails_identity_check(tmp_path: Path, monkeypatch: A
 
     assert result.status is ReadStatus.IDENTITY_MISMATCH
     assert "name changed" in str(result.diagnostic)
+
+
+def test_payload_mutation_during_schema_inspection_fails_identity_check(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    content = safetensors_payload(1.0)
+    proposal = proposal_for(content)
+    path = tmp_path / proposal.payload_relative_path
+    path.parent.mkdir(parents=True)
+    path.write_bytes(content)
+    inspect = object_store._inspect_safetensors
+
+    def mutate_same_inode(descriptor: int, *, file_size: int):
+        path.write_bytes(safetensors_payload(2.0))
+        return inspect(descriptor, file_size=file_size)
+
+    monkeypatch.setattr(object_store, "_inspect_safetensors", mutate_same_inode)
+
+    result = verify_proposal_payload(tmp_path, proposal)
+
+    assert result.status is ReadStatus.IDENTITY_MISMATCH
+    assert "schema inspection" in str(result.diagnostic)
+
+
+def test_regular_file_to_fifo_race_is_nonblocking_and_fails_closed(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    content = safetensors_payload()
+    proposal = proposal_for(content)
+    path = tmp_path / proposal.payload_relative_path
+    path.parent.mkdir(parents=True)
+    path.write_bytes(content)
+    real_open = os.open
+
+    def replace_with_fifo(target: str | os.PathLike[str], flags: int) -> int:
+        path.unlink()
+        os.mkfifo(path)
+        return real_open(target, flags)
+
+    monkeypatch.setattr(object_store.os, "open", replace_with_fifo)
+
+    result = verify_proposal_payload(tmp_path, proposal)
+
+    assert result.status is ReadStatus.IDENTITY_MISMATCH
+    assert "regular file" in str(result.diagnostic) or "identity changed" in str(result.diagnostic)

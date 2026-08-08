@@ -168,6 +168,10 @@ class ConfigV4:
         self.maintenance.validate(self.leader)
         if self.shared.init.resume:
             raise ValueError("init.resume is removed from Full Protocol v4")
+        if self.shared.coordination.syncer_ha.enabled:
+            raise ValueError(
+                "coordination.syncer_ha is removed from Full Protocol v4; leader is mandatory"
+            )
         if self.shared.fragments.enabled:
             raise ValueError("fragments are not supported by Full Protocol v4")
         if self.shared.sync.stop_after_global_tokens is not None:
@@ -188,7 +192,7 @@ class ConfigV4:
 
 
 _REMOVED_V4_PATHS = (
-    ("init",),
+    ("init", "resume"),
     ("fragments",),
     ("coordination", "syncer_ha"),
     ("sync", "stop_after_global_tokens"),
