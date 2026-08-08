@@ -121,3 +121,11 @@
 - 最终命令/环境：预提交前`bash -n scripts/miyabi/*.pbs`、literal group placeholder扫描、Ruff/py_compile/Checker静态门禁均通过；`qsub scripts/miyabi/run_plan03_phase1_tests.pbs`，PBS job `2508667.opbs`，compute `mg0008`，`debug-g`、`select=1:mpiprocs=1`、`walltime=00:10:00`、group `xg24i002`，Python 3.13.13、pytest 9.1.1、torch 2.13.0+cu132。
 - 结果/证据：Ruff PASS、Plan03 boundary Checker PASS；focused `247 passed in 20.56s`；full `634 passed, 5 xfailed in 43.52s`。结构化证据 `artifacts/20260809-022300_p1-review-remediation-tests_pass.json`；最小保留log `artifacts/20260809-022300_p1-review-remediation-tests_pass.log`，SHA-256 `51a5f200b454ea4061e02259e959ef14fab3b1f39d75c83db2a0b09d5f82df50`（仅规范化行尾空白）。
 - 尚未覆盖/后续：5个P0冻结RED仍按计划由P2/P3修复；P2-P4 concern-specific authority commands必须在各自owner phase完成，P1 mapping只冻结完整无遗漏的迁移责任。该次修复改变typed public API、fresh DDL和static concurrency protocol，按`plans/AGENTS.md`须创建新review-target并做增量Codex审查；Claude若仍为session-limit直接跳过。
+
+## 2026-08-09 — `P1-typed-foundation` phase-final PASS
+
+- 增量审查范围：base `0fa1286b7da1782a913fb02f56a1a8d1b27a2c4e`、target `513068ebcd507c02068b2ea09fc1c82f70dbfe91`，ancestry已验证。独立Codex报告 `reports/DOING/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P1-typed-foundation/gpt-5.6-sol_513068ebcd507c02068b2ea09fc1c82f70dbfe91.md` 结论 `APPROVE_WITH_FOLLOWUPS`，确认首次审查5 High/3 Medium/1 Low均fixed，无新的Critical/High/Medium。
+- Claude reviewer：fresh session `25c4e920-96d0-495a-b7ef-d668c7b1ca59`在0 input/output token处收到HTTP 429账户session limit；按用户和`plans/AGENTS.md`不重试，记为`skipped-session-limit`且不阻断。调用和skip metadata保存于同目录target同名JSON。
+- 新Low处置：L2 direct/wire validator重复为`deferred-with-justification`，owner=P5 protocol模块收敛，当前两条入口均有直接负例且无绕过；L3 same-FD双完整scan为`deferred-with-justification`，owner=P6 G10，正式性能证据前不以优化牺牲内容identity；L4缺少双current-contributor重归属专门用例为`deferred-with-justification`，owner=P2 adversarial safe-ingest matrix，当前stable key/fence JSON已走与其他receipt mismatch相同的事务前分支。三项均不削弱P1正确性门禁。
+- phase证据：job `2508667.opbs` focused `247 passed`、full `634 passed, 5 xfailed`，Ruff/Checker PASS；`20260809-022300_p1-review-remediation-tests_pass.json`和最小log已tracked。8项P1完成门禁以及持续回归的BASE-01更新为`complete`；MODE-02因actor pre-torch binding/cutover gate属于P4，保持`pending`。
+- 结论：P1完成，plan状态推进到P2。5项P0冻结xfail和P2-P4 concern-specific command仍按owner phase阻塞后续完成；P1没有宣称这些未来行为已实现。用户对`plans/AGENTS.md`的既有修改始终在phase commits/review targets之外。
