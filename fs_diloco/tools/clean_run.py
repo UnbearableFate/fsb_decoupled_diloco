@@ -36,6 +36,8 @@ class CleanupCandidate:
     relative_path: str
     size_bytes: int
     mtime_ns: int
+    device: int
+    inode: int
     reason: str
 
     def as_dict(self) -> dict[str, Any]:
@@ -43,6 +45,8 @@ class CleanupCandidate:
             "relative_path": self.relative_path,
             "size_bytes": self.size_bytes,
             "mtime_ns": self.mtime_ns,
+            "device": self.device,
+            "inode": self.inode,
             "reason": self.reason,
         }
 
@@ -105,10 +109,48 @@ def _resolve_existing_file(path: Path, *, label: str) -> Path:
     return resolved
 
 
-def _files_below(directory: Path) -> Iterable[Path]:
-    if not directory.is_dir():
+def _files_below(directory: Path, *, run_root: Path) -> tuple[Path, ...]:
+    try:
+        relative_root = directory.relative_to(run_root)
+        metadata = directory.lstat()
+    except FileNotFoundError:
         return ()
-    return (path for path in directory.rglob("*") if path.is_file() and not path.is_symlink())
+    except ValueError as exc:
+        raise CleanupRefusedError(f"cleanup scan escaped the run root: {directory}") from exc
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise CleanupRefusedError(f"cleanup scan root is not an owned directory: {directory}")
+    _validate_owned_parents(run_root, relative_root)
+    files: list[Path] = []
+    for current, directory_names, file_names in os.walk(directory, followlinks=False):
+        current_path = Path(current)
+        for name in tuple(directory_names):
+            child = current_path / name
+            child_metadata = child.lstat()
+            if not stat.S_ISDIR(child_metadata.st_mode):
+                raise CleanupRefusedError(
+                    f"cleanup scan refuses a symlink or non-directory parent: {child}"
+                )
+        for name in file_names:
+            child = current_path / name
+            child_metadata = child.lstat()
+            if not stat.S_ISREG(child_metadata.st_mode):
+                raise CleanupRefusedError(
+                    f"cleanup scan refuses a symlink or non-regular entry: {child}"
+                )
+            files.append(child)
+    return tuple(files)
+
+
+def _validate_owned_parents(run_root: Path, relative: Path) -> None:
+    current = run_root
+    for component in relative.parts[:-1] if relative.parts else ():
+        current = current / component
+        try:
+            metadata = current.lstat()
+        except FileNotFoundError as exc:
+            raise CleanupRefusedError(f"cleanup parent disappeared: {current}") from exc
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise CleanupRefusedError(f"cleanup parent must be a non-symlink directory: {current}")
 
 
 def _terminal_identity(run_root: Path) -> tuple[str, dict[str, Any], dict[str, Any]]:
@@ -220,27 +262,30 @@ def _candidate(
     reason: str,
 ) -> CleanupCandidate:
     try:
-        stat = path.stat(follow_symlinks=False)
         relative = path.relative_to(run_root).as_posix()
+        _validate_owned_parents(run_root, Path(relative))
+        metadata = path.lstat()
     except (OSError, ValueError) as exc:
         raise CleanupRefusedError(f"cleanup candidate escaped or disappeared: {path}") from exc
-    if not path.is_file() or path.is_symlink():
+    if not stat.S_ISREG(metadata.st_mode):
         raise CleanupRefusedError(f"cleanup candidate is not an owned regular file: {path}")
     return CleanupCandidate(
         path=path,
         relative_path=relative,
-        size_bytes=int(stat.st_size),
-        mtime_ns=int(stat.st_mtime_ns),
+        size_bytes=int(metadata.st_size),
+        mtime_ns=int(metadata.st_mtime_ns),
+        device=int(metadata.st_dev),
+        inode=int(metadata.st_ino),
         reason=reason,
     )
 
 
-def _load_artifact_policy(run_root: Path) -> ArtifactPolicy | None:
+def _load_artifact_policy(run_root: Path) -> ArtifactPolicy:
     path = run_root / "control" / "artifact_policy.json"
     try:
         metadata = path.lstat()
     except FileNotFoundError:
-        return None
+        raise CleanupRefusedError("artifact policy is required to prove generic cleanup safety")
     if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
         raise CleanupRefusedError("artifact policy must be an immutable regular file")
     try:
@@ -379,7 +424,10 @@ def build_cleanup_plan(
         for path in paths:
             selected[path] = reason
 
-    select(_files_below(run / "logs" / "wandb"), "offline experiment cache")
+    select(
+        _files_below(run / "logs" / "wandb", run_root=run),
+        "offline experiment cache",
+    )
     learner_logs = sorted(
         (
             path
@@ -397,34 +445,35 @@ def build_cleanup_plan(
         path = run / relative
         if path.is_file() and not path.is_symlink():
             selected[path] = "superseded raw telemetry"
-    select(_files_below(run / "heartbeats"), "terminal heartbeat cache")
-    select(_files_below(run / "updates" / "latest"), "terminal proposal pointer")
-    select(_files_below(run / "updates" / "payloads"), "terminal update payload")
-    for path in run.rglob("*"):
-        if (
-            path.is_file()
-            and not path.is_symlink()
-            and (path.name.endswith((".tmp", ".part", ".staging")) or path.name.startswith(".tmp-"))
-        ):
+    select(_files_below(run / "heartbeats", run_root=run), "terminal heartbeat cache")
+    select(
+        _files_below(run / "updates" / "latest", run_root=run),
+        "terminal proposal pointer",
+    )
+    select(
+        _files_below(run / "updates" / "payloads", run_root=run),
+        "terminal update payload",
+    )
+    for path in _files_below(run, run_root=run):
+        if path.name.endswith((".tmp", ".part", ".staging")) or path.name.startswith(".tmp-"):
             selected[path] = "temporary or staging file"
 
     candidates = tuple(
         _candidate(path, run_root=run, reason=selected[path])
         for path in sorted(selected, key=lambda item: item.relative_to(run).as_posix())
     )
-    if artifact_policy is not None:
-        _validate_policy_candidates(
-            run_root=run,
-            policy=artifact_policy,
-            candidates=candidates,
-        )
+    _validate_policy_candidates(
+        run_root=run,
+        policy=artifact_policy,
+        candidates=candidates,
+    )
     return CleanupPlan(
         project_root=project,
         run_root=run,
         evidence_path=evidence,
         run_id=run_id,
         evidence_sha256=_sha256(evidence),
-        artifact_policy_sha256=(None if artifact_policy is None else artifact_policy.policy_sha256),
+        artifact_policy_sha256=artifact_policy.policy_sha256,
         candidates=candidates,
         retained_representative_learner_log=(
             None if representative is None else representative.relative_to(run).as_posix()
@@ -497,17 +546,7 @@ def execute_cleanup(plan: CleanupPlan, manifest_path: str | Path) -> dict[str, A
                 "run, completion evidence, or cleanup candidate changed after inventory"
             )
         for candidate in plan.candidates:
-            stat = candidate.path.stat(follow_symlinks=False)
-            if (
-                candidate.path.is_symlink()
-                or not candidate.path.is_file()
-                or int(stat.st_size) != candidate.size_bytes
-                or int(stat.st_mtime_ns) != candidate.mtime_ns
-            ):
-                raise CleanupRefusedError(
-                    f"cleanup candidate changed after inventory: {candidate.relative_path}"
-                )
-            candidate.path.unlink()
+            _unlink_owned_candidate(plan.run_root, candidate)
             deleted_count += 1
             deleted_bytes += candidate.size_bytes
     except Exception as exc:
@@ -528,6 +567,36 @@ def execute_cleanup(plan: CleanupPlan, manifest_path: str | Path) -> dict[str, A
     }
     _write_json_atomic(manifest, completed, require_new=False)
     return completed
+
+
+def _unlink_owned_candidate(run_root: Path, candidate: CleanupCandidate) -> None:
+    relative = Path(candidate.relative_path)
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(run_root, flags)
+    try:
+        for component in relative.parts[:-1]:
+            next_descriptor = os.open(component, flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = next_descriptor
+        metadata = os.stat(relative.name, dir_fd=descriptor, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or int(metadata.st_size) != candidate.size_bytes
+            or int(metadata.st_mtime_ns) != candidate.mtime_ns
+            or int(metadata.st_dev) != candidate.device
+            or int(metadata.st_ino) != candidate.inode
+        ):
+            raise CleanupRefusedError(
+                f"cleanup candidate changed after inventory: {candidate.relative_path}"
+            )
+        os.unlink(relative.name, dir_fd=descriptor)
+        os.fsync(descriptor)
+    except OSError as exc:
+        raise CleanupRefusedError(
+            f"cleanup candidate parent or object changed: {candidate.relative_path}"
+        ) from exc
+    finally:
+        os.close(descriptor)
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -497,6 +497,26 @@ class LearnerLaunchOutbox:
                     )
                 )
                 continue
+            if state == "terminal_uncertain":
+                deadline = request.get("uncertainty_deadline")
+                if deadline is None:
+                    raise RuntimeError(
+                        f"terminal-uncertain launch request has no deadline: {request_id}"
+                    )
+                if now >= float(deadline):
+                    results.append(
+                        store.update_launch_request(
+                            request_id=request_id,
+                            expected_states={state},
+                            state="manual_review",
+                            scheduler_state="no_record",
+                            evidence_source="request_fingerprint_no_positive_record",
+                            manual_reason="scheduler uncertainty deadline elapsed",
+                            last_error="manual resolution required",
+                            observed_at=now,
+                        )
+                    )
+                continue
             expires_at = request.get("expires_at")
             if expires_at is not None and now >= float(expires_at):
                 results.append(

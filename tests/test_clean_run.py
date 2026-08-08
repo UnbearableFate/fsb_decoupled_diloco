@@ -47,6 +47,10 @@ def _completed_run(project: Path, name: str = "completed-run") -> tuple[Path, Pa
         ),
         encoding="utf-8",
     )
+    policy = run / "control" / "artifact_policy.json"
+    policy.write_text(json.dumps(build_artifact_policy()), encoding="utf-8")
+    policy.chmod(0o444)
+    sqlite3.connect(run / "control" / "syncer_metadata.sqlite3").close()
     evidence = reports / f"{name}-completed.json"
     evidence.write_text(
         json.dumps(
@@ -92,7 +96,7 @@ def test_clean_run_preserves_authority_and_one_learner_log(tmp_path: Path) -> No
         run / "updates" / "payloads" / "learner_000" / "update.safetensors",
         run / "weights" / ".tmp-checkpoint",
     ]
-    for path in (*preserved, *deleted):
+    for path in (*preserved[1:], *deleted):
         _write(path)
 
     plan = build_cleanup_plan(tmp_path, run, evidence)
@@ -280,6 +284,7 @@ def test_clean_run_applies_artifact_policy_and_authority_live_references(
 ) -> None:
     run, evidence = _completed_run(tmp_path, "policy-run")
     policy_path = run / "control" / "artifact_policy.json"
+    policy_path.chmod(0o644)
     policy_path.write_text(json.dumps(build_artifact_policy()), encoding="utf-8")
     policy_path.chmod(0o444)
     database = run / "control" / "syncer_metadata.sqlite3"
@@ -311,6 +316,7 @@ def test_clean_run_applies_artifact_policy_and_authority_live_references(
 def test_clean_run_refuses_symlinked_policy_or_authority_database(tmp_path: Path) -> None:
     run, evidence = _completed_run(tmp_path, "policy-symlink-run")
     policy = run / "control" / "artifact_policy.json"
+    policy.unlink()
     policy.symlink_to(tmp_path / "missing-policy")
     with pytest.raises(CleanupRefusedError, match="immutable regular"):
         build_cleanup_plan(tmp_path, run, evidence)
@@ -322,5 +328,53 @@ def test_clean_run_refuses_symlinked_policy_or_authority_database(tmp_path: Path
     database.unlink()
     database.symlink_to(tmp_path / "outside-authority.sqlite3")
 
-    with pytest.raises(CleanupRefusedError, match="regular non-symlink"):
+    with pytest.raises(CleanupRefusedError, match="symlink|non-regular"):
         build_cleanup_plan(tmp_path, run, evidence)
+
+
+def test_clean_run_fails_closed_without_artifact_policy(tmp_path: Path) -> None:
+    run, evidence = _completed_run(tmp_path, "missing-policy-run")
+    policy = run / "control" / "artifact_policy.json"
+    policy.chmod(0o644)
+    policy.unlink()
+
+    with pytest.raises(CleanupRefusedError, match="policy is required"):
+        build_cleanup_plan(tmp_path, run, evidence)
+
+
+def test_clean_run_refuses_symlinked_candidate_parent_without_touching_outside(
+    tmp_path: Path,
+) -> None:
+    run, evidence = _completed_run(tmp_path, "candidate-parent-symlink")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    outside_file = outside / "update.safetensors"
+    _write(outside_file, "must survive")
+    payloads = run / "updates" / "payloads"
+    payloads.parent.mkdir(parents=True)
+    payloads.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(CleanupRefusedError, match="symlink|owned directory"):
+        build_cleanup_plan(tmp_path, run, evidence)
+    assert outside_file.read_text(encoding="utf-8") == "must survive"
+
+
+def test_clean_run_rechecks_parent_chain_before_unlink(tmp_path: Path) -> None:
+    run, evidence = _completed_run(tmp_path, "candidate-parent-swap")
+    candidate = run / "updates" / "payloads" / "learner-0" / "update.safetensors"
+    _write(candidate)
+    plan = build_cleanup_plan(tmp_path, run, evidence)
+    outside = tmp_path / "outside-swap"
+    outside.mkdir()
+    outside_file = outside / "learner-0" / "update.safetensors"
+    _write(outside_file, "must survive")
+    payloads = run / "updates" / "payloads"
+    original = run / "updates" / "payloads-original"
+    payloads.rename(original)
+    payloads.symlink_to(outside, target_is_directory=True)
+    manifest = tmp_path / "reports" / "DOING" / "plan" / "parent-swap.json"
+
+    with pytest.raises(CleanupRefusedError, match="symlink|owned directory|changed"):
+        execute_cleanup(plan, manifest)
+    assert outside_file.read_text(encoding="utf-8") == "must survive"
+    assert (original / "learner-0" / "update.safetensors").exists()

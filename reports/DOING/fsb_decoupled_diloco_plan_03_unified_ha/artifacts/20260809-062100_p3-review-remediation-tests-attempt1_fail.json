@@ -1,0 +1,21 @@
+{
+  "artifact_version": 1,
+  "errors": [
+    "Initializer retry compared an expected mode that the staged .identity did not yet persist; 9 initializer tests failed.",
+    "One terminal negative test expected the older generic final-update diagnostic; the new receipt-specific check fired first."
+  ],
+  "focused": {
+    "failed": 10,
+    "passed": 284,
+    "seconds": 9.39
+  },
+  "job_id": "2508967.opbs",
+  "phase": "P3-operational-robustness-review-remediation",
+  "status": "FAIL",
+  "validation": {
+    "bash_n": "PASS",
+    "checker_requirements": "PASS",
+    "ruff_check": "PASS",
+    "ruff_format": "PASS"
+  }
+}

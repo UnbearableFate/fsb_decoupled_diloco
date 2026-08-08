@@ -33,6 +33,18 @@ def test_actor_telemetry_claim_prevents_shared_attempt_append(tmp_path: Path) ->
     assert row["attempt_id"] == "attempt-1"
 
 
+def test_actor_telemetry_payload_cannot_override_frozen_actor_identity(tmp_path: Path) -> None:
+    writer = ActorTelemetryWriter(
+        tmp_path / "metrics/learner/learner-0/attempt-1.jsonl",
+        actor_kind="learner",
+        actor_id="learner-0",
+        attempt_id="attempt-1",
+    )
+
+    with pytest.raises(ValueError, match="reserved identity"):
+        writer.event("step", actor_id="different")
+
+
 def test_comparison_is_blocked_before_identity_and_never_clips_signed_delta() -> None:
     assert compare_workloads({})["comparison_status"] == "BLOCKED"
     identity = {field: f"identity-{field}" for field in MATCHED_FIELDS}

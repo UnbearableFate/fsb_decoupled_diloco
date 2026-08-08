@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from ..core.config import Config, resolve_config, write_resolved_config
+from ..core.config import Config, resolve_config, resolved_config_bytes, write_resolved_config
 from ..core.constants import DYNAMIC_SCHEMA_VERSION, HA_SCHEMA_VERSION, PROTOCOL_VERSION
 from ..storage.atomic_io import atomic_write_json, sha256_file
 from ..storage.artifact_policy import build_artifact_policy
@@ -59,18 +59,39 @@ def initialize_run(
     project_root = Path(project_root).resolve()
     final_root = Path(config.run.shared_root).resolve()
     final_paths = RunPaths(final_root)
+    expected_config_sha256 = hashlib.sha256(resolved_config_bytes(config)).hexdigest()
+    expected_mode = "full_dynamic" if config.membership.mode == "dynamic" else "full"
     if final_paths.run_complete_file.is_file():
         validate_completed_run(final_root)
         completed_staging = find_reserved_staging(final_root, allow_missing_owner=True)
         if completed_staging is not None:
             remove_completed_staging(final_root=final_root, staging_root=completed_staging)
         descriptor = json.loads(final_paths.run_descriptor_json.read_text(encoding="utf-8"))
-        if descriptor.get("run_id") != config.run.run_id:
-            raise FileExistsError("completed run root belongs to a different run identity")
+        expected_descriptor_identity = {
+            "run_id": config.run.run_id,
+            "shared_root": str(final_root),
+            "resolved_config_sha256": expected_config_sha256,
+            "source_fingerprint": config.run.source_fingerprint,
+            "git_commit": config.run.git_commit,
+            "git_dirty": config.run.git_dirty,
+            "mode": (
+                "full_ha_dynamic" if config.membership.mode == "dynamic" else "full_ha_static"
+            ),
+        }
+        mismatches = {
+            key: (descriptor.get(key), value)
+            for key, value in expected_descriptor_identity.items()
+            if descriptor.get(key) != value
+        }
+        if mismatches:
+            raise FileExistsError(
+                f"completed run root belongs to a different full config identity: {mismatches}"
+            )
         bootstrap = json.loads(final_paths.bootstrap_complete_json.read_text(encoding="utf-8"))
         return {"descriptor": descriptor, "bootstrap": bootstrap, "recovered": True}
     final_root.parent.mkdir(parents=True, exist_ok=True)
     staging_root = find_reserved_staging(final_root)
+    recovered = staging_root is not None
     if staging_root is None:
         if final_root.exists():
             raise FileExistsError("partial run root has no matching identity reservation")
@@ -88,11 +109,21 @@ def initialize_run(
         )
     else:
         identity = json.loads((staging_root / ".identity").read_text(encoding="utf-8"))
-        if (
-            identity.get("run_id") != config.run.run_id
-            or identity.get("source_fingerprint") != config.run.source_fingerprint
-        ):
-            raise FileExistsError("reserved staging root belongs to a different run identity")
+        expected_identity = {
+            "run_id": config.run.run_id,
+            "source_fingerprint": config.run.source_fingerprint,
+            "config_sha256": expected_config_sha256,
+            "mode": expected_mode,
+        }
+        mismatches = {
+            key: (identity.get(key), value)
+            for key, value in expected_identity.items()
+            if identity.get(key) != value
+        }
+        if mismatches:
+            raise FileExistsError(
+                f"reserved staging root belongs to a different full config identity: {mismatches}"
+            )
     publish_staged_run(
         final_root=final_root,
         staging_root=staging_root,
@@ -101,7 +132,7 @@ def initialize_run(
     remove_completed_staging(final_root=final_root, staging_root=staging_root)
     descriptor = json.loads(final_paths.run_descriptor_json.read_text(encoding="utf-8"))
     bootstrap = json.loads(final_paths.bootstrap_complete_json.read_text(encoding="utf-8"))
-    return {"descriptor": descriptor, "bootstrap": bootstrap, "recovered": True}
+    return {"descriptor": descriptor, "bootstrap": bootstrap, "recovered": recovered}
 
 
 def _populate_staging(
@@ -192,6 +223,7 @@ def _populate_staging(
             "run_id": config.run.run_id,
             "source_fingerprint": config.run.source_fingerprint,
             "config_sha256": config_sha256,
+            "mode": identity.mode,
             "logical_root": str(logical_root),
         },
     )

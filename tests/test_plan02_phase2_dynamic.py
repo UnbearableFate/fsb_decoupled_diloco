@@ -1243,6 +1243,66 @@ def test_launch_outbox_reconciles_qsub_windows_and_retains_scheduler_capacity(
         lease.close()
 
 
+def test_no_job_uncertainty_deadline_is_anchored_and_reserves_scale_capacity(
+    tmp_path: Path,
+) -> None:
+    paths, lease, _token, fenced, store = dynamic_store(tmp_path)
+    try:
+        initialize_membership(store, pool=2, bootstrap=0)
+        capacity_observation(store, key="no-job-low:1", now=100.0, eligible=0)
+        planned = capacity_observation(store, key="no-job-low:2", now=102.0, eligible=0)[
+            "launch_request"
+        ]
+        assert planned is not None
+        store.update_launch_request(
+            request_id=planned["request_id"],
+            expected_states={"planned"},
+            state="submitting",
+            observed_at=103.0,
+        )
+        scheduler = MockScheduler()
+        now = [106.0]
+        outbox = LearnerLaunchOutbox(
+            paths=paths,
+            config=SimpleNamespace(
+                scheduler_reconcile_interval_seconds=1.0,
+                scheduler_uncertainty_timeout_seconds=30.0,
+                learner_pbs_script="learner.pbs",
+                learner_walltime="00:01:00",
+            ),
+            scheduler=scheduler,
+            descriptor_sha256="descriptor",
+            wall_clock=lambda: now[0],
+        )
+        outbox.reconcile(store)
+        row = next(
+            item for item in store.launch_requests() if item["request_id"] == planned["request_id"]
+        )
+        assert row["state"] == "terminal_uncertain"
+        assert row["uncertainty_deadline"] == 136.0
+
+        blocked = capacity_observation(
+            store,
+            key="no-job-low:3",
+            now=1015.0,
+            eligible=0,
+            max_total_launch_requests=10,
+        )
+        assert blocked["launch_request"] is None
+        assert blocked["observation"]["reserved_launch_capacity"] == 1
+
+        now[0] = 137.0
+        outbox.reconcile(store)
+        row = next(
+            item for item in store.launch_requests() if item["request_id"] == planned["request_id"]
+        )
+        assert row["state"] == "manual_review"
+        assert row["reservation_released_at"] is None
+    finally:
+        fenced.close()
+        lease.close()
+
+
 def test_bootstrap_job_remains_reserved_until_scheduler_terminal(tmp_path: Path) -> None:
     paths, lease, _token, fenced, store = dynamic_store(tmp_path)
     try:

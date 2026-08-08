@@ -99,6 +99,64 @@ def test_crash_after_complete_is_visible_and_retry_removes_staging_alias(tmp_pat
     assert find_reserved_staging(final_root, allow_missing_owner=True) is None
 
 
+def test_fresh_initialization_is_not_reported_as_recovery(tmp_path: Path) -> None:
+    config = _config(tmp_path, "fresh-result")
+
+    assert initialize_run(config, project_root=tmp_path)["recovered"] is False
+
+
+def test_retry_and_completed_replay_bind_the_entire_resolved_config_identity(
+    tmp_path: Path,
+) -> None:
+    staged = _config(tmp_path, "staged-config-identity")
+
+    def crash(point: str) -> None:
+        if point == "after_identity_reservation":
+            raise InjectedCrash(point)
+
+    with pytest.raises(InjectedCrash):
+        initialize_run(staged, project_root=tmp_path, fault_hook=crash)
+    staged.data.revision = "different-dataset-revision"
+    with pytest.raises(FileExistsError, match="full config identity"):
+        initialize_run(staged, project_root=tmp_path)
+
+    completed = _config(tmp_path, "completed-config-identity")
+    initialize_run(completed, project_root=tmp_path)
+    completed.training.inner_steps += 1
+    with pytest.raises(FileExistsError, match="full config identity"):
+        initialize_run(completed, project_root=tmp_path)
+
+
+def test_descriptor_validation_is_bounded_and_accepts_runtime_control_publications(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path, "runtime-publications")
+    initialize_run(config, project_root=tmp_path)
+    paths = RunPaths(Path(config.run.shared_root))
+    for path in (
+        paths.latest_json,
+        paths.param_index_json,
+        paths.stop_json,
+        paths.summary_json,
+        paths.dynamic_close_request_json,
+        paths.bootstrap_scheduler_jobs_json,
+        paths.sqlite_db.with_name(paths.sqlite_db.name + "-journal"),
+    ):
+        path.write_text("{}\n", encoding="utf-8")
+    (paths.audit_batches / "history").mkdir(parents=True)
+    for index in range(20):
+        (paths.audit_batches / "history" / f"batch-{index}.json").write_text(
+            "{}\n", encoding="utf-8"
+        )
+
+    def forbidden_rglob(_self: Path, _pattern: str):
+        raise AssertionError("actor startup must not recursively scan the run root")
+
+    monkeypatch.setattr(Path, "rglob", forbidden_rglob)
+    loaded = load_run_descriptor(paths.shared_root)
+    assert loaded.descriptor["run_id"] == config.run.run_id
+
+
 def test_every_manifest_object_link_fault_is_invisible_and_retryable(tmp_path: Path) -> None:
     observed: list[str] = []
     probe = _config(tmp_path, "object-link-probe")

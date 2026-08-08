@@ -1,0 +1,26 @@
+{
+  "artifact_version": 1,
+  "errors": [
+    "A clean_run negative test expected the older authority-specific diagnostic; the new full-tree symlink guard rejected earlier.",
+    "The new no-job uncertainty test used a synthetic time after the launch TTL, so expiry correctly preceded uncertainty transition."
+  ],
+  "focused": {
+    "failed": 0,
+    "passed": 294,
+    "seconds": 10.42
+  },
+  "full": {
+    "failed": 2,
+    "passed": 806,
+    "seconds": 55.02
+  },
+  "job_id": "2508969.opbs",
+  "phase": "P3-operational-robustness-review-remediation",
+  "status": "FAIL",
+  "validation": {
+    "bash_n": "PASS",
+    "checker_requirements": "PASS",
+    "ruff_check": "PASS",
+    "ruff_format": "PASS"
+  }
+}

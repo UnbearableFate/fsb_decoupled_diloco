@@ -979,7 +979,13 @@ def resolve_config(
     return config
 
 
+def resolved_config_bytes(config: Config) -> bytes:
+    """Return the canonical bytes used by the immutable run snapshot."""
+
+    return yaml.safe_dump(config_to_dict(config), sort_keys=False).encode("utf-8")
+
+
 def write_resolved_config(config: Config, path: str | Path) -> None:
     from ..storage.atomic_io import atomic_write_text
 
-    atomic_write_text(path, yaml.safe_dump(config_to_dict(config), sort_keys=False))
+    atomic_write_text(path, resolved_config_bytes(config).decode("utf-8"))

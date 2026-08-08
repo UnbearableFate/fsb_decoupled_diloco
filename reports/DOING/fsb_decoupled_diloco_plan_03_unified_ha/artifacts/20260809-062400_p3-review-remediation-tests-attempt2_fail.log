@@ -1,0 +1,10 @@
+PBS job: 2508969.opbs
+Host: mg0006
+Queue/resources: debug-g, 1 node, 1 mpiprocs, walltime 00:10:00
+
+Static gates and focused suite passed (294 passed in 10.42s).
+Full suite: 806 passed, 2 failed in 55.02s.
+
+Both failures were test-contract defects, not implementation defects:
+- clean_run now rejects a symlinked authority DB during the earlier full-tree ownership scan, so the negative test must accept the stronger generic symlink diagnostic.
+- the no-job test advanced from an expiry at 122 to time 1003; expiry was therefore correct. Keep the test clock before TTL while crossing the separately anchored uncertainty deadline.

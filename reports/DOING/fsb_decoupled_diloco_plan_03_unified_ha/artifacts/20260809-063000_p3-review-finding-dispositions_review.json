@@ -1,0 +1,38 @@
+{
+  "artifact_version": 1,
+  "base_commit": "225db163ee5bbfbf16bba3d59e06c4fbd6d789f8",
+  "claude_runtime_policy_note": "Claude ran local CPU pytest/reproducers on the login node despite the repository policy. Those runtime observations are excluded as validation evidence; source-inspection findings remain reviewed and were independently covered by PBS tests.",
+  "codex": {
+    "C1": "fixed: clean_run inventories non-symlink parents and deletes through anchored dir_fd/O_NOFOLLOW; planning and parent-swap RED tests preserve outside data",
+    "H1": "fixed: audit cutoff is clamped below MAX(global_versions.version), preserves dependency closure, and a continuation test commits v2",
+    "H2": "fixed: staging and completed retries compare canonical resolved-config SHA plus mode/git/source/run identity",
+    "H3": "fixed: only open->closing creates a close snapshot; replay is command-idempotent and a second command cannot rewrite it",
+    "H4": "fixed: normal descriptor validation is bounded; recursive exact-entry scan is restricted to strict publication and explicit repair",
+    "L1": "fixed: telemetry rejects reserved identity keys and fsyncs new claim/log directory entries",
+    "M1": "fixed: no-job terminal_uncertain rows honor the original deadline before TTL expiry",
+    "M2": "fixed/clarified: P3 matrix now distinguishes primitive completion from P4 production wiring; PBS retains structured per-ID Checker output and Checker validates it"
+  },
+  "claude": {
+    "F-01": "fixed: bounded startup validation accepts explicit mutable control leaves/SQLite sidecars while preserving immutable hashes",
+    "F-02": "fixed: uncertainty deadline uses COALESCE(existing,new), so the first deadline wins",
+    "F-03": "fixed: scale/admission reservation accounting uses reservation_released_at tombstones instead of drifting state lists",
+    "F-04": "fixed: final ack validates proposal_expected and planned_update_id; missing promised proposals retain the hard-crash recovery path",
+    "F-05": "fixed: actor startup no longer recursively scans audit/telemetry/payload history",
+    "F-06": "plan-contract correction: P3 closes telemetry/accounting/cursor primitives; P4-MIGRATE owns every production runtime call site and shared-CSV removal",
+    "F-07": "fixed: golden test executes v4 selection/weight/merge/outer-optimizer math and compares the generated tensor bytes to P0",
+    "F-08": "fixed with a semantic guard: whole fenced_store hashing remains intentionally relaxed for planned implementation changes, while Checker now enforces reviewed deadline/reservation/no-job contracts and the mutator surface remains frozen",
+    "F-09": "partially accepted: requirement declarations remain ownership bindings, not a substitute for behavior tests; Checker now also requires structured per-ID PASS evidence and executable cross-file operational guards, while PBS runs the behavior suites",
+    "F-10": "fixed: clean_run fails closed when artifact policy is missing or invalid",
+    "F-11": "fixed: incompatible P3 authority DDL bumped independent AUTHORITY_SCHEMA_VERSION from 4 to 5 with explicit old-version rejection",
+    "F-12": "fixed: audit GC records claim epoch/time and a successor epoch can reclaim and finish a stranded claim",
+    "F-13": "fixed: fresh init returns recovered=false; genuine staged/completed recovery returns true",
+    "F-14": "fixed: removed duplicate streams.resume_cursor/last_receipt_id writes; contributor_progress remains the authority",
+    "F-15": "deferred-low to P4 operator tooling: resolution remains fail-closed and requires an expected-state digest; P4 must expose an authority-owned read-only digest command before production cutover",
+    "F-16": "accepted intentional operator override: only uncertainty states are eligible, immutable expected-state hash is the CAS fence, and the request/result is durably audited; code now states this distinction",
+    "F-17": "fixed: token fate transitions preserve an existing applied_version unless a new version is explicitly provided",
+    "F-18": "deferred-low to P4 operator tooling: the explicit repair API is implemented and tested; a user-facing dry-run CLI is required before production launcher migration",
+    "F-19": "fixed: unselected dropped updates are bounded by base_global_version and the safe archive cutoff"
+  },
+  "review_target": "de3d27879fdef188afa03a233acd4b40d90e5feb",
+  "status": "all-blocking-findings-remediated"
+}

@@ -15,6 +15,7 @@ from fs_diloco.storage.authority import (
     ddl_bundle_sha256,
     initialize_authority_v4,
 )
+from fs_diloco.core.versions import AUTHORITY_SCHEMA_VERSION
 
 
 def identity() -> AuthorityIdentity:
@@ -37,6 +38,8 @@ def test_fresh_v4_schema_initializes_reopens_and_is_integral(
         tables = set(authority.read.table_names())
         assert authority.read.integrity_check() == ("ok",)
         assert metadata.ddl_sha256 == ddl_bundle_sha256(metadata.mode)
+        assert AUTHORITY_SCHEMA_VERSION == 5
+        assert metadata.schema_version == 5
         assert ("learner_instances" in tables) is dynamic_expected
         assert "static_contributor_bindings" in tables
         assert "publication_intents" in tables
@@ -85,6 +88,20 @@ def test_v4_open_rejects_mode_identity_and_schema_feature_mismatch(tmp_path: Pat
     connection.close()
     with pytest.raises(AuthoritySchemaError, match="features"):
         LeaderAuthority(database, identity(), static)
+
+
+def test_pre_p3_authority_schema_revision_fails_with_explicit_version_diagnostic(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "authority.sqlite3"
+    scope = StaticMembershipScope(("learner-0",))
+    initialize_authority_v4(database, identity(), scope)
+    connection = sqlite3.connect(database)
+    connection.execute("PRAGMA user_version=4")
+    connection.close()
+
+    with pytest.raises(AuthoritySchemaError, match="user_version"):
+        LeaderAuthority(database, identity(), scope)
 
 
 def test_v4_open_detects_out_of_band_ddl_even_when_metadata_hash_is_unchanged(

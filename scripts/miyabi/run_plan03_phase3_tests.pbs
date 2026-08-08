@@ -83,7 +83,8 @@ PY
   --root "$PROJECT_ROOT" \
   --expect reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260808-223500_p0-runtime-surface-inventory_review.json \
   --verify-boundaries \
-  --verify-phase-requirements P3-operational-robustness
+  --verify-phase-requirements P3-operational-robustness \
+  --inventory-output "${PLAN03_CHECKER_OUTPUT:-$PROJECT_ROOT/reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/${PBS_JOBID//./_}_p3-requirements.json}"
 
 "$PYTHON_BIN" -m pytest -q \
   tests/protocol \

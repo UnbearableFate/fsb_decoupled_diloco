@@ -1,0 +1,33 @@
+{
+  "artifact_version": 1,
+  "errors": [],
+  "exit_status": 0,
+  "focused": {
+    "passed": 294,
+    "seconds": 10.35
+  },
+  "full": {
+    "passed": 808,
+    "seconds": 54.61
+  },
+  "host": "mg0006",
+  "job_id": "2508975.opbs",
+  "phase": "P3-operational-robustness-review-remediation",
+  "requirements_artifact": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-062900_p3-review-remediation-requirements_pass.json",
+  "requirements_artifact_sha256": "f5c39297cd2805bd009c65c678264091830c9f0cd03fdd5f4e9e141ead4c6570",
+  "resources": {
+    "elapsed": "00:01:14",
+    "nodes": 1,
+    "queue": "debug-g",
+    "requested_walltime": "00:10:00"
+  },
+  "root_log_sha256": "86e11240b8876191a2703ea64f952d3c08bb8f62a57bdb9ba46e602bbce1814d",
+  "status": "PASS",
+  "validation": {
+    "bash_n": "PASS",
+    "checker_requirements": "40/40 structured PASS",
+    "p3_operational_contracts": "PASS",
+    "ruff_check": "PASS",
+    "ruff_format": "40/40 PASS"
+  }
+}

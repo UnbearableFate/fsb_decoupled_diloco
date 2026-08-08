@@ -619,6 +619,89 @@ def test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens(
         assert leader.finalize_terminal(command_id="finalize", reason="done").value == "finalized"
 
 
+def test_terminal_close_snapshot_cannot_be_rewritten_by_a_second_command(
+    tmp_path: Path,
+) -> None:
+    clock = Clock()
+    with _open_static(tmp_path, clock) as authority:
+        leader = authority.open_leader(
+            authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
+        )
+        fence = StaticContributorFence.from_dict(_static_fence(leader))
+        leader.initialize_v0(
+            command_id="v0",
+            publication_id="publication-v0",
+            **publish_checkpoint_pair(tmp_path, version=0),
+        )
+        assert (
+            leader.begin_terminal_close(
+                command_id="close", reason="first reason", hard_crash_cycle_token_budget=8
+            ).value
+            == "closing"
+        )
+        assert (
+            leader.begin_terminal_close(
+                command_id="close", reason="first reason", hard_crash_cycle_token_budget=8
+            ).value
+            == "closing"
+        )
+        with pytest.raises(RuntimeError, match="already active"):
+            leader.begin_terminal_close(
+                command_id="rewrite-close",
+                reason="rewritten reason",
+                hard_crash_cycle_token_budget=0,
+            )
+        assert (
+            leader.acknowledge_terminal_contributor(
+                command_id="hard-crash",
+                fence=fence,
+                final_cycle_seq=None,
+                hard_crash_gap_tokens_upper_bound=8,
+            )
+            == "hard_crash"
+        )
+
+
+def test_terminal_ack_rejects_a_missing_proposal_promised_by_final_receipt(
+    tmp_path: Path,
+) -> None:
+    clock = Clock()
+    with _open_static(tmp_path, clock) as authority:
+        leader = authority.open_leader(
+            authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
+        )
+        fence_payload = _static_fence(leader)
+        fence = StaticContributorFence.from_dict(fence_payload)
+        receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence_payload))
+        leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
+        leader.initialize_v0(
+            command_id="v0",
+            publication_id="publication-v0",
+            **publish_checkpoint_pair(tmp_path, version=0),
+        )
+        leader.begin_terminal_close(
+            command_id="close", reason="target reached", hard_crash_cycle_token_budget=8
+        )
+
+        with pytest.raises(MembershipFenceError, match="promised a proposal"):
+            leader.acknowledge_terminal_contributor(
+                command_id="invalid-final-ack",
+                fence=fence,
+                final_cycle_seq=1,
+                final_update_id=None,
+            )
+        assert (
+            leader.acknowledge_terminal_contributor(
+                command_id="hard-crash-ack",
+                fence=fence,
+                final_cycle_seq=None,
+                hard_crash_gap_tokens_upper_bound=8,
+            )
+            == "hard_crash"
+        )
+        assert leader.finalize_terminal(command_id="finalize", reason="done").value == "finalized"
+
+
 def test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_update(
     tmp_path: Path,
 ) -> None:
@@ -879,13 +962,48 @@ def test_immutable_audit_batch_precedes_exact_history_prune_and_preserves_rollup
         assert path.stat().st_mode & 0o222 == 0
 
 
-def test_active_leader_compacts_audit_batches_before_exact_source_gc(tmp_path: Path) -> None:
+def test_audit_archive_never_prunes_latest_version_or_blocks_next_commit(tmp_path: Path) -> None:
     clock = Clock()
-    paths = RunPaths(tmp_path)
     with _open_static(tmp_path, clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
+        fence = _static_fence(leader)
+        leader.initialize_v0(
+            command_id="v0",
+            publication_id="publication-v0",
+            **publish_checkpoint_pair(tmp_path, version=0),
+        )
+        first, _ = _ingest_static_cycle(leader, tmp_path, fence, sequence=1, previous=None)
+        _commit_next(leader, tmp_path, version=1)
+        records = authority.read.audit_history_records(cutoff_version=1)
+        payload = build_audit_batch(
+            batch_id="archive-with-latest-cutoff",
+            record_kind="authority_history",
+            cutoff_version=1,
+            records=records,
+        )
+        path, digest = publish_audit_batch(RunPaths(tmp_path), payload)
+        leader.archive_audit_batch(
+            command_id="archive-with-latest-cutoff",
+            batch_id="archive-with-latest-cutoff",
+            cutoff_version=1,
+            relative_path=RunPaths(tmp_path).relative(path),
+            sha256=digest,
+        )
+
+        assert authority.read.latest_committed_version().version == 1
+        _ingest_static_cycle(leader, tmp_path, fence, sequence=2, previous=first)
+        _commit_next(leader, tmp_path, version=2)
+        assert authority.read.latest_committed_version().version == 2
+
+
+def test_active_leader_compacts_audit_batches_before_exact_source_gc(tmp_path: Path) -> None:
+    clock = Clock()
+    paths = RunPaths(tmp_path)
+    with _open_static(tmp_path, clock) as authority:
+        token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
+        leader = authority.open_leader(token)
         fence = _static_fence(leader)
         leader.initialize_v0(
             command_id="v0",
@@ -956,6 +1074,11 @@ def test_active_leader_compacts_audit_batches_before_exact_source_gc(tmp_path: P
             paths.relative(first_path),
             paths.relative(second_path),
         }
+        authority.release_leader(token)
+        leader = authority.open_leader(
+            authority.acquire_leader(owner_id="successor", hostname="host", pid=2)
+        )
+        assert leader.claim_audit_gc(command_id="reclaim-audit-gc") == claims
         for item in claims:
             delete_claimed_audit_batch_object(
                 paths,

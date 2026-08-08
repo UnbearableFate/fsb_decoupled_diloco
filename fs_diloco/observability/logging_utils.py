@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from ..storage.atomic_io import ensure_dir
+from ..storage.atomic_io import fsync_directory
 
 
 PLAN03_REQUIREMENTS = frozenset({"AUDIT-05"})
@@ -71,8 +72,13 @@ class ActorTelemetryWriter:
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
+        fsync_directory(self._claim_path.parent)
 
     def event(self, event_type: str, **payload: Any) -> None:
+        reserved = {"timestamp", "actor_kind", "actor_id", "attempt_id", "event_type"}
+        collision = sorted(reserved & set(payload))
+        if collision:
+            raise ValueError(f"telemetry payload overrides reserved identity fields: {collision}")
         row = {
             "timestamp": time.time(),
             "actor_kind": self.actor_kind,
@@ -81,10 +87,13 @@ class ActorTelemetryWriter:
             "event_type": event_type,
             **payload,
         }
+        existed = self.path.exists()
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
             handle.flush()
             os.fsync(handle.fileno())
+        if not existed:
+            fsync_directory(self.path.parent)
 
 
 def log_uncaught_exception(logger: JsonlLogger) -> None:

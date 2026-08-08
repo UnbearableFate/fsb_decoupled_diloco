@@ -1072,21 +1072,6 @@ class LeaderSession:
                     now,
                 ),
             )
-            if isinstance(receipt.contributor_fence, DynamicContributorFence):
-                connection.execute(
-                    """
-                    UPDATE streams SET resume_cursor=?, last_receipt_id=?, updated_at=?
-                    WHERE stream_id=? AND current_stream_epoch=? AND current_instance_id=?
-                    """,
-                    (
-                        receipt.data_cursor_end,
-                        receipt.receipt_id,
-                        now,
-                        receipt.contributor_fence.stream_id,
-                        receipt.contributor_fence.stream_epoch,
-                        receipt.contributor_fence.instance_id,
-                    ),
-                )
             connection.execute(
                 """
                 INSERT INTO token_fates(
@@ -1947,6 +1932,9 @@ class LeaderSession:
                 next_state = str(row["state"])
                 request_state = "stale_rejected"
             else:
+                # This is an explicit operator override, not an automatic scheduler
+                # transition.  The immutable expected-state hash is its CAS fence and
+                # scheduler_operator_requests is its durable audit trail.
                 if str(row["state"]) not in {
                     "submission_unknown",
                     "terminal_uncertain",
@@ -3224,18 +3212,25 @@ class LeaderSession:
             rows = connection.execute(
                 """
                 SELECT relative_path, sha256 FROM audit_gc_candidates
-                WHERE state='pending' ORDER BY relative_path LIMIT ?
+                WHERE state='pending'
+                   OR (state='claimed' AND claimed_by_epoch != ?)
+                ORDER BY relative_path LIMIT ?
                 """,
-                (limit,),
+                (self.token.epoch, limit),
             ).fetchall()
             result = [
                 {"relative_path": str(row["relative_path"]), "sha256": str(row["sha256"])}
                 for row in rows
             ]
+            now = float(self._authority._wall_clock())
             for item in result:
                 connection.execute(
-                    "UPDATE audit_gc_candidates SET state='claimed' WHERE relative_path=?",
-                    (item["relative_path"],),
+                    """
+                    UPDATE audit_gc_candidates
+                    SET state='claimed', claimed_by_epoch=?, claimed_at=?
+                    WHERE relative_path=?
+                    """,
+                    (self.token.epoch, now, item["relative_path"]),
                 )
             return {"candidates": result}
 
@@ -3265,9 +3260,9 @@ class LeaderSession:
                 cursor = connection.execute(
                     """
                     UPDATE audit_gc_candidates SET state='deleted', deleted_at=?
-                    WHERE relative_path=? AND state='claimed'
+                    WHERE relative_path=? AND state='claimed' AND claimed_by_epoch=?
                     """,
-                    (now, relative_path),
+                    (now, relative_path, self.token.epoch),
                 )
                 if cursor.rowcount != 1:
                     raise RuntimeError("audit GC candidate is not claimed")
@@ -3307,71 +3302,69 @@ class LeaderSession:
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
             row = connection.execute("SELECT * FROM controller_state WHERE singleton=1").fetchone()
             assert row is not None
-            if row["state"] not in {"open", "closing", "draining"}:
-                raise RuntimeError("authority is already terminal")
-            is_new_close = row["state"] == "open"
-            generation = int(row["generation"]) + (1 if is_new_close else 0)
+            if row["state"] != "open":
+                raise RuntimeError("terminal close is already active or authority is terminal")
+            generation = int(row["generation"]) + 1
             now = float(self._authority._wall_clock())
-            if is_new_close:
-                if isinstance(self._authority._scope, StaticMembershipScope):
-                    contributors = connection.execute(
-                        """
-                        SELECT b.learner_id AS stable_contributor_key, 'static' AS fence_kind,
-                            json_object(
-                                'kind', 'static', 'learner_id', b.learner_id,
-                                'logical_launch_id', b.logical_launch_id,
-                                'attempt_id', b.attempt_id,
-                                'binding_generation', b.binding_generation
-                            ) AS fence_json,
-                            COALESCE(p.last_cycle_seq, 0) AS last_cycle_seq,
-                            COALESCE(p.data_cursor, 0) AS data_cursor
-                        FROM static_contributor_bindings AS b
-                        LEFT JOIN contributor_progress AS p
-                            ON p.stable_contributor_key=b.learner_id
-                        WHERE b.status='active'
-                        ORDER BY b.learner_id
-                        """
-                    ).fetchall()
-                else:
-                    contributors = connection.execute(
-                        """
-                        SELECT CAST(i.stream_id AS TEXT) AS stable_contributor_key,
-                            'dynamic' AS fence_kind,
-                            json_object(
-                                'kind', 'dynamic', 'instance_id', i.instance_id,
-                                'placement_id', i.placement_id,
-                                'placement_epoch', i.placement_epoch,
-                                'stream_id', i.stream_id, 'stream_epoch', i.stream_epoch,
-                                'admission_generation', i.admission_generation,
-                                'admission_token_sha256', i.admission_token_sha256
-                            ) AS fence_json,
-                            COALESCE(p.last_cycle_seq, 0) AS last_cycle_seq,
-                            COALESCE(p.data_cursor, 0) AS data_cursor
-                        FROM learner_instances AS i
-                        LEFT JOIN contributor_progress AS p
-                            ON p.stable_contributor_key=CAST(i.stream_id AS TEXT)
-                        WHERE i.status IN ('admitted', 'draining')
-                        ORDER BY i.stream_id
-                        """
-                    ).fetchall()
-                for contributor in contributors:
-                    fence_payload = json.loads(str(contributor["fence_json"]))
-                    connection.execute(
-                        """
-                        INSERT INTO terminal_contributor_fences(
-                            generation, stable_contributor_key, fence_kind, fence_json,
-                            close_last_cycle_seq, close_data_cursor, state
-                        ) VALUES (?, ?, ?, ?, ?, ?, 'awaiting_ack')
-                        """,
-                        (
-                            generation,
-                            contributor["stable_contributor_key"],
-                            contributor["fence_kind"],
-                            _canonical_json(fence_payload),
-                            contributor["last_cycle_seq"],
-                            contributor["data_cursor"],
-                        ),
-                    )
+            if isinstance(self._authority._scope, StaticMembershipScope):
+                contributors = connection.execute(
+                    """
+                    SELECT b.learner_id AS stable_contributor_key, 'static' AS fence_kind,
+                        json_object(
+                            'kind', 'static', 'learner_id', b.learner_id,
+                            'logical_launch_id', b.logical_launch_id,
+                            'attempt_id', b.attempt_id,
+                            'binding_generation', b.binding_generation
+                        ) AS fence_json,
+                        COALESCE(p.last_cycle_seq, 0) AS last_cycle_seq,
+                        COALESCE(p.data_cursor, 0) AS data_cursor
+                    FROM static_contributor_bindings AS b
+                    LEFT JOIN contributor_progress AS p
+                        ON p.stable_contributor_key=b.learner_id
+                    WHERE b.status='active'
+                    ORDER BY b.learner_id
+                    """
+                ).fetchall()
+            else:
+                contributors = connection.execute(
+                    """
+                    SELECT CAST(i.stream_id AS TEXT) AS stable_contributor_key,
+                        'dynamic' AS fence_kind,
+                        json_object(
+                            'kind', 'dynamic', 'instance_id', i.instance_id,
+                            'placement_id', i.placement_id,
+                            'placement_epoch', i.placement_epoch,
+                            'stream_id', i.stream_id, 'stream_epoch', i.stream_epoch,
+                            'admission_generation', i.admission_generation,
+                            'admission_token_sha256', i.admission_token_sha256
+                        ) AS fence_json,
+                        COALESCE(p.last_cycle_seq, 0) AS last_cycle_seq,
+                        COALESCE(p.data_cursor, 0) AS data_cursor
+                    FROM learner_instances AS i
+                    LEFT JOIN contributor_progress AS p
+                        ON p.stable_contributor_key=CAST(i.stream_id AS TEXT)
+                    WHERE i.status IN ('admitted', 'draining')
+                    ORDER BY i.stream_id
+                    """
+                ).fetchall()
+            for contributor in contributors:
+                fence_payload = json.loads(str(contributor["fence_json"]))
+                connection.execute(
+                    """
+                    INSERT INTO terminal_contributor_fences(
+                        generation, stable_contributor_key, fence_kind, fence_json,
+                        close_last_cycle_seq, close_data_cursor, state
+                    ) VALUES (?, ?, ?, ?, ?, ?, 'awaiting_ack')
+                    """,
+                    (
+                        generation,
+                        contributor["stable_contributor_key"],
+                        contributor["fence_kind"],
+                        _canonical_json(fence_payload),
+                        contributor["last_cycle_seq"],
+                        contributor["data_cursor"],
+                    ),
+                )
             connection.execute(
                 """
                 UPDATE controller_state
@@ -3495,6 +3488,27 @@ class LeaderSession:
                 observed_sequence = 0 if progress is None else int(progress["last_cycle_seq"])
                 if observed_sequence != final_cycle_seq:
                     raise MembershipFenceError("final cycle receipt is not contiguous and ingested")
+                receipt = connection.execute(
+                    """
+                    SELECT proposal_expected, planned_update_id FROM cycle_receipts
+                    WHERE stable_contributor_key=? AND cycle_seq=?
+                    """,
+                    (fence.stable_contributor_key, final_cycle_seq),
+                ).fetchone()
+                if receipt is None:
+                    raise MembershipFenceError("final cycle receipt is missing")
+                proposal_expected = bool(receipt["proposal_expected"])
+                planned_update_id = receipt["planned_update_id"]
+                if proposal_expected and final_update_id is None:
+                    raise MembershipFenceError(
+                        "final receipt promised a proposal; acknowledge it or use hard-crash handling"
+                    )
+                if proposal_expected and final_update_id != planned_update_id:
+                    raise MembershipFenceError(
+                        "final update does not match the update planned by the final receipt"
+                    )
+                if not proposal_expected and final_update_id is not None:
+                    raise MembershipFenceError("final receipt did not declare a proposal")
                 if final_update_id is not None:
                     update = connection.execute(
                         "SELECT * FROM updates WHERE update_id=?", (final_update_id,)
@@ -4060,7 +4074,8 @@ class LeaderSession:
         )
         connection.execute(
             """
-            UPDATE token_fates SET direct_fate=?, fate_reason=?, applied_version=?,
+            UPDATE token_fates SET direct_fate=?, fate_reason=?,
+                applied_version=COALESCE(?, applied_version),
                 updated_by_epoch=?, updated_at=? WHERE receipt_id=?
             """,
             (fate, reason, applied_version, self.token.epoch, now, receipt_id),
@@ -4548,6 +4563,12 @@ def _audit_history_records(
 ) -> list[dict[str, Any]]:
     """Return the exact dependency-closed rows safe to remove through a cutoff."""
 
+    latest_row = connection.execute("SELECT MAX(version) FROM global_versions").fetchone()
+    latest_version = None if latest_row is None else latest_row[0]
+    safe_cutoff = (
+        -1 if latest_version is None else min(int(cutoff_version), int(latest_version) - 1)
+    )
+
     batch_rows = connection.execute(
         """
         SELECT b.* FROM selection_batches AS b
@@ -4560,7 +4581,7 @@ def _audit_history_records(
           )
         ORDER BY b.batch_id
         """,
-        (cutoff_version,),
+        (safe_cutoff,),
     ).fetchall()
     batch_ids = {str(row["batch_id"]) for row in batch_rows}
     publication_rows = connection.execute(
@@ -4569,7 +4590,7 @@ def _audit_history_records(
         WHERE target_version<=? AND state IN ('committed', 'abandoned')
         ORDER BY publication_id
         """,
-        (cutoff_version,),
+        (safe_cutoff,),
     ).fetchall()
     publication_rows = [
         row
@@ -4581,7 +4602,7 @@ def _audit_history_records(
         row
         for row in connection.execute(
             "SELECT * FROM global_versions WHERE version<=? ORDER BY version",
-            (cutoff_version,),
+            (safe_cutoff,),
         ).fetchall()
         if str(row["publication_id"]) in publication_ids
     ]
@@ -4600,7 +4621,10 @@ def _audit_history_records(
         if (row["selected_batch_id"] is not None and str(row["selected_batch_id"]) in batch_ids)
         or (
             row["selected_batch_id"] is None
-            and (row["applied_version"] is None or int(row["applied_version"]) <= cutoff_version)
+            and (
+                int(row["base_global_version"]) <= safe_cutoff
+                and (row["applied_version"] is None or int(row["applied_version"]) <= safe_cutoff)
+            )
         )
     ]
     receipt_ids = {str(row["cycle_receipt_id"]) for row in update_rows}

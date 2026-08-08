@@ -1,0 +1,18 @@
+PBS job: 2508967.opbs
+Host: mg0006
+Queue/resources: debug-g, 1 node, 1 mpiprocs, walltime 00:10:00
+
+Static gates:
+- Ruff check: PASS
+- Ruff format (40 scoped files): PASS
+- Plan03 boundary/40 requirement checker: PASS
+
+Focused pytest:
+- 284 passed, 10 failed in 9.39s
+- 9 failures shared one cause: retry expected `.identity.mode`, but the initializer had not persisted that field.
+- 1 failure was diagnostic ordering: a wrong final update now failed at the stronger receipt/planned-update check before the older generic update check.
+
+Disposition:
+- Persist the already-computed BootstrapIdentity mode in `.identity`.
+- Preserve distinct diagnostics for missing promised proposal versus a mismatched planned update.
+- No full-suite run occurred because the focused gate failed.

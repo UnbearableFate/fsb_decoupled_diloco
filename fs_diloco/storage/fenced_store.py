@@ -1222,24 +1222,14 @@ class FencedSQLiteStore:
                     """
                 ).fetchone()[0]
             )
-            reserved_states = (
-                "planned",
-                "submitting",
-                "submitted",
-                "started",
-                "external_submitted",
-                "submission_unknown",
-                "retryable",
-            )
-            placeholders = ",".join("?" for _ in reserved_states)
             reserved = int(
                 conn.execute(
-                    f"""
+                    """
                     SELECT COUNT(*) FROM launch_requests
-                    WHERE state IN ({placeholders}) AND admitted_instance_id IS NULL
+                    WHERE reservation_released_at IS NULL AND admitted_instance_id IS NULL
                       AND request_id != ?
                     """,
-                    (*reserved_states, launch_request_id),
+                    (launch_request_id,),
                 ).fetchone()[0]
             )
             if (
@@ -2165,23 +2155,12 @@ class FencedSQLiteStore:
                     "SELECT COALESCE(MAX(observation_seq), 0) + 1 FROM capacity_observations"
                 ).fetchone()[0]
             )
-            reserved_states = (
-                "planned",
-                "submitting",
-                "submitted",
-                "started",
-                "external_submitted",
-                "submission_unknown",
-                "retryable",
-            )
-            placeholders = ",".join("?" for _ in reserved_states)
             reserved = int(
                 conn.execute(
-                    f"""
+                    """
                     SELECT COUNT(*) FROM launch_requests
-                    WHERE state IN ({placeholders}) AND admitted_instance_id IS NULL
-                    """,
-                    reserved_states,
+                    WHERE reservation_released_at IS NULL AND admitted_instance_id IS NULL
+                    """
                 ).fetchone()[0]
             )
             instances = conn.execute(
@@ -2288,12 +2267,11 @@ class FencedSQLiteStore:
             active_count = len(instances)
             pending_scale = int(
                 conn.execute(
-                    f"""
+                    """
                     SELECT COUNT(*) FROM launch_requests
-                    WHERE reason='scale_out' AND state IN ({placeholders})
+                    WHERE reason='scale_out' AND reservation_released_at IS NULL
                       AND admitted_instance_id IS NULL
-                    """,
-                    reserved_states,
+                    """
                 ).fetchone()[0]
             )
             scale_count_row = conn.execute(
@@ -2505,7 +2483,7 @@ class FencedSQLiteStore:
                         THEN scheduler_observed_at ELSE ? END,
                     first_uncertain_at=COALESCE(first_uncertain_at, ?),
                     last_positive_evidence_at=COALESCE(?, last_positive_evidence_at),
-                    uncertainty_deadline=COALESCE(?, uncertainty_deadline),
+                    uncertainty_deadline=COALESCE(uncertainty_deadline, ?),
                     evidence_source=COALESCE(?, evidence_source),
                     manual_reason=COALESCE(?, manual_reason),
                     last_error=?,

@@ -25,6 +25,33 @@ from .schema_bootstrap import BootstrapIdentity, open_existing
 PLAN03_REQUIREMENTS = frozenset({"AUDIT-01", "ENV-01", "INIT-01"})
 
 
+_MUTABLE_SUBTREES = (
+    "audit",
+    "control/scheduler_operator_requests",
+    "control/syncer_epochs",
+    "control/syncer_launch_claims",
+    "control/registration_requests",
+    "eval_checkpoints",
+    "heartbeats",
+    "logs",
+    "metrics",
+    "optim",
+    "updates",
+    "weights",
+)
+_MUTABLE_FILES = (
+    "control/bootstrap_scheduler_jobs.json",
+    "control/dynamic_close_request.json",
+    "control/latest.json",
+    "control/param_index.json",
+    "control/stop.json",
+    "control/summary.json",
+    "control/syncer_metadata.sqlite3-journal",
+    "control/syncer_metadata.sqlite3-shm",
+    "control/syncer_metadata.sqlite3-wal",
+)
+
+
 FaultHook = Callable[[str], None]
 
 
@@ -94,24 +121,12 @@ def build_complete_manifest(staging_root: Path, *, logical_root: Path) -> dict[s
             }
         )
     manifest: dict[str, Any] = {
-        "format_version": 1,
+        "format_version": 2,
         "logical_root": str(logical_root),
         "directories": directories,
         "objects": objects,
-        "mutable_prefixes": [
-            "audit",
-            "control/scheduler_operator_requests",
-            "control/syncer_epochs",
-            "control/syncer_launch_claims",
-            "control/registration_requests",
-            "eval_checkpoints",
-            "heartbeats",
-            "logs",
-            "metrics",
-            "optim",
-            "updates",
-            "weights",
-        ],
+        "mutable_prefixes": list(_MUTABLE_SUBTREES),
+        "mutable_files": list(_MUTABLE_FILES),
     }
     manifest["manifest_sha256"] = hashlib.sha256(canonical_json_bytes(manifest)).hexdigest()
     return manifest
@@ -262,32 +277,14 @@ def _validate_completed_run(
                 or sha256_file(target) != entry["sha256"]
             ):
                 raise RuntimeError(f"manifest object checksum mismatch: {relative}")
-    actual_files: set[str] = set()
-    actual_dirs: set[str] = set()
-    for path in final_root.rglob("*"):
-        relative = path.relative_to(final_root).as_posix()
-        metadata = path.lstat()
-        if stat.S_ISLNK(metadata.st_mode):
-            raise RuntimeError(f"run root contains a protocol-forbidden symlink: {relative}")
-        if stat.S_ISDIR(metadata.st_mode):
-            actual_dirs.add(relative)
-        elif stat.S_ISREG(metadata.st_mode):
-            actual_files.add(relative)
-        else:
-            raise RuntimeError(f"run root contains a protocol-forbidden entry: {relative}")
+    for relative in expected_dirs:
+        metadata = (final_root / relative).lstat()
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise RuntimeError(f"manifest directory is not a non-symlink directory: {relative}")
     if strict_initial:
+        actual_files, actual_dirs = _scan_run_entries(final_root)
         if actual_files != expected_files or actual_dirs != expected_dirs:
             raise RuntimeError("initial run root contains entries outside the complete manifest")
-    else:
-        extras = (actual_files - expected_files) | (actual_dirs - expected_dirs)
-        prefixes = tuple(str(item).rstrip("/") for item in manifest["mutable_prefixes"])
-        forbidden = sorted(
-            item
-            for item in extras
-            if not any(item == prefix or item.startswith(prefix + "/") for prefix in prefixes)
-        )
-        if forbidden:
-            raise RuntimeError(f"run root contains protocol-external entries: {forbidden}")
     _validate_completed_protocol_identity(final_root)
     return manifest
 
@@ -299,11 +296,30 @@ def repair_identity_reservation(final_root: Path) -> Path:
         raise FileExistsError("identity reservation already exists")
     # Validate every immutable object and the complete protocol entry set
     # without relying on the missing sibling reservation.
-    _validate_completed_run(
+    manifest = _validate_completed_run(
         final_root,
         strict_initial=False,
         require_reservation=False,
     )
+    actual_files, actual_dirs = _scan_run_entries(final_root)
+    expected_files = {".complete", ".identity"} | {
+        str(entry["relative_path"]) for entry in manifest["objects"]
+    }
+    expected_dirs = set(manifest["directories"])
+    mutable_subtrees = tuple(str(item) for item in manifest["mutable_prefixes"])
+    mutable_files = set(str(item) for item in manifest["mutable_files"])
+    extras = (actual_files - expected_files) | (actual_dirs - expected_dirs)
+    forbidden = sorted(
+        item
+        for item in extras
+        if item not in mutable_files
+        and not _is_atomic_temporary(item, mutable_files)
+        and not any(item == prefix or item.startswith(prefix + "/") for prefix in mutable_subtrees)
+    )
+    wrong_mutable_types = sorted(item for item in mutable_files if item in actual_dirs)
+    if forbidden or wrong_mutable_types:
+        details = forbidden + wrong_mutable_types
+        raise RuntimeError(f"run root contains protocol-external entries: {details}")
     identity = final_root / ".identity"
     os.link(identity, reservation, follow_symlinks=False)
     fsync_directory(final_root.parent)
@@ -349,15 +365,16 @@ def _validate_manifest_self_hash(manifest: dict[str, Any]) -> None:
 
 
 def _validate_manifest_structure(manifest: dict[str, Any]) -> None:
-    if manifest.get("format_version") != 1:
+    if manifest.get("format_version") != 2:
         raise RuntimeError("unsupported complete manifest version")
     directories = manifest.get("directories")
     objects = manifest.get("objects")
     mutable_prefixes = manifest.get("mutable_prefixes")
+    mutable_files = manifest.get("mutable_files")
     if not isinstance(directories, list) or not isinstance(objects, list):
         raise RuntimeError("complete manifest directories/objects must be lists")
-    if not isinstance(mutable_prefixes, list):
-        raise RuntimeError("complete manifest mutable prefixes must be a list")
+    if not isinstance(mutable_prefixes, list) or not isinstance(mutable_files, list):
+        raise RuntimeError("complete manifest mutable paths must be lists")
     directory_names = [_canonical_relative_path(item) for item in directories]
     object_names: list[str] = []
     for entry in objects:
@@ -383,11 +400,14 @@ def _validate_manifest_structure(manifest: dict[str, Any]) -> None:
             raise RuntimeError("complete manifest object metadata is invalid")
         object_names.append(relative)
     prefix_names = [_canonical_relative_path(item) for item in mutable_prefixes]
+    mutable_file_names = [_canonical_relative_path(item) for item in mutable_files]
     if (
         len(set(directory_names)) != len(directory_names)
         or len(set(object_names)) != len(object_names)
         or len(set(prefix_names)) != len(prefix_names)
+        or len(set(mutable_file_names)) != len(mutable_file_names)
         or set(directory_names) & set(object_names)
+        or set(prefix_names) & set(mutable_file_names)
     ):
         raise RuntimeError("complete manifest paths must be unique and type-consistent")
     declared_directories = set(directory_names)
@@ -397,6 +417,33 @@ def _validate_manifest_structure(manifest: dict[str, Any]) -> None:
             if parent.as_posix() not in declared_directories:
                 raise RuntimeError("complete manifest omits a required parent directory")
             parent = parent.parent
+
+
+def _scan_run_entries(root: Path) -> tuple[set[str], set[str]]:
+    files: set[str] = set()
+    directories: set[str] = set()
+    for path in root.rglob("*"):
+        relative = path.relative_to(root).as_posix()
+        metadata = path.lstat()
+        if stat.S_ISLNK(metadata.st_mode):
+            raise RuntimeError(f"run root contains a protocol-forbidden symlink: {relative}")
+        if stat.S_ISDIR(metadata.st_mode):
+            directories.add(relative)
+        elif stat.S_ISREG(metadata.st_mode):
+            files.add(relative)
+        else:
+            raise RuntimeError(f"run root contains a protocol-forbidden entry: {relative}")
+    return files, directories
+
+
+def _is_atomic_temporary(relative: str, mutable_files: set[str]) -> bool:
+    path = PurePosixPath(relative)
+    return any(
+        path.parent == PurePosixPath(target).parent
+        and path.name.startswith(f".{PurePosixPath(target).name}.")
+        and path.name.endswith(".tmp")
+        for target in mutable_files
+    )
 
 
 def _canonical_relative_path(value: Any) -> str:

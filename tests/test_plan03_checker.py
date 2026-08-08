@@ -12,6 +12,7 @@ from scripts.miyabi.check_plan03 import (
     verify_boundaries,
     verify_inventory,
     verify_phase_requirements,
+    verify_p3_operational_contracts,
     verify_tracked_evidence,
 )
 
@@ -119,6 +120,10 @@ def test_plan03_boundary_allows_p3_store_implementation_but_not_mutator_surface_
     assert verify_boundaries(mutator_drift, expected) == ["inventory.bound_mutators"]
 
 
+def test_plan03_checker_guards_reviewed_cross_file_operational_contracts() -> None:
+    assert verify_p3_operational_contracts(ROOT) == []
+
+
 def test_plan03_completed_candidate_evidence_is_tracked_and_matches_contract() -> None:
     matrix = (
         ROOT / "plans/DOING/plans/fsb_decoupled_diloco_plan_03_unified_ha-requirement-matrix.csv"
@@ -207,6 +212,7 @@ def test_plan03_p3_requirement_checker_binds_implementation_tests_and_evidence()
     assert differences == []
     assert checks
     assert all(item["status"] == "PASS" for item in checks.values())
+    assert all(item["structured_evidence_paths"] for item in checks.values())
 
 
 def test_plan03_triage_finding_ids_are_all_bound_to_matrix_requirements() -> None:

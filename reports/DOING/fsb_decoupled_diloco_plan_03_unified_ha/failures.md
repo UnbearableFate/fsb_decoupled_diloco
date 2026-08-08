@@ -313,3 +313,17 @@
 - Confirmed cause: test migration omission. The actual behavior is P3's required H-07 fix and the focused regression already proves it: no positive scheduler record starts bounded uncertainty and preserves the anti-duplicate tombstone. Restoring either old expectation would reintroduce SCHED-02/SCHED-05 violations.
 - Evidence: original complete `fsdiloco_plan03_p3.o2508858`; retained diagnosis `artifacts/20260809-042637_p3-compute-validation-attempt4_fail.log`.
 - Next modification/falsification: change only the stale assertions to use an injected mutable wall clock; require `terminal_uncertain` plus no release before deadline, then `manual_review` plus no release after deadline. Rerun the identical focused+full gate. No production outbox logic changes are indicated by this failure.
+
+## 2026-08-09 06:21 JST — P3 review-remediation validation attempt 1
+
+- PBS job `2508967.opbs` on `mg0006`; Ruff/format/structured 40-requirement Checker passed, focused suite `284 passed, 10 failed in 9.39s`.
+- Nine failures had one initializer cause: retry compared `.identity.mode`, but the staging identity did not yet persist the already-computed `BootstrapIdentity.mode`. The remaining failure was a diagnostic-order assertion after the stronger receipt/planned-update check.
+- Fix: persist mode in `.identity`; distinguish missing promised proposal from mismatched planned update. Full suite did not run.
+- Evidence: `artifacts/20260809-062100_p3-review-remediation-tests-attempt1_fail.{json,log}`.
+
+## 2026-08-09 06:24 JST — P3 review-remediation validation attempt 2
+
+- PBS job `2508969.opbs` on `mg0006`; focused suite passed `294/294`; full suite `806 passed, 2 failed in 55.02s`.
+- Both failures were test-contract defects: clean_run rejected a symlink earlier with the new full-tree ownership guard, and the no-job uncertainty fixture advanced beyond launch TTL before asking for uncertainty transition.
+- Fix: accept the stronger fail-closed diagnostic and keep the synthetic clock before TTL while crossing the independently anchored uncertainty deadline.
+- Evidence: `artifacts/20260809-062400_p3-review-remediation-tests-attempt2_fail.{json,log}`. Attempt 3 then passed; consecutive count reset.

@@ -385,17 +385,77 @@ def verify_phase_requirements(
             missing = [item for item in evidence_paths if not (root / item).exists()]
             if missing:
                 requirement_differences.extend(f"missing-evidence:{item}" for item in missing)
+        structured_evidence: list[str] = []
+        for item in evidence_paths:
+            path = root / item
+            if path.suffix != ".json" or not path.is_file():
+                continue
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            requirement_payload = (
+                payload.get("checks", {}).get("requirements", {}).get(requirement, {})
+                if isinstance(payload, dict)
+                else {}
+            )
+            if (
+                isinstance(requirement_payload, dict)
+                and requirement_payload.get("status") == "PASS"
+            ):
+                structured_evidence.append(item)
+        if row["artifact_contract"].startswith("checker requirements.") and not structured_evidence:
+            requirement_differences.append("structured-checker-evidence")
         checks[requirement] = {
             "status": "PASS" if not requirement_differences else "BLOCKED",
             "implementation_owners": implementation_owners,
             "test_owners": test_owners,
             "evidence_paths": evidence_paths,
+            "structured_evidence_paths": structured_evidence,
             "differences": requirement_differences,
         }
         differences.extend(
             f"requirements.{requirement}.{difference}" for difference in requirement_differences
         )
     return checks, differences
+
+
+def verify_p3_operational_contracts(root: Path) -> list[str]:
+    """Guard the cross-file scheduler/initializer invariants found during P3 review."""
+
+    differences: list[str] = []
+    fenced_store = (root / "fs_diloco/storage/fenced_store.py").read_text(encoding="utf-8")
+    launch_outbox = (root / "fs_diloco/runtime/launch_outbox.py").read_text(encoding="utf-8")
+    initializer = (root / "fs_diloco/storage/run_initializer.py").read_text(encoding="utf-8")
+    schema = (root / "fs_diloco/storage/schema_v4.sql").read_text(encoding="utf-8")
+    if "uncertainty_deadline=COALESCE(uncertainty_deadline, ?)" not in fenced_store:
+        differences.append("scheduler.deadline-not-first-write-wins")
+    if fenced_store.count("reservation_released_at IS NULL") < 3:
+        differences.append("scheduler.reservation-accounting-not-tombstone-based")
+    if 'if state == "terminal_uncertain":' not in launch_outbox:
+        differences.append("scheduler.no-job-deadline-path-missing")
+    validator = ast.parse(initializer, filename="fs_diloco/storage/run_initializer.py")
+    validate_function = next(
+        (
+            node
+            for node in validator.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_validate_completed_run"
+        ),
+        None,
+    )
+    if validate_function is None:
+        differences.append("initializer.validator-missing")
+    else:
+        recursive_scans = [
+            node
+            for node in ast.walk(validate_function)
+            if isinstance(node, ast.Attribute) and node.attr == "rglob"
+        ]
+        if recursive_scans:
+            differences.append("initializer.startup-recursive-scan")
+    if "claimed_by_epoch INTEGER" not in schema or "claimed_at REAL" not in schema:
+        differences.append("audit.gc-claim-ownership-missing")
+    return differences
 
 
 def verify_tracked_evidence(root: Path, matrix_path: Path) -> list[str]:
@@ -510,6 +570,13 @@ def main() -> None:
                 )
                 checks["requirements"] = requirement_checks
                 differences.extend(requirement_differences)
+                if args.verify_phase_requirements == "P3-operational-robustness":
+                    operational_differences = verify_p3_operational_contracts(root)
+                    checks["p3_operational_contracts"] = {"differences": operational_differences}
+                    differences.extend(
+                        f"p3_operational_contracts.{difference}"
+                        for difference in operational_differences
+                    )
             payload["status"] = "PASS" if not differences else "BLOCKED"
             payload["differences"] = differences
             payload["checks"] = checks
