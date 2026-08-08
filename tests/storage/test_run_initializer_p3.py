@@ -172,6 +172,21 @@ def test_completed_descriptor_rejects_identity_mode_mismatch(tmp_path: Path) -> 
     identity_path.chmod(0o644)
     identity_path.write_text(json.dumps(identity, sort_keys=True) + "\n", encoding="utf-8")
     identity_path.chmod(0o444)
+    complete_path = RunPaths(Path(config.run.shared_root)).run_complete_file
+    complete = read_json(complete_path)
+    identity_entry = next(
+        entry for entry in complete["objects"] if entry["relative_path"] == ".identity"
+    )
+    identity_entry["size_bytes"] = identity_path.stat().st_size
+    identity_entry["sha256"] = hashlib.sha256(identity_path.read_bytes()).hexdigest()
+    complete["manifest_sha256"] = hashlib.sha256(
+        initializer_module.canonical_json_bytes(
+            {key: value for key, value in complete.items() if key != "manifest_sha256"}
+        )
+    ).hexdigest()
+    complete_path.chmod(0o644)
+    complete_path.write_text(json.dumps(complete, sort_keys=True) + "\n", encoding="utf-8")
+    complete_path.chmod(0o444)
 
     with pytest.raises(RuntimeError, match="run identity does not match descriptor.*mode"):
         load_run_descriptor(config.run.shared_root)

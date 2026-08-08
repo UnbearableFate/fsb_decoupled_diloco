@@ -327,3 +327,10 @@
 - Both failures were test-contract defects: clean_run rejected a symlink earlier with the new full-tree ownership guard, and the no-job uncertainty fixture advanced beyond launch TTL before asking for uncertainty transition.
 - Fix: accept the stronger fail-closed diagnostic and keep the synthetic clock before TTL while crossing the independently anchored uncertainty deadline.
 - Evidence: `artifacts/20260809-062400_p3-review-remediation-tests-attempt2_fail.{json,log}`. Attempt 3 then passed; consecutive count reset.
+
+## 2026-08-09 07:10 JST — P3 incremental-remediation validation attempt 1
+
+- PBS job `2509023.opbs` on `mg0005`; Ruff、40-file format、frozen/current boundary和P3 cross-file operational checks均通过，focused suite为`294 passed, 2 failed in 10.73s`，full suite未运行。
+- 第一项是operator-release RED在`submitted`状态直接请求`mark_failed`，而协议只允许operator override处理`submission_unknown/terminal_uncertain/manual_review`；修复fixture为positive evidence后再次进入独立uncertainty episode、越过新deadline到manual_review，再应用terminal disposition并核对reservation release。
+- 第二项identity-mode RED只重写`.identity`，因此更早的complete-manifest object hash正确fail closed；修复fixture同时重签外层immutable complete manifest，使测试精确到达descriptor-derived mode与identity mode交叉检查，production validator不放宽。
+- Evidence：`artifacts/20260809-071013_p3-incremental-remediation-tests-attempt1_fail.{json,log}`；pre-test operational checker artifact为`artifacts/20260809-070955_p3-remediation-requirements_review.json`。

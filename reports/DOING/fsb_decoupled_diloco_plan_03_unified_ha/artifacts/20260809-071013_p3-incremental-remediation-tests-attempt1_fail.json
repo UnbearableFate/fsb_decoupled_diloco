@@ -1,0 +1,33 @@
+{
+  "artifact_version": 1,
+  "errors": [
+    {
+      "cause": "The operator-release test attempted a terminal disposition from submitted instead of first returning the request to terminal_uncertain/manual_review.",
+      "test": "tests/storage/test_authority_p3_operational.py::test_scheduler_operator_request_is_expected_state_cas_and_audited"
+    },
+    {
+      "cause": "The identity-mode RED changed .identity without updating the enclosing immutable completion manifest, so the earlier manifest checksum guard correctly failed first.",
+      "test": "tests/storage/test_run_initializer_p3.py::test_completed_descriptor_rejects_identity_mode_mismatch"
+    }
+  ],
+  "exit_status": 1,
+  "focused": {
+    "failed": 2,
+    "passed": 294,
+    "seconds": 10.73
+  },
+  "host": "mg0005",
+  "job_id": "2509023.opbs",
+  "phase": "P3-operational-robustness-incremental-remediation",
+  "requirements_artifact": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-070955_p3-remediation-requirements_review.json",
+  "requirements_artifact_sha256": "0786648c41c7e1a97ebe3fec2b6cfd5be282c4e3c6d47c61cffdf6bf692c303f",
+  "resources": {
+    "elapsed": "00:00:19",
+    "nodes": 1,
+    "queue": "debug-g",
+    "requested_walltime": "00:10:00"
+  },
+  "root_log_sha256": "c192307b4032b90993671f98381c1ecc7341ce6372677e787ace652a215a2e4d",
+  "source_commit": "6a000c20993c2afae643acf45a73759eb880b201",
+  "status": "FAIL"
+}

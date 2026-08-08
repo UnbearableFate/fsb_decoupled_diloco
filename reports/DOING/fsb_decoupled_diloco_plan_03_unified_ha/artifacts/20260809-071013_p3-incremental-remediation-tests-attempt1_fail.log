@@ -1,0 +1,212 @@
+Currently Loaded Modulefiles:
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9
+
+Key:
+(symbolic-version)
+mg0005
+PBS_JOBID=2509023.opbs
+python=3.13.13
+platform=Linux-5.14.0-427.13.1.el9_4.aarch64+64k-aarch64-with-glibc2.34
+hypothesis=6.165.2
+pytest=9.1.1
+torch=2.13.0+cu132
+All checks passed!
+40 files already formatted
+PASS
+........................................................................ [ 24%]
+.....F.................................................................. [ 48%]
+..................................F..................................... [ 72%]
+........................................................................ [ 97%]
+........                                                                 [100%]
+=================================== FAILURES ===================================
+______ test_scheduler_operator_request_is_expected_state_cas_and_audited _______
+
+tmp_path = PosixPath('/tmp/2509023.4746/pytest-of-x10041/pytest-0/test_scheduler_operator_reques0')
+
+    def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: Path) -> None:
+        clock = Clock()
+        with _open_static(tmp_path, clock) as authority:
+            leader = authority.open_leader(
+                authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
+            )
+            row = leader.record_candidate_launch_request(
+                command_id="record-launch",
+                request_id="candidate-request-1",
+                observation_key="heartbeat-1",
+                request_sha256="a" * 64,
+            )
+            with pytest.raises(ValueError, match="invalid scheduler transition"):
+                leader.transition_candidate_launch_request(
+                    command_id="invalid-direct-admit",
+                    request_id=row["request_id"],
+                    expected_state="planned",
+                    state="admitted",
+                    evidence_source="invalid",
+                )
+            submitting = leader.transition_candidate_launch_request(
+                command_id="submitting",
+                request_id=row["request_id"],
+                expected_state="planned",
+                state="submitting",
+                evidence_source="qsub_started",
+            )
+            with pytest.raises(ValueError, match="persistent timeout"):
+                leader.transition_candidate_launch_request(
+                    command_id="missing-deadline",
+                    request_id=submitting["request_id"],
+                    expected_state="submitting",
+                    state="submission_unknown",
+                    evidence_source="qsub_receipt_missing",
+                )
+            unknown = leader.transition_candidate_launch_request(
+                command_id="submission-unknown",
+                request_id=submitting["request_id"],
+                expected_state="submitting",
+                state="submission_unknown",
+                evidence_source="qsub_receipt_missing",
+                uncertainty_timeout_seconds=30.0,
+            )
+            uncertain = leader.transition_candidate_launch_request(
+                command_id="uncertain",
+                request_id=unknown["request_id"],
+                expected_state="submission_unknown",
+                state="terminal_uncertain",
+                evidence_source="live+historical:no_record",
+                uncertainty_timeout_seconds=30.0,
+            )
+            request = SchedulerOperatorRequest(
+                format_version=1,
+                request_id="scheduler-op-1",
+                launch_request_id=row["request_id"],
+                action=SchedulerOperatorAction.CONFIRM_JOB_ID,
+                expected_state_sha256=scheduler_state_sha256(uncertain),
+                reason="operator found accounting receipt",
+                created_at=101.0,
+                scheduler_job_id="123.opbs",
+                evidence_source="accounting_record",
+            )
+            applied = leader.apply_scheduler_operator_request(
+                command_id="apply-operator", operator_request=request
+            )
+            assert applied["request_state"] == "applied"
+            assert applied["launch_state"] == "submitted"
+
+            with sqlite3.connect(tmp_path / "authority.sqlite3") as connection:
+                connection.row_factory = sqlite3.Row
+                submitted = dict(
+                    connection.execute(
+                        "SELECT * FROM candidate_launch_outbox WHERE request_id=?",
+                        (row["request_id"],),
+                    ).fetchone()
+                )
+            assert submitted["first_uncertain_at"] is None
+            assert submitted["uncertainty_deadline"] is None
+            assert submitted["reservation_released_at"] is None
+
+            stale = SchedulerOperatorRequest(
+                format_version=1,
+                request_id="scheduler-op-stale",
+                launch_request_id=row["request_id"],
+                action=SchedulerOperatorAction.MARK_FAILED,
+                expected_state_sha256="f" * 64,
+                reason="stale view",
+                created_at=102.0,
+            )
+            rejected = leader.apply_scheduler_operator_request(
+                command_id="apply-stale", operator_request=stale
+            )
+            assert rejected["request_state"] == "stale_rejected"
+            assert rejected["launch_state"] == "submitted"
+
+            failed_request = SchedulerOperatorRequest(
+                format_version=1,
+                request_id="scheduler-op-failed",
+                launch_request_id=row["request_id"],
+                action=SchedulerOperatorAction.MARK_FAILED,
+                expected_state_sha256=scheduler_state_sha256(submitted),
+                reason="operator confirmed terminal failure",
+                created_at=102.0,
+            )
+>           failed = leader.apply_scheduler_operator_request(
+                command_id="apply-failed", operator_request=failed_request
+            )
+
+tests/storage/test_authority_p3_operational.py:909:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+fs_diloco/storage/authority.py:2047: in apply_scheduler_operator_request
+    return self._command(command_id, "apply_scheduler_operator_request", request, operation)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+fs_diloco/storage/authority.py:4529: in _command
+    result = operation(connection)
+             ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <sqlite3.Connection object at 0x40015f9417b0>
+
+    def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+        table = "candidate_launch_outbox"
+        row = connection.execute(
+            "SELECT * FROM candidate_launch_outbox WHERE request_id=?",
+            (operator_request.launch_request_id,),
+        ).fetchone()
+        job_column = "scheduler_job_id"
+        if row is None and isinstance(self._authority._scope, DynamicMembershipScope):
+            table = "launch_requests"
+            row = connection.execute(
+                "SELECT * FROM launch_requests WHERE request_id=?",
+                (operator_request.launch_request_id,),
+            ).fetchone()
+            job_column = "pbs_job_id"
+        if row is None:
+            raise RuntimeError("operator request names an unknown launch request")
+        state_row = dict(row)
+        state_row["pbs_job_id"] = row[job_column]
+        actual_state_sha = scheduler_state_sha256(state_row)
+        stale = actual_state_sha != operator_request.expected_state_sha256
+        now = float(self._authority._wall_clock())
+        if stale:
+            next_state = str(row["state"])
+            request_state = "stale_rejected"
+        else:
+            # This is an explicit operator override, not an automatic scheduler
+            # transition.  The immutable expected-state hash is its CAS fence and
+            # scheduler_operator_requests is its durable audit trail.
+            if str(row["state"]) not in {
+                "submission_unknown",
+                "terminal_uncertain",
+                "manual_review",
+            }:
+>               raise RuntimeError("operator request can only resolve scheduler uncertainty")
+E               RuntimeError: operator request can only resolve scheduler uncertainty
+
+fs_diloco/storage/authority.py:1952: RuntimeError
+___________ test_completed_descriptor_rejects_identity_mode_mismatch ___________
+
+tmp_path = PosixPath('/tmp/2509023.4746/pytest-of-x10041/pytest-0/test_completed_descriptor_reje0')
+
+    def test_completed_descriptor_rejects_identity_mode_mismatch(tmp_path: Path) -> None:
+        config = _config(tmp_path, "identity-mode-mismatch")
+        initialize_run(config, project_root=tmp_path)
+        identity_path = RunPaths(Path(config.run.shared_root)).run_identity_file
+        identity = read_json(identity_path)
+        identity["mode"] = "full_dynamic"
+        content = {key: value for key, value in identity.items() if key != "identity_sha256"}
+        identity["identity_sha256"] = hashlib.sha256(
+            initializer_module.canonical_json_bytes(content)
+        ).hexdigest()
+        identity_path.chmod(0o644)
+        identity_path.write_text(json.dumps(identity, sort_keys=True) + "\n", encoding="utf-8")
+        identity_path.chmod(0o444)
+
+>       with pytest.raises(RuntimeError, match="run identity does not match descriptor.*mode"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'run identity does not match descriptor.*mode'
+E         Actual message: 'manifest object checksum mismatch: .identity'
+
+tests/storage/test_run_initializer_p3.py:176: AssertionError
+=========================== short test summary info ============================
+FAILED tests/storage/test_authority_p3_operational.py::test_scheduler_operator_request_is_expected_state_cas_and_audited
+FAILED tests/storage/test_run_initializer_p3.py::test_completed_descriptor_rejects_identity_mode_mismatch
+2 failed, 294 passed in 10.73s
+[ERROR] Failed at line 96
