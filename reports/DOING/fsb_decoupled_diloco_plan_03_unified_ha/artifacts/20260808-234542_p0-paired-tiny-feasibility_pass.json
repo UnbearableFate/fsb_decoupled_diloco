@@ -1,0 +1,449 @@
+{
+  "artifact_version": 1,
+  "bootstrap_upper_95": -0.029021139289915215,
+  "classic_seconds": [
+    6.674915623036213,
+    6.675259483978152,
+    6.625051376991905,
+    6.77515677199699,
+    6.875323190004565
+  ],
+  "experiment_id": "p0-paired-tiny-feasibility",
+  "host": "mg0013",
+  "median_overhead": -0.06559130762725988,
+  "method": {
+    "arm_order": "AB/BA alternating, starting with classic on even pair indices",
+    "bootstrap_samples": 10000,
+    "bootstrap_seed": 20260808,
+    "margin": 0.1,
+    "pairs": 5,
+    "prewarm": "one unmeasured fresh-root arm per mode",
+    "timer_anchor": "before any arm-specific initialization through all three actor clean exits"
+  },
+  "noninferiority_pass_is_not_a_p0_gate": true,
+  "pbs_job_id": "2508425.opbs",
+  "scratch_removed": true,
+  "signed_overheads": [
+    -0.029021139289915215,
+    -0.06667844928556532,
+    -0.04447538762194434,
+    -0.06559130762725988,
+    -0.09407431332019874
+  ],
+  "source_identity": {
+    "git_commit": "1563e34d8ae582d46e629f6f8bf419e084318043",
+    "git_dirty": true,
+    "source_fingerprint": "sha256:ddfd59a98d579b607ecf2366fec3b461441e45806c4b475ca2ddb93da5089ede"
+  },
+  "static_ha_seconds": [
+    6.481201966991648,
+    6.230163533007726,
+    6.330399648984894,
+    6.330765379942022,
+    6.228531882050447
+  ],
+  "status": "FEASIBLE",
+  "trials": [
+    {
+      "arm": "classic",
+      "elapsed_seconds": 11.580627961899154,
+      "pair": -1,
+      "process_logs_cleaned": true,
+      "processes": [
+        {
+          "returncode": 0,
+          "role": "syncer"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_000"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_001"
+        }
+      ],
+      "run_root_cleaned": true,
+      "timing": {
+        "actor_process_seconds": 11.58062741800677,
+        "pre_actor_initialization_seconds": 5.438923835754395e-07
+      },
+      "warmup": true,
+      "workload": {
+        "final_version": 2,
+        "integrity": [
+          "ok"
+        ],
+        "total_seen_tokens": 256
+      }
+    },
+    {
+      "arm": "static_ha",
+      "elapsed_seconds": 6.183695929008536,
+      "pair": -1,
+      "process_logs_cleaned": true,
+      "processes": [
+        {
+          "returncode": 0,
+          "role": "syncer"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_000"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_001"
+        }
+      ],
+      "run_root_cleaned": true,
+      "timing": {
+        "actor_process_seconds": 6.024463253095746,
+        "pre_actor_initialization_seconds": 0.15923267591279
+      },
+      "warmup": true,
+      "workload": {
+        "final_version": 2,
+        "integrity": [
+          "ok"
+        ],
+        "total_seen_tokens": 256
+      }
+    },
+    {
+      "arm": "classic",
+      "elapsed_seconds": 6.674915623036213,
+      "pair": 0,
+      "process_logs_cleaned": true,
+      "processes": [
+        {
+          "returncode": 0,
+          "role": "syncer"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_000"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_001"
+        }
+      ],
+      "run_root_cleaned": true,
+      "timing": {
+        "actor_process_seconds": 6.674915399053134,
+        "pre_actor_initialization_seconds": 2.2398307919502258e-07
+      },
+      "warmup": false,
+      "workload": {
+        "final_version": 2,
+        "integrity": [
+          "ok"
+        ],
+        "total_seen_tokens": 256
+      }
+    },
+    {
+      "arm": "static_ha",
+      "elapsed_seconds": 6.481201966991648,
+      "pair": 0,
+      "process_logs_cleaned": true,
+      "processes": [
+        {
+          "returncode": 0,
+          "role": "syncer"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_000"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_001"
+        }
+      ],
+      "run_root_cleaned": true,
+      "timing": {
+        "actor_process_seconds": 6.324880433967337,
+        "pre_actor_initialization_seconds": 0.15632153302431107
+      },
+      "warmup": false,
+      "workload": {
+        "final_version": 2,
+        "integrity": [
+          "ok"
+        ],
+        "total_seen_tokens": 256
+      }
+    },
+    {
+      "arm": "static_ha",
+      "elapsed_seconds": 6.230163533007726,
+      "pair": 1,
+      "process_logs_cleaned": true,
+      "processes": [
+        {
+          "returncode": 0,
+          "role": "syncer"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_000"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_001"
+        }
+      ],
+      "run_root_cleaned": true,
+      "timing": {
+        "actor_process_seconds": 6.074314928962849,
+        "pre_actor_initialization_seconds": 0.155848604044877
+      },
+      "warmup": false,
+      "workload": {
+        "final_version": 2,
+        "integrity": [
+          "ok"
+        ],
+        "total_seen_tokens": 256
+      }
+    },
+    {
+      "arm": "classic",
+      "elapsed_seconds": 6.675259483978152,
+      "pair": 1,
+      "process_logs_cleaned": true,
+      "processes": [
+        {
+          "returncode": 0,
+          "role": "syncer"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_000"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_001"
+        }
+      ],
+      "run_root_cleaned": true,
+      "timing": {
+        "actor_process_seconds": 6.675259259995073,
+        "pre_actor_initialization_seconds": 2.2398307919502258e-07
+      },
+      "warmup": false,
+      "workload": {
+        "final_version": 2,
+        "integrity": [
+          "ok"
+        ],
+        "total_seen_tokens": 256
+      }
+    },
+    {
+      "arm": "classic",
+      "elapsed_seconds": 6.625051376991905,
+      "pair": 2,
+      "process_logs_cleaned": true,
+      "processes": [
+        {
+          "returncode": 0,
+          "role": "syncer"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_000"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_001"
+        }
+      ],
+      "run_root_cleaned": true,
+      "timing": {
+        "actor_process_seconds": 6.625051025068387,
+        "pre_actor_initialization_seconds": 3.5192351788282394e-07
+      },
+      "warmup": false,
+      "workload": {
+        "final_version": 2,
+        "integrity": [
+          "ok"
+        ],
+        "total_seen_tokens": 256
+      }
+    },
+    {
+      "arm": "static_ha",
+      "elapsed_seconds": 6.330399648984894,
+      "pair": 2,
+      "process_logs_cleaned": true,
+      "processes": [
+        {
+          "returncode": 0,
+          "role": "syncer"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_000"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_001"
+        }
+      ],
+      "run_root_cleaned": true,
+      "timing": {
+        "actor_process_seconds": 6.174337796983309,
+        "pre_actor_initialization_seconds": 0.15606185200158507
+      },
+      "warmup": false,
+      "workload": {
+        "final_version": 2,
+        "integrity": [
+          "ok"
+        ],
+        "total_seen_tokens": 256
+      }
+    },
+    {
+      "arm": "static_ha",
+      "elapsed_seconds": 6.330765379942022,
+      "pair": 3,
+      "process_logs_cleaned": true,
+      "processes": [
+        {
+          "returncode": 0,
+          "role": "syncer"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_000"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_001"
+        }
+      ],
+      "run_root_cleaned": true,
+      "timing": {
+        "actor_process_seconds": 6.174871206982061,
+        "pre_actor_initialization_seconds": 0.155894172959961
+      },
+      "warmup": false,
+      "workload": {
+        "final_version": 2,
+        "integrity": [
+          "ok"
+        ],
+        "total_seen_tokens": 256
+      }
+    },
+    {
+      "arm": "classic",
+      "elapsed_seconds": 6.77515677199699,
+      "pair": 3,
+      "process_logs_cleaned": true,
+      "processes": [
+        {
+          "returncode": 0,
+          "role": "syncer"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_000"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_001"
+        }
+      ],
+      "run_root_cleaned": true,
+      "timing": {
+        "actor_process_seconds": 6.775156356045045,
+        "pre_actor_initialization_seconds": 4.159519448876381e-07
+      },
+      "warmup": false,
+      "workload": {
+        "final_version": 2,
+        "integrity": [
+          "ok"
+        ],
+        "total_seen_tokens": 256
+      }
+    },
+    {
+      "arm": "classic",
+      "elapsed_seconds": 6.875323190004565,
+      "pair": 4,
+      "process_logs_cleaned": true,
+      "processes": [
+        {
+          "returncode": 0,
+          "role": "syncer"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_000"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_001"
+        }
+      ],
+      "run_root_cleaned": true,
+      "timing": {
+        "actor_process_seconds": 6.875322837964632,
+        "pre_actor_initialization_seconds": 3.520399332046509e-07
+      },
+      "warmup": false,
+      "workload": {
+        "final_version": 2,
+        "integrity": [
+          "ok"
+        ],
+        "total_seen_tokens": 256
+      }
+    },
+    {
+      "arm": "static_ha",
+      "elapsed_seconds": 6.228531882050447,
+      "pair": 4,
+      "process_logs_cleaned": true,
+      "processes": [
+        {
+          "returncode": 0,
+          "role": "syncer"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_000"
+        },
+        {
+          "returncode": 0,
+          "role": "learner_001"
+        }
+      ],
+      "run_root_cleaned": true,
+      "timing": {
+        "actor_process_seconds": 6.074305649031885,
+        "pre_actor_initialization_seconds": 0.1542262330185622
+      },
+      "warmup": false,
+      "workload": {
+        "final_version": 2,
+        "integrity": [
+          "ok"
+        ],
+        "total_seen_tokens": 256
+      }
+    }
+  ],
+  "workload_equivalent": true,
+  "workload_signature": {
+    "final_version": 2,
+    "total_seen_tokens": 256
+  }
+}

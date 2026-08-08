@@ -635,7 +635,7 @@ dynamic key 是 `stream_id`，static key 是 `learner_id`。选出 subset 后按
 - **AUDIT-04**：recovery hot set经rollup/archive/prune后有界；immutable audit batch/partition可线性增长，但不参与启动/discovery扫描。
 - **AUDIT-05**：telemetry文件是single-writer/per-actor；不存在多进程共享CSV append，离线export不反写authority。
 - **CLOCK-01**：进程内 elapsed timeout 用 monotonic；跨进程 lease/scheduler deadline 用 wall clock并声明 skew。
-- **INIT-01**：正式 shared FS 已在 P0 证明不支持 directory `RENAME_NOREPLACE`。initializer 必须用 same-parent staging + exclusive `mkdir(final)` identity reservation，逐对象 hard-link create-no-replace、fsync，再最后发布 create-no-replace `.complete` marker；reader 只承认 identity/hash完整的 marker，因而半初始化 final directory 不可见且既有 final 不能被覆盖。
+- **INIT-01**：正式 shared FS 已在 P0 证明不支持 directory `RENAME_NOREPLACE`。initializer 必须先把 staging 中的 identity object hard-link create-no-replace到 final同parent的sibling reservation并fsync parent，再exclusive `mkdir(final)`，逐对象按manifest SHA-256 hard-link/fsync，最后发布create-no-replace `.complete` hashed manifest；reader只承认reservation/identity/object hash全部匹配的marker，因而半初始化 final directory 不可见且既有 final 不能被覆盖。
 - **ENV-01**：descriptor 冻结 source/lock/model/tokenizer/dataset revision；actor runtime attestation 可核验。
 - **LEGACY-01**：旧 run reader query-only，production runtime 不能 import legacy writer/DDL。
 - **BASE-01**：torch DDP/periodic-average config语义、sharding、optimizer schedule和正式PBS行为不因本计划改变；共享schema marker更新不算协议变化。
@@ -662,8 +662,8 @@ P0中的pytest、FS probe和性能标定属于runtime/实验工作，执行时�
 7. 对 9 High + 15 Medium + 10 architecture + 6 docs 共 40 条 finding 写 triage JSON：`reproduced / rejected-with-evidence / deferred-with-justification`。
 8. 建立 `tests/support/`：virtual clock、fault tape、tmp authority、fake PBS、deterministic IDs。
 9. 增加 dev 依赖 `hypothesis`、`pytest-timeout` 和 pytest marker；不做全仓格式化。pyright 只在 P0 证明选定新模块零 baseline error 后才可加为辅助门禁。
-10. 冻结性能方法：paired 2-learner tiny workload、交替/随机化arm顺序、相同timer anchor、signed delta、10% margin、固定seed的one-sided 95% paired-bootstrap upper bound。先做5 pairs；不足以判定时每批加5、最多20 pairs。P0只测噪声/可行性，不能依据observed effect改变margin、CI方法或上限。
-11. 在正式shared filesystem的临时目录探测same-directory hard-link/create-no-replace、directory no-replace rename、dir-fd/openat(O_NOFOLLOW)、parent-directory fsync和SQLite DELETE-journal lock行为；只操作`mktemp -d`得到的精确路径。P0 实测 directory `RENAME_NOREPLACE` 返回 `EINVAL`，因此冻结为：exclusive `mkdir(final)` 预留 identity，逐对象 hard-link 后 fsync，最后 hard-link create-no-replace 发布 `.complete` marker；逐 crash prefix、重试和 collision 必须证明半成品对 reader 不可见且不能覆盖别的 identity。其他原语仍须通过；禁止静默退化为覆盖写。
+10. 冻结性能方法：paired 2-learner tiny workload、交替/随机化arm顺序、signed delta、10% margin、固定seed的one-sided 95% paired-bootstrap upper bound。主timer从fresh run root尚未初始化、任何arm-specific initializer尚未执行的共同起点开始，到全部actor clean exit结束；不得把candidate-only bootstrap排除在timer外。先做5 pairs；不足以判定时每批加5、最多20 pairs。P0只测噪声/可行性，不能依据observed effect改变margin、CI方法或上限。主门禁保留end-to-end总时长；G10同时报告由authority lifecycle event界定的secondary active-protocol duration，作为启动开销稀释的诊断项但不替代主门禁。
+11. 在正式shared filesystem的临时目录探测same-directory hard-link/create-no-replace、directory no-replace rename、dir-fd/openat(O_NOFOLLOW)、parent-directory fsync和SQLite DELETE-journal lock行为；只操作`mktemp -d`得到的精确路径。P0 实测 directory `RENAME_NOREPLACE` 返回 `EINVAL`，因此冻结为：先将staging identity hard-link create-no-replace到final同parent的sibling reservation并fsync parent，再exclusive `mkdir(final)`；逐对象按complete manifest中的SHA-256 hard-link并fsync，最后hard-link create-no-replace发布 `.complete` hashed manifest。逐reservation/mkdir/object-link/fsync/marker crash prefix、重试和collision必须证明半成品对reader不可见、同identity可恢复且不能认领预先存在或不同identity的final。其他原语仍须通过；禁止静默退化为覆盖写。
 12. 冻结§3.5 maintenance retention起点、推导公式和G6测量口径；后续不得根据10k结果放宽阈值。
 
 ### 5.2 四个必须动态判定的 finding
@@ -854,7 +854,7 @@ planned → submitting → submission_unknown → submitted → started
 
 - process elapsed timeout 统一用 injected monotonic clock；lease/scheduler persistent deadline继续用 wall clock，并在 SQLite lock 后重新采样；
 - terminal close artifact冻结每个current contributor fence；learner最多完成当前cycle并在drain ack声明final cycle sequence/update ID。drain只接受这些pre-close fence的contiguous receipt和matching final proposal，超出声明或来自new/stale attempt的一律拒绝；hard-crash contributor按per-incarnation gap上界终结；
-- initializer 在与 final root 同 parent/mount 的 `<run>.staging.<uuid>` 完成全部文件/DB/marker/fsync并关闭SQLite handle；descriptor 中写 final logical path而不是 staging path。发布时 exclusive `mkdir(final)` 并先写入 create-no-replace identity reservation；把 staging 中每个 immutable object以 hard-link create-no-replace装入 final，fsync相应目录，最后以同目录 hard-link create-no-replace发布 `.complete` marker并fsync parent。reader在marker前视final为不存在；marker后重新加载descriptor/DB并核对reservation、manifest hash和logical path。retry只允许恢复同identity且未complete的reservation，其他collision fail closed；失败可留下可解释的 reserved partial final 和非权威 staging，但不能覆盖或暴露半初始化run；
+- initializer 在与 final root 同 parent/mount 的 `<run>.staging.<uuid>` 完成全部文件/DB/identity/hashed complete manifest并逐项fsync，关闭SQLite handle；descriptor 中写 final logical path而不是 staging path。发布时先把staging identity hard-link create-no-replace到 `<final-parent>/.<final-name>.identity-reservation` 并fsync parent，以该sibling object原子绑定identity；再exclusive `mkdir(final)` 并fsync parent，把staging中每个immutable object按manifest SHA-256以hard-link create-no-replace装入final、逐项fsync，最后hard-link create-no-replace发布 `.complete` manifest并再次fsync final/parent。reader在marker前视final为不存在；marker后重新加载descriptor/DB并核对sibling reservation、in-directory identity、全部object hash和logical path。retry只允许恢复已有matching reservation且未complete的final；新建reservation时发现final已存在、reservation不匹配、对象hash冲突或非regular/symlink collision均fail closed；失败可留下可解释的reserved partial final和非权威staging，但不能覆盖或暴露半初始化run；
 - cycle receipt、terminal observation、token fate和旧version metadata先写`audit/batches/<kind>/<batch_id>` immutable create-no-replace object并fsync，再在一个fenced transaction中更新`archive_batches`/cumulative rollup并prune hot rows。同batch ID若hash相同视为retry，不同则fail closed；不再多进程append共享archive文件。只有active leader的fenced maintenance可把已closed batch objects压成immutable partition + hashed manifest；manifest commit并重新验hash后才可GC已被完全覆盖的source batches。generic cleanup无此权限。较老DB batch rows折叠为manifest cursor；analysis仍按record kind/primary key去重；
 - runtime telemetry改为`metrics/<actor-kind>/<actor-id>/<attempt-id>.jsonl`等per-actor single-writer文件；共享CSV只由离线export生成到显式输出目录，不能由多个learner append；CSV/W&B仍非权威；
 - initializer 发布 versioned artifact policy；DB只逐项登记 correctness-relevant publication，不能要求 learner 为每个 telemetry 文件写 authority row；
@@ -1204,12 +1204,12 @@ G8/G9 两个 9-node job覆盖正式 static/dynamic、FP32/BF16和超过 50×10 �
 
 ### 11.11 G10：paired performance/comparability
 
-classic 在冻结 tag的独立 worktree/venv/run root运行；两臂不共享DB/run目录。使用2 learners tiny workload，arm顺序按P0预注册方案交替/随机化；先5 paired repeats，无法判定时以5为一批增加到最多20，超过上限仍不确定则INCONCLUSIVE。优先在少量长allocation内顺序执行多pair，每个arm使用fresh run root；共同model/dataset cache在timer前按同一规则prewarm，不执行privileged system-cache drop。timer不包含PBS排队，allocation/启动差异仍单独报告。
+classic 在冻结 tag的独立 worktree/venv/run root运行；两臂不共享DB/run目录。使用2 learners tiny workload，arm顺序按P0预注册方案交替/随机化；先5 paired repeats，无法判定时以5为一批增加到最多20，超过上限仍不确定则INCONCLUSIVE。优先在少量长allocation内顺序执行多pair，每个arm使用fresh run root；共同model/dataset cache在timer前按同一规则prewarm，不执行privileged system-cache drop。主timer从run root不存在且任何arm-specific initializer尚未运行的共同起点开始，到该arm全部actor clean exit；candidate-only init/bootstrap必须计时。timer不包含PBS排队，allocation/启动差异仍单独报告。另以authority lifecycle events报告secondary active-protocol duration，诊断进程启动稀释但不替代end-to-end主门禁。
 
 两组性能比较都关闭failure injection和mid-cycle replace；否则旧classic token含义不能与v4一一映射，直接INCOMPARABLE。硬门禁：
 
 - workload equivalence=PASS；
-- raw signed delta、paired values、timer anchor和CI完整；
+- raw signed delta、paired values、共同timer anchor、secondary active-protocol duration和CI完整；
 - paired median absolute delta >20% 时 INCOMPARABLE并审计workload，不得PASS；
 - clipping不存在。
 
@@ -1255,7 +1255,7 @@ BLOCKED
 | M-01/M-12 | P3 | monotonic process clock + post-lock wall sample |
 | M-02/M-03 | P3 | reject fake streaming + indexed durable cursor |
 | M-04 | P2 | full UUID + create-if-absent |
-| M-05 | P0/P3 | shared-FS fallback：same-parent staging + exclusive final reservation + hard-linked immutable objects + create-no-replace complete marker + post-complete self-check |
+| M-05 | P0/P3 | shared-FS fallback：same-parent staging + parent-sibling hard-linked identity reservation + exclusive final mkdir + manifest-hashed hard-linked objects + create-no-replace complete manifest + post-complete self-check |
 | M-06/M-07 | P3/P5 | archive dedup；telemetry非权威/单writer或per-process |
 | M-08/M-09 | P1 | config validator + fresh schema constraints |
 | M-10 | P3 | stable authority service credit |

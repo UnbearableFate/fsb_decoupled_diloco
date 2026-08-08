@@ -1,0 +1,50 @@
+{
+  "artifact_version": 1,
+  "experiment_id": "p0-performance-method-remediation",
+  "status": "PREREGISTERED",
+  "recorded_at": "2026-08-08T23:30:06+09:00",
+  "review_target": "1563e34d8ae582d46e629f6f8bf419e084318043",
+  "supersedes_timer_anchor_only": "20260808-223000_p0-performance-method_review.json",
+  "reason": "phase review proved the former anchor excluded candidate-only initialization; this corrects a comparability defect before P1 and does not use the observed effect to change margin, CI, seed, batching or cap",
+  "primary_timer": {
+    "start": "fresh run root does not exist and no arm-specific initializer has executed",
+    "stop": "syncer and both learners have cleanly exited",
+    "includes_candidate_only_init": true,
+    "includes_process_startup": true,
+    "excludes_pbs_queue_time": true
+  },
+  "workload_equivalence": {
+    "signature": ["final_version", "total_seen_tokens"],
+    "required_pairs": 5,
+    "one_exact_trial_per_pair_arm": true,
+    "mismatch_disposition": "BLOCKED_BEFORE_STATISTIC"
+  },
+  "pairing": {
+    "initial_pairs": 5,
+    "increment_pairs": 5,
+    "maximum_pairs": 20,
+    "arm_order": "AB/BA alternating, classic first on even pair indices",
+    "bootstrap_seed": 20260808
+  },
+  "statistic": {
+    "signed_overhead": "(candidate_seconds-baseline_seconds)/baseline_seconds",
+    "median_margin": 0.1,
+    "confidence_method": "one-sided 95% paired-bootstrap upper bound of paired median",
+    "bootstrap_samples": 10000,
+    "pass_condition": "median <= 0.10 and upper_95 <= 0.10",
+    "negative_deltas_are_not_clipped": true
+  },
+  "process_io": {
+    "stdout_stderr": "per-actor temporary files",
+    "pipe_deadlock_possible": false,
+    "successful_scratch_retention": "structured summary and output tails only"
+  },
+  "secondary_diagnostic": {
+    "metric": "authority-lifecycle active-protocol duration",
+    "required_by": "P6 G10 checker",
+    "owner": "scripts/miyabi/check_plan03.py P6 performance mode",
+    "gate_role": "diagnostic only; primary non-inferiority remains end-to-end"
+  },
+  "formal_g10_requires_clean_source": true,
+  "p0_dirty_feasibility_is_not_formal_g10": true
+}

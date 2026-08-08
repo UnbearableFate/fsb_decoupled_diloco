@@ -21,6 +21,8 @@ logs/
 .cache
 .ruff_cache
 **/artifacts
+!reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/
+!reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/**
 # macOS Finder metadata
 .DS_Store
 wandb

@@ -20,6 +20,12 @@
 - checkpoint 组从目标 descriptor 重建相同 config/model/training seed/tensor/dtype,在同一 filesystem 上交替执行 100 个 Plan 01 legacy publication 与 100 个 HA publication 样本。输出包含 run/descriptor/source/config identity、原始块证据、nearest-rank p99、冻结阈值、tensor 元素数和 digest mode。
 - 两组都使用 `observability.phase1_performance` 冻结的 `baseline p99 × 1.25 + 0.002s` 上限;任一采样、observer 活动、只读约束、identity 或 p99 条件失败即返回 `BLOCKED`。`main` 用原子 JSON 写入 `--output`,只有整体 `PASS` 时退出 0。
 
+## `tools/paired_performance.py`
+
+- `paired_noninferiority(baseline_seconds,candidate_seconds,...)` 先要求两臂长度相同、非空，且每个 duration 都是有限正数；signed delta 固定为 `(candidate-baseline)/baseline`，负值不 clip。
+- 返回每个 paired delta、median、固定 seed 10,000 次 bootstrap 得到的 one-sided 95% upper 和 10% margin；只有 median 与 upper 都不超过 margin 时 `passes=true`。输入长度、margin、bootstrap 数量或 duration 非法时在统计前 `ValueError`。
+- Plan 03 P0/G10 以 fresh run 尚未初始化前为共同主 timer anchor；candidate-only initializer 必须计入 end-to-end 时间。authority lifecycle 界定的 active-protocol duration 是另行报告的诊断量，不替代主门禁。
+
 ## Phase 2 launch 与 evidence 工具
 
 - `launch_phase2_acceptance.submit_jobs()` 提交 G8/G9 crash leader、后继者、独立 dynamic bootstrap、可选 duplicate 和 chaos checker。每次 qsub 后立即原子更新 pending receipt,并逐 slot 重写 identity-bound bootstrap scheduler manifest;中途失败返回 partial 且不自动 qdel。

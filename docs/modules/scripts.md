@@ -23,6 +23,15 @@
 - **`_atomic_write(path, content)`** — 同目录 `mkstemp`、flush + file `fsync`、`os.replace`,失败删 temp;不 fsync 父目录。
 - **`main()`** — 必需 project root、JSON 输出和 env 输出。env 写入/导出 `FS_DILOCO_GIT_COMMIT`、`FS_DILOCO_GIT_DIRTY`、`FS_DILOCO_SOURCE_FINGERPRINT`、`FS_DILOCO_REQUIRE_SOURCE_IDENTITY=1`;stdout 只打印前三个值的 JSON。
 
+## Plan 03 P0 freeze/check 工具
+
+- **`miyabi/check_plan03.py`** — 以 Git ref 而不是当前脏 worktree 重建 tracked source/tests/config/PBS/schema、fragment/baseline 迁移边界、42 个 bound mutator、archive tag target 和逐文件 SHA-256。无 `--expect` 时状态为 `INVENTORY`；`--expect <frozen.json>` 按 artifact 中的 source commit 逐项核对，任一 count/list/hash/tag 漂移输出 `BLOCKED` 并非零退出。YAML 由 `safe_load` 解析；不存在的 historical control/recursive anchor 直接阻塞。
+- **`miyabi/plan03_fs_capability.py`** — 只在 `--shared-parent` 下精确临时目录探测 hard-link create-no-replace、directory `RENAME_NOREPLACE`、dir-fd/O_NOFOLLOW、parent fsync 和 SQLite DELETE writer contention。directory no-replace 不支持时验证 parent-sibling identity reservation、exclusive final mkdir、manifest SHA-256 对象 hard-link 和 last complete manifest 的每个 pre-visibility crash prefix、retry 与 collision；临时目录在 `finally` 清理。
+- **`miyabi/plan03_p0_performance.py`** — 在 PBS allocation 内顺序运行 2-learner classic/static-HA fresh-root warmup 和 5 个 paired trial；共同 timer 在任何 arm-specific init 前开始，进程 stdout 写每 actor 临时文件避免 PIPE 阻塞，arm 工作量不完全一致时在统计前失败。成功后只保留结构化 `--output` 和 process tail，删除 run/checkpoint/log scratch。
+- **`run_plan03_phase0_tests.pbs`** — 10 分钟单节点 P0 checker/focused/RED/full-suite 批处理。RED 用 `--runxfail` 要求精确 5 个失败并生成唯一 timestamp log；PBS stdout 使用默认 job-id 文件，不能覆盖既有冻结 artifact。
+- **`run_plan03_p0_performance.pbs`** — 10 分钟单节点 P0 paired feasibility 批处理，输出 timestamp 结构化 artifact。提交任一脚本前仍须执行全体 `bash -n scripts/miyabi/*.pbs` 并确认 literal group。
+- `pyproject.toml` 对 Plan 03 启用 strict markers、strict xfail、300 秒 test timeout 和 `plan03_red/state_machine/crash_matrix/integration/performance` markers；超长测试必须局部显式放宽 timeout。
+
 ## miyabi/check_plan01_invariants.py
 
 - **`read_json` / `read_jsonl`** — 严格要求 object;JSONL 不容忍损坏/半行,文件不存在才返回空列表。

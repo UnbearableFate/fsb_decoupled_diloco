@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Static inventory and staged evidence checker for Plan 03.
+"""Static inventory and frozen-evidence checker for Plan 03.
 
-The inventory mode is intentionally stdlib-only so it is safe on a Miyabi
-login node. Runtime evidence is produced by the individual compute/PBS gates.
+The checker performs no Torch/GPU work and is safe on a Miyabi login node when
+run through the project environment. Runtime evidence remains a compute/PBS gate.
 """
 
 from __future__ import annotations
@@ -13,9 +13,12 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 
 PLAN_ID = "fsb_decoupled_diloco_plan_03_unified_ha"
@@ -35,8 +38,11 @@ def _git(root: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-def _tracked(root: Path, prefix: str) -> list[str]:
-    output = _git(root, "ls-files", prefix)
+def _tracked(root: Path, prefix: str, *, source_ref: str | None = None) -> list[str]:
+    if source_ref is None:
+        output = _git(root, "ls-files", prefix)
+    else:
+        output = _git(root, "ls-tree", "-r", "--name-only", source_ref, "--", prefix)
     return sorted(line for line in output.splitlines() if line)
 
 
@@ -48,56 +54,134 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _bound_mutators(root: Path) -> list[str]:
-    path = root / "fs_diloco/storage/fenced_store.py"
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+def _read_text(root: Path, path: str, *, source_ref: str | None) -> str:
+    if source_ref is None:
+        return (root / path).read_text(encoding="utf-8")
+    return subprocess.run(
+        ["git", "show", f"{source_ref}:{path}"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+    ).stdout.decode("utf-8")
+
+
+def _content_sha256(root: Path, path: str, *, source_ref: str | None) -> str:
+    if source_ref is None:
+        return _sha256(root / path)
+    content = subprocess.run(
+        ["git", "show", f"{source_ref}:{path}"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+    ).stdout
+    return hashlib.sha256(content).hexdigest()
+
+
+def _literal_string_set(node: ast.expr) -> set[str] | None:
+    candidate = node
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in {"set", "frozenset"}
+        and len(node.args) == 1
+        and not node.keywords
+    ):
+        candidate = node.args[0]
+    try:
+        value = ast.literal_eval(candidate)
+    except (ValueError, TypeError):
+        return None
+    if isinstance(value, (set, frozenset)) and all(isinstance(item, str) for item in value):
+        return set(value)
+    return None
+
+
+def _bound_mutators(root: Path, *, source_ref: str | None = None) -> list[str]:
+    path = "fs_diloco/storage/fenced_store.py"
+    tree = ast.parse(_read_text(root, path, source_ref=source_ref), filename=path)
     for node in tree.body:
-        if isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == "_BOUND_MUTATORS"
-            for target in node.targets
+        targets: list[ast.expr]
+        if isinstance(node, ast.Assign):
+            targets = list(node.targets)
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        else:
+            continue
+        if any(
+            isinstance(target, ast.Name) and target.id == "_BOUND_MUTATORS" for target in targets
         ):
-            value = ast.literal_eval(node.value)
-            if not isinstance(value, set) or not all(isinstance(item, str) for item in value):
-                break
-            return sorted(value)
+            value = _literal_string_set(node.value)
+            if value is not None:
+                return sorted(value)
+            break
     raise RuntimeError("could not statically resolve _BOUND_MUTATORS")
 
 
-def _fragment_enabled(path: Path) -> bool:
-    lines = path.read_text(encoding="utf-8").splitlines()
-    for index, line in enumerate(lines):
-        if line.strip() == "fragments:":
-            for child in lines[index + 1 :]:
-                if child and not child.startswith((" ", "\t")):
-                    break
-                if child.strip() == "enabled: true":
-                    return True
-            return False
-    return False
+def _fragment_enabled(content: str, *, path: str) -> bool:
+    payload = yaml.safe_load(content)
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"config is not an object: {path}")
+    fragments = payload.get("fragments")
+    if fragments is None:
+        return False
+    if not isinstance(fragments, dict):
+        raise RuntimeError(f"fragments section is not an object: {path}")
+    enabled = fragments.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise RuntimeError(f"fragments.enabled is not boolean: {path}")
+    return enabled
 
 
-def inventory(root: Path) -> dict[str, Any]:
-    source = _tracked(root, "fs_diloco")
-    tests = [path for path in _tracked(root, "tests") if Path(path).name.startswith("test_")]
-    configs = [path for path in _tracked(root, "configs") if path.endswith((".yaml", ".yml"))]
-    pbs = [path for path in _tracked(root, "scripts/miyabi") if path.endswith(".pbs")]
+def inventory(root: Path, *, source_ref: str | None = None) -> dict[str, Any]:
+    source = _tracked(root, "fs_diloco", source_ref=source_ref)
+    tests = [
+        path
+        for path in _tracked(root, "tests", source_ref=source_ref)
+        if Path(path).name.startswith("test_")
+    ]
+    configs = [
+        path
+        for path in _tracked(root, "configs", source_ref=source_ref)
+        if path.endswith((".yaml", ".yml"))
+    ]
+    pbs = [
+        path
+        for path in _tracked(root, "scripts/miyabi", source_ref=source_ref)
+        if path.endswith(".pbs")
+    ]
     schemas = [path for path in source if path.endswith(".sql")]
-    fragments = [path for path in configs if _fragment_enabled(root / path)]
+    fragments = [
+        path
+        for path in configs
+        if _fragment_enabled(_read_text(root, path, source_ref=source_ref), path=path)
+    ]
     fragment_pbs = [
         path for path in pbs if "fragment" in Path(path).name and "no_fragment" not in path
     ]
     baseline_configs = [path for path in configs if Path(path).name.startswith("torch_baseline_")]
     baseline_pbs = [path for path in pbs if "torch_" in Path(path).name]
     baseline_tests = [path for path in tests if Path(path).name.startswith("test_torch_baseline_")]
-    tag_targets = {tag: _git(root, "rev-parse", f"{tag}^{{commit}}") for tag in ARCHIVE_TAGS}
+    historical_config = "configs/fs_diloco_gpt2_wikitext2_8l_no_fragment_50x10.yaml"
+    historical_pbs = "scripts/miyabi/run_9node_no_fragment_gpt2_wikitext2_50x10.pbs"
+    recursive_anchor = "configs/5000/fs_diloco_gpt2_wikitext2_8l_200x25steps.yaml"
+    if historical_config not in configs or historical_pbs not in pbs:
+        raise RuntimeError("historical full-control inventory boundary is missing")
+    if recursive_anchor not in configs:
+        raise RuntimeError("recursive config inventory anchor is missing")
+    tag_targets: dict[str, str | None] = {}
+    for tag in ARCHIVE_TAGS:
+        try:
+            tag_targets[tag] = _git(root, "rev-parse", f"{tag}^{{commit}}")
+        except subprocess.CalledProcessError:
+            tag_targets[tag] = None
     files = source + tests + configs + pbs + schemas
     return {
         "artifact_version": 1,
         "plan_id": PLAN_ID,
-        "status": "PASS",
+        "status": "INVENTORY",
         "source_identity": {
             "branch": _git(root, "branch", "--show-current"),
-            "commit": _git(root, "rev-parse", "HEAD"),
+            "commit": _git(root, "rev-parse", source_ref or "HEAD"),
             "archive_tag_targets": tag_targets,
         },
         "counts": {
@@ -106,7 +190,7 @@ def inventory(root: Path) -> dict[str, Any]:
             "config_files": len(configs),
             "pbs_files": len(pbs),
             "schema_files": len(schemas),
-            "bound_mutators": len(_bound_mutators(root)),
+            "bound_mutators": len(_bound_mutators(root, source_ref=source_ref)),
             "fragment_enabled_configs": len(fragments),
             "fragment_pbs": len(fragment_pbs),
             "torch_baseline_configs": len(baseline_configs),
@@ -119,14 +203,14 @@ def inventory(root: Path) -> dict[str, Any]:
             "configs_recursive": configs,
             "pbs": pbs,
             "schemas": schemas,
-            "bound_mutators": _bound_mutators(root),
+            "bound_mutators": _bound_mutators(root, source_ref=source_ref),
         },
         "migration_boundaries": {
             "fragment_enabled_configs_delete_in_p5": fragments,
             "fragment_pbs_delete_in_p5": fragment_pbs,
             "historical_full_control_archive_separately": {
-                "config": "configs/fs_diloco_gpt2_wikitext2_8l_no_fragment_50x10.yaml",
-                "pbs": "scripts/miyabi/run_9node_no_fragment_gpt2_wikitext2_50x10.pbs",
+                "config": historical_config,
+                "pbs": historical_pbs,
             },
             "torch_baseline_retain": {
                 "configs": baseline_configs,
@@ -134,10 +218,40 @@ def inventory(root: Path) -> dict[str, Any]:
                 "tests": baseline_tests,
                 "package": "fs_diloco/baselines",
             },
-            "recursive_config_anchor": "configs/5000/fs_diloco_gpt2_wikitext2_8l_200x25steps.yaml",
+            "recursive_config_anchor": recursive_anchor,
         },
-        "manifest_sha256": {path: _sha256(root / path) for path in sorted(set(files))},
+        "manifest_sha256": {
+            path: _content_sha256(root, path, source_ref=source_ref) for path in sorted(set(files))
+        },
     }
+
+
+def verify_inventory(actual: dict[str, Any], expected: dict[str, Any]) -> list[str]:
+    differences: list[str] = []
+    comparisons = (
+        (
+            "source_identity.commit",
+            actual["source_identity"]["commit"],
+            expected["source_identity"]["commit"],
+        ),
+        (
+            "source_identity.archive_tag_targets",
+            actual["source_identity"]["archive_tag_targets"],
+            expected["source_identity"]["archive_tag_targets"],
+        ),
+        ("counts", actual["counts"], expected["counts"]),
+        ("inventory", actual["inventory"], expected["inventory"]),
+        (
+            "migration_boundaries",
+            actual["migration_boundaries"],
+            expected["migration_boundaries"],
+        ),
+        ("manifest_sha256", actual["manifest_sha256"], expected["manifest_sha256"]),
+    )
+    for label, actual_value, expected_value in comparisons:
+        if actual_value != expected_value:
+            differences.append(label)
+    return differences
 
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -159,11 +273,36 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("--inventory-output", type=Path)
+    parser.add_argument("--source-ref")
+    parser.add_argument("--expect", type=Path)
     args = parser.parse_args()
-    payload = inventory(args.root.resolve())
+    root = args.root.resolve()
+    try:
+        expected = None
+        source_ref = args.source_ref
+        if args.expect is not None:
+            expected = json.loads(args.expect.resolve().read_text(encoding="utf-8"))
+            source_ref = source_ref or str(expected["source_identity"]["commit"])
+        payload = inventory(root, source_ref=source_ref)
+        if expected is not None:
+            differences = verify_inventory(payload, expected)
+            payload["status"] = "PASS" if not differences else "BLOCKED"
+            payload["differences"] = differences
+    except (OSError, RuntimeError, KeyError, ValueError, subprocess.CalledProcessError) as exc:
+        payload = {
+            "artifact_version": 1,
+            "plan_id": PLAN_ID,
+            "status": "BLOCKED",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
     if args.inventory_output is not None:
         _atomic_write_json(args.inventory_output.resolve(), payload)
-    print(json.dumps(payload, indent=2, sort_keys=True))
+    if args.expect is not None:
+        print(payload["status"])
+    else:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    if payload["status"] == "BLOCKED":
+        sys.exit(1)
 
 
 if __name__ == "__main__":

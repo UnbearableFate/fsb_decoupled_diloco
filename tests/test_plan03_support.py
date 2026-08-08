@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import errno
+import math
 
 import pytest
 
@@ -43,3 +44,35 @@ def test_paired_performance_keeps_signed_deltas_and_fixed_bootstrap() -> None:
     assert result.median_overhead == pytest.approx(0.05)
     assert result.bootstrap_upper_95 >= result.median_overhead
     assert result.margin == 0.10
+
+
+@pytest.mark.parametrize(
+    ("baseline", "candidate"),
+    [
+        ([0.0], [1.0]),
+        ([-1.0], [1.0]),
+        ([math.nan], [1.0]),
+        ([math.inf], [1.0]),
+        ([1.0], [0.0]),
+        ([1.0], [-1.0]),
+        ([1.0], [math.nan]),
+        ([1.0], [math.inf]),
+    ],
+)
+def test_paired_performance_rejects_nonpositive_or_nonfinite_durations(
+    baseline: list[float],
+    candidate: list[float],
+) -> None:
+    with pytest.raises(ValueError, match="positive and finite"):
+        paired_noninferiority(baseline, candidate)
+
+
+def test_paired_performance_rejects_invalid_shapes_and_parameters() -> None:
+    with pytest.raises(ValueError, match="same positive sample count"):
+        paired_noninferiority([], [])
+    with pytest.raises(ValueError, match="same positive sample count"):
+        paired_noninferiority([1.0], [1.0, 2.0])
+    with pytest.raises(ValueError, match="invalid bootstrap or margin"):
+        paired_noninferiority([1.0], [1.0], bootstrap_samples=99)
+    with pytest.raises(ValueError, match="invalid bootstrap or margin"):
+        paired_noninferiority([1.0], [1.0], margin=1.0)

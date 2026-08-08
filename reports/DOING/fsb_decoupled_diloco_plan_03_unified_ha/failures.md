@@ -107,3 +107,36 @@
 - 预期：命令保持interactive session并返回job/node。
 - 实际：客户端只输出 `qsub: Job has interactive requested` 后退出，`qstat`确认 `No unfinished job found`；没有job ID或产物。资源参数和queue已合法，失败发生在自动化PTY与本站interactive qsub握手层。
 - 下一轮：不再重试interactive握手；新增范围精确的P0 batch validation脚本，先按仓库规则运行全体PBS `bash -n`、确认literal group和10分钟walltime，再正常 `qsub`。脚本运行focused suite后运行full suite，并把唯一日志写入P0 evidence目录。
+
+## 2026-08-08 23:32 JST — `p0-phase-review-remediation-validation-attempt1`（连续失败 1 次）
+
+- 环境：Miyabi-G compute，PBS job `2508334.opbs`；single-node `debug-g`，literal group `xg24i002`，10分钟walltime。checker先在冻结commit inventory上PASS，尚未进入pytest。
+- 命令：`qsub scripts/miyabi/run_plan03_phase0_tests.pbs`；脚本中的shared-FS命令为 `.venv/bin/python scripts/miyabi/plan03_fs_capability.py --shared-parent reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts --output <timestamp artifact>`。
+- 预期：parent reservation fallback的全部pre-visibility crash prefix在retry前不可见，retry后可见；marker之后的durability steps保持completed可恢复。
+- 实际：probe在 `crash prefix 13 became visible` 失败。prefix 13恰好是hard-link `.complete` marker之后、final目录fsync之前；marker已作为设计中的visibility linearization point，因此reader接受它是正确行为，测试却仍把它分类为pre-visibility并要求不可见。临时probe目录已由`finally`清理，没有生成结果artifact；原始完整log为仓库根 `fsdiloco_plan03_p0.o2508334`。
+- 已确认根因：fault-step枚举没有区分marker link前的不可见prefix和marker link后的已提交但仍需durability fsync的prefix；不是publication protocol提前可见。staged marker和全部objects在link前已经fsync，且每个object link后final目录也已fsync。
+- 下一轮：把marker hard-link定义为唯一visibility linearization point。只对marker前0..12个prefix断言不可见；marker后两个fsync prefix断言已visible、函数返回completed且同identity retry保持visible；unit test分别核对pre/post两组。其余代码和门禁不放宽。
+
+## 2026-08-08 23:34 JST — `p0-phase-review-remediation-validation-attempt2`（连续失败 2 次）
+
+- 环境/命令：Miyabi-G compute，PBS job `2508344.opbs`；资源和batch命令同attempt1。checker再次PASS；shared-FS probe在pytest前运行。
+- 预期：pre/post visibility prefix分类通过后，completed final root对different identity fail closed。
+- 实际：全部prefix已越过attempt1失败点；probe随后抛 `RuntimeError: completed root accepted a different identity`。实际内部调用使用identity B但仍传入identity A的staged complete manifest，`_load_staged_manifest`立即以 `completion manifest identity mismatch` fail closed；外层测试只接受旧实现的固定错误字符串 `final reservation identity collision`，把任何其他安全拒绝误报为“accepted”。临时目录已清理，无结果artifact；完整log `fsdiloco_plan03_p0.o2508344`。
+- 已确认根因：collision fixture自身identity/manifest不一致，无法到达final parent reservation collision；同时assertion耦合到已删除的旧错误字符串。production fallback没有接受不同identity。
+- 下一轮：构造identity B、manifest identity hash B且对象hash有效的完整staging B，再对已完成identity A final发布；精确要求在parent reservation create-no-replace处报告对应collision且final marker/hash保持A。若第三次仍失败，按规则在第四次前升级全面审查。
+
+## 2026-08-08 23:36 JST — `p0-phase-review-remediation-validation-attempt3`（连续失败 3 次，已触发全面审查）
+
+- 环境/命令：Miyabi-G compute，PBS job `2508354.opbs`；同一P0 remediation batch目标、配置和不变量。checker PASS；修订后的shared-FS formal probe PASS并生成 `artifacts/20260808-233610_p0-shared-fs-capability_pass.json`，随后focused pytest失败。
+- 预期：checker/oracle/FS/performance support普通passing，5个accepted RED严格xfail且只能因目标behavior defect失败。
+- 实际：`2 failed, 21 passed, 4 xfailed in 5.15s`。第一项是matrix consistency test要求每个completion-candidate evidence已经出现在`git ls-files`，但本轮新建且尚未到review-fix commit的 `20260808-233006_p0-performance-method-remediation_review.json` 合法地处于untracked/not-ignored状态。第二项H-01a在目标selection fence抛精确 `RuntimeError: dynamic update is not pending/current at selection: stale-before-select`；新增的 `xfail(raises=AssertionError)`因此把真实accepted defect暴露为normal failure。完整log：`fsdiloco_plan03_p0.o2508354`。
+- 已确认根因：两个review remediation约束都把最终态条件放到了中间态。Git测试把“phase-final必须tracked”错误地要求为“任何precommit test时必须tracked”；H-01a的accepted defect本来就是selection API中止批次的RuntimeError，不是末尾state assertion。前两次FS fixture问题已修复且本轮formal probe独立通过；它们与这两个focused test失败不同，但验证目标相同，故仍按同一experiment三连败升级。
+- 下一轮：暂停第四次运行，先在`code_review.md`完成输入/状态/持久化/恢复/输出的全面审查。预计把evidence test改为precommit时必须存在、非ignored且可由普通`git add`发现，phase-final另在staging/commit门禁核对tracked；H-01a只捕获精确message的目标RuntimeError并转换为AssertionError，其他异常继续作为normal failure。
+
+## 2026-08-08 23:48 JST — remediation失败日志保留路径更正
+
+- artifact cleanup时把前三次失败的PBS默认log从仓库根移动到长期报告目录，并只做了行尾空白规范化；此前记录中的根目录路径不再有效。
+- attempt1：`artifacts/20260808-233203_p0-phase-review-remediation-attempt1_fail.log`，SHA-256 `d12697828c20d04ed0bc95bfd135b3bc99de3e7711246952b62914414479f7b3`。
+- attempt2：`artifacts/20260808-233400_p0-phase-review-remediation-attempt2_fail.log`，SHA-256 `53a487405b81be0abc29e2f7f6e02f934a33322bac09d8045bb809034df3e174`。
+- attempt3：`artifacts/20260808-233600_p0-phase-review-remediation-attempt3_fail.log`，SHA-256 `068b95b7b1d8fb228a9caa2e6c180b867745686e44e788e034d74146c67a4f6b`。
+- 第四次在全面审查后通过，连续失败计数归零。重复的successful FS/RED/test/performance产物与PBS根日志已在保留最终结构化证据后精确删除；没有删除失败证据、source、config或user run。

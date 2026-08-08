@@ -34,15 +34,16 @@ def paired_noninferiority(
         raise ValueError("paired arms must have the same positive sample count")
     if bootstrap_samples < 100 or not 0.0 < margin < 1.0:
         raise ValueError("invalid bootstrap or margin")
+    baseline = tuple(float(value) for value in baseline_seconds)
+    candidate = tuple(float(value) for value in candidate_seconds)
+    if any(not math.isfinite(value) or value <= 0.0 for value in (*baseline, *candidate)):
+        raise ValueError("durations must be positive and finite")
     signed = tuple(
-        (float(candidate) - float(baseline)) / float(baseline)
-        for baseline, candidate in zip(baseline_seconds, candidate_seconds, strict=True)
+        (candidate_value - baseline_value) / baseline_value
+        for baseline_value, candidate_value in zip(baseline, candidate, strict=True)
     )
-    if any(
-        not math.isfinite(value) or float(baseline) <= 0.0
-        for value, baseline in zip(signed, baseline_seconds, strict=True)
-    ):
-        raise ValueError("durations and signed overheads must be positive/finite")
+    if any(not math.isfinite(value) for value in signed):
+        raise ValueError("signed overheads must be finite")
     rng = random.Random(seed)
     medians = sorted(
         statistics.median(rng.choices(signed, k=len(signed))) for _ in range(bootstrap_samples)

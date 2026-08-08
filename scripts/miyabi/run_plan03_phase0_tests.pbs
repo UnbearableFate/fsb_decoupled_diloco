@@ -5,12 +5,12 @@
 #PBS -l select=1:mpiprocs=1
 #PBS -l walltime=00:10:00
 #PBS -j oe
-#PBS -o reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-001500_p0-final-compute.log
 
 set -eEuo pipefail
 trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
 
 export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+export PYTHONDONTWRITEBYTECODE=1
 module list 2>&1 | cat
 
 PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
@@ -32,10 +32,36 @@ print(f"pytest={pytest.__version__}")
 print(f"torch={torch.__version__}")
 PY
 
+"$PYTHON_BIN" scripts/miyabi/check_plan03.py \
+  --root "$PROJECT_ROOT" \
+  --expect reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260808-223500_p0-runtime-surface-inventory_review.json
+
+FS_OUTPUT="reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/$(date +%Y%m%d-%H%M%S)_p0-shared-fs-capability_pass.json"
+"$PYTHON_BIN" scripts/miyabi/plan03_fs_capability.py \
+  --shared-parent reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts \
+  --output "$FS_OUTPUT"
+printf 'PLAN03_FS_CAPABILITY_ARTIFACT=%s\n' "$FS_OUTPUT"
+
 "$PYTHON_BIN" -m pytest -q \
   tests/test_plan03_support.py \
+  tests/test_plan03_checker.py \
+  tests/test_plan03_fs_capability.py \
+  tests/test_plan03_p0_performance.py \
   tests/reference/test_plan03_classic_static_oracle.py \
   tests/test_plan03_p0_red.py
+
+RED_LOG="reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/$(date +%Y%m%d-%H%M%S)_p0-red-runxfail_review.log"
+set +e
+"$PYTHON_BIN" -m pytest -q --runxfail tests/test_plan03_p0_red.py >"$RED_LOG" 2>&1
+RED_STATUS=$?
+set -e
+if [[ "$RED_STATUS" -ne 1 ]] || ! grep -Eq '5 failed' "$RED_LOG"; then
+  cat "$RED_LOG"
+  echo "Unexpected RED evidence status: $RED_STATUS" >&2
+  exit 1
+fi
+cat "$RED_LOG"
+printf 'PLAN03_RED_LOG=%s\n' "$RED_LOG"
 
 "$PYTHON_BIN" -m pytest -q
 

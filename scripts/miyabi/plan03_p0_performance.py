@@ -4,12 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import shutil
 import sqlite3
 import subprocess
-import sys
 import tempfile
 import time
 from pathlib import Path
@@ -17,7 +17,46 @@ from typing import Any
 
 import yaml
 
+from fs_diloco.storage.atomic_io import atomic_write_json
 from fs_diloco.tools.paired_performance import paired_noninferiority
+
+
+def _capture_source_identity(project_root: Path) -> dict[str, Any]:
+    capture_path = project_root / "scripts/miyabi/capture_source_identity.py"
+    spec = importlib.util.spec_from_file_location("plan03_capture_source_identity", capture_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load source identity helper: {capture_path}")
+    capture_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(capture_module)
+    return capture_module.capture(project_root)
+
+
+def _collect_process_results(
+    roles: tuple[str, ...],
+    processes: list[subprocess.Popen[str]],
+    *,
+    log_dir: Path,
+    deadline: float,
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    for role, process in zip(roles, processes, strict=True):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(f"tiny arm timed out before {role} completed")
+        process.wait(timeout=remaining)
+    for role, process in zip(roles, processes, strict=True):
+        output = (log_dir / f"{role}.log").read_text(encoding="utf-8")
+        results.append(
+            {
+                "role": role,
+                "returncode": process.returncode,
+                "output_tail": output.splitlines()[-20:],
+            }
+        )
+    failed = [result for result in results if result["returncode"] != 0]
+    if failed:
+        raise RuntimeError(f"tiny arm process failure: {failed}")
+    return results
 
 
 def _run_processes(
@@ -27,8 +66,9 @@ def _run_processes(
     run_root: Path,
     *,
     environment: dict[str, str],
-    timeout_seconds: float,
-) -> tuple[float, list[dict[str, Any]]]:
+    deadline: float,
+    log_dir: Path,
+) -> list[dict[str, Any]]:
     commands = [
         [
             str(python),
@@ -58,35 +98,26 @@ def _run_processes(
             for index in range(2)
         ],
     ]
-    started = time.monotonic()
-    processes = [
-        subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            env=environment,
-        )
-        for command in commands
-    ]
-    results: list[dict[str, Any]] = []
-    deadline = started + timeout_seconds
+    roles = ("syncer", "learner_000", "learner_001")
+    log_dir.mkdir(parents=True, exist_ok=False)
+    processes: list[subprocess.Popen[str]] = []
+    log_handles: list[Any] = []
     try:
-        for role, process in zip(("syncer", "learner_000", "learner_001"), processes, strict=True):
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise TimeoutError(f"tiny arm timed out before {role} completed")
-            output, _ = process.communicate(timeout=remaining)
-            results.append(
-                {
-                    "role": role,
-                    "returncode": process.returncode,
-                    "output_tail": output.splitlines()[-20:],
-                }
+        for role, command in zip(roles, commands, strict=True):
+            handle = (log_dir / f"{role}.log").open("w", encoding="utf-8")
+            log_handles.append(handle)
+            processes.append(
+                subprocess.Popen(
+                    command,
+                    stdout=handle,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    env=environment,
+                )
             )
-        failed = [result for result in results if result["returncode"] != 0]
-        if failed:
-            raise RuntimeError(f"tiny arm process failure: {failed}")
+        for handle in log_handles:
+            handle.flush()
+        results = _collect_process_results(roles, processes, log_dir=log_dir, deadline=deadline)
     finally:
         for process in processes:
             if process.poll() is None:
@@ -97,13 +128,16 @@ def _run_processes(
                     process.wait(timeout=5.0)
                 except subprocess.TimeoutExpired:
                     process.kill()
-    return time.monotonic() - started, results
+                    process.wait(timeout=5.0)
+        for handle in log_handles:
+            handle.close()
+    return results
 
 
 def _authority_summary(run_root: Path) -> dict[str, Any]:
     database = run_root / "control" / "syncer_metadata.sqlite3"
     if not database.is_file():
-        database = run_root / "run_state.sqlite"
+        raise RuntimeError(f"tiny arm authority database is missing: {database}")
     connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
     try:
         row = connection.execute(
@@ -132,8 +166,14 @@ def _run_arm(
     ha = arm == "static_ha"
     run_id = f"plan03-p0-{'warmup' if warmup else f'pair{pair}'}-{arm}"
     run_root = scratch / run_id
+    log_dir = scratch / f".{run_id}-process-logs"
     python = project_root / ".venv/bin/python"
+    started = time.monotonic()
+    deadline = started + timeout_seconds
     if ha:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("HA tiny arm timed out before initialization")
         init = subprocess.run(
             [
                 str(python),
@@ -152,21 +192,24 @@ def _run_arm(
             capture_output=True,
             text=True,
             env=environment,
-            timeout=timeout_seconds,
+            timeout=remaining,
         )
         if init.returncode != 0:
             raise RuntimeError(
                 f"HA tiny init failed: {(init.stdout + init.stderr).splitlines()[-30:]}"
             )
         config = run_root / "control" / "run_config.resolved.yaml"
-    elapsed, processes = _run_processes(
+    actors_started = time.monotonic()
+    processes = _run_processes(
         python,
         config,
         run_id,
         run_root,
         environment=environment,
-        timeout_seconds=timeout_seconds,
+        deadline=deadline,
+        log_dir=log_dir,
     )
+    completed = time.monotonic()
     summary = _authority_summary(run_root)
     if summary["final_version"] < 1:
         raise RuntimeError(f"tiny arm did not complete a merge: {summary}")
@@ -174,13 +217,35 @@ def _run_arm(
         "arm": arm,
         "pair": pair,
         "warmup": warmup,
-        "elapsed_seconds": elapsed,
+        "elapsed_seconds": completed - started,
+        "timing": {
+            "pre_actor_initialization_seconds": actors_started - started,
+            "actor_process_seconds": completed - actors_started,
+        },
         "workload": summary,
-        "processes": processes,
+        "processes": [{"role": row["role"], "returncode": row["returncode"]} for row in processes],
     }
     shutil.rmtree(run_root)
+    shutil.rmtree(log_dir)
     result["run_root_cleaned"] = True
+    result["process_logs_cleaned"] = True
     return result
+
+
+def _validate_measured_workloads(measured: list[dict[str, Any]], *, pairs: int) -> tuple[int, int]:
+    expected_keys = {(pair, arm) for pair in range(pairs) for arm in ("classic", "static_ha")}
+    actual_keys = [(int(row["pair"]), str(row["arm"])) for row in measured]
+    if len(actual_keys) != len(expected_keys) or set(actual_keys) != expected_keys:
+        raise RuntimeError(f"paired trial coverage mismatch: {actual_keys}")
+    if len(actual_keys) != len(set(actual_keys)):
+        raise RuntimeError(f"duplicate paired trial key: {actual_keys}")
+    signatures = {
+        (int(row["workload"]["final_version"]), int(row["workload"]["total_seen_tokens"]))
+        for row in measured
+    }
+    if len(signatures) != 1:
+        raise RuntimeError(f"paired workload mismatch: {sorted(signatures)}")
+    return next(iter(signatures))
 
 
 def run(project_root: Path, shared_parent: Path) -> dict[str, Any]:
@@ -189,10 +254,7 @@ def run(project_root: Path, shared_parent: Path) -> dict[str, Any]:
     scratch = Path(tempfile.mkdtemp(prefix=".plan03-p0-performance-", dir=shared_parent))
     trials: list[dict[str, Any]] = []
     try:
-        sys.path.insert(0, str(project_root / "scripts/miyabi"))
-        from capture_source_identity import capture
-
-        source = capture(project_root)
+        source = _capture_source_identity(project_root)
         environment = os.environ.copy()
         environment.update(
             FS_DILOCO_GIT_COMMIT=str(source["git_commit"]),
@@ -238,6 +300,7 @@ def run(project_root: Path, shared_parent: Path) -> dict[str, Any]:
                     )
                 )
         measured = [trial for trial in trials if not trial["warmup"]]
+        workload_signature = _validate_measured_workloads(measured, pairs=5)
         classic = [
             float(
                 next(
@@ -272,8 +335,8 @@ def run(project_root: Path, shared_parent: Path) -> dict[str, Any]:
             },
             "method": {
                 "pairs": 5,
-                "arm_order": "AB/BA alternating",
-                "timer_anchor": "immediately before spawning syncer+two learner processes through all three clean exits",
+                "arm_order": "AB/BA alternating, starting with classic on even pair indices",
+                "timer_anchor": "before any arm-specific initialization through all three actor clean exits",
                 "prewarm": "one unmeasured fresh-root arm per mode",
                 "margin": statistic.margin,
                 "bootstrap_seed": 20260808,
@@ -285,13 +348,11 @@ def run(project_root: Path, shared_parent: Path) -> dict[str, Any]:
             "median_overhead": statistic.median_overhead,
             "bootstrap_upper_95": statistic.bootstrap_upper_95,
             "noninferiority_pass_is_not_a_p0_gate": statistic.passes,
-            "workload_equivalent": len(
-                {
-                    (row["workload"]["final_version"], row["workload"]["total_seen_tokens"])
-                    for row in measured
-                }
-            )
-            == 1,
+            "workload_equivalent": True,
+            "workload_signature": {
+                "final_version": workload_signature[0],
+                "total_seen_tokens": workload_signature[1],
+            },
             "trials": trials,
             "scratch_removed": True,
         }
@@ -303,12 +364,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--shared-parent", type=Path, required=True)
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    print(
-        json.dumps(
-            run(args.project_root.resolve(), args.shared_parent.resolve()), indent=2, sort_keys=True
-        )
-    )
+    payload = run(args.project_root.resolve(), args.shared_parent.resolve())
+    if args.output is not None:
+        atomic_write_json(args.output.resolve(), payload)
+    print(json.dumps(payload, indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":

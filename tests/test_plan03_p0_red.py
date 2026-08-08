@@ -58,6 +58,7 @@ def _capacity_observation(rows: list[dict[str, object]]) -> dict[str, object]:
 
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason="H-01a: eligible_updates includes revoked incarnations and selection aborts the batch",
 )
 def test_h01a_revoke_before_select_does_not_abort_current_batch(tmp_path: Path) -> None:
@@ -79,10 +80,16 @@ def test_h01a_revoke_before_select_does_not_abort_current_batch(tmp_path: Path) 
         assert [row["instance_id"] for row in revoked] == [stale["instance_id"]]
 
         eligible = authority.store.eligible_updates(0, 0)
-        authority.store.mark_updates_selected(
-            [str(row["update_id"]) for row in eligible],
-            "h01a-selection",
-        )
+        try:
+            authority.store.mark_updates_selected(
+                [str(row["update_id"]) for row in eligible],
+                "h01a-selection",
+            )
+        except RuntimeError as exc:
+            expected = "dynamic update is not pending/current at selection: stale-before-select"
+            if str(exc) != expected:
+                raise
+            raise AssertionError("H-01a reproduced: stale row aborted selection") from exc
         assert authority.store.get_update("stale-before-select")["status"] == "dropped"
         assert authority.store.get_update("current-before-select")["status"] == "selected"
     finally:
@@ -91,6 +98,7 @@ def test_h01a_revoke_before_select_does_not_abort_current_batch(tmp_path: Path) 
 
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason="H-01b: commit-time membership retry resets the stale row with the valid batch",
 )
 def test_h01b_commit_conflict_terminalizes_only_invalid_rows(tmp_path: Path) -> None:
@@ -145,6 +153,7 @@ def test_h01b_commit_conflict_terminalizes_only_invalid_rows(tmp_path: Path) -> 
 
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason="H-05: quorum truncation has no persistent contributor service credit",
 )
 def test_h05_quorum_truncation_serves_every_continuously_ready_contributor() -> None:
@@ -167,6 +176,7 @@ def test_h05_quorum_truncation_serves_every_continuously_ready_contributor() -> 
 
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason="H-06: one transient registration read is collapsed into malformed and unlinked",
 )
 def test_h06_transient_registration_eio_preserves_request_for_retry(
@@ -244,6 +254,7 @@ def test_h06_transient_registration_eio_preserves_request_for_retry(
 
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason="H-07: live+historical no-record immediately fails a known accepted PBS job",
 )
 def test_h07_known_job_no_record_enters_bounded_uncertainty(tmp_path: Path) -> None:
