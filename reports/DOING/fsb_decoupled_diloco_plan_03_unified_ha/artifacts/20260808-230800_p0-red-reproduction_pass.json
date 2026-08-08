@@ -1,0 +1,29 @@
+{
+  "artifact_version": 1,
+  "experiment_id": "p0-red-reproduction",
+  "status": "PASS",
+  "recorded_at": "2026-08-08T23:08:00+09:00",
+  "source_base": "a00a3d64a50f10a2478c3f4fe795e658d1b3b52f",
+  "environment": {
+    "host": "mg0004",
+    "pbs_job_id": "2508036.opbs",
+    "python": "3.13.13"
+  },
+  "strict_xfail": {
+    "command": ".venv/bin/python -m pytest -q tests/test_plan03_support.py tests/reference/test_plan03_classic_static_oracle.py tests/test_plan03_p0_red.py",
+    "result": "4 passed, 5 xfailed in 1.64s"
+  },
+  "runxfail": {
+    "command": ".venv/bin/python -m pytest -q --runxfail tests/test_plan03_p0_red.py",
+    "result": "5 failed in 0.34s",
+    "expected_exit_nonzero": true
+  },
+  "reproductions": {
+    "H-01a": "eligible_updates returns a revoked incarnation; atomic mark_updates_selected raises RuntimeError and rolls back the current row",
+    "H-01b": "commit membership conflict followed by current retry behavior resets both rows, leaving the invalid stale row pending",
+    "H-05": "1000 repeated quorum_max=3 selections over 8 continuously ready contributors serve only learner_000..002",
+    "H-06": "one injected transient registration read result removes the durable request before retry",
+    "H-07": "known job with live+historical no-record transitions directly to failed and releases reservation"
+  },
+  "excluded_attempt": "p0-red-evidence-attempt1 used invalid test fixture calls for H-01/H-06 and is not accepted evidence"
+}

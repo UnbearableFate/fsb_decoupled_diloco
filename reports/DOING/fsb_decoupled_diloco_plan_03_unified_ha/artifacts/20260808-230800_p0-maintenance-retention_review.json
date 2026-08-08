@@ -1,0 +1,41 @@
+{
+  "artifact_version": 1,
+  "experiment_id": "p0-maintenance-retention",
+  "status": "FROZEN",
+  "recorded_at": "2026-08-08T23:08:00+09:00",
+  "values": {
+    "archive_batch_rows": 256,
+    "recent_batch_dedup_count": 64,
+    "hot_receipts_per_contributor": 64,
+    "hot_observations_per_contributor": 64,
+    "quarantine_records_per_contributor": 64,
+    "publication_orphan_grace_seconds": 120,
+    "max_retained_epoch_dirs": 32
+  },
+  "derivation": {
+    "minimum_safe_orphan_grace_seconds": "lease_duration_seconds + 2 * max_clock_skew_seconds = 90 + 2*2 = 94",
+    "configured_orphan_grace_margin_seconds": 26,
+    "hot_receipt_rows_upper_bound": "current_contributors * hot_receipts_per_contributor",
+    "hot_observation_rows_upper_bound": "current_contributors * hot_observations_per_contributor",
+    "hot_quarantine_rows_upper_bound": "current_contributors * quarantine_records_per_contributor",
+    "quiescent_active_proposal_rows_upper_bound": "2 * current_contributors (one pending plus one selected per contributor)",
+    "dedup_hot_batches_upper_bound": 64,
+    "recovery_epoch_directory_upper_bound": 32,
+    "audit_growth": "linear immutable archive batches, excluded from recovery discovery and reported separately"
+  },
+  "g6_measurement": {
+    "cycles": 10000,
+    "sample_points": [0, 64, 256, 1000, 5000, 10000],
+    "measure": [
+      "SQLite hot-row counts by table and status",
+      "active referenced filesystem object count and bytes",
+      "fixed discovery stat/open count per contributor per cycle",
+      "recovery scan entries and elapsed seconds",
+      "epoch directory count",
+      "audit batch count and bytes separately",
+      "GC candidate count and oldest age",
+      "integrity_check and dangling-reference count"
+    ],
+    "threshold_policy": "the frozen values and formulas may be tightened with new evidence but may not be relaxed after observing G6"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "artifact_schema": "plan03.p0.final-compute.v1",
+  "status": "PASS",
+  "phase": "P0-freeze-oracles",
+  "source_base_commit": "a00a3d64a50f10a2478c3f4fe795e658d1b3b52f",
+  "pbs": {
+    "job_id": "2508127.opbs",
+    "queue": "debug-g",
+    "group": "xg24i002",
+    "nodes": 1,
+    "hostname": "mg0004",
+    "walltime_requested": "00:10:00"
+  },
+  "environment": {
+    "python": "3.13.13",
+    "pytest": "9.1.1",
+    "torch": "2.13.0+cu132",
+    "platform": "Linux-5.14.0-427.13.1.el9_4.aarch64+64k-aarch64-with-glibc2.34"
+  },
+  "focused_suite": {
+    "passed": 4,
+    "xfailed": 5,
+    "seconds": 1.85
+  },
+  "full_suite": {
+    "passed": 530,
+    "xfailed": 5,
+    "seconds": 37.27
+  },
+  "accepted_xfail_scope": "tests/test_plan03_p0_red.py only; P6 requires zero xfail",
+  "log": "artifacts/20260809-001500_p0-final-compute.log",
+  "log_sha256": "f8009bb4d3ad395a2c90ca9dc5174481f4c4df8167fd6d26bb24f29fd275191e"
+}

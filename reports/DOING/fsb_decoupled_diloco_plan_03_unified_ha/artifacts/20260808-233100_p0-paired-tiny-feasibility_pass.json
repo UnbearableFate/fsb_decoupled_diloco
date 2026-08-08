@@ -1,0 +1,58 @@
+{
+  "artifact_version": 1,
+  "experiment_id": "p0-paired-tiny-feasibility",
+  "status": "PASS",
+  "recorded_at": "2026-08-08T23:31:00+09:00",
+  "host": "mg0003",
+  "pbs_job_id": "2508070.opbs",
+  "source_identity": {
+    "git_commit": "a00a3d64a50f10a2478c3f4fe795e658d1b3b52f",
+    "git_dirty": true,
+    "source_fingerprint": "sha256:0508c234bef87101f7b88c187261dcff80ed5f80297cdf7ccfa533731ed7af16"
+  },
+  "method": {
+    "learners": 2,
+    "workload": "synthetic tiny, 2 outer commits",
+    "pairs": 5,
+    "arm_order": "AB/BA alternating",
+    "prewarm": "one unmeasured fresh-root arm per mode",
+    "timer_anchor": "immediately before spawning syncer and two learners through all three clean exits",
+    "signed_formula": "(static_ha_seconds-classic_seconds)/classic_seconds",
+    "margin": 0.1,
+    "bootstrap_samples": 10000,
+    "bootstrap_seed": 20260808
+  },
+  "workload_equivalence": {
+    "status": "PASS",
+    "all_measured_final_version": 2,
+    "all_measured_total_seen_tokens_legacy_semantics": 256,
+    "all_integrity_check": ["ok"],
+    "all_roles_returncode": 0
+  },
+  "classic_seconds": [
+    6.566771954996511,
+    6.5950303220015485,
+    6.6546405970002525,
+    6.622484875988448,
+    6.611745336995227
+  ],
+  "static_ha_seconds": [
+    5.992339981996338,
+    5.06154452599003,
+    6.124438483995618,
+    6.287803574989084,
+    6.029676410005777
+  ],
+  "signed_overheads": [
+    -0.08747554764150153,
+    -0.23252141705788484,
+    -0.07967404178726589,
+    -0.050537118206617354,
+    -0.08803559382914422
+  ],
+  "median_overhead": -0.08747554764150153,
+  "one_sided_bootstrap_upper_95": -0.050537118206617354,
+  "negative_deltas_clipped": false,
+  "p0_noninferiority_is_formal_g10": false,
+  "scratch_removed": true
+}

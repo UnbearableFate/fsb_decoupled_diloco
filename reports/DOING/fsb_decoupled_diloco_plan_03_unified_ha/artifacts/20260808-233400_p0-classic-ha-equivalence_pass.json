@@ -1,0 +1,31 @@
+{
+  "artifact_version": 1,
+  "experiment_id": "p0-classic-ha-equivalence",
+  "status": "PASS",
+  "recorded_at": "2026-08-08T23:34:00+09:00",
+  "event_tape": {
+    "theta_v0_float32": [1.0, -2.0, 3.0],
+    "proposal_ids": ["proposal-000", "proposal-001"],
+    "learner_ids": ["learner_000", "learner_001"],
+    "tokens_each": 8,
+    "arrival_committed_at": [10.0, 11.0],
+    "quorum_max": 2,
+    "failure": false,
+    "mid_cycle_replace": false,
+    "outer": {"name": "nesterov", "lr": 0.7, "momentum": 0.9}
+  },
+  "projection": {
+    "selected_ids": ["proposal-000", "proposal-001"],
+    "selected_order": ["learner_000", "learner_001"],
+    "weights": [0.5, 0.5],
+    "merged_float32_le_hex": "0000803f000000c000005040",
+    "theta_float32_le_hex": "0000803f000000c0ae475540",
+    "outer_step": 1,
+    "outer_momentum_float32_le_hex": "0000000000000000000080be",
+    "version": 1,
+    "predecessor_version": 0
+  },
+  "comparison": "classic projection and static HA projection exact; tensor fields torch.equal and byte-identical",
+  "excluded_wrapper_fields": ["epoch", "owner_id", "publication_id", "path", "timestamp"],
+  "test": "tests/reference/test_plan03_classic_static_oracle.py::test_classic_and_static_ha_share_exact_semantic_projection"
+}

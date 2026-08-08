@@ -1,0 +1,43 @@
+old_name,concern,disposition,new_command,reason
+admit_registration,dynamic membership,merge,LeaderAuthority.admit_dynamic_registration,Typed admission command validates request and current capacity in one transaction
+advance_dynamic_drain,dynamic terminal,merge,LeaderAuthority.reconcile_terminal_drain,One terminal state-machine command owns timeout retirement and close transition
+begin_dynamic_drain,dynamic terminal,merge,LeaderAuthority.begin_terminal_drain,Static and dynamic use one ordered close lifecycle
+authorize_placement_replacement,dynamic replacement,keep,LeaderAuthority.authorize_dynamic_replacement,Operator replacement remains a distinct auditable authority decision
+claim_gc_candidate,filesystem GC,merge,LeaderAuthority.claim_gc_batch,Single and batch claim paths become one typed maintenance command
+claim_ready_gc_candidates,filesystem GC,merge,LeaderAuthority.claim_gc_batch,One bounded reference-driven claim command
+clear_gc_pending_paths,filesystem GC,merge,LeaderAuthority.finalize_gc_batch,Clear is only legal as part of fenced batch completion
+commit_full_merge,global commit,merge,LeaderAuthority.commit_merge,Publication intent selection token and version commit become one explicit command
+complete_gc_candidate,filesystem GC,merge,LeaderAuthority.finalize_gc_batch,Completion is keyed by immutable batch and object identities
+delete_archived_rows,audit retention,merge,LeaderAuthority.archive_audit_batch,Prune only after hashed immutable audit batch commit
+delete_archived_ha_history,audit retention,merge,LeaderAuthority.archive_audit_batch,HA history uses the common auditable archive transaction
+delete_archived_dynamic_history,audit retention,merge,LeaderAuthority.archive_audit_batch,Dynamic history uses the common auditable archive transaction
+drop_ineligible_updates,proposal disposition,merge,LeaderAuthority.adjudicate_proposals,Every rejected proposal receives a typed terminal disposition
+drop_obsolete_updates,proposal disposition,merge,LeaderAuthority.adjudicate_proposals,Staleness is one disposition reason not a standalone mutator
+drop_superseded_updates,proposal disposition,merge,LeaderAuthority.adjudicate_proposals,Supersession follows accepted insert and is recorded atomically
+drop_updates,proposal disposition,delete,,Generic arbitrary drop is replaced by typed reason-specific adjudication
+expedite_terminal_gc_candidates,terminal GC,merge,LeaderAuthority.reconcile_terminal_gc,Terminal GC still obeys live-reference and grace checks
+finalize_terminal_state,terminal state,keep,LeaderAuthority.finalize_terminal,Explicit final transition remains independently auditable
+finalize_unconsumed_updates,proposal terminalization,merge,LeaderAuthority.finalize_unconsumed_proposals,One full-only command assigns every remaining proposal a terminal fate
+initialize_full_run,v0 publication,merge,LeaderAuthority.initialize_v0,V0 follows publication intent commit and control publication lifecycle
+initialize_dynamic_membership,dynamic membership,keep,LeaderAuthority.initialize_dynamic_membership,Optional dynamic tables require one explicit initialization command
+insert_update_metadata,proposal ingest,merge,LeaderAuthority.ingest_proposal,Typed decode conflict adjudication and frontier update share one transaction
+mark_updates_applied,proposal commit,delete,,Application is only legal inside commit_merge
+mark_updates_selected,selection,merge,LeaderAuthority.try_select_batch,Selection rows and durable batch are created atomically
+prepare_full_resume,legacy resume,delete,,V4 does not resume old runs and v4 takeover reconciles explicit batches/intents
+record_control_publication,control publication,merge,LeaderAuthority.commit_control_publication,Deterministic control command IDs and publication ledger are inseparable
+record_capacity_observation,capacity accounting,merge,LeaderAuthority.record_capacity_observation,Retained for non-merge observations behind a typed command
+record_starvation_capacity_observation,capacity accounting,merge,LeaderAuthority.record_capacity_observation,Starvation is a typed observation kind
+record_external_launch_jobs,scheduler receipt,keep,LeaderAuthority.record_external_launch_jobs,Durable external job receipts remain an explicit scheduler command
+reject_registration,dynamic membership,merge,LeaderAuthority.adjudicate_registration,Admission and rejection share typed identity validation and dispositions
+revoke_dead_instances,dynamic membership,merge,LeaderAuthority.retire_contributor,All retirement causes terminalize the incarnation and its proposals atomically
+register_orphan_gc_candidate,filesystem GC,merge,LeaderAuthority.register_orphan_object,Only typed unreferenced object identities may enter GC
+reset_all_selected_to_pending,recovery,delete,,Recovery reconciles durable selection batches and cannot globally reset unrelated rows
+reset_selected_to_pending,recovery,merge,LeaderAuthority.reconcile_selection_batch,Only still-current rows in a named failed batch return to pending
+set_controller_state,generic state escape,delete,,Terminal state changes use explicit lifecycle commands
+set_run_state,generic state escape,delete,,Typed commands own their durable state and arbitrary key mutation is not public
+update_learner_status,static contributor,merge,LeaderAuthority.update_contributor_liveness,Static status is fenced by logical launch attempt and binding generation
+update_instance_heartbeat,dynamic liveness,merge,LeaderAuthority.observe_contributor_heartbeats,Single heartbeat uses the same batch command as a one-item input
+update_instance_heartbeats,dynamic liveness,merge,LeaderAuthority.observe_contributor_heartbeats,One transaction validates and records a heartbeat scan
+update_launch_request,scheduler outbox,keep,LeaderAuthority.transition_launch_request,Explicit compare-and-transition is required for uncertainty recovery
+upsert_global_version,global commit,delete,,V0 and later versions can only be created by initialize_v0 or commit_merge
+upsert_learner,static contributor,merge,LeaderAuthority.observe_contributor_heartbeats,Static learner row mutation is part of the fenced contributor observation command

@@ -1,0 +1,50 @@
+{
+  "artifact_version": 1,
+  "experiment_id": "p0-shared-fs-capability",
+  "status": "PASS",
+  "recorded_at": "2026-08-08T22:56:00+09:00",
+  "source_commit": "a00a3d64a50f10a2478c3f4fe795e658d1b3b52f",
+  "host": "mg0004",
+  "pbs_job_id": "2508036.opbs",
+  "shared_parent": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts",
+  "temporary_path_removed": true,
+  "results": {
+    "hardlink_create_no_replace": {
+      "status": "PASS",
+      "collision_errno": 17,
+      "same_inode": true
+    },
+    "directory_rename_no_replace": {
+      "status": "UNSUPPORTED",
+      "errno": 22,
+      "fallback_required": true
+    },
+    "directory_publish_fallback": {
+      "status": "PASS",
+      "protocol": "exclusive-mkdir+identity-reservation+hardlink-objects+complete-marker",
+      "crash_prefixes": [
+        {"prefix": 0, "visible_before_retry": false, "visible_after_retry": true},
+        {"prefix": 1, "visible_before_retry": false, "visible_after_retry": true},
+        {"prefix": 2, "visible_before_retry": false, "visible_after_retry": true},
+        {"prefix": 3, "visible_before_retry": false, "visible_after_retry": true}
+      ],
+      "same_identity_retry": true,
+      "different_identity_collision": "fail_closed",
+      "completed_root_overwrite": "fail_closed"
+    },
+    "dir_fd_openat_nofollow_and_parent_fsync": {
+      "status": "PASS",
+      "symlink_errno": 40,
+      "parent_directory_fsync": true
+    },
+    "sqlite_delete_journal_lock": {
+      "status": "PASS",
+      "journal_mode": "delete",
+      "contended_error_code": 5,
+      "contended_error": "database is locked",
+      "waited_seconds": 0.05115729593671858,
+      "success_after_release": true,
+      "integrity_check": ["ok"]
+    }
+  }
+}

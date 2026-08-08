@@ -1,0 +1,16 @@
+{
+  "fixture_version": 1,
+  "protocol": "static_ha_v1",
+  "semantic_projection": {
+    "selected_ids": ["proposal-000", "proposal-001"],
+    "selected_order": ["learner_000", "learner_001"],
+    "weights": [0.5, 0.5],
+    "merged_float32_le_hex": "0000803f000000c000005040",
+    "theta_float32_le_hex": "0000803f000000c0ae475540",
+    "outer_step": 1,
+    "outer_momentum_float32_le_hex": "0000000000000000000080be",
+    "version": 1,
+    "predecessor_version": 0
+  },
+  "excluded_wrapper_fields": ["epoch", "owner_id", "publication_id", "path", "timestamp"]
+}

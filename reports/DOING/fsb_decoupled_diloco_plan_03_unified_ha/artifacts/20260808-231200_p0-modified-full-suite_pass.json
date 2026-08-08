@@ -1,0 +1,35 @@
+{
+  "artifact_version": 1,
+  "experiment_id": "p0-modified-full-suite",
+  "status": "PASS",
+  "recorded_at": "2026-08-08T23:12:00+09:00",
+  "environment": {
+    "system": "Miyabi-G",
+    "host": "mg0004",
+    "pbs_job_id": "2508036.opbs",
+    "python": "3.13.13",
+    "torch": "2.13.0+cu132",
+    "pytest": "9.1.1"
+  },
+  "collection": {
+    "command": ".venv/bin/python -m pytest --collect-only -q",
+    "collected": 535,
+    "baseline_collected": 526,
+    "p0_added": 9,
+    "errors": 0,
+    "elapsed_seconds": 7.86
+  },
+  "suite": {
+    "command": ".venv/bin/python -m pytest -q",
+    "passed": 530,
+    "xfailed": 5,
+    "failed": 0,
+    "errors": 0,
+    "elapsed_seconds": 32.45
+  },
+  "static": {
+    "ruff_check": "PASS",
+    "ruff_format_check": "PASS",
+    "git_diff_check": "PASS"
+  }
+}
