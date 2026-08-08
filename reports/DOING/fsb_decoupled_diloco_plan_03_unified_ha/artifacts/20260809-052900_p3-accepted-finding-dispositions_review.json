@@ -1,0 +1,137 @@
+{
+  "artifact_version": 1,
+  "experiment_id": "p3-accepted-finding-dispositions",
+  "status": "COMPLETE",
+  "phase": "P3-operational-robustness",
+  "recorded_at": "2026-08-09T05:29:00+09:00",
+  "phase_gate_findings": [
+    "H-02",
+    "H-05",
+    "H-07",
+    "H-08",
+    "H-09",
+    "M-01",
+    "M-02",
+    "M-03",
+    "M-05",
+    "M-06",
+    "M-07",
+    "M-08",
+    "M-09",
+    "M-10",
+    "M-11",
+    "M-12",
+    "M-15"
+  ],
+  "dispositions": {
+    "H-02": {
+      "disposition": "fixed",
+      "requirements": ["TOK-01", "TOK-02", "TOK-03", "P3-REBASE"],
+      "tests": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py",
+        "tests/protocol/test_p3_unified_v4_golden.py"
+      ]
+    },
+    "H-05": {
+      "disposition": "fixed",
+      "requirements": ["TOK-04", "SEL-01", "SEL-02", "SEL-03", "SEL-04", "P3-REBASE"],
+      "tests": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py",
+        "tests/storage/test_authority_p3_operational.py",
+        "tests/test_plan03_p0_red.py"
+      ]
+    },
+    "H-07": {
+      "disposition": "fixed",
+      "requirements": ["DMB-05", "SCHED-01", "SCHED-02", "SCHED-03", "SCHED-04", "SCHED-05", "SCHED-06"],
+      "tests": [
+        "tests/storage/test_authority_p3_operational.py",
+        "tests/tools/test_resolve_scheduler_uncertainty.py",
+        "tests/test_plan02_phase2_dynamic.py",
+        "tests/test_plan03_p0_red.py"
+      ]
+    },
+    "H-08": {
+      "disposition": "fixed",
+      "requirements": ["TOK-05", "TOK-06", "TOK-07"],
+      "tests": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py",
+        "tests/storage/test_authority_p3_operational.py"
+      ]
+    },
+    "H-09": {
+      "disposition": "fixed-for-P3-deferred-final-measurement",
+      "requirements": ["P6-PERF-CLASSIC", "P6-PERF-DYNAMIC"],
+      "tests": ["tests/observability/test_p3_operational_evidence.py"],
+      "justification": "P3 fixes and tests signed, unclipped workload-equivalence evaluation; the preregistered multi-pair performance measurements remain P6 acceptance work."
+    },
+    "M-01": {
+      "disposition": "fixed",
+      "requirements": ["CLOCK-01"],
+      "tests": ["tests/storage/test_authority_p3_operational.py"]
+    },
+    "M-02": {
+      "disposition": "fixed",
+      "requirements": ["DATA-04"],
+      "tests": ["tests/protocol/test_p3_accounting_selection_cursor.py"]
+    },
+    "M-03": {
+      "disposition": "fixed",
+      "requirements": ["DATA-01", "DATA-02", "DATA-03"],
+      "tests": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py",
+        "tests/storage/test_authority_p3_operational.py"
+      ]
+    },
+    "M-05": {
+      "disposition": "fixed",
+      "requirements": ["INIT-01"],
+      "tests": ["tests/storage/test_run_initializer_p3.py"]
+    },
+    "M-06": {
+      "disposition": "fixed",
+      "requirements": ["AUDIT-02", "AUDIT-04"],
+      "tests": ["tests/storage/test_audit_archive_p3.py"]
+    },
+    "M-07": {
+      "disposition": "fixed",
+      "requirements": ["TOK-08", "AUDIT-05"],
+      "tests": ["tests/observability/test_p3_operational_evidence.py"]
+    },
+    "M-08": {
+      "disposition": "fixed-in-P1-regressed",
+      "requirements": ["CFG-01"],
+      "tests": ["tests/test_plan02_phase1_ha.py"]
+    },
+    "M-09": {
+      "disposition": "fixed-in-P1-regressed",
+      "requirements": ["AUTH-02", "AUTH-03"],
+      "tests": ["tests/storage/test_schema_v4.py"]
+    },
+    "M-10": {
+      "disposition": "fixed",
+      "requirements": ["SEL-05"],
+      "tests": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py",
+        "tests/storage/test_authority_p3_operational.py"
+      ]
+    },
+    "M-11": {
+      "disposition": "fixed-in-P2-regressed",
+      "requirements": ["PUB-01"],
+      "tests": ["tests/test_plan02_phase1_ha.py"]
+    },
+    "M-12": {
+      "disposition": "fixed",
+      "requirements": ["CLOCK-01"],
+      "tests": ["tests/storage/test_authority_p3_operational.py"]
+    },
+    "M-15": {
+      "disposition": "fixed",
+      "requirements": ["ENV-01"],
+      "tests": ["tests/storage/test_run_initializer_p3.py"]
+    }
+  },
+  "compute_evidence": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-052846_p3-final-audit-validation-attempt2_pass.json",
+  "golden_attribution": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-043200_p3-trace-rebaseline_review.json"
+}

@@ -1,0 +1,11 @@
+PBS_JOBID=2508861.opbs
+compute_host=mg0003
+python=3.13.13 pytest=9.1.1 hypothesis=6.165.2 torch=2.13.0+cu132
+Ruff: PASS
+Format: 31 files already formatted
+Plan03 Checker: PASS
+Focused: 239 passed in 8.14s
+Full: 745 passed in 50.54s
+PLAN03_PHASE3_TESTS_COMPLETE=2508861.opbs
+Original log: fsdiloco_plan03_p3.o2508861
+Original SHA-256: 67b6ebd0a872a4318f9c0ad64daf54ebeafc502f86b8c112bc713aaa432224fc

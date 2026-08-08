@@ -19,6 +19,9 @@ from .config import Config, _from_dict
 from .versions import CONFIG_SCHEMA_VERSION
 
 
+PLAN03_REQUIREMENTS = frozenset({"DATA-04", "TOK-07"})
+
+
 class ConfigProfile(str, Enum):
     FULL_V4 = "full_v4"
     TORCH_BASELINE = "torch_baseline"

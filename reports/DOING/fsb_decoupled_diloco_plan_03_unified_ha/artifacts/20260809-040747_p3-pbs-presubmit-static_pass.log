@@ -1,0 +1,11 @@
+Command: bash -n scripts/miyabi/*.pbs && ! rg -n '#PBS -W group_list=<|#PBS -W group_list=\$|group_list=<group_id>' scripts/miyabi -g '*.pbs' && rg -n '^#PBS -W group_list=xg24i002$|^#PBS -l walltime=00:10:00$' scripts/miyabi/run_plan03_phase3_tests.pbs && git diff --check
+Environment: miyabi-g1 login/control-plane node; static validation only
+Exit status: 0
+
+scripts/miyabi/run_plan03_phase3_tests.pbs:4:#PBS -W group_list=xg24i002
+scripts/miyabi/run_plan03_phase3_tests.pbs:6:#PBS -l walltime=00:10:00
+
+bash syntax: PASS for every scripts/miyabi/*.pbs
+literal group placeholder scan: PASS
+P3 group/walltime assertions: PASS
+git diff --check: PASS

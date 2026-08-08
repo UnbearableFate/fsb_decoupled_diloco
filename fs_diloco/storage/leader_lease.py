@@ -15,6 +15,9 @@ from typing import Any, Callable, Mapping
 from .schema_bootstrap import BootstrapIdentity, open_existing
 
 
+PLAN03_REQUIREMENTS = frozenset({"CLOCK-01"})
+
+
 class LeaseUnavailableError(RuntimeError):
     """Raised when another non-expired owner holds the lease."""
 
@@ -162,9 +165,9 @@ class LeaderLeaseStore:
     ) -> LeaderToken:
         if not owner_id:
             raise ValueError("owner_id must not be empty")
-        now = float(self._wall_clock())
         self.conn.execute("BEGIN IMMEDIATE")
         try:
+            now = float(self._wall_clock())
             current = self.conn.execute(
                 "SELECT * FROM syncer_leader WHERE singleton = 1"
             ).fetchone()
@@ -252,9 +255,9 @@ class LeaderLeaseStore:
 
     def renew(self, token: LeaderToken) -> dict[str, Any]:
         self._check_run_id(token)
-        now = float(self._wall_clock())
         self.conn.execute("BEGIN IMMEDIATE")
         try:
+            now = float(self._wall_clock())
             row = self._matching_row(token)
             if row is None or str(row["state"]) != "active":
                 raise StaleLeaderTokenError("leader token has been superseded or released")
@@ -304,9 +307,9 @@ class LeaderLeaseStore:
 
     def release(self, token: LeaderToken) -> None:
         self._check_run_id(token)
-        now = float(self._wall_clock())
         self.conn.execute("BEGIN IMMEDIATE")
         try:
+            now = float(self._wall_clock())
             row = self._matching_row(token)
             if row is None or str(row["state"]) != "active":
                 raise StaleLeaderTokenError("only the current active owner may release")

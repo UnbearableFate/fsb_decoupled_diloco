@@ -70,8 +70,8 @@ CREATE TABLE launch_requests (
     reason TEXT NOT NULL,
     requested_by_epoch INTEGER NOT NULL CHECK (requested_by_epoch >= 1),
     state TEXT NOT NULL CHECK (state IN (
-        'requested', 'claimed', 'submitted', 'uncertain', 'admitted', 'failed', 'expired',
-        'manual_review'
+        'planned', 'submitting', 'submission_unknown', 'submitted', 'started',
+        'terminal_uncertain', 'admitted', 'failed', 'expired', 'manual_review'
     )),
     request_sha256 TEXT NOT NULL CHECK (length(request_sha256) = 64),
     created_at REAL NOT NULL,
@@ -81,8 +81,11 @@ CREATE TABLE launch_requests (
     pbs_job_id TEXT,
     scheduler_state TEXT,
     scheduler_observed_at REAL,
+    first_uncertain_at REAL,
+    last_positive_evidence_at REAL,
     uncertainty_deadline REAL,
     evidence_source TEXT,
+    manual_reason TEXT,
     admitted_instance_id TEXT UNIQUE REFERENCES learner_instances(instance_id),
     expires_at REAL,
     last_error TEXT,

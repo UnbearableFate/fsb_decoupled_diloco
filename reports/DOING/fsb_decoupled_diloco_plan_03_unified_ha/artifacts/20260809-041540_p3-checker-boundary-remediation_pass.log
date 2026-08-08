@@ -1,0 +1,13 @@
+Commands:
+1. .venv/bin/ruff format scripts/miyabi/check_plan03.py tests/test_plan03_checker.py
+2. .venv/bin/ruff check fs_diloco tests scripts/miyabi
+3. .venv/bin/python -m compileall -q fs_diloco tests scripts/miyabi
+4. .venv/bin/python scripts/miyabi/check_plan03.py --root . --expect reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260808-223500_p0-runtime-surface-inventory_review.json --verify-boundaries
+5. bash -n scripts/miyabi/*.pbs
+6. git diff --check
+Environment: miyabi-g1 login/control-plane node; static validation only
+Exit status: 0
+
+Ruff: All checks passed!
+Plan03 Checker: PASS
+compileall/bash syntax/diff check: PASS

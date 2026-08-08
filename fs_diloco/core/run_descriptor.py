@@ -5,15 +5,23 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import platform
+import socket
+import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from .config import Config, load_resolved_config_snapshot
 from .constants import DYNAMIC_SCHEMA_VERSION, HA_SCHEMA_VERSION, PROTOCOL_VERSION
-from ..storage.atomic_io import read_json, sha256_file
+from ..storage.atomic_io import publish_immutable_bytes, read_json, sha256_file
 from ..storage.paths import RunPaths
+from ..storage.run_initializer import validate_completed_run
 from ..storage.schema_bootstrap import BootstrapIdentity
+
+
+PLAN03_REQUIREMENTS = frozenset({"ENV-01"})
 
 
 def _sha256_json_without(payload: dict[str, Any], field: str) -> str:
@@ -128,6 +136,7 @@ def load_run_descriptor(
         config_sha256=str(descriptor["resolved_config_sha256"]),
         mode=identity_mode,
     )
+    validate_completed_run(paths.shared_root)
     return LoadedRunDescriptor(paths, descriptor, config, identity)
 
 
@@ -143,3 +152,89 @@ def load_run_descriptor_from_environment() -> LoadedRunDescriptor:
         expected_source_fingerprint=os.environ.get("FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT"),
         expected_descriptor_sha256=os.environ.get("FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256"),
     )
+
+
+def write_actor_attestation(
+    loaded: LoadedRunDescriptor,
+    *,
+    actor_kind: str,
+    actor_id: str,
+    attempt_id: str,
+    runtime_evidence: Mapping[str, Any],
+    scheduler_job_id: str | None = None,
+    accelerator_identity: str | None = None,
+    observed_at: float | None = None,
+) -> Path:
+    """Publish one immutable runtime/source attestation per actor attempt."""
+
+    for name, value in (
+        ("actor_kind", actor_kind),
+        ("actor_id", actor_id),
+        ("attempt_id", attempt_id),
+    ):
+        if not value or "/" in value or "\\" in value or "\0" in value or value in {".", ".."}:
+            raise ValueError(f"{name} must be a safe path component")
+    required_runtime_fields = {
+        "torch_version",
+        "cuda_runtime_version",
+        "gpu_driver_version",
+        "module_environment",
+        "resource_allocation",
+    }
+    if not isinstance(runtime_evidence, Mapping) or set(runtime_evidence) != (
+        required_runtime_fields
+    ):
+        raise ValueError("runtime_evidence fields are invalid")
+    torch_version = runtime_evidence["torch_version"]
+    if not isinstance(torch_version, str) or not torch_version:
+        raise ValueError("runtime_evidence.torch_version must not be empty")
+    for name in ("cuda_runtime_version", "gpu_driver_version"):
+        value = runtime_evidence[name]
+        if value is not None and (not isinstance(value, str) or not value):
+            raise ValueError(f"runtime_evidence.{name} must be null or a non-empty string")
+    modules = runtime_evidence["module_environment"]
+    if not isinstance(modules, (list, tuple)) or any(
+        not isinstance(item, str) or not item for item in modules
+    ):
+        raise ValueError("runtime_evidence.module_environment must be a string sequence")
+    resources = runtime_evidence["resource_allocation"]
+    if not isinstance(resources, Mapping) or not resources:
+        raise ValueError("runtime_evidence.resource_allocation must be a non-empty mapping")
+    normalized_runtime_evidence = {
+        "torch_version": torch_version,
+        "cuda_runtime_version": runtime_evidence["cuda_runtime_version"],
+        "gpu_driver_version": runtime_evidence["gpu_driver_version"],
+        "module_environment": list(modules),
+        "resource_allocation": dict(resources),
+    }
+    descriptor = loaded.descriptor
+    payload = {
+        "format_version": 1,
+        "run_id": descriptor["run_id"],
+        "descriptor_sha256": descriptor["descriptor_sha256"],
+        "source_fingerprint": descriptor["source_fingerprint"],
+        "source_lock_sha256": descriptor.get("source_lock_sha256"),
+        "model_identity": descriptor.get("model_identity"),
+        "tokenizer_identity": descriptor.get("tokenizer_identity"),
+        "dataset_identity": descriptor.get("dataset_identity"),
+        "actor_kind": actor_kind,
+        "actor_id": actor_id,
+        "attempt_id": attempt_id,
+        "hostname": socket.gethostname(),
+        "pid": os.getpid(),
+        "python_version": platform.python_version(),
+        "runtime_evidence": normalized_runtime_evidence,
+        "scheduler_job_id": scheduler_job_id,
+        "accelerator_identity": accelerator_identity,
+        "observed_at": time.time() if observed_at is None else float(observed_at),
+    }
+    raw_without_hash = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    payload["attestation_sha256"] = hashlib.sha256(raw_without_hash).hexdigest()
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode(
+        "utf-8"
+    )
+    target = loaded.paths.actor_attestation_path(actor_kind, actor_id, attempt_id)
+    publish_immutable_bytes(target, raw + b"\n")
+    return target

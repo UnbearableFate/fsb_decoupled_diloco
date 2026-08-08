@@ -1,0 +1,12 @@
+P3 expanded hardening validation attempt 1
+PBS job: 2508881.opbs
+Compute gate: Ruff PASS; changed-file format PASS; Plan03 Checker PASS
+Focused pytest: 3 failed, 258 passed in 8.43s
+Full pytest: not run (fail-fast)
+
+Failures:
+1. unified_v4_trace maximum_wait_rounds fixture expected 3; generated deterministic lineage measured 2.
+2. SQL fairness test reused receipt-1/proposal-1 command IDs for distinct contributor requests, correctly raising CommandConflictError.
+3. Scheduler deadline negative test used invalid planned -> submission_unknown edge, so transition-graph validation correctly rejected it before deadline validation.
+
+Disposition: test/fixture corrections only; production semantics remain unchanged.

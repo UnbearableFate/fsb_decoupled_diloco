@@ -63,6 +63,8 @@ CREATE TABLE controller_state (
     generation INTEGER NOT NULL CHECK (generation >= 0),
     reason TEXT,
     requested_at REAL,
+    hard_crash_cycle_token_budget INTEGER NOT NULL DEFAULT 0
+        CHECK (hard_crash_cycle_token_budget >= 0),
     updated_by_epoch INTEGER,
     updated_by_owner_id TEXT
 );
@@ -77,6 +79,30 @@ CREATE TABLE terminal_state (
     finalized_by_epoch INTEGER NOT NULL CHECK (finalized_by_epoch >= 1),
     finalized_by_owner_id TEXT NOT NULL,
     finalized_at REAL NOT NULL
+);
+
+CREATE TABLE terminal_contributor_fences (
+    generation INTEGER NOT NULL CHECK (generation >= 1),
+    stable_contributor_key TEXT NOT NULL,
+    fence_kind TEXT NOT NULL CHECK (fence_kind IN ('static', 'dynamic')),
+    fence_json TEXT NOT NULL,
+    close_last_cycle_seq INTEGER NOT NULL CHECK (close_last_cycle_seq >= 0),
+    close_data_cursor INTEGER NOT NULL CHECK (close_data_cursor >= 0),
+    state TEXT NOT NULL CHECK (state IN ('awaiting_ack', 'acked', 'hard_crash')),
+    final_cycle_seq INTEGER,
+    final_update_id TEXT,
+    hard_crash_gap_tokens_upper_bound INTEGER NOT NULL DEFAULT 0
+        CHECK (hard_crash_gap_tokens_upper_bound >= 0),
+    acknowledged_at REAL,
+    acknowledged_by_epoch INTEGER,
+    PRIMARY KEY(generation, stable_contributor_key),
+    UNIQUE(generation, fence_json),
+    CHECK ((state = 'awaiting_ack' AND final_cycle_seq IS NULL
+            AND final_update_id IS NULL AND acknowledged_at IS NULL)
+        OR (state = 'acked' AND final_cycle_seq IS NOT NULL
+            AND acknowledged_at IS NOT NULL)
+        OR (state = 'hard_crash' AND final_cycle_seq IS NULL
+            AND final_update_id IS NULL AND acknowledged_at IS NOT NULL))
 );
 
 CREATE TABLE static_contributor_bindings (
@@ -204,7 +230,7 @@ CREATE TABLE cycle_receipts (
     stable_contributor_key TEXT NOT NULL,
     cycle_seq INTEGER NOT NULL CHECK (cycle_seq >= 1),
     cycle_id TEXT NOT NULL,
-    previous_receipt_id TEXT REFERENCES cycle_receipts(receipt_id),
+    previous_receipt_id TEXT,
     previous_receipt_sha256 TEXT,
     processed_tokens_this_cycle INTEGER NOT NULL CHECK (processed_tokens_this_cycle > 0),
     effective_tokens_this_cycle INTEGER NOT NULL CHECK (effective_tokens_this_cycle >= 0),
@@ -445,12 +471,49 @@ CREATE TABLE control_publications (
 CREATE TABLE archive_batches (
     archive_batch_id TEXT PRIMARY KEY,
     owner_epoch INTEGER NOT NULL CHECK (owner_epoch >= 1),
+    record_kind TEXT NOT NULL,
     cutoff_version INTEGER NOT NULL CHECK (cutoff_version >= 0),
     row_count INTEGER NOT NULL CHECK (row_count >= 0),
     relative_path TEXT NOT NULL,
     sha256 TEXT NOT NULL CHECK (length(sha256) = 64),
     state TEXT NOT NULL CHECK (state IN ('prepared', 'committed', 'deleted')),
     created_at REAL NOT NULL
+);
+
+CREATE TABLE archive_partitions (
+    partition_id TEXT PRIMARY KEY,
+    owner_epoch INTEGER NOT NULL CHECK (owner_epoch >= 1),
+    record_kind TEXT NOT NULL,
+    source_batch_count INTEGER NOT NULL CHECK (source_batch_count >= 1),
+    row_count INTEGER NOT NULL CHECK (row_count >= 0),
+    relative_path TEXT NOT NULL UNIQUE,
+    sha256 TEXT NOT NULL CHECK (length(sha256) = 64),
+    manifest_relative_path TEXT NOT NULL UNIQUE,
+    manifest_sha256 TEXT NOT NULL CHECK (length(manifest_sha256) = 64),
+    state TEXT NOT NULL CHECK (state IN ('committed', 'deleted')),
+    created_at REAL NOT NULL
+);
+
+CREATE TABLE audit_partition_batches (
+    partition_id TEXT NOT NULL REFERENCES archive_partitions(partition_id),
+    archive_batch_id TEXT NOT NULL UNIQUE,
+    record_kind TEXT NOT NULL,
+    cutoff_version INTEGER NOT NULL CHECK (cutoff_version >= 0),
+    row_count INTEGER NOT NULL CHECK (row_count >= 0),
+    relative_path TEXT NOT NULL UNIQUE,
+    sha256 TEXT NOT NULL CHECK (length(sha256) = 64),
+    PRIMARY KEY(partition_id, archive_batch_id)
+);
+
+CREATE TABLE audit_gc_candidates (
+    relative_path TEXT PRIMARY KEY,
+    partition_id TEXT NOT NULL REFERENCES archive_partitions(partition_id),
+    archive_batch_id TEXT NOT NULL UNIQUE,
+    sha256 TEXT NOT NULL CHECK (length(sha256) = 64),
+    state TEXT NOT NULL CHECK (state IN ('pending', 'claimed', 'deleted')),
+    recorded_by_epoch INTEGER NOT NULL CHECK (recorded_by_epoch >= 1),
+    recorded_at REAL NOT NULL,
+    deleted_at REAL
 );
 
 CREATE TABLE gc_candidates (
@@ -470,12 +533,36 @@ CREATE TABLE candidate_launch_outbox (
     observation_key TEXT NOT NULL UNIQUE,
     request_sha256 TEXT NOT NULL CHECK (length(request_sha256) = 64),
     state TEXT NOT NULL CHECK (state IN (
-        'requested', 'claimed', 'submitted', 'uncertain', 'failed', 'expired', 'manual_review'
+        'planned', 'submitting', 'submission_unknown', 'submitted', 'started',
+        'terminal_uncertain', 'admitted', 'failed', 'expired', 'manual_review'
     )),
     owner_epoch INTEGER NOT NULL CHECK (owner_epoch >= 1),
     scheduler_job_id TEXT,
+    first_uncertain_at REAL,
+    last_positive_evidence_at REAL,
     uncertainty_deadline REAL,
     evidence_source TEXT,
+    manual_reason TEXT,
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
+);
+
+CREATE TABLE scheduler_operator_requests (
+    request_id TEXT PRIMARY KEY,
+    launch_request_id TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action IN (
+        'confirm_job_id', 'mark_failed', 'mark_expired',
+        'record_external_cancel_evidence'
+    )),
+    expected_state_sha256 TEXT NOT NULL CHECK (length(expected_state_sha256) = 64),
+    reason TEXT NOT NULL,
+    scheduler_job_id TEXT,
+    evidence_source TEXT,
+    request_sha256 TEXT NOT NULL CHECK (length(request_sha256) = 64),
+    state TEXT NOT NULL CHECK (state IN ('applied', 'stale_rejected')),
+    result_state TEXT NOT NULL,
+    processed_by_epoch INTEGER NOT NULL CHECK (processed_by_epoch >= 1),
+    processed_at REAL NOT NULL,
+    CHECK ((action = 'confirm_job_id' AND scheduler_job_id IS NOT NULL)
+        OR (action <> 'confirm_job_id' AND scheduler_job_id IS NULL))
 );

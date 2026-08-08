@@ -1,0 +1,35 @@
+{
+  "artifact_format_version": 1,
+  "status": "REVIEWED",
+  "fixture": "tests/fixtures/golden/unified_v4_trace.json",
+  "anchors": [
+    "tests/fixtures/golden/classic_full_v1_trace.json",
+    "tests/fixtures/golden/static_ha_v1_trace.json"
+  ],
+  "cases": {
+    "no_replace_full_quorum": {
+      "disposition": "unchanged",
+      "evidence": "semantic projection exactly equals both P0 anchors; full-quorum selector returns stable-key order"
+    },
+    "prepublication_replace": {
+      "disposition": "accepted_change",
+      "finding": "H-02",
+      "requirements": ["TOK-01", "TOK-02"],
+      "reason": "only post-replacement effective work may weight the proposal"
+    },
+    "cycle_end_replace": {
+      "disposition": "accepted_change",
+      "finding": "H-02",
+      "requirements": ["TOK-02", "TOK-05"],
+      "reason": "zero-effective completed cycle publishes a receipt but no proposal"
+    },
+    "truncated_fair_selection": {
+      "disposition": "accepted_change",
+      "finding": "H-05",
+      "requirements": ["SEL-02", "SEL-03", "SEL-05", "SEL-06"],
+      "reason": "quorum truncation now uses persistent committed service count before deterministic ties"
+    }
+  },
+  "unexpected_drift": [],
+  "gate": "Only the two accepted findings change their scoped cases; every other semantic field is anchored to P0."
+}

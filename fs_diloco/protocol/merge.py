@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
+
+
+PLAN03_REQUIREMENTS = frozenset({"TOK-04"})
 
 
 def staleness(current_version: int, base_global_version: int) -> int:
@@ -19,17 +23,43 @@ def normalized_update_weights(
     current_version: int,
     staleness_lambda: float,
 ) -> dict[str, float]:
+    if isinstance(current_version, bool) or not isinstance(current_version, int):
+        raise ValueError("current_version must be a non-negative integer")
+    if current_version < 0:
+        raise ValueError("current_version must be a non-negative integer")
+    if isinstance(staleness_lambda, bool):
+        raise ValueError("staleness_lambda must be finite and non-negative")
+    numeric_lambda = float(staleness_lambda)
+    if not math.isfinite(numeric_lambda) or numeric_lambda < 0.0:
+        raise ValueError("staleness_lambda must be finite and non-negative")
+    if not updates:
+        raise ValueError("selected updates must not be empty")
     raw: dict[str, float] = {}
     for update in updates:
-        s = staleness(current_version, int(update["base_global_version"]))
-        raw[update["update_id"]] = raw_update_weight(
-            int(update["tokens_this_update"]),
-            s,
-            staleness_lambda,
-        )
-    total = sum(raw.values())
-    if total <= 0:
-        raise ValueError("selected updates have non-positive total merge weight")
+        update_id = update.get("update_id")
+        if not isinstance(update_id, str) or not update_id or update_id in raw:
+            raise ValueError("selected update IDs must be non-empty and unique")
+        tokens = update.get("tokens_this_update")
+        if isinstance(tokens, bool) or not isinstance(tokens, int) or tokens <= 0:
+            raise ValueError("each selected update must have positive integer direct tokens")
+        base = update.get("base_global_version")
+        if isinstance(base, bool) or not isinstance(base, int) or not 0 <= base <= current_version:
+            raise ValueError("selected update base version must be current or historical")
+        try:
+            weight = raw_update_weight(tokens, staleness(current_version, base), numeric_lambda)
+        except OverflowError as exc:
+            raise ValueError("each raw merge weight must be positive and finite") from exc
+        if not math.isfinite(weight) or weight <= 0.0:
+            raise ValueError("each raw merge weight must be positive and finite")
+        raw[update_id] = weight
+    try:
+        total = math.fsum(raw.values())
+    except OverflowError as exc:
+        raise ValueError(
+            "selected updates have non-positive or non-finite total merge weight"
+        ) from exc
+    if not math.isfinite(total) or total <= 0.0:
+        raise ValueError("selected updates have non-positive or non-finite total merge weight")
     return {update_id: weight / total for update_id, weight in raw.items()}
 
 
@@ -144,7 +174,8 @@ def stale_fragment_update_ids(
     return [
         update["update_id"]
         for update in updates
-        if staleness(current_fragment_version, int(update["base_fragment_version"])) > max_staleness_versions
+        if staleness(current_fragment_version, int(update["base_fragment_version"]))
+        > max_staleness_versions
     ]
 
 

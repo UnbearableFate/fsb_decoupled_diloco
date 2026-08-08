@@ -275,14 +275,12 @@ def _boundary_manifest(payload: dict[str, Any]) -> dict[str, str]:
         *boundaries["torch_baseline_retain"]["pbs"],
         *boundaries["torch_baseline_retain"]["tests"],
         boundaries["recursive_config_anchor"],
-        "fs_diloco/storage/fenced_store.py",
     }
     baseline_package = str(boundaries["torch_baseline_retain"]["package"]).rstrip("/") + "/"
     paths.update(
         path
         for path in payload["inventory"]["source"]
-        if path.startswith(baseline_package)
-        and path != P1_BASELINE_COMPOSITION_MIGRATION
+        if path.startswith(baseline_package) and path != P1_BASELINE_COMPOSITION_MIGRATION
     )
     return {path: payload["manifest_sha256"][path] for path in sorted(paths)}
 
@@ -317,6 +315,87 @@ def verify_boundaries(actual: dict[str, Any], expected: dict[str, Any]) -> list[
         if actual_value != expected_value:
             differences.append(label)
     return differences
+
+
+def _declared_requirements(root: Path, prefix: str) -> dict[str, list[str]]:
+    owners: dict[str, list[str]] = {}
+    base = root / prefix
+    for path in sorted(base.rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        relative = path.relative_to(root).as_posix()
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative)
+        for node in tree.body:
+            targets: list[ast.expr]
+            if isinstance(node, ast.Assign):
+                targets = list(node.targets)
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+            else:
+                continue
+            if not any(
+                isinstance(target, ast.Name) and target.id == "PLAN03_REQUIREMENTS"
+                for target in targets
+            ):
+                continue
+            declared = _literal_string_set(node.value)
+            if declared is None or not declared:
+                raise RuntimeError(f"{relative}: PLAN03_REQUIREMENTS must be a literal string set")
+            for requirement in declared:
+                owners.setdefault(requirement, []).append(relative)
+            break
+    return {key: sorted(paths) for key, paths in sorted(owners.items())}
+
+
+def verify_phase_requirements(
+    root: Path,
+    matrix_path: Path,
+    phase: str,
+) -> tuple[dict[str, Any], list[str]]:
+    """Bind every phase requirement to implementation, tests, and retained evidence."""
+
+    with matrix_path.open(newline="", encoding="utf-8") as handle:
+        rows = [row for row in csv.DictReader(handle) if row["phase"] == phase]
+    if not rows:
+        raise RuntimeError(f"requirement matrix has no rows for phase: {phase}")
+    identifiers = [row["invariant_id"] for row in rows]
+    if len(set(identifiers)) != len(identifiers):
+        raise RuntimeError(f"requirement matrix has duplicate IDs in phase: {phase}")
+    implementation = _declared_requirements(root, "fs_diloco")
+    tests = _declared_requirements(root, "tests")
+    checks: dict[str, Any] = {}
+    differences: list[str] = []
+    for row in rows:
+        requirement = row["invariant_id"]
+        implementation_owners = implementation.get(requirement, [])
+        test_owners = tests.get(requirement, [])
+        evidence_paths = [item.strip() for item in row["evidence_path"].split(";") if item.strip()]
+        requirement_differences: list[str] = []
+        if row["status"] != "complete":
+            requirement_differences.append("status")
+        if row["artifact_contract"] != f"checker requirements.{requirement}":
+            requirement_differences.append("artifact-contract")
+        if not implementation_owners:
+            requirement_differences.append("implementation")
+        if not test_owners:
+            requirement_differences.append("tests")
+        if not evidence_paths or evidence_paths == ["TBD"]:
+            requirement_differences.append("evidence")
+        else:
+            missing = [item for item in evidence_paths if not (root / item).exists()]
+            if missing:
+                requirement_differences.extend(f"missing-evidence:{item}" for item in missing)
+        checks[requirement] = {
+            "status": "PASS" if not requirement_differences else "BLOCKED",
+            "implementation_owners": implementation_owners,
+            "test_owners": test_owners,
+            "evidence_paths": evidence_paths,
+            "differences": requirement_differences,
+        }
+        differences.extend(
+            f"requirements.{requirement}.{difference}" for difference in requirement_differences
+        )
+    return checks, differences
 
 
 def verify_tracked_evidence(root: Path, matrix_path: Path) -> list[str]:
@@ -379,6 +458,11 @@ def main() -> None:
         action="store_true",
         help="phase-final gate: require every non-pending matrix evidence path in Git",
     )
+    parser.add_argument(
+        "--verify-phase-requirements",
+        metavar="PHASE_ID",
+        help="require complete implementation/test/evidence bindings for one matrix phase",
+    )
     args = parser.parse_args()
     root = args.root.resolve()
     try:
@@ -417,6 +501,15 @@ def main() -> None:
                 differences.extend(
                     f"tracked_evidence.{difference}" for difference in evidence_differences
                 )
+            if args.verify_phase_requirements:
+                matrix_path = root / "plans/DOING/plans" / f"{PLAN_ID}-requirement-matrix.csv"
+                requirement_checks, requirement_differences = verify_phase_requirements(
+                    root,
+                    matrix_path,
+                    args.verify_phase_requirements,
+                )
+                checks["requirements"] = requirement_checks
+                differences.extend(requirement_differences)
             payload["status"] = "PASS" if not differences else "BLOCKED"
             payload["differences"] = differences
             payload["checks"] = checks

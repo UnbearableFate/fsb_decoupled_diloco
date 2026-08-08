@@ -12,11 +12,12 @@ import json
 import os
 import socket
 import sqlite3
+import stat
 import tempfile
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from ..core.versions import AUTHORITY_SCHEMA_VERSION, PROTOCOL_VERSION
@@ -34,6 +35,7 @@ from ..protocol.authority import (
     SelectionCandidate,
     StaticBinding,
     TerminalState,
+    TokenLedgerSummary,
     VisibilityDecision,
 )
 from ..protocol.contributor import (
@@ -43,14 +45,51 @@ from ..protocol.contributor import (
     StaticMembershipScope,
 )
 from ..protocol.cycle_receipt import CycleReceiptV1
+from ..protocol.data_cursor import ContributorResumeState
 from ..protocol.proposal import FullUpdateProposalV2
-from .atomic_io import atomic_write_json, read_json
+from ..protocol.scheduler import (
+    SchedulerOperatorAction,
+    SchedulerOperatorRequest,
+    scheduler_state_sha256,
+)
+from .atomic_io import fsync_directory, publish_immutable_bytes, read_json, sha256_file
+from .audit_archive import (
+    validate_audit_batch,
+    validate_audit_partition,
+    validate_audit_partition_manifest,
+)
 from .leader_lease import (
     LeaderToken,
     LeaseUnavailableError,
     StaleLeaderTokenError,
 )
 from .object_store import verify_proposal_payload, verify_publication_artifact
+from .paths import RunPaths
+
+
+PLAN03_REQUIREMENTS = frozenset(
+    {
+        "AUDIT-02",
+        "AUDIT-04",
+        "DATA-02",
+        "DATA-03",
+        "DMB-05",
+        "DMB-09",
+        "DMB-10",
+        "SCHED-01",
+        "SCHED-02",
+        "SCHED-03",
+        "SCHED-04",
+        "SCHED-05",
+        "SEL-03",
+        "SEL-04",
+        "TERM-01",
+        "TERM-02",
+        "TERM-03",
+        "TOK-05",
+        "TOK-08",
+    }
+)
 
 
 AUTHORITY_APPLICATION_ID = 0x46534434  # "FSD4"
@@ -187,6 +226,47 @@ def _marker_path(database_path: Path, marker_path: str | Path | None) -> Path:
     )
 
 
+def _path_entry_exists(path: Path) -> bool:
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def _same_regular_inode(left: Path, right: Path) -> bool:
+    try:
+        left_stat = left.lstat()
+        right_stat = right.lstat()
+    except FileNotFoundError:
+        return False
+    return (
+        stat.S_ISREG(left_stat.st_mode)
+        and stat.S_ISREG(right_stat.st_mode)
+        and (left_stat.st_dev, left_stat.st_ino) == (right_stat.st_dev, right_stat.st_ino)
+    )
+
+
+def _lexical_protocol_path(root: Path, relative_path: str) -> Path:
+    if (
+        not relative_path
+        or relative_path.startswith("/")
+        or "\\" in relative_path
+        or "\0" in relative_path
+    ):
+        raise ValueError("protocol path must be a canonical relative POSIX path")
+    relative = PurePosixPath(relative_path)
+    if any(part in {"", ".", ".."} for part in relative.parts):
+        raise ValueError("protocol path must be a canonical relative POSIX path")
+    current = root
+    for component in relative.parts[:-1]:
+        current = current / component
+        metadata = current.lstat()
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise ValueError("protocol path parent must be a non-symlink directory")
+    return current / relative.name
+
+
 def _configure_connection(connection: sqlite3.Connection, *, busy_timeout_ms: int) -> None:
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys=ON")
@@ -208,7 +288,7 @@ def initialize_authority_v4(
 
     path = Path(database_path)
     marker = _marker_path(path, marker_path)
-    if path.exists() or marker.exists():
+    if _path_entry_exists(path) or _path_entry_exists(marker):
         raise FileExistsError(f"v4 authority target already exists: {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
     mode = "static" if isinstance(membership_scope, StaticMembershipScope) else "dynamic"
@@ -220,6 +300,7 @@ def initialize_authority_v4(
     )
     os.close(temporary_fd)
     temporary_path = Path(temporary_name)
+    database_linked = False
     try:
         connection = sqlite3.connect(temporary_path)
         try:
@@ -264,11 +345,8 @@ def initialize_authority_v4(
         with temporary_path.open("rb") as handle:
             os.fsync(handle.fileno())
         os.link(temporary_path, path)
-        directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
+        database_linked = True
+        fsync_directory(path.parent)
         marker_payload = {
             "authority_schema_version": AUTHORITY_SCHEMA_VERSION,
             "protocol_version": PROTOCOL_VERSION,
@@ -280,7 +358,15 @@ def initialize_authority_v4(
             "database_name": path.name,
             "created_at": now,
         }
-        atomic_write_json(marker, marker_payload)
+        marker_bytes = (
+            json.dumps(marker_payload, sort_keys=True, indent=2, allow_nan=False) + "\n"
+        ).encode("utf-8")
+        publish_immutable_bytes(marker, marker_bytes)
+    except BaseException:
+        if database_linked and _same_regular_inode(temporary_path, path):
+            path.unlink()
+            fsync_directory(path.parent)
+        raise
     finally:
         temporary_path.unlink(missing_ok=True)
     return AuthorityMetadata(
@@ -405,6 +491,39 @@ class AuthorityReadModel:
         )
         return None if row is None else _decode_progress(row)
 
+    def token_ledger_summary(self) -> TokenLedgerSummary:
+        row = self._authority._fetchone("SELECT * FROM token_rollups WHERE singleton=1")
+        gap = self._authority._fetchone(
+            """
+            SELECT COALESCE(SUM(hard_crash_gap_tokens_upper_bound), 0) AS gap
+            FROM terminal_contributor_fences WHERE state='hard_crash'
+            """
+        )
+        gap_tokens = int(gap["gap"] if gap is not None else 0)
+        if row is None:
+            return TokenLedgerSummary(
+                adjudicated_processed=0,
+                local_discarded=0,
+                direct_applied=0,
+                direct_dropped=0,
+                direct_quarantined_or_conflicted=0,
+                direct_reported_unpublished=0,
+                direct_outstanding=0,
+                carried_ancestry=0,
+                hard_crash_gap_tokens_upper_bound=gap_tokens,
+            )
+        return TokenLedgerSummary(
+            adjudicated_processed=int(row["adjudicated_processed"]),
+            local_discarded=int(row["local_discarded"]),
+            direct_applied=int(row["direct_applied"]),
+            direct_dropped=int(row["direct_dropped"]),
+            direct_quarantined_or_conflicted=int(row["direct_quarantined_or_conflicted"]),
+            direct_reported_unpublished=int(row["direct_reported_unpublished"]),
+            direct_outstanding=int(row["direct_outstanding"]),
+            carried_ancestry=int(row["carried_ancestry"]),
+            hard_crash_gap_tokens_upper_bound=gap_tokens,
+        )
+
     def integrity_check(self) -> tuple[str, ...]:
         return tuple(str(row[0]) for row in self._authority._fetchall("PRAGMA integrity_check"))
 
@@ -413,6 +532,29 @@ class AuthorityReadModel:
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
         )
         return tuple(str(row[0]) for row in rows)
+
+    def audit_history_records(self, *, cutoff_version: int) -> tuple[dict[str, Any], ...]:
+        if isinstance(cutoff_version, bool) or not isinstance(cutoff_version, int):
+            raise ValueError("cutoff_version must be an integer")
+        if cutoff_version < 0:
+            return ()
+        return tuple(_audit_history_records(self._authority._connection, cutoff_version))
+
+    def audit_archive_summary(self) -> dict[str, int]:
+        row = self._authority._fetchone(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM archive_batches) AS hot_batches,
+                (SELECT COUNT(*) FROM archive_partitions WHERE state='committed') AS partitions,
+                (SELECT COALESCE(SUM(source_batch_count), 0) FROM archive_partitions
+                    WHERE state='committed') AS folded_batches,
+                (SELECT COUNT(*) FROM audit_partition_batches) AS folded_batch_index_rows,
+                (SELECT COUNT(*) FROM audit_gc_candidates WHERE state='pending') AS pending_gc,
+                (SELECT COUNT(*) FROM audit_gc_candidates WHERE state='claimed') AS claimed_gc
+            """
+        )
+        assert row is not None
+        return {key: int(row[key]) for key in row.keys()}
 
 
 class LeaderAuthority:
@@ -502,9 +644,9 @@ class LeaderAuthority:
     ) -> LeaderToken:
         if not owner_id:
             raise ValueError("owner_id must not be empty")
-        now = float(self._wall_clock())
         self._connection.execute("BEGIN IMMEDIATE")
         try:
+            now = float(self._wall_clock())
             current = self._connection.execute(
                 "SELECT * FROM syncer_leader WHERE singleton = 1"
             ).fetchone()
@@ -571,9 +713,9 @@ class LeaderAuthority:
         return LeaderToken(self._identity.run_id, epoch, owner_id)
 
     def renew_leader(self, token: LeaderToken) -> None:
-        now = float(self._wall_clock())
         self._connection.execute("BEGIN IMMEDIATE")
         try:
+            now = float(self._wall_clock())
             self._verify_token(token, require_safe_expiry=False)
             cursor = self._connection.execute(
                 """
@@ -595,9 +737,9 @@ class LeaderAuthority:
             raise
 
     def release_leader(self, token: LeaderToken) -> None:
-        now = float(self._wall_clock())
         self._connection.execute("BEGIN IMMEDIATE")
         try:
+            now = float(self._wall_clock())
             self._verify_token(token)
             self._connection.execute(
                 """
@@ -845,6 +987,12 @@ class LeaderSession:
                 receipt.contributor_fence,
                 update_id=receipt.planned_update_id,
             )
+            self._require_terminal_input_allowed(
+                connection,
+                fence=receipt.contributor_fence,
+                cycle_seq=receipt.cycle_seq,
+                update_id=receipt.planned_update_id,
+            )
             progress = connection.execute(
                 "SELECT * FROM contributor_progress WHERE stable_contributor_key=?",
                 (receipt.stable_contributor_key,),
@@ -924,6 +1072,21 @@ class LeaderSession:
                     now,
                 ),
             )
+            if isinstance(receipt.contributor_fence, DynamicContributorFence):
+                connection.execute(
+                    """
+                    UPDATE streams SET resume_cursor=?, last_receipt_id=?, updated_at=?
+                    WHERE stream_id=? AND current_stream_epoch=? AND current_instance_id=?
+                    """,
+                    (
+                        receipt.data_cursor_end,
+                        receipt.receipt_id,
+                        now,
+                        receipt.contributor_fence.stream_id,
+                        receipt.contributor_fence.stream_epoch,
+                        receipt.contributor_fence.instance_id,
+                    ),
+                )
             connection.execute(
                 """
                 INSERT INTO token_fates(
@@ -941,6 +1104,7 @@ class LeaderSession:
                     now,
                 ),
             )
+            self._record_token_receipt(connection, receipt=receipt, now=now)
             row = connection.execute(
                 "SELECT * FROM contributor_progress WHERE stable_contributor_key=?",
                 (receipt.stable_contributor_key,),
@@ -968,6 +1132,12 @@ class LeaderSession:
                 raise MembershipFenceError("proposal belongs to another run")
             self._require_current_fence(
                 connection, proposal.contributor_fence, update_id=proposal.update_id
+            )
+            self._require_terminal_input_allowed(
+                connection,
+                fence=proposal.contributor_fence,
+                cycle_seq=proposal.cycle_seq,
+                update_id=proposal.update_id,
             )
             receipt = self._require_proposal_receipt(
                 connection,
@@ -1125,13 +1295,12 @@ class LeaderSession:
                     """,
                     (self.token.epoch, row["update_id"]),
                 )
-                connection.execute(
-                    """
-                    UPDATE token_fates SET direct_fate='dropped',
-                        fate_reason='superseded_by_newer_cycle', updated_by_epoch=?, updated_at=?
-                    WHERE receipt_id=?
-                    """,
-                    (self.token.epoch, now, row["cycle_receipt_id"]),
+                self._transition_token_fate(
+                    connection,
+                    receipt_id=str(row["cycle_receipt_id"]),
+                    fate="dropped",
+                    reason="superseded_by_newer_cycle",
+                    now=now,
                 )
             newer_pending = connection.execute(
                 """
@@ -1155,13 +1324,12 @@ class LeaderSession:
                     """,
                     (self.token.epoch, proposal.update_id),
                 )
-                connection.execute(
-                    """
-                    UPDATE token_fates SET direct_fate='dropped',
-                        fate_reason='superseded_before_arrival', updated_by_epoch=?, updated_at=?
-                    WHERE receipt_id=?
-                    """,
-                    (self.token.epoch, now, proposal.cycle_receipt_id),
+                self._transition_token_fate(
+                    connection,
+                    receipt_id=proposal.cycle_receipt_id,
+                    fate="dropped",
+                    reason="superseded_before_arrival",
+                    now=now,
                 )
             observation_id = self._record_observation(
                 connection, proposal, ProposalDisposition.ACCEPTED
@@ -1579,6 +1747,297 @@ class LeaderSession:
         result = self._command(command_id, "initialize_dynamic_membership", request, operation)
         return tuple(int(item) for item in result["stream_ids"])
 
+    def record_candidate_launch_request(
+        self,
+        *,
+        command_id: str,
+        request_id: str,
+        observation_key: str,
+        request_sha256: str,
+    ) -> dict[str, Any]:
+        validate_identity(request_id, name="request_id")
+        validate_identity(observation_key, name="observation_key")
+        if len(request_sha256) != 64:
+            raise ValueError("request_sha256 must be a SHA-256 digest")
+        request = {
+            "request_id": request_id,
+            "observation_key": observation_key,
+            "request_sha256": request_sha256,
+        }
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            now = float(self._authority._wall_clock())
+            connection.execute(
+                """
+                INSERT INTO candidate_launch_outbox(
+                    request_id, observation_key, request_sha256, state, owner_epoch,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, 'planned', ?, ?, ?)
+                """,
+                (
+                    request_id,
+                    observation_key,
+                    request_sha256,
+                    self.token.epoch,
+                    now,
+                    now,
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM candidate_launch_outbox WHERE request_id=?", (request_id,)
+            ).fetchone()
+            assert row is not None
+            return dict(row)
+
+        return self._command(command_id, "record_candidate_launch_request", request, operation)
+
+    def transition_candidate_launch_request(
+        self,
+        *,
+        command_id: str,
+        request_id: str,
+        expected_state: str,
+        state: str,
+        scheduler_job_id: str | None = None,
+        evidence_source: str,
+        uncertainty_timeout_seconds: float | None = None,
+    ) -> dict[str, Any]:
+        validate_identity(request_id, name="request_id")
+        allowed = {
+            "planned",
+            "submitting",
+            "submission_unknown",
+            "submitted",
+            "started",
+            "terminal_uncertain",
+            "admitted",
+            "failed",
+            "expired",
+            "manual_review",
+        }
+        if expected_state not in allowed or state not in allowed:
+            raise ValueError("invalid scheduler launch state")
+        transitions = {
+            "planned": {"submitting"},
+            "submitting": {"submission_unknown", "submitted", "failed"},
+            "submission_unknown": {"submitted", "terminal_uncertain", "failed"},
+            "submitted": {"started", "terminal_uncertain", "admitted", "failed"},
+            "started": {"terminal_uncertain", "admitted", "failed"},
+            "terminal_uncertain": {
+                "submitted",
+                "started",
+                "admitted",
+                "failed",
+                "expired",
+                "manual_review",
+            },
+            "admitted": set(),
+            "failed": set(),
+            "expired": set(),
+            "manual_review": set(),
+        }
+        if state not in transitions[expected_state]:
+            raise ValueError(f"invalid scheduler transition: {expected_state} -> {state}")
+        if scheduler_job_id is not None:
+            validate_identity(scheduler_job_id, name="scheduler_job_id")
+        if not evidence_source:
+            raise ValueError("scheduler evidence_source must not be empty")
+        if uncertainty_timeout_seconds is not None and uncertainty_timeout_seconds <= 0.0:
+            raise ValueError("scheduler uncertainty timeout must be positive")
+        if state in {"submission_unknown", "terminal_uncertain"} and (
+            uncertainty_timeout_seconds is None
+        ):
+            raise ValueError("scheduler uncertainty transitions require a persistent timeout")
+        request = {
+            "request_id": request_id,
+            "expected_state": expected_state,
+            "state": state,
+            "scheduler_job_id": scheduler_job_id,
+            "evidence_source": evidence_source,
+            "uncertainty_timeout_seconds": uncertainty_timeout_seconds,
+        }
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            row = connection.execute(
+                "SELECT * FROM candidate_launch_outbox WHERE request_id=?", (request_id,)
+            ).fetchone()
+            if row is None or row["state"] != expected_state:
+                raise RuntimeError("candidate launch request state changed")
+            now = float(self._authority._wall_clock())
+            if state in {"failed", "expired", "manual_review"} and expected_state in {
+                "submission_unknown",
+                "terminal_uncertain",
+            }:
+                if row["uncertainty_deadline"] is None or now < float(row["uncertainty_deadline"]):
+                    raise RuntimeError("scheduler uncertainty deadline has not elapsed")
+            uncertain = state in {"submission_unknown", "terminal_uncertain"}
+            deadline = (
+                now + float(uncertainty_timeout_seconds)
+                if uncertain and uncertainty_timeout_seconds is not None
+                else None
+            )
+            positive = state in {"submitted", "started", "admitted"}
+            connection.execute(
+                """
+                UPDATE candidate_launch_outbox SET state=?,
+                    scheduler_job_id=COALESCE(?, scheduler_job_id),
+                    first_uncertain_at=CASE WHEN ? THEN COALESCE(first_uncertain_at, ?)
+                        ELSE first_uncertain_at END,
+                    last_positive_evidence_at=CASE WHEN ? THEN ?
+                        ELSE last_positive_evidence_at END,
+                    uncertainty_deadline=CASE WHEN ? THEN COALESCE(uncertainty_deadline, ?)
+                        ELSE uncertainty_deadline END,
+                    evidence_source=?, owner_epoch=?, updated_at=?
+                WHERE request_id=? AND state=?
+                """,
+                (
+                    state,
+                    scheduler_job_id,
+                    int(uncertain),
+                    now,
+                    int(positive),
+                    now,
+                    int(uncertain),
+                    deadline,
+                    evidence_source,
+                    self.token.epoch,
+                    now,
+                    request_id,
+                    expected_state,
+                ),
+            )
+            result = connection.execute(
+                "SELECT * FROM candidate_launch_outbox WHERE request_id=?", (request_id,)
+            ).fetchone()
+            assert result is not None
+            return dict(result)
+
+        return self._command(command_id, "transition_candidate_launch_request", request, operation)
+
+    def apply_scheduler_operator_request(
+        self,
+        *,
+        command_id: str,
+        operator_request: SchedulerOperatorRequest,
+    ) -> dict[str, Any]:
+        request = operator_request.as_dict()
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            table = "candidate_launch_outbox"
+            row = connection.execute(
+                "SELECT * FROM candidate_launch_outbox WHERE request_id=?",
+                (operator_request.launch_request_id,),
+            ).fetchone()
+            job_column = "scheduler_job_id"
+            if row is None and isinstance(self._authority._scope, DynamicMembershipScope):
+                table = "launch_requests"
+                row = connection.execute(
+                    "SELECT * FROM launch_requests WHERE request_id=?",
+                    (operator_request.launch_request_id,),
+                ).fetchone()
+                job_column = "pbs_job_id"
+            if row is None:
+                raise RuntimeError("operator request names an unknown launch request")
+            state_row = dict(row)
+            state_row["pbs_job_id"] = row[job_column]
+            actual_state_sha = scheduler_state_sha256(state_row)
+            stale = actual_state_sha != operator_request.expected_state_sha256
+            now = float(self._authority._wall_clock())
+            if stale:
+                next_state = str(row["state"])
+                request_state = "stale_rejected"
+            else:
+                if str(row["state"]) not in {
+                    "submission_unknown",
+                    "terminal_uncertain",
+                    "manual_review",
+                }:
+                    raise RuntimeError("operator request can only resolve scheduler uncertainty")
+                action = operator_request.action
+                if action is SchedulerOperatorAction.CONFIRM_JOB_ID:
+                    next_state = "submitted"
+                    connection.execute(
+                        f"""
+                        UPDATE {table} SET state='submitted', {job_column}=?,
+                            last_positive_evidence_at=?, evidence_source=?, updated_at=?
+                        WHERE request_id=?
+                        """,
+                        (
+                            operator_request.scheduler_job_id,
+                            now,
+                            operator_request.evidence_source or "operator_confirmed_job_id",
+                            now,
+                            operator_request.launch_request_id,
+                        ),
+                    )
+                elif action is SchedulerOperatorAction.MARK_FAILED:
+                    next_state = "failed"
+                    connection.execute(
+                        f"UPDATE {table} SET state=?, manual_reason=?, updated_at=? WHERE request_id=?",
+                        (
+                            next_state,
+                            operator_request.reason,
+                            now,
+                            operator_request.launch_request_id,
+                        ),
+                    )
+                elif action is SchedulerOperatorAction.MARK_EXPIRED:
+                    next_state = "expired"
+                    connection.execute(
+                        f"UPDATE {table} SET state=?, manual_reason=?, updated_at=? WHERE request_id=?",
+                        (
+                            next_state,
+                            operator_request.reason,
+                            now,
+                            operator_request.launch_request_id,
+                        ),
+                    )
+                else:
+                    next_state = "manual_review"
+                    connection.execute(
+                        f"""
+                        UPDATE {table} SET state='manual_review', manual_reason=?,
+                            evidence_source=?, updated_at=? WHERE request_id=?
+                        """,
+                        (
+                            operator_request.reason,
+                            operator_request.evidence_source or "external_cancel_evidence",
+                            now,
+                            operator_request.launch_request_id,
+                        ),
+                    )
+                request_state = "applied"
+            connection.execute(
+                """
+                INSERT INTO scheduler_operator_requests(
+                    request_id, launch_request_id, action, expected_state_sha256,
+                    reason, scheduler_job_id, evidence_source, request_sha256,
+                    state, result_state, processed_by_epoch, processed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    operator_request.request_id,
+                    operator_request.launch_request_id,
+                    operator_request.action.value,
+                    operator_request.expected_state_sha256,
+                    operator_request.reason,
+                    operator_request.scheduler_job_id,
+                    operator_request.evidence_source,
+                    operator_request.immutable_sha256(),
+                    request_state,
+                    next_state,
+                    self.token.epoch,
+                    now,
+                ),
+            )
+            return {
+                "request_state": request_state,
+                "launch_state": next_state,
+                "actual_state_sha256": actual_state_sha,
+            }
+
+        return self._command(command_id, "apply_scheduler_operator_request", request, operation)
+
     def admit_dynamic_incarnation(
         self,
         *,
@@ -1627,6 +2086,11 @@ class LeaderSession:
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
             if not isinstance(self._authority._scope, DynamicMembershipScope):
                 raise RuntimeError("dynamic admission requires dynamic authority mode")
+            controller = connection.execute(
+                "SELECT state FROM controller_state WHERE singleton=1"
+            ).fetchone()
+            if controller is None or controller["state"] != "open":
+                raise MembershipFenceError("dynamic admission is closed")
             if stream_id >= self._authority._scope.stream_pool_size:
                 raise MembershipFenceError("stream_id is outside the configured pool")
             stream = connection.execute(
@@ -1646,10 +2110,7 @@ class LeaderSession:
                     or fence.admission_token_sha256 != admission_token_sha256
                 ):
                     raise MembershipFenceError("instance ID was replayed with different admission")
-                return {
-                    "fence": fence.as_dict(),
-                    "resume_cursor": int(stream["resume_cursor"]),
-                }
+                return self._dynamic_admission_result(connection, fence=fence)
             placement = connection.execute(
                 "SELECT * FROM placements WHERE placement_id=?", (placement_id,)
             ).fetchone()
@@ -1787,12 +2248,18 @@ class LeaderSession:
                 admission_generation=generation,
                 admission_token_sha256=admission_token_sha256,
             )
-            return {"fence": fence.as_dict(), "resume_cursor": int(stream["resume_cursor"])}
+            return self._dynamic_admission_result(connection, fence=fence)
 
         result = self._command(command_id, "admit_dynamic_incarnation", request, operation)
         return DynamicAdmission(
             fence=DynamicContributorFence.from_dict(result["fence"]),
-            resume_cursor=int(result["resume_cursor"]),
+            resume=ContributorResumeState(
+                cursor=int(result["resume_cursor"]),
+                last_receipt_id=result["last_receipt_id"],
+                last_receipt_sha256=result["last_receipt_sha256"],
+                next_cycle_seq=int(result["next_cycle_seq"]),
+                stream_epoch=int(result["fence"]["stream_epoch"]),
+            ),
         )
 
     def retire_incarnation(
@@ -1851,12 +2318,23 @@ class LeaderSession:
                 raise RuntimeError("v0 must be committed before selecting learner proposals")
             rows = connection.execute(
                 """
-                SELECT u.*, COALESCE(s.committed_credit, 0) AS selection_credit
-                FROM updates AS u
+                WITH per_contributor AS (
+                    SELECT u.*,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY u.stable_contributor_key
+                            ORDER BY u.cycle_seq DESC, u.update_id ASC
+                        ) AS proposal_rank
+                    FROM updates AS u
+                    WHERE u.status='pending' AND u.base_global_version <= ?
+                )
+                SELECT u.*, COALESCE(s.committed_credit, 0) AS selection_credit,
+                    COALESCE(s.last_committed_version, -1) AS service_version
+                FROM per_contributor AS u
                 LEFT JOIN selection_state AS s
                     ON s.stable_contributor_key = u.stable_contributor_key
-                WHERE u.status='pending' AND u.base_global_version <= ?
-                ORDER BY selection_credit ASC, u.stable_contributor_key ASC, u.update_id ASC
+                WHERE u.proposal_rank=1
+                ORDER BY selection_credit ASC, service_version ASC,
+                    u.stable_contributor_key ASC
                 """,
                 (int(latest),),
             ).fetchall()
@@ -2226,13 +2704,13 @@ class LeaderSession:
                             now,
                         ),
                     )
-                    connection.execute(
-                        """
-                        UPDATE token_fates SET direct_fate='applied', applied_version=?,
-                            updated_by_epoch=?, updated_at=?
-                        WHERE receipt_id=?
-                        """,
-                        (target, self.token.epoch, now, row["cycle_receipt_id"]),
+                    self._transition_token_fate(
+                        connection,
+                        receipt_id=str(row["cycle_receipt_id"]),
+                        fate="applied",
+                        reason="selected_commit",
+                        now=now,
+                        applied_version=target,
                     )
             result = connection.execute(
                 "SELECT * FROM global_versions WHERE version=?", (target,)
@@ -2352,29 +2830,712 @@ class LeaderSession:
         result = self._command(command_id, "claim_orphan_gc", request, operation)
         return tuple(str(item) for item in result["relative_paths"])
 
-    def begin_terminal_close(self, *, command_id: str, reason: str) -> TerminalState:
-        request = {"reason": reason}
+    def archive_audit_batch(
+        self,
+        *,
+        command_id: str,
+        batch_id: str,
+        cutoff_version: int,
+        relative_path: str,
+        sha256: str,
+    ) -> dict[str, Any]:
+        """Register a verified immutable history batch, then prune its exact rows."""
+
+        validate_identity(batch_id, name="batch_id")
+        if isinstance(cutoff_version, bool) or not isinstance(cutoff_version, int):
+            raise ValueError("cutoff_version must be an integer")
+        if cutoff_version < 0:
+            raise ValueError("cutoff_version must be non-negative")
+        if (
+            not relative_path.startswith("audit/batches/authority_history/")
+            or relative_path.startswith("/")
+            or ".." in Path(relative_path).parts
+        ):
+            raise ValueError("audit batch path must be canonical and authority-history scoped")
+        if len(sha256) != 64:
+            raise ValueError("audit batch sha256 must be a SHA-256 digest")
+        request = {
+            "batch_id": batch_id,
+            "cutoff_version": cutoff_version,
+            "relative_path": relative_path,
+            "sha256": sha256,
+        }
+        replay = self._command_replay(command_id, "archive_audit_batch", request)
+        if replay is not None:
+            return replay
+        compacted = self._authority._fetchone(
+            "SELECT * FROM audit_partition_batches WHERE archive_batch_id=?", (batch_id,)
+        )
+        if compacted is not None:
+            if compacted["sha256"] != sha256:
+                raise RuntimeError("compacted audit batch ID has different immutable content")
+            return {
+                "archive_batch_id": batch_id,
+                "record_kind": str(compacted["record_kind"]),
+                "cutoff_version": int(compacted["cutoff_version"]),
+                "row_count": int(compacted["row_count"]),
+                "relative_path": str(compacted["relative_path"]),
+                "sha256": str(compacted["sha256"]),
+                "state": "compacted",
+                "partition_id": str(compacted["partition_id"]),
+            }
+        batch_path = _lexical_protocol_path(self._authority._run_root, relative_path)
+        try:
+            metadata = batch_path.lstat()
+        except FileNotFoundError:
+            archived_source = self._find_compacted_audit_source(batch_id)
+            if archived_source is None:
+                raise
+            if (
+                archived_source["file_sha256"] != sha256
+                or int(archived_source["cutoff_version"]) != cutoff_version
+            ):
+                raise RuntimeError("compacted audit batch ID has different immutable content")
+            return {
+                "archive_batch_id": batch_id,
+                "record_kind": "authority_history",
+                "cutoff_version": cutoff_version,
+                "row_count": int(archived_source["row_count"]),
+                "relative_path": relative_path,
+                "sha256": sha256,
+                "state": "compacted",
+                "partition_id": str(archived_source["partition_id"]),
+            }
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
+            raise ValueError("audit batch must be a non-writable regular file")
+        if sha256_file(batch_path) != sha256:
+            raise ValueError("audit batch file hash mismatch")
+        payload = read_json(batch_path)
+        validate_audit_batch(payload)
+        if (
+            payload["batch_id"] != batch_id
+            or payload["record_kind"] != "authority_history"
+            or int(payload["cutoff_version"]) != cutoff_version
+        ):
+            raise ValueError("audit batch immutable identity mismatch")
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            expected = _audit_history_records(connection, cutoff_version)
+            if payload["records"] != expected:
+                raise RuntimeError(
+                    "audit batch does not exactly cover the archivable authority rows"
+                )
+            now = float(self._authority._wall_clock())
+            existing = connection.execute(
+                "SELECT * FROM archive_batches WHERE archive_batch_id=?", (batch_id,)
+            ).fetchone()
+            if existing is not None:
+                if existing["sha256"] != sha256:
+                    raise RuntimeError("audit batch ID was replayed with different content")
+                return dict(existing)
+            connection.execute(
+                """
+                INSERT INTO archive_batches(
+                    archive_batch_id, owner_epoch, record_kind, cutoff_version,
+                    row_count, relative_path, sha256, state, created_at
+                ) VALUES (?, ?, 'authority_history', ?, ?, ?, ?, 'committed', ?)
+                """,
+                (
+                    batch_id,
+                    self.token.epoch,
+                    cutoff_version,
+                    len(expected),
+                    relative_path,
+                    sha256,
+                    now,
+                ),
+            )
+            keys: dict[str, list[Any]] = {}
+            for record in expected:
+                keys.setdefault(str(record["table"]), []).append(record["primary_key"])
+            delete_order = (
+                "proposal_conflicts",
+                "proposal_observations",
+                "selection_batch_updates",
+                "token_fates",
+                "updates",
+                "cycle_receipts",
+                "artifact_publications",
+                "global_versions",
+                "publication_intents",
+                "selection_batches",
+            )
+            primary_columns = {
+                "proposal_conflicts": "CAST(observation_id AS TEXT)",
+                "proposal_observations": "CAST(observation_id AS TEXT)",
+                "selection_batch_updates": "batch_id || ':' || update_id",
+                "token_fates": "receipt_id",
+                "updates": "update_id",
+                "cycle_receipts": "receipt_id",
+                "artifact_publications": "publication_id || ':' || artifact_kind",
+                "global_versions": "CAST(version AS TEXT)",
+                "publication_intents": "publication_id",
+                "selection_batches": "batch_id",
+            }
+            for table in delete_order:
+                values = keys.get(table, [])
+                if not values:
+                    continue
+                placeholders = ",".join("?" for _ in values)
+                connection.execute(
+                    f"DELETE FROM {table} WHERE {primary_columns[table]} IN ({placeholders})",
+                    tuple(str(value) for value in values),
+                )
+            row = connection.execute(
+                "SELECT * FROM archive_batches WHERE archive_batch_id=?", (batch_id,)
+            ).fetchone()
+            assert row is not None
+            return dict(row)
+
+        return self._command(command_id, "archive_audit_batch", request, operation)
+
+    def _immutable_audit_object(
+        self, relative_path: str, expected_sha256: str, *, prefix: str
+    ) -> Path:
+        if (
+            not relative_path.startswith(prefix)
+            or relative_path.startswith("/")
+            or ".." in Path(relative_path).parts
+        ):
+            raise ValueError("audit object path is not canonical or correctly scoped")
+        target = _lexical_protocol_path(self._authority._run_root, relative_path)
+        metadata = target.lstat()
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
+            raise ValueError("audit object must be a non-writable regular file")
+        if sha256_file(target) != expected_sha256:
+            raise ValueError("audit object file hash mismatch")
+        return target
+
+    def _find_compacted_audit_source(self, batch_id: str) -> dict[str, Any] | None:
+        """Rare retry path: consult immutable manifests, never the startup hot scan."""
+
+        rows = self._authority._fetchall(
+            "SELECT * FROM archive_partitions WHERE state='committed' ORDER BY partition_id"
+        )
+        paths = RunPaths(self._authority._run_root)
+        for row in rows:
+            partition_path = self._immutable_audit_object(
+                str(row["relative_path"]),
+                str(row["sha256"]),
+                prefix="audit/partitions/",
+            )
+            manifest_path = self._immutable_audit_object(
+                str(row["manifest_relative_path"]),
+                str(row["manifest_sha256"]),
+                prefix="audit/partitions/",
+            )
+            partition = read_json(partition_path)
+            manifest = read_json(manifest_path)
+            validate_audit_partition_manifest(
+                paths=paths,
+                partition=partition,
+                manifest=manifest,
+            )
+            for source in manifest["source_batches"]:
+                if source["batch_id"] == batch_id:
+                    return {"partition_id": str(row["partition_id"]), **dict(source)}
+        return None
+
+    def compact_audit_batches(
+        self,
+        *,
+        command_id: str,
+        partition_id: str,
+        record_kind: str,
+        batch_ids: tuple[str, ...],
+        partition_relative_path: str,
+        partition_sha256: str,
+        manifest_relative_path: str,
+        manifest_sha256: str,
+    ) -> dict[str, Any]:
+        """Fold committed batch rows into one verified immutable partition cursor."""
+
+        validate_identity(partition_id, name="partition_id")
+        validate_identity(record_kind, name="record_kind")
+        normalized_batch_ids = tuple(sorted(batch_ids))
+        if not normalized_batch_ids or len(set(normalized_batch_ids)) != len(normalized_batch_ids):
+            raise ValueError("audit compaction requires unique source batch IDs")
+        for batch_id in normalized_batch_ids:
+            validate_identity(batch_id, name="batch_id")
+        expected_partition_path = f"audit/partitions/{record_kind}/{partition_id}.json"
+        expected_manifest_path = f"audit/partitions/{record_kind}/{partition_id}.manifest.json"
+        if (
+            partition_relative_path != expected_partition_path
+            or manifest_relative_path != expected_manifest_path
+        ):
+            raise ValueError("audit partition paths are not canonical")
+        for digest in (partition_sha256, manifest_sha256):
+            if len(digest) != 64 or any(
+                character not in "0123456789abcdef" for character in digest
+            ):
+                raise ValueError("audit partition digests must be lowercase SHA-256")
+        request = {
+            "partition_id": partition_id,
+            "record_kind": record_kind,
+            "batch_ids": list(normalized_batch_ids),
+            "partition_relative_path": partition_relative_path,
+            "partition_sha256": partition_sha256,
+            "manifest_relative_path": manifest_relative_path,
+            "manifest_sha256": manifest_sha256,
+        }
+        replay = self._command_replay(command_id, "compact_audit_batches", request)
+        if replay is not None:
+            return replay
+        partition_path = self._immutable_audit_object(
+            partition_relative_path, partition_sha256, prefix="audit/partitions/"
+        )
+        manifest_path = self._immutable_audit_object(
+            manifest_relative_path, manifest_sha256, prefix="audit/partitions/"
+        )
+        partition = read_json(partition_path)
+        manifest = read_json(manifest_path)
+        validate_audit_partition(partition)
+        validate_audit_partition_manifest(
+            paths=RunPaths(self._authority._run_root),
+            partition=partition,
+            manifest=manifest,
+        )
+        if (
+            partition["partition_id"] != partition_id
+            or partition["record_kind"] != record_kind
+            or tuple(sorted(item["batch_id"] for item in partition["source_batches"]))
+            != normalized_batch_ids
+        ):
+            raise ValueError("audit partition immutable identity mismatch")
+        placeholders = ",".join("?" for _ in normalized_batch_ids)
+        source_rows = self._authority._fetchall(
+            f"SELECT * FROM archive_batches WHERE archive_batch_id IN ({placeholders})",
+            normalized_batch_ids,
+        )
+        if len(source_rows) != len(normalized_batch_ids):
+            raise RuntimeError("audit compaction source batches are not all hot and committed")
+        for row in source_rows:
+            self._immutable_audit_object(
+                str(row["relative_path"]), str(row["sha256"]), prefix="audit/batches/"
+            )
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            existing = connection.execute(
+                "SELECT * FROM archive_partitions WHERE partition_id=?", (partition_id,)
+            ).fetchone()
+            if existing is not None:
+                if (
+                    existing["sha256"] != partition_sha256
+                    or existing["manifest_sha256"] != manifest_sha256
+                ):
+                    raise RuntimeError("audit partition ID was replayed with different content")
+                return dict(existing)
+            rows = connection.execute(
+                f"SELECT * FROM archive_batches WHERE archive_batch_id IN ({placeholders})",
+                normalized_batch_ids,
+            ).fetchall()
+            if len(rows) != len(normalized_batch_ids) or any(
+                row["state"] != "committed" or row["record_kind"] != record_kind for row in rows
+            ):
+                raise RuntimeError("audit compaction source state changed")
+            persisted = {str(row["archive_batch_id"]): row for row in rows}
+            source_projection = {
+                str(item["batch_id"]): item for item in partition["source_batches"]
+            }
+            for batch_id in normalized_batch_ids:
+                row = persisted[batch_id]
+                source = source_projection[batch_id]
+                if (
+                    source["file_sha256"] != row["sha256"]
+                    or int(source["cutoff_version"]) != int(row["cutoff_version"])
+                    or int(source["row_count"]) != int(row["row_count"])
+                ):
+                    raise RuntimeError("audit partition source identity differs from authority")
+            now = float(self._authority._wall_clock())
+            connection.execute(
+                """
+                INSERT INTO archive_partitions(
+                    partition_id, owner_epoch, record_kind, source_batch_count,
+                    row_count, relative_path, sha256, manifest_relative_path,
+                    manifest_sha256, state, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'committed', ?)
+                """,
+                (
+                    partition_id,
+                    self.token.epoch,
+                    record_kind,
+                    len(rows),
+                    len(partition["records"]),
+                    partition_relative_path,
+                    partition_sha256,
+                    manifest_relative_path,
+                    manifest_sha256,
+                    now,
+                ),
+            )
+            for batch_id in normalized_batch_ids:
+                row = persisted[batch_id]
+                connection.execute(
+                    """
+                    INSERT INTO audit_partition_batches(
+                        partition_id, archive_batch_id, record_kind, cutoff_version,
+                        row_count, relative_path, sha256
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        partition_id,
+                        batch_id,
+                        record_kind,
+                        row["cutoff_version"],
+                        row["row_count"],
+                        row["relative_path"],
+                        row["sha256"],
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO audit_gc_candidates(
+                        relative_path, partition_id, archive_batch_id, sha256,
+                        state, recorded_by_epoch, recorded_at
+                    ) VALUES (?, ?, ?, ?, 'pending', ?, ?)
+                    """,
+                    (
+                        row["relative_path"],
+                        partition_id,
+                        batch_id,
+                        row["sha256"],
+                        self.token.epoch,
+                        now,
+                    ),
+                )
+            connection.execute(
+                f"DELETE FROM archive_batches WHERE archive_batch_id IN ({placeholders})",
+                normalized_batch_ids,
+            )
+            result = connection.execute(
+                "SELECT * FROM archive_partitions WHERE partition_id=?", (partition_id,)
+            ).fetchone()
+            assert result is not None
+            return dict(result)
+
+        return self._command(command_id, "compact_audit_batches", request, operation)
+
+    def claim_audit_gc(self, *, command_id: str, limit: int = 64) -> tuple[dict[str, str], ...]:
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+            raise ValueError("audit GC claim limit must be a positive integer")
+        request = {"limit": limit}
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            rows = connection.execute(
+                """
+                SELECT relative_path, sha256 FROM audit_gc_candidates
+                WHERE state='pending' ORDER BY relative_path LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            result = [
+                {"relative_path": str(row["relative_path"]), "sha256": str(row["sha256"])}
+                for row in rows
+            ]
+            for item in result:
+                connection.execute(
+                    "UPDATE audit_gc_candidates SET state='claimed' WHERE relative_path=?",
+                    (item["relative_path"],),
+                )
+            return {"candidates": result}
+
+        result = self._command(command_id, "claim_audit_gc", request, operation)
+        return tuple(dict(item) for item in result["candidates"])
+
+    def complete_audit_gc(
+        self, *, command_id: str, relative_paths: tuple[str, ...]
+    ) -> tuple[str, ...]:
+        paths = tuple(sorted(relative_paths))
+        if not paths or len(set(paths)) != len(paths):
+            raise ValueError("audit GC completion requires unique paths")
+        for relative_path in paths:
+            if not relative_path.startswith("audit/batches/") or ".." in Path(relative_path).parts:
+                raise ValueError("audit GC completion path is invalid")
+            try:
+                (self._authority._run_root / relative_path).lstat()
+            except FileNotFoundError:
+                pass
+            else:
+                raise RuntimeError("audit GC object still exists")
+        request = {"relative_paths": list(paths)}
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            now = float(self._authority._wall_clock())
+            for relative_path in paths:
+                cursor = connection.execute(
+                    """
+                    UPDATE audit_gc_candidates SET state='deleted', deleted_at=?
+                    WHERE relative_path=? AND state='claimed'
+                    """,
+                    (now, relative_path),
+                )
+                if cursor.rowcount != 1:
+                    raise RuntimeError("audit GC candidate is not claimed")
+                connection.execute(
+                    "DELETE FROM audit_partition_batches WHERE relative_path=?",
+                    (relative_path,),
+                )
+                connection.execute(
+                    "DELETE FROM audit_gc_candidates WHERE relative_path=?",
+                    (relative_path,),
+                )
+            return {"relative_paths": list(paths)}
+
+        result = self._command(command_id, "complete_audit_gc", request, operation)
+        return tuple(str(item) for item in result["relative_paths"])
+
+    def begin_terminal_close(
+        self,
+        *,
+        command_id: str,
+        reason: str,
+        hard_crash_cycle_token_budget: int = 0,
+    ) -> TerminalState:
+        if not reason:
+            raise ValueError("terminal close reason must not be empty")
+        if (
+            isinstance(hard_crash_cycle_token_budget, bool)
+            or not isinstance(hard_crash_cycle_token_budget, int)
+            or hard_crash_cycle_token_budget < 0
+        ):
+            raise ValueError("hard crash cycle token budget must be a non-negative integer")
+        request = {
+            "reason": reason,
+            "hard_crash_cycle_token_budget": hard_crash_cycle_token_budget,
+        }
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
             row = connection.execute("SELECT * FROM controller_state WHERE singleton=1").fetchone()
             assert row is not None
             if row["state"] not in {"open", "closing", "draining"}:
                 raise RuntimeError("authority is already terminal")
-            generation = int(row["generation"]) + (1 if row["state"] == "open" else 0)
+            is_new_close = row["state"] == "open"
+            generation = int(row["generation"]) + (1 if is_new_close else 0)
             now = float(self._authority._wall_clock())
+            if is_new_close:
+                if isinstance(self._authority._scope, StaticMembershipScope):
+                    contributors = connection.execute(
+                        """
+                        SELECT b.learner_id AS stable_contributor_key, 'static' AS fence_kind,
+                            json_object(
+                                'kind', 'static', 'learner_id', b.learner_id,
+                                'logical_launch_id', b.logical_launch_id,
+                                'attempt_id', b.attempt_id,
+                                'binding_generation', b.binding_generation
+                            ) AS fence_json,
+                            COALESCE(p.last_cycle_seq, 0) AS last_cycle_seq,
+                            COALESCE(p.data_cursor, 0) AS data_cursor
+                        FROM static_contributor_bindings AS b
+                        LEFT JOIN contributor_progress AS p
+                            ON p.stable_contributor_key=b.learner_id
+                        WHERE b.status='active'
+                        ORDER BY b.learner_id
+                        """
+                    ).fetchall()
+                else:
+                    contributors = connection.execute(
+                        """
+                        SELECT CAST(i.stream_id AS TEXT) AS stable_contributor_key,
+                            'dynamic' AS fence_kind,
+                            json_object(
+                                'kind', 'dynamic', 'instance_id', i.instance_id,
+                                'placement_id', i.placement_id,
+                                'placement_epoch', i.placement_epoch,
+                                'stream_id', i.stream_id, 'stream_epoch', i.stream_epoch,
+                                'admission_generation', i.admission_generation,
+                                'admission_token_sha256', i.admission_token_sha256
+                            ) AS fence_json,
+                            COALESCE(p.last_cycle_seq, 0) AS last_cycle_seq,
+                            COALESCE(p.data_cursor, 0) AS data_cursor
+                        FROM learner_instances AS i
+                        LEFT JOIN contributor_progress AS p
+                            ON p.stable_contributor_key=CAST(i.stream_id AS TEXT)
+                        WHERE i.status IN ('admitted', 'draining')
+                        ORDER BY i.stream_id
+                        """
+                    ).fetchall()
+                for contributor in contributors:
+                    fence_payload = json.loads(str(contributor["fence_json"]))
+                    connection.execute(
+                        """
+                        INSERT INTO terminal_contributor_fences(
+                            generation, stable_contributor_key, fence_kind, fence_json,
+                            close_last_cycle_seq, close_data_cursor, state
+                        ) VALUES (?, ?, ?, ?, ?, ?, 'awaiting_ack')
+                        """,
+                        (
+                            generation,
+                            contributor["stable_contributor_key"],
+                            contributor["fence_kind"],
+                            _canonical_json(fence_payload),
+                            contributor["last_cycle_seq"],
+                            contributor["data_cursor"],
+                        ),
+                    )
             connection.execute(
                 """
                 UPDATE controller_state
                 SET state='closing', generation=?, reason=?, requested_at=?,
+                    hard_crash_cycle_token_budget=?,
                     updated_by_epoch=?, updated_by_owner_id=?
                 WHERE singleton=1
                 """,
-                (generation, reason, now, self.token.epoch, self.token.owner_id),
+                (
+                    generation,
+                    reason,
+                    now,
+                    hard_crash_cycle_token_budget,
+                    self.token.epoch,
+                    self.token.owner_id,
+                ),
             )
             return {"state": "closing"}
 
         result = self._command(command_id, "begin_terminal_close", request, operation)
         return TerminalState(result["state"])
+
+    def acknowledge_terminal_contributor(
+        self,
+        *,
+        command_id: str,
+        fence: StaticContributorFence | DynamicContributorFence,
+        final_cycle_seq: int | None,
+        final_update_id: str | None = None,
+        hard_crash_gap_tokens_upper_bound: int = 0,
+    ) -> str:
+        if final_cycle_seq is not None and (
+            isinstance(final_cycle_seq, bool)
+            or not isinstance(final_cycle_seq, int)
+            or final_cycle_seq < 0
+        ):
+            raise ValueError("final_cycle_seq must be a non-negative integer")
+        if final_update_id is not None:
+            validate_identity(final_update_id, name="final_update_id")
+        if (
+            isinstance(hard_crash_gap_tokens_upper_bound, bool)
+            or not isinstance(hard_crash_gap_tokens_upper_bound, int)
+            or hard_crash_gap_tokens_upper_bound < 0
+        ):
+            raise ValueError("hard crash gap bound must be a non-negative integer")
+        hard_crash = final_cycle_seq is None
+        if hard_crash:
+            if final_update_id is not None:
+                raise ValueError("hard-crash acknowledgement cannot name a final update")
+        elif hard_crash_gap_tokens_upper_bound:
+            raise ValueError("an acknowledged final cycle cannot carry a hard-crash gap")
+        request = {
+            "fence": fence.as_dict(),
+            "final_cycle_seq": final_cycle_seq,
+            "final_update_id": final_update_id,
+            "hard_crash_gap_tokens_upper_bound": hard_crash_gap_tokens_upper_bound,
+        }
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            controller = connection.execute(
+                "SELECT * FROM controller_state WHERE singleton=1"
+            ).fetchone()
+            if controller is None or controller["state"] not in {"closing", "draining"}:
+                raise RuntimeError("terminal contributor acknowledgement requires an active close")
+            generation = int(controller["generation"])
+            frozen = connection.execute(
+                """
+                SELECT * FROM terminal_contributor_fences
+                WHERE generation=? AND stable_contributor_key=?
+                """,
+                (generation, fence.stable_contributor_key),
+            ).fetchone()
+            if frozen is None or frozen["fence_json"] != _canonical_json(fence.as_dict()):
+                raise MembershipFenceError("terminal acknowledgement fence was not frozen")
+            if frozen["state"] != "awaiting_ack":
+                raise RuntimeError("terminal contributor was already acknowledged")
+            now = float(self._authority._wall_clock())
+            if hard_crash:
+                if hard_crash_gap_tokens_upper_bound > int(
+                    controller["hard_crash_cycle_token_budget"]
+                ):
+                    raise ValueError("hard-crash gap exceeds the frozen one-cycle token budget")
+                state = "hard_crash"
+                if isinstance(fence, DynamicContributorFence):
+                    self._retire_dynamic_in_transaction(
+                        connection,
+                        fence=fence,
+                        reason="terminal_hard_crash",
+                        final_status="expired",
+                    )
+                else:
+                    self._terminalize_fenced_updates(
+                        connection,
+                        fence_json=_canonical_json(fence.as_dict()),
+                        reason="terminal_hard_crash",
+                    )
+                    connection.execute(
+                        """
+                        UPDATE static_contributor_bindings
+                        SET status='terminal', terminal_at=?
+                        WHERE learner_id=? AND logical_launch_id=? AND attempt_id=?
+                            AND binding_generation=? AND status='active'
+                        """,
+                        (
+                            now,
+                            fence.learner_id,
+                            fence.logical_launch_id,
+                            fence.attempt_id,
+                            fence.binding_generation,
+                        ),
+                    )
+            else:
+                assert final_cycle_seq is not None
+                close_sequence = int(frozen["close_last_cycle_seq"])
+                if final_cycle_seq not in {close_sequence, close_sequence + 1}:
+                    raise MembershipFenceError("final cycle exceeds the frozen current-cycle bound")
+                progress = connection.execute(
+                    "SELECT * FROM contributor_progress WHERE stable_contributor_key=?",
+                    (fence.stable_contributor_key,),
+                ).fetchone()
+                observed_sequence = 0 if progress is None else int(progress["last_cycle_seq"])
+                if observed_sequence != final_cycle_seq:
+                    raise MembershipFenceError("final cycle receipt is not contiguous and ingested")
+                if final_update_id is not None:
+                    update = connection.execute(
+                        "SELECT * FROM updates WHERE update_id=?", (final_update_id,)
+                    ).fetchone()
+                    if (
+                        update is None
+                        or int(update["cycle_seq"]) != final_cycle_seq
+                        or update["fence_json"] != _canonical_json(fence.as_dict())
+                    ):
+                        raise MembershipFenceError("final update does not match the frozen cycle")
+                state = "acked"
+            connection.execute(
+                """
+                UPDATE terminal_contributor_fences
+                SET state=?, final_cycle_seq=?, final_update_id=?,
+                    hard_crash_gap_tokens_upper_bound=?, acknowledged_at=?,
+                    acknowledged_by_epoch=?
+                WHERE generation=? AND stable_contributor_key=? AND state='awaiting_ack'
+                """,
+                (
+                    state,
+                    final_cycle_seq,
+                    final_update_id,
+                    hard_crash_gap_tokens_upper_bound,
+                    now,
+                    self.token.epoch,
+                    generation,
+                    fence.stable_contributor_key,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE controller_state SET state='draining', updated_by_epoch=?,
+                    updated_by_owner_id=? WHERE singleton=1
+                """,
+                (self.token.epoch, self.token.owner_id),
+            )
+            return {"state": state}
+
+        result = self._command(command_id, "acknowledge_terminal_contributor", request, operation)
+        return str(result["state"])
 
     def finalize_terminal(
         self,
@@ -2400,6 +3561,20 @@ class LeaderSession:
                 "SELECT * FROM controller_state WHERE singleton=1"
             ).fetchone()
             assert controller is not None
+            if controller["state"] not in {"closing", "draining"}:
+                raise RuntimeError("terminal close must be started before finalization")
+            awaiting = connection.execute(
+                """
+                SELECT COUNT(*) FROM terminal_contributor_fences
+                WHERE generation=? AND state='awaiting_ack'
+                """,
+                (int(controller["generation"]),),
+            ).fetchone()[0]
+            token_outstanding = connection.execute(
+                "SELECT COALESCE(direct_outstanding, 0) FROM token_rollups WHERE singleton=1"
+            ).fetchone()
+            if awaiting or (token_outstanding is not None and int(token_outstanding[0]) != 0):
+                raise RuntimeError("terminal finalization requires drained contributor/token state")
             latest = connection.execute("SELECT MAX(version) FROM global_versions").fetchone()[0]
             if latest is None:
                 raise RuntimeError("cannot finalize before v0 is committed")
@@ -2739,6 +3914,29 @@ class LeaderSession:
             ).fetchone()
             if current is not None and current["status"] in {"pending", "selected"}:
                 self._drop_active_update(connection, current, reason=reason)
+        orphan_receipts = connection.execute(
+            """
+            SELECT r.receipt_id FROM cycle_receipts AS r
+            JOIN token_fates AS f ON f.receipt_id=r.receipt_id
+            WHERE r.fence_json=? AND f.direct_fate='outstanding'
+              AND (? IS NULL OR r.planned_update_id<>?)
+              AND NOT EXISTS (
+                SELECT 1 FROM updates AS u
+                WHERE u.cycle_receipt_id=r.receipt_id
+                  AND u.status IN ('pending', 'selected')
+              )
+            """,
+            (fence_json, preserve_update_id, preserve_update_id),
+        ).fetchall()
+        now = float(self._authority._wall_clock())
+        for receipt in orphan_receipts:
+            self._transition_token_fate(
+                connection,
+                receipt_id=str(receipt["receipt_id"]),
+                fate="dropped",
+                reason=reason,
+                now=now,
+            )
         return update_ids
 
     def _drop_active_update(
@@ -2755,14 +3953,118 @@ class LeaderSession:
         )
         if not cursor.rowcount:
             return False
-        connection.execute(
-            """
-            UPDATE token_fates SET direct_fate='dropped', fate_reason=?,
-                updated_by_epoch=?, updated_at=? WHERE receipt_id=?
-            """,
-            (reason, self.token.epoch, now, row["cycle_receipt_id"]),
+        self._transition_token_fate(
+            connection,
+            receipt_id=str(row["cycle_receipt_id"]),
+            fate="dropped",
+            reason=reason,
+            now=now,
         )
         return True
+
+    @staticmethod
+    def _token_rollup_column(fate: str) -> str:
+        columns = {
+            "applied": "direct_applied",
+            "dropped": "direct_dropped",
+            "quarantined": "direct_quarantined_or_conflicted",
+            "conflicted": "direct_quarantined_or_conflicted",
+            "unpublished": "direct_reported_unpublished",
+            "outstanding": "direct_outstanding",
+        }
+        try:
+            return columns[fate]
+        except KeyError as exc:
+            raise AuthoritySchemaError(f"unknown token fate: {fate}") from exc
+
+    def _ensure_token_rollup(self, connection: sqlite3.Connection, *, now: float) -> None:
+        connection.execute(
+            """
+            INSERT INTO token_rollups(
+                singleton, adjudicated_processed, local_discarded, direct_applied,
+                direct_dropped, direct_quarantined_or_conflicted,
+                direct_reported_unpublished, direct_outstanding, carried_ancestry,
+                updated_by_epoch, updated_at
+            ) VALUES (1, 0, 0, 0, 0, 0, 0, 0, 0, ?, ?)
+            ON CONFLICT(singleton) DO NOTHING
+            """,
+            (self.token.epoch, now),
+        )
+
+    def _record_token_receipt(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        receipt: CycleReceiptV1,
+        now: float,
+    ) -> None:
+        self._ensure_token_rollup(connection, now=now)
+        fate_column = self._token_rollup_column(
+            "outstanding" if receipt.proposal_expected else "unpublished"
+        )
+        connection.execute(
+            f"""
+            UPDATE token_rollups SET
+                adjudicated_processed=adjudicated_processed+?,
+                local_discarded=local_discarded+?,
+                {fate_column}={fate_column}+?,
+                carried_ancestry=carried_ancestry+?,
+                updated_by_epoch=?, updated_at=?
+            WHERE singleton=1
+            """,
+            (
+                receipt.processed_tokens_this_cycle,
+                receipt.local_discarded_tokens_this_cycle,
+                receipt.effective_tokens_this_cycle,
+                receipt.retained_tokens_since_base - receipt.effective_tokens_this_cycle,
+                self.token.epoch,
+                now,
+            ),
+        )
+
+    def _transition_token_fate(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        receipt_id: str,
+        fate: str,
+        reason: str,
+        now: float,
+        applied_version: int | None = None,
+    ) -> None:
+        row = connection.execute(
+            "SELECT direct_weight_tokens, direct_fate FROM token_fates WHERE receipt_id=?",
+            (receipt_id,),
+        ).fetchone()
+        if row is None:
+            raise AuthoritySchemaError(f"token fate is missing for receipt {receipt_id}")
+        old_fate = str(row["direct_fate"])
+        if old_fate == fate:
+            return
+        tokens = int(row["direct_weight_tokens"])
+        old_column = self._token_rollup_column(old_fate)
+        new_column = self._token_rollup_column(fate)
+        self._ensure_token_rollup(connection, now=now)
+        if old_column == new_column:
+            rollup_assignment = "updated_by_epoch=?, updated_at=?"
+            rollup_parameters: tuple[Any, ...] = (self.token.epoch, now)
+        else:
+            rollup_assignment = (
+                f"{old_column}={old_column}-?, {new_column}={new_column}+?, "
+                "updated_by_epoch=?, updated_at=?"
+            )
+            rollup_parameters = (tokens, tokens, self.token.epoch, now)
+        connection.execute(
+            f"UPDATE token_rollups SET {rollup_assignment} WHERE singleton=1",
+            rollup_parameters,
+        )
+        connection.execute(
+            """
+            UPDATE token_fates SET direct_fate=?, fate_reason=?, applied_version=?,
+                updated_by_epoch=?, updated_at=? WHERE receipt_id=?
+            """,
+            (fate, reason, applied_version, self.token.epoch, now, receipt_id),
+        )
 
     def _reconcile_invalid_batch(
         self,
@@ -2967,6 +4269,24 @@ class LeaderSession:
             admission_token_sha256=str(row["admission_token_sha256"]),
         )
 
+    @staticmethod
+    def _dynamic_admission_result(
+        connection: sqlite3.Connection,
+        *,
+        fence: DynamicContributorFence,
+    ) -> dict[str, Any]:
+        progress = connection.execute(
+            "SELECT * FROM contributor_progress WHERE stable_contributor_key=?",
+            (fence.stable_contributor_key,),
+        ).fetchone()
+        return {
+            "fence": fence.as_dict(),
+            "resume_cursor": 0 if progress is None else int(progress["data_cursor"]),
+            "last_receipt_id": None if progress is None else progress["last_receipt_id"],
+            "last_receipt_sha256": (None if progress is None else progress["last_receipt_sha256"]),
+            "next_cycle_seq": 1 if progress is None else int(progress["last_cycle_seq"]) + 1,
+        }
+
     def _require_current_fence(
         self,
         connection: sqlite3.Connection,
@@ -3024,6 +4344,43 @@ class LeaderSession:
             ).fetchone()
         if row is None:
             raise MembershipFenceError("contributor fence is stale or not admitted")
+
+    def _require_terminal_input_allowed(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        fence: StaticContributorFence | DynamicContributorFence,
+        cycle_seq: int,
+        update_id: str | None,
+    ) -> None:
+        controller = connection.execute(
+            "SELECT state, generation FROM controller_state WHERE singleton=1"
+        ).fetchone()
+        if controller is None:
+            raise AuthoritySchemaError("controller state is missing")
+        if controller["state"] == "open":
+            return
+        if controller["state"] not in {"closing", "draining"}:
+            raise MembershipFenceError("terminal authority no longer accepts contributor input")
+        frozen = connection.execute(
+            """
+            SELECT * FROM terminal_contributor_fences
+            WHERE generation=? AND stable_contributor_key=?
+            """,
+            (int(controller["generation"]), fence.stable_contributor_key),
+        ).fetchone()
+        if (
+            frozen is None
+            or frozen["state"] != "awaiting_ack"
+            or frozen["fence_json"] != _canonical_json(fence.as_dict())
+        ):
+            raise MembershipFenceError("input does not match an awaiting pre-close fence")
+        close_sequence = int(frozen["close_last_cycle_seq"])
+        if cycle_seq not in {close_sequence, close_sequence + 1}:
+            raise MembershipFenceError("terminal input exceeds the frozen current-cycle bound")
+        declared_update = frozen["final_update_id"]
+        if declared_update is not None and update_id != declared_update:
+            raise MembershipFenceError("terminal proposal does not match the declared final update")
 
     def _require_current_fence_json(
         self,
@@ -3184,6 +4541,170 @@ class LeaderSession:
             candidates=candidates,
             state=str(batch["state"]),
         )
+
+
+def _audit_history_records(
+    connection: sqlite3.Connection, cutoff_version: int
+) -> list[dict[str, Any]]:
+    """Return the exact dependency-closed rows safe to remove through a cutoff."""
+
+    batch_rows = connection.execute(
+        """
+        SELECT b.* FROM selection_batches AS b
+        WHERE b.target_version<=? AND b.state IN ('committed', 'abandoned')
+          AND NOT EXISTS (
+            SELECT 1 FROM selection_batch_updates AS bu
+            JOIN updates AS u ON u.update_id=bu.update_id
+            JOIN contributor_progress AS p ON p.last_receipt_id=u.cycle_receipt_id
+            WHERE bu.batch_id=b.batch_id
+          )
+        ORDER BY b.batch_id
+        """,
+        (cutoff_version,),
+    ).fetchall()
+    batch_ids = {str(row["batch_id"]) for row in batch_rows}
+    publication_rows = connection.execute(
+        """
+        SELECT * FROM publication_intents
+        WHERE target_version<=? AND state IN ('committed', 'abandoned')
+        ORDER BY publication_id
+        """,
+        (cutoff_version,),
+    ).fetchall()
+    publication_rows = [
+        row
+        for row in publication_rows
+        if row["selection_batch_id"] is None or str(row["selection_batch_id"]) in batch_ids
+    ]
+    publication_ids = {str(row["publication_id"]) for row in publication_rows}
+    version_rows = [
+        row
+        for row in connection.execute(
+            "SELECT * FROM global_versions WHERE version<=? ORDER BY version",
+            (cutoff_version,),
+        ).fetchall()
+        if str(row["publication_id"]) in publication_ids
+    ]
+    update_rows = connection.execute(
+        """
+        SELECT u.* FROM updates AS u
+        LEFT JOIN contributor_progress AS p ON p.last_receipt_id=u.cycle_receipt_id
+        WHERE p.stable_contributor_key IS NULL
+          AND u.status IN ('applied', 'dropped')
+        ORDER BY u.update_id
+        """
+    ).fetchall()
+    update_rows = [
+        row
+        for row in update_rows
+        if (row["selected_batch_id"] is not None and str(row["selected_batch_id"]) in batch_ids)
+        or (
+            row["selected_batch_id"] is None
+            and (row["applied_version"] is None or int(row["applied_version"]) <= cutoff_version)
+        )
+    ]
+    receipt_ids = {str(row["cycle_receipt_id"]) for row in update_rows}
+    receipt_only = connection.execute(
+        """
+        SELECT r.* FROM cycle_receipts AS r
+        JOIN token_fates AS f ON f.receipt_id=r.receipt_id
+        JOIN contributor_progress AS p
+            ON p.stable_contributor_key=r.stable_contributor_key
+        WHERE r.cycle_seq < p.last_cycle_seq
+          AND f.direct_fate='unpublished'
+          AND NOT EXISTS (SELECT 1 FROM updates AS u WHERE u.cycle_receipt_id=r.receipt_id)
+        ORDER BY r.receipt_id
+        """
+    ).fetchall()
+    receipt_ids.update(str(row["receipt_id"]) for row in receipt_only)
+    if receipt_ids:
+        placeholders = ",".join("?" for _ in receipt_ids)
+        receipt_rows = connection.execute(
+            f"SELECT * FROM cycle_receipts WHERE receipt_id IN ({placeholders}) ORDER BY receipt_id",
+            tuple(sorted(receipt_ids)),
+        ).fetchall()
+        fate_rows = connection.execute(
+            f"SELECT * FROM token_fates WHERE receipt_id IN ({placeholders}) ORDER BY receipt_id",
+            tuple(sorted(receipt_ids)),
+        ).fetchall()
+        observation_rows = connection.execute(
+            f"""
+            SELECT o.* FROM proposal_observations AS o
+            JOIN cycle_receipts AS r
+              ON r.stable_contributor_key=o.stable_contributor_key
+             AND r.cycle_seq=o.cycle_seq
+            WHERE r.receipt_id IN ({placeholders})
+              AND NOT EXISTS (
+                SELECT 1 FROM proposal_frontiers AS f
+                WHERE f.terminal_observation_id=o.observation_id
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM proposal_visibility AS v
+                WHERE v.terminal_observation_id=o.observation_id
+              )
+            ORDER BY o.observation_id
+            """,
+            tuple(sorted(receipt_ids)),
+        ).fetchall()
+    else:
+        receipt_rows = []
+        fate_rows = []
+        observation_rows = []
+    observation_ids = {int(row["observation_id"]) for row in observation_rows}
+    if observation_ids:
+        placeholders = ",".join("?" for _ in observation_ids)
+        conflict_rows = connection.execute(
+            f"""
+            SELECT * FROM proposal_conflicts
+            WHERE observation_id IN ({placeholders}) ORDER BY observation_id
+            """,
+            tuple(sorted(observation_ids)),
+        ).fetchall()
+    else:
+        conflict_rows = []
+    batch_update_rows = []
+    if batch_ids:
+        placeholders = ",".join("?" for _ in batch_ids)
+        batch_update_rows = connection.execute(
+            f"""
+            SELECT * FROM selection_batch_updates
+            WHERE batch_id IN ({placeholders}) ORDER BY batch_id, update_id
+            """,
+            tuple(sorted(batch_ids)),
+        ).fetchall()
+    artifact_rows = []
+    if publication_ids:
+        placeholders = ",".join("?" for _ in publication_ids)
+        artifact_rows = connection.execute(
+            f"""
+            SELECT * FROM artifact_publications
+            WHERE publication_id IN ({placeholders}) ORDER BY publication_id, artifact_kind
+            """,
+            tuple(sorted(publication_ids)),
+        ).fetchall()
+    groups: tuple[tuple[str, str, list[sqlite3.Row]], ...] = (
+        ("proposal_conflicts", "observation_id", list(conflict_rows)),
+        ("proposal_observations", "observation_id", list(observation_rows)),
+        ("selection_batch_updates", "batch_update", list(batch_update_rows)),
+        ("token_fates", "receipt_id", list(fate_rows)),
+        ("updates", "update_id", list(update_rows)),
+        ("cycle_receipts", "receipt_id", list(receipt_rows)),
+        ("artifact_publications", "artifact", list(artifact_rows)),
+        ("global_versions", "version", list(version_rows)),
+        ("publication_intents", "publication_id", list(publication_rows)),
+        ("selection_batches", "batch_id", list(batch_rows)),
+    )
+    records: list[dict[str, Any]] = []
+    for table, key_kind, rows in groups:
+        for row in rows:
+            if key_kind == "batch_update":
+                primary_key = f"{row['batch_id']}:{row['update_id']}"
+            elif key_kind == "artifact":
+                primary_key = f"{row['publication_id']}:{row['artifact_kind']}"
+            else:
+                primary_key = str(row[key_kind])
+            records.append({"table": table, "primary_key": primary_key, "row": dict(row)})
+    return sorted(records, key=lambda item: (item["table"], item["primary_key"]))
 
 
 def _canonical_json(value: Any) -> str:

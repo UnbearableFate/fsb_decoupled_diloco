@@ -46,6 +46,9 @@ from fs_diloco.tools.launch_phase2_acceptance import submit_jobs as submit_accep
 from fs_diloco.tools.launch_phase2_matched import submit_jobs as submit_matched_jobs
 
 
+PLAN03_REQUIREMENTS = frozenset({"DMB-05"})
+
+
 def dynamic_identity() -> BootstrapIdentity:
     return BootstrapIdentity(
         run_id="dynamic-test",
@@ -1189,6 +1192,7 @@ def test_launch_outbox_reconciles_qsub_windows_and_retains_scheduler_capacity(
 
         scheduler = MockScheduler()
         scheduler.found = PBSJobObservation("777", "queued", {"job_state": "Q"}, 0, "")
+        now = [1000.0]
         outbox = LearnerLaunchOutbox(
             paths=paths,
             config=SimpleNamespace(
@@ -1198,7 +1202,7 @@ def test_launch_outbox_reconciles_qsub_windows_and_retains_scheduler_capacity(
             ),
             scheduler=scheduler,
             descriptor_sha256="descriptor",
-            wall_clock=lambda: 1000.0,
+            wall_clock=lambda: now[0],
         )
         outbox.reconcile(store)
         row = next(
@@ -1215,16 +1219,25 @@ def test_launch_outbox_reconciles_qsub_windows_and_retains_scheduler_capacity(
         row = next(
             item for item in store.launch_requests() if item["request_id"] == planned["request_id"]
         )
-        assert row["state"] == "submitted"
+        assert row["state"] == "terminal_uncertain"
         assert row["reservation_released_at"] is None
+        assert row["uncertainty_deadline"] == 1030.0
 
         scheduler.queried = PBSJobObservation("777", "no_record", None, 1, "missing")
         outbox.reconcile(store)
         row = next(
             item for item in store.launch_requests() if item["request_id"] == planned["request_id"]
         )
-        assert row["state"] == "failed"
-        assert row["reservation_released_at"] == 1000.0
+        assert row["state"] == "terminal_uncertain"
+        assert row["reservation_released_at"] is None
+
+        now[0] = 1031.0
+        outbox.reconcile(store)
+        row = next(
+            item for item in store.launch_requests() if item["request_id"] == planned["request_id"]
+        )
+        assert row["state"] == "manual_review"
+        assert row["reservation_released_at"] is None
     finally:
         fenced.close()
         lease.close()
@@ -1244,6 +1257,7 @@ def test_bootstrap_job_remains_reserved_until_scheduler_terminal(tmp_path: Path)
         store.record_external_launch_jobs(jobs, observed_at=100.0)
         scheduler = MockScheduler()
         scheduler.queried = PBSJobObservation("321.opbs", "queued", {"job_state": "Q"}, 0, "")
+        now = [10_000.0]
         outbox = LearnerLaunchOutbox(
             paths=paths,
             config=SimpleNamespace(
@@ -1253,7 +1267,7 @@ def test_bootstrap_job_remains_reserved_until_scheduler_terminal(tmp_path: Path)
             ),
             scheduler=scheduler,
             descriptor_sha256="descriptor-digest",
-            wall_clock=lambda: 10_000.0,
+            wall_clock=lambda: now[0],
         )
         outbox.reconcile(store)
         row = next(
@@ -1267,8 +1281,17 @@ def test_bootstrap_job_remains_reserved_until_scheduler_terminal(tmp_path: Path)
         row = next(
             item for item in store.launch_requests() if item["request_id"] == launch["request_id"]
         )
-        assert row["state"] == "failed"
-        assert row["reservation_released_at"] == 10_000.0
+        assert row["state"] == "terminal_uncertain"
+        assert row["reservation_released_at"] is None
+        assert row["uncertainty_deadline"] == 10_030.0
+
+        now[0] = 10_031.0
+        outbox.reconcile(store)
+        row = next(
+            item for item in store.launch_requests() if item["request_id"] == launch["request_id"]
+        )
+        assert row["state"] == "manual_review"
+        assert row["reservation_released_at"] is None
     finally:
         fenced.close()
         lease.close()

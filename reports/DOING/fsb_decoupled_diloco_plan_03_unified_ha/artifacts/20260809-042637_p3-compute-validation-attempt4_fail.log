@@ -1,0 +1,40 @@
+Source log: fsdiloco_plan03_p3.o2508858
+PBS_JOBID=2508858.opbs
+Compute host: mg0003
+Environment: Python 3.13.13; pytest 9.1.1; hypothesis 6.165.2; torch 2.13.0+cu132
+
+Static gates:
+  Ruff: PASS
+  Scoped format: 30 files already formatted
+  Plan03 Checker: PASS
+
+Focused result:
+  239 passed in 8.17s
+
+Full result:
+  2 failed, 743 passed in 51.18s
+
+Failure 1:
+  tests/test_plan02_phase2_dynamic.py::test_launch_outbox_reconciles_qsub_windows_and_retains_scheduler_capacity
+  Legacy expectation after a known submitted job returns `unknown`: state remains `submitted`.
+  Actual: `terminal_uncertain`, reservation remains held. This is the intended P3 H-07
+  transition and is already covered by the focused ordinary regression.
+
+Failure 2:
+  tests/test_plan02_phase2_dynamic.py::test_bootstrap_job_remains_reserved_until_scheduler_terminal
+  Legacy expectation after live+historical `no_record`: immediate `failed` and capacity release.
+  Actual: `terminal_uncertain`, reservation remains held. Immediate failure/release is the
+  exact P0 H-07 defect P3 removed.
+
+Confirmed cause:
+  Two older full-suite assertions were not migrated when the P0 H-07 strict RED became an
+  ordinary GREEN test. Production behavior matches SCHED-02/SCHED-03/SCHED-05: lack of a
+  positive scheduler record starts bounded uncertainty and retains the anti-duplicate
+  tombstone. This is a test-contract regression, not a new outbox failure.
+
+Next falsification:
+  Drive an injected wall clock. Assert unknown/no-record enters terminal_uncertain without
+  releasing the reservation; advance beyond the persisted deadline; assert manual_review
+  still retains the reservation. Rerun the same focused+full compute gate.
+
+The original complete tracebacks remain in fsdiloco_plan03_p3.o2508858.

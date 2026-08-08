@@ -14,9 +14,16 @@ import argparse
 import hashlib
 import json
 import os
+import sqlite3
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
+
+from ..storage.artifact_policy import ArtifactClass, ArtifactPolicy
+
+
+PLAN03_REQUIREMENTS = frozenset({"AUDIT-03", "FS-05"})
 
 
 class CleanupRefusedError(RuntimeError):
@@ -47,6 +54,7 @@ class CleanupPlan:
     evidence_path: Path
     run_id: str
     evidence_sha256: str
+    artifact_policy_sha256: str | None
     candidates: tuple[CleanupCandidate, ...]
     retained_representative_learner_log: str | None
 
@@ -227,6 +235,113 @@ def _candidate(
     )
 
 
+def _load_artifact_policy(run_root: Path) -> ArtifactPolicy | None:
+    path = run_root / "control" / "artifact_policy.json"
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
+        raise CleanupRefusedError("artifact policy must be an immutable regular file")
+    try:
+        return ArtifactPolicy.from_dict(_load_json(path, label="artifact policy"))
+    except ValueError as exc:
+        raise CleanupRefusedError(f"artifact policy is invalid: {exc}") from exc
+
+
+def _authority_live_paths(run_root: Path) -> set[str]:
+    database = run_root / "control" / "syncer_metadata.sqlite3"
+    try:
+        metadata = database.lstat()
+    except FileNotFoundError as exc:
+        raise CleanupRefusedError("authority database is missing") from exc
+    if not stat.S_ISREG(metadata.st_mode):
+        raise CleanupRefusedError("authority database must be a regular non-symlink file")
+    uri = f"file:{database.resolve()}?mode=ro"
+    try:
+        connection = sqlite3.connect(uri, uri=True)
+        connection.row_factory = sqlite3.Row
+    except sqlite3.Error as exc:
+        raise CleanupRefusedError("cannot open authority database read-only") from exc
+    live: set[str] = set()
+    try:
+        tables = {
+            str(row[0])
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        if "updates" in tables:
+            columns = {
+                str(row[1]) for row in connection.execute("PRAGMA table_info(updates)").fetchall()
+            }
+            path_column = (
+                "payload_relative_path"
+                if "payload_relative_path" in columns
+                else "file_path"
+                if "file_path" in columns
+                else None
+            )
+            if path_column is not None and "status" in columns:
+                rows = connection.execute(
+                    f"SELECT {path_column} FROM updates WHERE status IN ('pending','selected')"
+                ).fetchall()
+                for row in rows:
+                    raw = Path(str(row[0]))
+                    if raw.is_absolute():
+                        try:
+                            raw = raw.resolve().relative_to(run_root)
+                        except ValueError:
+                            continue
+                    live.add(raw.as_posix())
+        if "artifact_publications" in tables:
+            rows = connection.execute(
+                """
+                SELECT relative_path FROM artifact_publications
+                WHERE state IN ('prepared','committed','orphan')
+                """
+            ).fetchall()
+            live.update(str(row[0]) for row in rows)
+        if "gc_candidates" in tables:
+            rows = connection.execute(
+                "SELECT relative_path FROM gc_candidates WHERE state IN ('pending','claimed')"
+            ).fetchall()
+            live.update(str(row[0]) for row in rows)
+    except sqlite3.Error as exc:
+        raise CleanupRefusedError("cannot inspect authority live references") from exc
+    finally:
+        connection.close()
+    return live
+
+
+def _validate_policy_candidates(
+    *,
+    run_root: Path,
+    policy: ArtifactPolicy,
+    candidates: tuple[CleanupCandidate, ...],
+) -> None:
+    live = _authority_live_paths(run_root)
+    for candidate in candidates:
+        try:
+            artifact_class = policy.classify(candidate.relative_path)
+            allowed = policy.allows_generic_cleanup(candidate.relative_path)
+        except ValueError as exc:
+            raise CleanupRefusedError(
+                f"cleanup candidate has ambiguous/invalid policy classification: "
+                f"{candidate.relative_path}"
+            ) from exc
+        if artifact_class in {ArtifactClass.UNKNOWN, ArtifactClass.AUTHORITY, ArtifactClass.AUDIT}:
+            raise CleanupRefusedError(
+                f"generic cleanup cannot delete {artifact_class.value}: {candidate.relative_path}"
+            )
+        if not allowed:
+            raise CleanupRefusedError(
+                f"artifact policy forbids generic cleanup: {candidate.relative_path}"
+            )
+        if candidate.relative_path in live:
+            raise CleanupRefusedError(
+                f"authority still references cleanup candidate: {candidate.relative_path}"
+            )
+
+
 def build_cleanup_plan(
     project_root: str | Path,
     run_root: str | Path,
@@ -247,11 +362,16 @@ def build_cleanup_plan(
         )
     for suffix in ("-journal", "-shm", "-wal"):
         active_sidecar = run / "control" / f"syncer_metadata.sqlite3{suffix}"
-        if active_sidecar.exists():
+        try:
+            active_sidecar.lstat()
+        except FileNotFoundError:
+            pass
+        else:
             raise CleanupRefusedError(f"authority database may still be active: {active_sidecar}")
 
     run_id, summary, _stop = _terminal_identity(run)
     _matching_pass_evidence(evidence, run, run_id, summary)
+    artifact_policy = _load_artifact_policy(run)
 
     selected: dict[Path, str] = {}
 
@@ -292,12 +412,19 @@ def build_cleanup_plan(
         _candidate(path, run_root=run, reason=selected[path])
         for path in sorted(selected, key=lambda item: item.relative_to(run).as_posix())
     )
+    if artifact_policy is not None:
+        _validate_policy_candidates(
+            run_root=run,
+            policy=artifact_policy,
+            candidates=candidates,
+        )
     return CleanupPlan(
         project_root=project,
         run_root=run,
         evidence_path=evidence,
         run_id=run_id,
         evidence_sha256=_sha256(evidence),
+        artifact_policy_sha256=(None if artifact_policy is None else artifact_policy.policy_sha256),
         candidates=candidates,
         retained_representative_learner_log=(
             None if representative is None else representative.relative_to(run).as_posix()
@@ -314,6 +441,7 @@ def _manifest(plan: CleanupPlan, *, status: str) -> dict[str, Any]:
         "run_root": str(plan.run_root),
         "completion_evidence": str(plan.evidence_path),
         "completion_evidence_sha256": plan.evidence_sha256,
+        "artifact_policy_sha256": plan.artifact_policy_sha256,
         "candidate_count": len(plan.candidates),
         "candidate_bytes": plan.total_bytes,
         "retained_representative_learner_log": plan.retained_representative_learner_log,
@@ -323,8 +451,6 @@ def _manifest(plan: CleanupPlan, *, status: str) -> dict[str, Any]:
 
 def _write_json_atomic(path: Path, payload: dict[str, Any], *, require_new: bool) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    if require_new and path.exists():
-        raise CleanupRefusedError(f"cleanup manifest already exists: {path}")
     temporary = path.with_name(f".{path.name}.tmp-{os.getpid()}")
     try:
         with temporary.open("x", encoding="utf-8") as handle:
@@ -332,7 +458,16 @@ def _write_json_atomic(path: Path, payload: dict[str, Any], *, require_new: bool
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        if require_new:
+            try:
+                os.link(temporary, path, follow_symlinks=False)
+            except FileExistsError as exc:
+                raise CleanupRefusedError(f"cleanup manifest already exists: {path}") from exc
+            temporary.unlink()
+        else:
+            if path.is_symlink() or not path.is_file():
+                raise CleanupRefusedError("cleanup manifest ownership changed")
+            os.replace(temporary, path)
         directory_fd = os.open(path.parent, os.O_RDONLY)
         try:
             os.fsync(directory_fd)

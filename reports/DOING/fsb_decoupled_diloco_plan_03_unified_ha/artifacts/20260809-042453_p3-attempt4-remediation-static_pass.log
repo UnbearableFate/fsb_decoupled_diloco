@@ -1,0 +1,29 @@
+Timestamp: 2026-08-09T04:24:53+09:00
+Environment: miyabi-g1 login/control-plane node; static validation only
+
+Commands:
+  .venv/bin/ruff format <five attempt-4 changed Python files>
+  .venv/bin/ruff check fs_diloco tests scripts/miyabi
+  .venv/bin/python -m compileall -q fs_diloco tests scripts/miyabi
+  .venv/bin/python scripts/miyabi/check_plan03.py --root . --expect reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260808-223500_p0-runtime-surface-inventory_review.json --verify-boundaries
+  git diff --check
+  bash -n scripts/miyabi/*.pbs
+  rg -n '#PBS -W group_list=<group_id>' scripts/miyabi/*.pbs
+
+Results:
+  Ruff format: 5 files left unchanged
+  Ruff check: All checks passed
+  compileall: PASS
+  Plan03 Checker: PASS
+  git diff --check: PASS
+  PBS bash syntax: PASS
+  PBS group placeholder scan: PASS (no matches)
+
+Attempt-4 remediation represented here:
+  - Fair service ordering is committed count, last committed version, stable key.
+  - Terminal hard-crash gap is read independently of receipt/token-rollup presence.
+  - Immutable identity tamper fixtures assert 0444 then explicitly acquire write authority.
+  - Deterministic 16-round prefix, failed-selection no-credit, authority abandon/no-credit,
+    empty hard-crash gap and receipt-bearing final-ack counterexamples were added.
+
+No pytest, torch workload, qsub or runtime experiment was executed on the login node.

@@ -548,8 +548,8 @@ def test_ha_initializer_writes_identical_root_and_control_config(
     initialize_ha_run(config, project_root=tmp_path)
     paths = RunPaths(shared_root)
     assert paths.resolved_config_yaml.read_bytes() == paths.run_root_config_yaml.read_bytes()
-    with pytest.raises(FileExistsError, match="run root already exists"):
-        initialize_ha_run(config, project_root=tmp_path)
+    replay = initialize_ha_run(config, project_root=tmp_path)
+    assert replay["recovered"] is True
 
 
 def test_run_descriptor_rejects_all_identity_tampering_without_lease_writes(
@@ -589,14 +589,18 @@ def test_run_descriptor_rejects_all_identity_tampering_without_lease_writes(
     assert_no_leadership_rows(paths)
 
     paths, _config = initialized("descriptor-checksum")
+    assert paths.run_descriptor_json.stat().st_mode & 0o222 == 0
     descriptor = json.loads(paths.run_descriptor_json.read_text(encoding="utf-8"))
     descriptor["run_id"] = "tampered"
+    paths.run_descriptor_json.chmod(0o644)
     paths.run_descriptor_json.write_text(json.dumps(descriptor), encoding="utf-8")
     with pytest.raises(RuntimeError, match="self-checksum"):
         load_run_descriptor(paths.shared_root)
     assert_no_leadership_rows(paths)
 
     paths, _config = initialized("config-checksum")
+    assert paths.resolved_config_yaml.stat().st_mode & 0o222 == 0
+    paths.resolved_config_yaml.chmod(0o644)
     paths.resolved_config_yaml.write_text(
         paths.resolved_config_yaml.read_text(encoding="utf-8") + "# tampered\n",
         encoding="utf-8",
@@ -606,6 +610,8 @@ def test_run_descriptor_rejects_all_identity_tampering_without_lease_writes(
     assert_no_leadership_rows(paths)
 
     paths, _config = initialized("source-checksum")
+    assert paths.run_source_manifest_json.stat().st_mode & 0o222 == 0
+    paths.run_source_manifest_json.chmod(0o644)
     paths.run_source_manifest_json.write_text(
         paths.run_source_manifest_json.read_text(encoding="utf-8") + " ",
         encoding="utf-8",

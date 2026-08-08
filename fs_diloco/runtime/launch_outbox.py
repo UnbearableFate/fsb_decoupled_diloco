@@ -19,6 +19,9 @@ from ..storage.paths import RunPaths
 from .pbs_scheduler import OUTSTANDING_CLASSIFICATIONS, PBSScheduler
 
 
+PLAN03_REQUIREMENTS = frozenset({"SCHED-01", "SCHED-02", "SCHED-03", "SCHED-05", "SCHED-06"})
+
+
 def recovery_observation_key(
     *,
     run_id: str,
@@ -425,17 +428,52 @@ class LearnerLaunchOutbox:
                             state=next_state,
                             pbs_job_id=observation.job_id,
                             scheduler_state=observation.classification,
+                            last_positive_evidence_at=now,
+                            evidence_source="pbs_live_or_historical",
                             observed_at=now,
                         )
                     )
-                elif observation.classification in {"finished", "no_record"}:
+                elif observation.classification in {
+                    "finished",
+                    "no_record",
+                    "query_failed",
+                    "unknown",
+                }:
+                    deadline = request.get("uncertainty_deadline")
+                    timeout = float(
+                        getattr(
+                            self.config,
+                            "scheduler_uncertainty_timeout_seconds",
+                            max(
+                                3.0 * float(self.config.scheduler_reconcile_interval_seconds),
+                                30.0,
+                            ),
+                        )
+                    )
+                    if deadline is not None and now >= float(deadline):
+                        results.append(
+                            store.update_launch_request(
+                                request_id=request_id,
+                                expected_states={state},
+                                state="manual_review",
+                                scheduler_state=observation.classification,
+                                evidence_source="pbs_live_and_historical_no_positive_record",
+                                manual_reason="scheduler uncertainty deadline elapsed",
+                                last_error="scheduler_uncertainty_deadline_elapsed",
+                                observed_at=now,
+                            )
+                        )
+                        continue
                     results.append(
                         store.update_launch_request(
                             request_id=request_id,
                             expected_states={state},
-                            state="failed",
+                            state="terminal_uncertain",
                             scheduler_state=observation.classification,
-                            last_error="scheduler_terminal_before_admission",
+                            first_uncertain_at=now,
+                            uncertainty_deadline=now + timeout,
+                            evidence_source="pbs_live_and_historical_no_positive_record",
+                            last_error="scheduler_terminal_state_uncertain_before_admission",
                             observed_at=now,
                         )
                     )
@@ -453,6 +491,8 @@ class LearnerLaunchOutbox:
                         ),
                         pbs_job_id=found.job_id,
                         scheduler_state=found.classification,
+                        last_positive_evidence_at=now,
+                        evidence_source="request_fingerprint_reconciliation",
                         observed_at=now,
                     )
                 )
@@ -476,16 +516,30 @@ class LearnerLaunchOutbox:
                 now - float(request["updated_at"])
                 >= 2.0 * float(self.config.scheduler_reconcile_interval_seconds)
             ):
+                timeout = float(
+                    getattr(
+                        self.config,
+                        "scheduler_uncertainty_timeout_seconds",
+                        max(
+                            3.0 * float(self.config.scheduler_reconcile_interval_seconds),
+                            30.0,
+                        ),
+                    )
+                )
                 results.append(
                     store.update_launch_request(
                         request_id=request_id,
                         expected_states={state},
-                        state="retryable",
+                        state="terminal_uncertain",
                         scheduler_state="no_record",
+                        first_uncertain_at=now,
+                        uncertainty_deadline=now + timeout,
+                        evidence_source="request_fingerprint_no_record",
+                        last_error="submission outcome remains uncertain",
                         observed_at=now,
                     )
                 )
-                state = "retryable"
+                continue
             if state not in {"planned", "retryable"}:
                 continue
             submitting = store.update_launch_request(

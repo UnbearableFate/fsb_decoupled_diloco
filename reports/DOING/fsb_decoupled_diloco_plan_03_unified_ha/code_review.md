@@ -50,3 +50,47 @@
 - checker和formal shared-FS probe PASS；focused suite中review-support/oracle普通passing、5项RED全部且仅目标xfail；`--runxfail`精确5 failed并保存原始log；full suite零unexpected failure。
 - 新artifact在precommit查询中可见且不命中ignore；review-fix commit创建后，matrix全部nonpending evidence由`git ls-files`证明tracked。
 - 若第四次仍在相同目标失败，不再局部修改，重新检查batch顺序、pytest marker语义和target/index边界。
+## 2026-08-09T04:19:38+09:00 — Comprehensive review after three consecutive P3 validation failures
+
+### Scope and evidence
+
+This Codex/GPT review covers the complete first P3 slice from learner accounting inputs through typed protocol objects, v4 SQLite transactions, scheduler reconciliation, staged filesystem publication, audit/GC references and observable outputs. Evidence is the three consecutive `p3-compute-validation` runs: job `2508845.opbs` stopped at an over-broad format scope, job `2508848.opbs` stopped at an over-frozen Checker boundary, and job `2508854.opbs` passed all static/Checker gates then exposed three focused behavioral/test-contract failures (`3 failed, 232 passed`). Attempts 1 and 2 were validation-harness faults; attempt 3 proves the harness now reaches the intended state machines.
+
+### End-to-end data and control flow reviewed
+
+1. Learner-side steps enter `TrainingSegmentAccumulator`; destructive pre-publication replace transfers current effective tokens to local-discarded and resets effective loss/example/gradient state, while retained rebase preserves it. The cycle closes into a typed `CycleReceiptV1`; a positive effective segment may additionally produce `FullUpdateProposalV2`.
+2. `LeaderSession.ingest_cycle_receipt` runs under `BEGIN IMMEDIATE` and a current static/dynamic fence, verifies contiguous sequence/hash/cursor, inserts receipt and token fate, advances contributor/stream progress and incrementally updates `token_rollups`. Proposal ingest verifies immutable filesystem payload before entering the fenced transaction, binds it to the exact receipt, and leaves at most one pending proposal per contributor.
+3. Selection first chooses one proposal per contributor, then orders contributors from persistent `selection_state`; selection only marks rows. `commit_merge` revalidates all fences, commits version/publication/update/token transitions and service credit in one SQLite transaction. Failed selection/publication/commit does not update service credit.
+4. Dynamic replacement retires the exact old fence and its active or receipt-only outstanding work in the same transaction, then returns cursor, receipt hash and next sequence from base contributor progress. Terminal close snapshots current fences/progress, blocks admission, accepts at most the frozen current cycle, records ack/hard-crash bound and only finalizes after active work/intents/tokens drain.
+5. Scheduler no-record observations persist uncertainty/deadline/evidence without releasing the anti-duplicate reservation. Operator tooling writes only create-no-replace immutable requests; an active leader applies expected-state CAS and audits either applied or stale-rejected outcome. It never admits or calls qdel.
+6. Initializer prepares config/source/descriptor/DB/policy/identity in same-parent staging, owns a same-inode sibling reservation, exclusively creates final, hard-links manifest objects and publishes `.complete` last. Reader validates identities and immutable hashes before returning. Audit history is written as an immutable batch before its exact dependency-closed SQLite rows are pruned; cumulative token rollup remains authority.
+
+### Invariants, transaction boundaries and failure semantics
+
+- Token conservation is `processed = local_discarded + applied + dropped + quarantined/conflicted + unpublished + outstanding`; carried ancestry and hard-crash gap upper bounds are separate. Every fate transition and its rollup bucket move must be one transaction. A read model must not condition terminal-gap visibility on whether any receipt exists.
+- Fairness credit is consumed only by a successful global commit. Selection and prepare/abandon paths cannot mutate it. Tensor reduction order remains stable-key order even when admission order changes.
+- The originally frozen two-field key `(last_selected_committed_version, stable_key)` is insufficient for the explicit count-difference gate with batched service: all members of a selected batch receive the same version, so a partially exhausted age cohort repeatedly borrows low stable keys from the next cohort. The observed `500/333` split is deterministic evidence, not noise. Keeping this key unchanged would force either a false gate or hidden mutable tie cursor.
+- Revised ordering is `(committed_service_count, last_selected_committed_version_or_minus_one, stable_key)`. `committed_service_count` is already persisted and transactionally incremented; it supplies the missing service quantity. Last version preserves oldest-service preference within equal counts, stable key gives deterministic final order. The explicit Plan text's narrower key is rejected-with-evidence for this implementation; SEL-03/04/05/06 remain stronger and satisfied. No plan正文 is rewritten per `plans/AGENTS.md`; the disposition is recorded here/progress/matrix evidence.
+- Terminal fence rows and token rollup are independent authority domains. The read path must aggregate terminal hard-crash bounds before/alongside the empty receipt ledger. This is a read-model bug only; the acknowledgement transaction and fence state were correct.
+- Identity/config/source objects are intentionally 0444. A tamper test must first emulate an actor with replacement/permission authority, then assert loader fail-closed. Direct `write_text` is no longer a valid fixture setup. The immutable behavior must not be weakened to preserve an obsolete test assumption.
+- Audit pruning deletion order must respect observation/frontier, batch/update/receipt/token and version/publication/artifact references. Immutable audit publication/hash validation precedes the single fenced prune transaction; generic cleanup has no audit deletion path.
+- Initializer retry accepts only the staging identity inode that owns the reservation; same bytes on another inode fail. Marker-before-complete remains invisible. Process wait/timeout clocks remain monotonic; persistent wall samples occur after SQLite write-lock acquisition.
+
+### Test review and missing counterexamples
+
+The attempt-3 tests correctly detected two behavior/read-model defects and one obsolete setup. The fairness test needs a short deterministic prefix assertion in addition to aggregate metrics so future regressions identify cohort/tie behavior directly. Authority selection also needs a transaction-level test proving a selected-but-abandoned batch does not consume service count. Terminal tests need both empty-receipt hard crash and receipt-bearing final ack, ensuring gap aggregation does not alter token balance. Initializer tampering should cover descriptor, config and source using explicit chmod or atomic replacement while retaining the 0444 precondition assertion.
+
+### Alternative explanations/implementations considered
+
+- Adding a rotating in-memory stable-key cursor would balance counts but violates persistence, crash determinism and SEL-05/06; rejected.
+- Assigning distinct fractional/ordinal pseudo-versions within one global commit could make the original key work, but falsifies the meaning/type of `last_committed_version` and complicates replay; rejected.
+- Using only committed service count is count-fair but loses useful oldest-service information among equal counts. Count primary + last-version + stable key is the smallest durable deterministic correction and reuses existing schema.
+- Returning a fabricated zero gap when `token_rollups` is absent could be patched in the test, but would hide real terminal authority; rejected. Querying the independently persisted gap for both empty/non-empty ledgers is required.
+- Making initializer identity files writable would restore old tests but violate INIT-01 and allow post-complete silent mutation; rejected. Update the adversarial fixture instead.
+
+### Revised implementation and RED tests before attempt 4
+
+1. Change the pure selector and SQL selector ordering to committed service count first, then last committed version, then stable key; keep reduction order stable key. Add the first 16 selected sets, 1000-round count/wait/Jain metrics and failed-batch-no-credit authority RED tests.
+2. Refactor `token_ledger_summary` so terminal gap is queried even when `token_rollups` has no singleton. Keep `TokenLedgerSummary.balance` independent of the gap and assert the empty-ledger hard-crash result is 64.
+3. Assert initializer files are 0444, explicitly chmod only inside tamper setup (or atomically replace the name), and retain the existing loader checksum diagnostics plus zero-leadership-write check.
+4. Run Ruff/format/compileall/Checker/bash/diff locally, then compute attempt 4. Exact pass condition: static and Checker PASS; focused group zero failures/xfails including the new prefix/no-credit cases; full suite zero failures/core xfails; terminal completion marker emitted. These changes avoid all three prior causes rather than relaxing the acceptance assertions.

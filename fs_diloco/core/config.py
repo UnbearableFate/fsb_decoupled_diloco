@@ -122,6 +122,8 @@ class InitSection(ConfigSection):
 @dataclass
 class ModelSection(ConfigSection):
     name_or_path: str = "gpt2"
+    revision: str | None = None
+    tokenizer_revision: str | None = None
     trust_remote_code: bool = False
     dtype: str = "bfloat16"
     compile: bool = False
@@ -133,6 +135,7 @@ class ModelSection(ConfigSection):
 class DataSection(ConfigSection):
     dataset_name: str = "wikitext"
     dataset_config_name: str | None = "wikitext-2-raw-v1"
+    revision: str | None = None
     train_split: str = "train"
     validation_split: str = "validation"
     block_size: int = 1024
@@ -251,6 +254,7 @@ class ScalingSection(ConfigSection):
     launch_request_ttl_seconds: float = 900.0
     capacity_observation_retention_count: int = 64
     scheduler_reconcile_interval_seconds: float = 30.0
+    scheduler_uncertainty_timeout_seconds: float = 300.0
     starvation_observation_seconds: float = 120.0
     learner_pbs_script: str = "scripts/miyabi/run_dynamic_learner.pbs"
     learner_walltime: str | None = None
@@ -477,9 +481,7 @@ def load_config(path: str | Path | None = None) -> Config:
             raise ValueError(f"config {path} must contain a mapping")
         data = loaded
     config = _from_dict(Config, data)
-    config.validate(
-        profile="torch_baseline" if config.torch_baseline.enabled else "legacy_oracle"
-    )
+    config.validate(profile="torch_baseline" if config.torch_baseline.enabled else "legacy_oracle")
     return config
 
 
@@ -517,9 +519,7 @@ def load_resolved_config_snapshot(path: str | Path) -> Config:
         if present and replacement is not None:
             set_dotted_if_missing(loaded, replacement, value)
     config = _from_dict(Config, loaded)
-    config.validate(
-        profile="torch_baseline" if config.torch_baseline.enabled else "legacy_oracle"
-    )
+    config.validate(profile="torch_baseline" if config.torch_baseline.enabled else "legacy_oracle")
     return config
 
 
@@ -715,17 +715,12 @@ def resolve_config(
             "quorum_max <= stream_pool_size"
         )
     if membership.max_active_instance_records < membership.stream_pool_size:
-        raise ValueError(
-            "membership.max_active_instance_records must be >= stream_pool_size"
-        )
+        raise ValueError("membership.max_active_instance_records must be >= stream_pool_size")
     if membership.heartbeat_dead_after_seconds <= membership.heartbeat_stale_after_seconds:
         raise ValueError("membership heartbeat_dead_after_seconds must exceed stale timeout")
     if membership.expired_retention_seconds < membership.revocation_grace_seconds:
         raise ValueError("membership expired_retention_seconds must cover revocation_grace_seconds")
-    if (
-        membership.initial_membership_deadline_seconds
-        < membership.registration_request_ttl_seconds
-    ):
+    if membership.initial_membership_deadline_seconds < membership.registration_request_ttl_seconds:
         raise ValueError(
             "membership initial_membership_deadline_seconds must cover registration request TTL"
         )
@@ -744,11 +739,13 @@ def resolve_config(
         raise ValueError("scaling max_pending_launch_requests must not exceed max_total")
     if scaling.max_pending_launch_requests < 0 or scaling.max_total_launch_requests < 0:
         raise ValueError("scaling launch request budgets must be non-negative")
-    if (
-        scaling.launch_request_ttl_seconds
-        < 2.0 * scaling.scheduler_reconcile_interval_seconds
-    ):
+    if scaling.launch_request_ttl_seconds < 2.0 * scaling.scheduler_reconcile_interval_seconds:
         raise ValueError("scaling launch_request_ttl_seconds must cover two reconciliations")
+    if (
+        scaling.scheduler_uncertainty_timeout_seconds
+        < 3.0 * scaling.scheduler_reconcile_interval_seconds
+    ):
+        raise ValueError("scaling scheduler uncertainty timeout must cover three reconciliations")
     if scaling.low_contributor_threshold >= scaling.desired_contributors:
         raise ValueError("scaling low_contributor_threshold must be below desired_contributors")
     if scaling.consecutive_low_windows < 2:
@@ -762,10 +759,7 @@ def resolve_config(
         raise ValueError("scaling.productive_window_count must be >= 1")
     if scaling.productive_upload_grace_min_seconds <= 0.0:
         raise ValueError("scaling productive upload grace minimum must be > 0")
-    if (
-        scaling.productive_upload_grace_max_seconds
-        < scaling.productive_upload_grace_min_seconds
-    ):
+    if scaling.productive_upload_grace_max_seconds < scaling.productive_upload_grace_min_seconds:
         raise ValueError("scaling productive upload grace maximum must cover minimum")
     if scaling.enabled:
         learner_walltime = scaling.learner_walltime
@@ -821,19 +815,12 @@ def resolve_config(
         config.sync.stop_after_outer_steps is not None
         or config.sync.stop_after_global_tokens is not None
     )
-    if (
-        dynamic
-        and terminal.admission_close_policy == "global_target"
-        and not has_global_target
-    ):
+    if dynamic and terminal.admission_close_policy == "global_target" and not has_global_target:
         raise ValueError("global_target close policy requires a configured global target")
     if (
         dynamic
         and terminal.admission_close_policy == "global_target_or_launch_budget"
-        and not (
-            has_global_target
-            or (scaling.enabled and scaling.max_total_launch_requests > 0)
-        )
+        and not (has_global_target or (scaling.enabled and scaling.max_total_launch_requests > 0))
     ):
         raise ValueError(
             "global_target_or_launch_budget requires a global target or finite scale budget"
@@ -974,16 +961,12 @@ def resolve_config(
         raise ValueError("learner.post_publish_latest_poll_seconds must be > 0")
     config.torch_baseline.backend = config.torch_baseline.backend.lower()
     if config.torch_baseline.backend not in {"gloo", "nccl"}:
-        raise ValueError(
-            f"unsupported torch_baseline.backend: {config.torch_baseline.backend}"
-        )
+        raise ValueError(f"unsupported torch_baseline.backend: {config.torch_baseline.backend}")
     if config.torch_baseline.enabled:
         if config.sync.num_learners < 1:
             raise ValueError("torch baseline requires sync.num_learners >= 1")
         if config.training.max_local_steps is None:
-            raise ValueError(
-                "torch baseline requires training.max_local_steps to be configured"
-            )
+            raise ValueError("torch baseline requires training.max_local_steps to be configured")
         if int(config.training.max_local_steps) <= 0:
             raise ValueError("torch baseline training.max_local_steps must be > 0")
         if int(config.training.inner_steps) <= 0:

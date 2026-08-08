@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from fs_diloco.protocol.merge import select_one_per_learner
+from fs_diloco.protocol.selection import PersistentFairSelector
 from fs_diloco.runtime.launch_outbox import LearnerLaunchOutbox
 from fs_diloco.runtime.pbs_scheduler import PBSJobObservation
 from tests.support import DynamicAuthorityHarness, FakePBS
@@ -29,27 +29,15 @@ def test_h01b_commit_conflict_terminalizes_only_invalid_rows(tmp_path: Path) -> 
     _p2_revoke_after(tmp_path)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="H-05: quorum truncation has no persistent contributor service credit",
-)
 def test_h05_quorum_truncation_serves_every_continuously_ready_contributor() -> None:
-    updates = [
-        {
-            "update_id": f"u-{index}",
-            "learner_id": f"learner_{index:03d}",
-            "local_step_end": 1,
-            "committed_at": 1.0,
-        }
-        for index in range(8)
-    ]
+    contributors = tuple(f"learner_{index:03d}" for index in range(8))
+    selector = PersistentFairSelector()
     selected_contributors: set[str] = set()
-    for _ in range(1000):
-        selected_contributors.update(
-            str(row["learner_id"]) for row in select_one_per_learner(updates, quorum_max=3)
-        )
-    assert selected_contributors == {str(row["learner_id"]) for row in updates}
+    for version in range(1, 1001):
+        selected = selector.select(contributors, quorum_max=3)
+        selected_contributors.update(selected)
+        selector.commit(selected, committed_version=version)
+    assert selected_contributors == set(contributors)
 
 
 def test_h06_transient_registration_eio_preserves_request_for_retry(
@@ -58,11 +46,6 @@ def test_h06_transient_registration_eio_preserves_request_for_retry(
     _p2_transient(tmp_path)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="H-07: live+historical no-record immediately fails a known accepted PBS job",
-)
 def test_h07_known_job_no_record_enters_bounded_uncertainty(tmp_path: Path) -> None:
     authority = DynamicAuthorityHarness.create(tmp_path / "authority-h07")
     try:

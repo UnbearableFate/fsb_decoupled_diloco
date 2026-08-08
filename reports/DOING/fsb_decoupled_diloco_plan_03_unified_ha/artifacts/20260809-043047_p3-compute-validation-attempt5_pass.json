@@ -1,0 +1,33 @@
+{
+  "artifact_format_version": 1,
+  "experiment_id": "p3-compute-validation",
+  "status": "PASS",
+  "timestamp": "2026-08-09T04:30:47+09:00",
+  "pbs_job_id": "2508861.opbs",
+  "compute_host": "mg0003",
+  "queue": "debug-g",
+  "resources": {
+    "nodes": 1,
+    "processes": 1,
+    "walltime": "00:10:00",
+    "group": "xg24i002"
+  },
+  "environment": {
+    "python": "3.13.13",
+    "pytest": "9.1.1",
+    "hypothesis": "6.165.2",
+    "torch": "2.13.0+cu132",
+    "hypothesis_profile": "plan03-phase"
+  },
+  "gates": {
+    "ruff": "PASS",
+    "format_changed_files": "31 files already formatted",
+    "plan03_checker": "PASS",
+    "focused": "239 passed in 8.14s",
+    "full": "745 passed in 50.54s",
+    "completion_marker": "PLAN03_PHASE3_TESTS_COMPLETE=2508861.opbs",
+    "core_invariant_xfails": 0
+  },
+  "source_log": "fsdiloco_plan03_p3.o2508861",
+  "source_log_sha256": "67b6ebd0a872a4318f9c0ad64daf54ebeafc502f86b8c112bc713aaa432224fc"
+}

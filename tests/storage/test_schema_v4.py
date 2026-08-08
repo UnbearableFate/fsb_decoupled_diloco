@@ -42,6 +42,29 @@ def test_fresh_v4_schema_initializes_reopens_and_is_integral(
         assert "publication_intents" in tables
         assert "candidate_launch_outbox" in tables
         assert not (tables & {"fragments", "fragment_updates", "fragment_versions"})
+    marker = database.with_name("authority_v4_bootstrap_complete.json")
+    assert marker.stat().st_mode & 0o222 == 0
+
+
+@pytest.mark.parametrize("collision_kind", ["database", "marker"])
+def test_fresh_v4_schema_rejects_broken_symlink_collisions_without_partial_publish(
+    tmp_path: Path, collision_kind: str
+) -> None:
+    database = tmp_path / "authority.sqlite3"
+    marker = database.with_name("authority_v4_bootstrap_complete.json")
+    collision = database if collision_kind == "database" else marker
+    collision.symlink_to(tmp_path / f"missing-{collision_kind}")
+
+    with pytest.raises(FileExistsError, match="already exists"):
+        initialize_authority_v4(
+            database,
+            identity(),
+            StaticMembershipScope(("learner-0",)),
+        )
+
+    assert collision.is_symlink()
+    if collision_kind == "marker":
+        assert not database.exists()
 
 
 def test_v4_open_rejects_mode_identity_and_schema_feature_mismatch(tmp_path: Path) -> None:

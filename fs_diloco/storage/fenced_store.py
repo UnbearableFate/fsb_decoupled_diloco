@@ -340,7 +340,7 @@ class FencedSQLiteStore:
     def launch_requests(self, *, active_only: bool = False) -> list[dict[str, Any]]:
         where = (
             "WHERE state IN ('planned','submitting','submitted','started',"
-            "'external_submitted','submission_unknown','retryable')"
+            "'external_submitted','submission_unknown','terminal_uncertain','retryable')"
             if active_only
             else ""
         )
@@ -2466,6 +2466,11 @@ class FencedSQLiteStore:
         state: str,
         pbs_job_id: str | None = None,
         scheduler_state: str | None = None,
+        first_uncertain_at: float | None = None,
+        last_positive_evidence_at: float | None = None,
+        uncertainty_deadline: float | None = None,
+        evidence_source: str | None = None,
+        manual_reason: str | None = None,
         last_error: str | None = None,
         increment_submission_attempts: bool = False,
         observed_at: float | None = None,
@@ -2498,6 +2503,11 @@ class FencedSQLiteStore:
                     scheduler_state=COALESCE(?, scheduler_state),
                     scheduler_observed_at=CASE WHEN ? IS NULL
                         THEN scheduler_observed_at ELSE ? END,
+                    first_uncertain_at=COALESCE(first_uncertain_at, ?),
+                    last_positive_evidence_at=COALESCE(?, last_positive_evidence_at),
+                    uncertainty_deadline=COALESCE(?, uncertainty_deadline),
+                    evidence_source=COALESCE(?, evidence_source),
+                    manual_reason=COALESCE(?, manual_reason),
                     last_error=?,
                     reservation_released_at=CASE
                         WHEN ? IN ('failed','expired','cancelled','capacity_fulfilled','completed')
@@ -2514,6 +2524,11 @@ class FencedSQLiteStore:
                     scheduler_state,
                     scheduler_state,
                     timestamp,
+                    first_uncertain_at,
+                    last_positive_evidence_at,
+                    uncertainty_deadline,
+                    evidence_source,
+                    manual_reason,
                     last_error,
                     state,
                     timestamp,
@@ -3142,7 +3157,7 @@ class ReadOnlySQLiteStore:
     def launch_requests(self, *, active_only: bool = False) -> list[dict[str, Any]]:
         where = (
             "WHERE state IN ('planned','submitting','submitted','started',"
-            "'external_submitted','submission_unknown','retryable')"
+            "'external_submitted','submission_unknown','terminal_uncertain','retryable')"
             if active_only
             else ""
         )

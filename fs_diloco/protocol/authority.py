@@ -8,6 +8,7 @@ from typing import Generic, TypeVar
 
 from ._validation import identity, sha256, strict_float, strict_int
 from .contributor import ContributorFence
+from .data_cursor import ContributorResumeState
 from .proposal import FullUpdateProposalV2
 
 
@@ -52,10 +53,12 @@ class ReadResult(Generic[T]):
 
 
 class LaunchState(str, Enum):
-    REQUESTED = "requested"
-    CLAIMED = "claimed"
+    PLANNED = "planned"
+    SUBMITTING = "submitting"
+    SUBMISSION_UNKNOWN = "submission_unknown"
     SUBMITTED = "submitted"
-    UNCERTAIN = "uncertain"
+    STARTED = "started"
+    TERMINAL_UNCERTAIN = "terminal_uncertain"
     ADMITTED = "admitted"
     FAILED = "failed"
     EXPIRED = "expired"
@@ -226,16 +229,74 @@ class ContributorProgress:
 
 
 @dataclass(frozen=True)
+class TokenLedgerSummary:
+    adjudicated_processed: int
+    local_discarded: int
+    direct_applied: int
+    direct_dropped: int
+    direct_quarantined_or_conflicted: int
+    direct_reported_unpublished: int
+    direct_outstanding: int
+    carried_ancestry: int
+    hard_crash_gap_tokens_upper_bound: int = 0
+
+    def __post_init__(self) -> None:
+        for name, value in vars(self).items():
+            strict_int(value, name=name, minimum=0)
+        if self.balance != 0:
+            raise ValueError(f"token ledger does not balance: {self.balance}")
+
+    @property
+    def adjudicated_direct(self) -> int:
+        return self.adjudicated_processed - self.local_discarded
+
+    @property
+    def terminal_direct(self) -> int:
+        return (
+            self.direct_applied
+            + self.direct_dropped
+            + self.direct_quarantined_or_conflicted
+            + self.direct_reported_unpublished
+            + self.direct_outstanding
+        )
+
+    @property
+    def balance(self) -> int:
+        return self.adjudicated_processed - self.local_discarded - self.terminal_direct
+
+
+@dataclass(frozen=True)
 class DynamicAdmission:
     fence: ContributorFence
-    resume_cursor: int
+    resume: ContributorResumeState
 
     def __post_init__(self) -> None:
         from .contributor import DynamicContributorFence
 
         if not isinstance(self.fence, DynamicContributorFence):
             raise ValueError("dynamic admission requires a dynamic contributor fence")
-        strict_int(self.resume_cursor, name="resume_cursor", minimum=0)
+        if not isinstance(self.resume, ContributorResumeState):
+            raise ValueError("dynamic admission requires typed contributor resume state")
+        if self.resume.stream_epoch != self.fence.stream_epoch:
+            raise ValueError("resume state stream epoch does not match the admission fence")
+
+    @property
+    def resume_cursor(self) -> int:
+        """Compatibility accessor for P1/P2 callers."""
+
+        return self.resume.cursor
+
+    @property
+    def last_receipt_id(self) -> str | None:
+        return self.resume.last_receipt_id
+
+    @property
+    def last_receipt_sha256(self) -> str | None:
+        return self.resume.last_receipt_sha256
+
+    @property
+    def next_cycle_seq(self) -> int:
+        return self.resume.next_cycle_seq
 
 
 @dataclass(frozen=True)

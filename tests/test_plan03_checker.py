@@ -11,6 +11,7 @@ from scripts.miyabi.check_plan03 import (
     inventory,
     verify_boundaries,
     verify_inventory,
+    verify_phase_requirements,
     verify_tracked_evidence,
 )
 
@@ -105,6 +106,19 @@ def test_plan03_boundary_allows_p1_baseline_composition_but_not_protocol_drift()
     assert verify_boundaries(protocol_drift, expected) == ["boundary_manifest_sha256"]
 
 
+def test_plan03_boundary_allows_p3_store_implementation_but_not_mutator_surface_drift() -> None:
+    expected = _expected()
+    actual = inventory(ROOT, source_ref=str(expected["source_identity"]["commit"]))
+
+    implementation_only = copy.deepcopy(actual)
+    implementation_only["manifest_sha256"]["fs_diloco/storage/fenced_store.py"] = "0" * 64
+    assert verify_boundaries(implementation_only, expected) == []
+
+    mutator_drift = copy.deepcopy(actual)
+    mutator_drift["inventory"]["bound_mutators"].append("unreviewed_mutator")
+    assert verify_boundaries(mutator_drift, expected) == ["inventory.bound_mutators"]
+
+
 def test_plan03_completed_candidate_evidence_is_tracked_and_matches_contract() -> None:
     matrix = (
         ROOT / "plans/DOING/plans/fsb_decoupled_diloco_plan_03_unified_ha-requirement-matrix.csv"
@@ -182,6 +196,17 @@ def test_plan03_phase_final_gate_requires_tracked_evidence(tmp_path: Path) -> No
     )
     (repository / "untracked.json").write_text("{}\n", encoding="utf-8")
     assert verify_tracked_evidence(repository, matrix) == ["THREE:untracked.json:not-tracked"]
+
+
+def test_plan03_p3_requirement_checker_binds_implementation_tests_and_evidence() -> None:
+    matrix = (
+        ROOT / "plans/DOING/plans/fsb_decoupled_diloco_plan_03_unified_ha-requirement-matrix.csv"
+    )
+    checks, differences = verify_phase_requirements(ROOT, matrix, "P3-operational-robustness")
+
+    assert differences == []
+    assert checks
+    assert all(item["status"] == "PASS" for item in checks.values())
 
 
 def test_plan03_triage_finding_ids_are_all_bound_to_matrix_requirements() -> None:

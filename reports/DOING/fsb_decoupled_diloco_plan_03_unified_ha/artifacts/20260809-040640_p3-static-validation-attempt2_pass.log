@@ -1,0 +1,8 @@
+Command: .venv/bin/ruff check fs_diloco tests scripts/miyabi && .venv/bin/python -m compileall -q fs_diloco tests scripts/miyabi && git diff --check
+Environment: miyabi-g1 login/control-plane node; static validation only; no pytest/torch runtime executed
+Exit status: 0
+
+All checks passed!
+
+compileall: PASS
+git diff --check: PASS

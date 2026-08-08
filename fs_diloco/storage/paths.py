@@ -85,6 +85,18 @@ class RunPaths:
         return self.control / "registration_requests"
 
     @property
+    def scheduler_operator_requests(self) -> Path:
+        return self.control / "scheduler_operator_requests"
+
+    @property
+    def audit_batches(self) -> Path:
+        return self.shared_root / "audit" / "batches"
+
+    @property
+    def audit_partitions(self) -> Path:
+        return self.shared_root / "audit" / "partitions"
+
+    @property
     def bootstrap_scheduler_jobs_json(self) -> Path:
         return self.control / "bootstrap_scheduler_jobs.json"
 
@@ -115,6 +127,18 @@ class RunPaths:
     @property
     def bootstrap_complete_json(self) -> Path:
         return self.control / "bootstrap_complete.json"
+
+    @property
+    def run_identity_file(self) -> Path:
+        return self.shared_root / ".identity"
+
+    @property
+    def run_complete_file(self) -> Path:
+        return self.shared_root / ".complete"
+
+    @property
+    def artifact_policy_json(self) -> Path:
+        return self.control / "artifact_policy.json"
 
     @property
     def run_descriptor_json(self) -> Path:
@@ -188,6 +212,12 @@ class RunPaths:
 
     def learner_heartbeat_path(self, instance_id: str) -> Path:
         return self.heartbeats / f"{instance_id}.json"
+
+    def actor_metrics_path(self, actor_kind: str, actor_id: str, attempt_id: str) -> Path:
+        return self.metrics / actor_kind / actor_id / f"{attempt_id}.jsonl"
+
+    def actor_attestation_path(self, actor_kind: str, actor_id: str, attempt_id: str) -> Path:
+        return self.metrics / "attestations" / actor_kind / actor_id / f"{attempt_id}.json"
 
     def registration_request_path(self, instance_id: str) -> Path:
         return self.registration_requests / f"{instance_id}.json"
@@ -359,6 +389,9 @@ def prepare_authority_dirs(paths: RunPaths) -> None:
         paths.syncer_epochs,
         paths.syncer_launch_claims,
         paths.registration_requests,
+        paths.scheduler_operator_requests,
+        paths.audit_batches,
+        paths.audit_partitions,
     ):
         ensure_dir(directory)
 

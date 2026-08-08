@@ -32,6 +32,12 @@ def _fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
+def fsync_directory(path: str | Path) -> None:
+    """Persist directory-entry changes for a previously created directory."""
+
+    _fsync_directory(Path(path))
+
+
 def ensure_dir(path: str | Path) -> Path:
     path = Path(path)
     path.mkdir(parents=True, exist_ok=True)

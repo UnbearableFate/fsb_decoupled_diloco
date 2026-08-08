@@ -1,0 +1,80 @@
+{
+  "fixture_version": 1,
+  "protocol": "unified_v4",
+  "cases": {
+    "no_replace_full_quorum": {
+      "attribution": "unchanged P0 semantic anchor; no accepted finding applies",
+      "semantic_projection": {
+        "selected_ids": ["proposal-000", "proposal-001"],
+        "selected_order": ["learner_000", "learner_001"],
+        "weights": [0.5, 0.5],
+        "merged_float32_le_hex": "0000803f000000c000005040",
+        "theta_float32_le_hex": "0000803f000000c0ae475540",
+        "outer_step": 1,
+        "outer_momentum_float32_le_hex": "0000000000000000000080be",
+        "version": 1,
+        "predecessor_version": 0
+      },
+      "v4_selected_lineage": [
+        ["learner_000", "learner_001"],
+        ["learner_000", "learner_001"]
+      ]
+    },
+    "prepublication_replace": {
+      "attribution": "H-02/TOK-02: work before base replacement is local-discarded",
+      "processed_tokens": 16,
+      "local_discarded_tokens": 10,
+      "effective_tokens": 6,
+      "effective_examples": 1,
+      "mean_loss": 1.5,
+      "mean_grad_norm": 1.0,
+      "proposal_expected": true
+    },
+    "cycle_end_replace": {
+      "attribution": "H-02/TOK-02: an empty effective segment emits receipt only",
+      "processed_tokens": 8,
+      "local_discarded_tokens": 8,
+      "effective_tokens": 0,
+      "effective_examples": 0,
+      "mean_loss": null,
+      "proposal_expected": false
+    },
+    "truncated_fair_selection": {
+      "attribution": "H-05/SEL-02: persistent committed service count removes stable-key starvation",
+      "n": 8,
+      "quorum_max": 3,
+      "selected_lineage": [
+        ["learner-0", "learner-1", "learner-2"],
+        ["learner-3", "learner-4", "learner-5"],
+        ["learner-6", "learner-7", "learner-0"],
+        ["learner-1", "learner-2", "learner-3"],
+        ["learner-4", "learner-5", "learner-6"],
+        ["learner-7", "learner-0", "learner-1"],
+        ["learner-2", "learner-3", "learner-4"],
+        ["learner-5", "learner-6", "learner-7"]
+      ],
+      "reduction_lineage": [
+        ["learner-0", "learner-1", "learner-2"],
+        ["learner-3", "learner-4", "learner-5"],
+        ["learner-0", "learner-6", "learner-7"],
+        ["learner-1", "learner-2", "learner-3"],
+        ["learner-4", "learner-5", "learner-6"],
+        ["learner-0", "learner-1", "learner-7"],
+        ["learner-2", "learner-3", "learner-4"],
+        ["learner-5", "learner-6", "learner-7"]
+      ],
+      "committed_service_counts": {
+        "learner-0": 3,
+        "learner-1": 3,
+        "learner-2": 3,
+        "learner-3": 3,
+        "learner-4": 3,
+        "learner-5": 3,
+        "learner-6": 3,
+        "learner-7": 3
+      },
+      "maximum_wait_rounds": 2,
+      "jain_index": 1.0
+    }
+  }
+}
