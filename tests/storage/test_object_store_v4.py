@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+import errno
 import json
 import os
 import struct
 from typing import Any
 from pathlib import Path
+
+import pytest
 
 from fs_diloco.protocol.authority import ReadStatus
 from fs_diloco.protocol.proposal import FullUpdateProposalV2
@@ -173,3 +176,31 @@ def test_regular_file_to_fifo_race_is_nonblocking_and_fails_closed(
 
     assert result.status is ReadStatus.IDENTITY_MISMATCH
     assert "regular file" in str(result.diagnostic) or "identity changed" in str(result.diagnostic)
+
+
+@pytest.mark.parametrize(
+    ("error_number", "expected"),
+    [
+        (errno.ENOENT, ReadStatus.NOT_FOUND),
+        (errno.ESTALE, ReadStatus.TRANSIENT_IO),
+        (errno.EIO, ReadStatus.TRANSIENT_IO),
+    ],
+)
+def test_open_errno_is_classified_without_collapsing_transient_io(
+    tmp_path: Path,
+    monkeypatch: Any,
+    error_number: int,
+    expected: ReadStatus,
+) -> None:
+    content = safetensors_payload()
+    proposal = proposal_for(content)
+    path = tmp_path / proposal.payload_relative_path
+    path.parent.mkdir(parents=True)
+    path.write_bytes(content)
+
+    def fail_open(*_args: Any, **_kwargs: Any) -> int:
+        raise OSError(error_number, os.strerror(error_number))
+
+    monkeypatch.setattr(object_store.os, "open", fail_open)
+
+    assert verify_proposal_payload(tmp_path, proposal).status is expected

@@ -113,7 +113,7 @@ CREATE TABLE proposal_observations (
     pointer_sequence INTEGER,
     disposition TEXT NOT NULL CHECK (disposition IN (
         'accepted', 'exact_replay', 'conflict', 'identity_collision', 'malformed',
-        'stale_fence', 'post_fence'
+        'missing', 'identity_mismatch', 'manual_review', 'stale_fence', 'post_fence'
     )),
     diagnostic TEXT,
     source_relative_path TEXT,
@@ -132,16 +132,69 @@ CREATE TABLE proposal_conflicts (
     fingerprint TEXT NOT NULL CHECK (length(fingerprint) = 64)
 );
 
+CREATE TABLE proposal_frontiers (
+    run_id TEXT NOT NULL,
+    stable_contributor_key TEXT NOT NULL,
+    last_terminal_cycle_seq INTEGER NOT NULL CHECK (last_terminal_cycle_seq >= 1),
+    terminal_observation_id INTEGER NOT NULL
+        REFERENCES proposal_observations(observation_id),
+    updated_by_epoch INTEGER NOT NULL CHECK (updated_by_epoch >= 1),
+    updated_at REAL NOT NULL,
+    PRIMARY KEY(run_id, stable_contributor_key)
+);
+
 CREATE TABLE proposal_visibility (
-    stable_contributor_key TEXT PRIMARY KEY,
+    visibility_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    stable_contributor_key TEXT NOT NULL,
+    cycle_seq INTEGER NOT NULL CHECK (cycle_seq >= 1),
+    update_id TEXT NOT NULL,
+    object_identity TEXT NOT NULL,
+    pointer_signature TEXT NOT NULL,
     pointer_sequence INTEGER NOT NULL CHECK (pointer_sequence >= 0),
-    first_missing_at REAL,
+    first_observed_at REAL NOT NULL,
+    first_stable_failure_at REAL,
     last_observed_at REAL NOT NULL,
     stable_failure_count INTEGER NOT NULL CHECK (stable_failure_count >= 0),
     last_read_status TEXT NOT NULL CHECK (last_read_status IN (
         'ok', 'not_found', 'transient_io', 'malformed', 'identity_mismatch'
     )),
-    last_fingerprint TEXT
+    last_fingerprint TEXT,
+    bounded_diagnostic TEXT,
+    terminal_disposition TEXT CHECK (terminal_disposition IN (
+        'missing', 'malformed', 'identity_mismatch', 'manual_review'
+    )),
+    terminal_observation_id INTEGER REFERENCES proposal_observations(observation_id),
+    UNIQUE(stable_contributor_key, object_identity, pointer_signature)
+);
+
+CREATE TABLE proposal_visibility_archive (
+    archive_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    stable_contributor_key TEXT NOT NULL,
+    object_identity TEXT NOT NULL,
+    pointer_signature TEXT NOT NULL,
+    last_read_status TEXT NOT NULL,
+    stable_failure_count INTEGER NOT NULL CHECK (stable_failure_count >= 0),
+    last_fingerprint TEXT,
+    terminal_disposition TEXT,
+    archived_at REAL NOT NULL,
+    UNIQUE(stable_contributor_key, object_identity, pointer_signature)
+);
+
+CREATE TABLE proposal_quarantine (
+    quarantine_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    stable_contributor_key TEXT NOT NULL,
+    cycle_seq INTEGER NOT NULL CHECK (cycle_seq >= 1),
+    update_id TEXT,
+    disposition TEXT NOT NULL CHECK (disposition IN (
+        'conflict', 'identity_collision', 'malformed', 'missing',
+        'identity_mismatch', 'manual_review'
+    )),
+    fingerprint TEXT NOT NULL,
+    bounded_diagnostic TEXT NOT NULL,
+    source_relative_path TEXT,
+    observation_id INTEGER NOT NULL UNIQUE REFERENCES proposal_observations(observation_id),
+    quarantined_at REAL NOT NULL,
+    UNIQUE(stable_contributor_key, cycle_seq, disposition, fingerprint)
 );
 
 CREATE TABLE cycle_receipts (
@@ -256,7 +309,7 @@ CREATE TABLE updates (
 
 CREATE TABLE selection_batch_updates (
     batch_id TEXT NOT NULL REFERENCES selection_batches(batch_id),
-    update_id TEXT NOT NULL UNIQUE REFERENCES updates(update_id),
+    update_id TEXT NOT NULL REFERENCES updates(update_id),
     stable_contributor_key TEXT NOT NULL,
     reduction_order INTEGER NOT NULL CHECK (reduction_order >= 0),
     raw_weight REAL NOT NULL CHECK (raw_weight > 0),
@@ -286,6 +339,7 @@ CREATE TABLE publication_intents (
     optim_relative_path TEXT NOT NULL,
     optim_size INTEGER NOT NULL CHECK (optim_size > 0),
     optim_sha256 TEXT NOT NULL CHECK (length(optim_sha256) = 64),
+    theta_sha256 TEXT NOT NULL CHECK (length(theta_sha256) = 64),
     state TEXT NOT NULL CHECK (state IN ('prepared', 'committed', 'abandoned')),
     prepared_at REAL NOT NULL,
     committed_at REAL,
@@ -307,6 +361,7 @@ CREATE TABLE global_versions (
     optim_relative_path TEXT NOT NULL,
     optim_size INTEGER NOT NULL CHECK (optim_size > 0),
     optim_sha256 TEXT NOT NULL CHECK (length(optim_sha256) = 64),
+    theta_sha256 TEXT NOT NULL CHECK (length(theta_sha256) = 64),
     committed_by_epoch INTEGER NOT NULL CHECK (committed_by_epoch >= 1),
     committed_by_owner_id TEXT NOT NULL,
     committed_at REAL NOT NULL,
@@ -328,6 +383,10 @@ CREATE INDEX idx_pending_update_per_contributor
 CREATE INDEX idx_updates_status ON updates(status, base_global_version);
 CREATE INDEX idx_observations_contributor
     ON proposal_observations(stable_contributor_key, observation_id);
+CREATE INDEX idx_visibility_contributor
+    ON proposal_visibility(stable_contributor_key, pointer_sequence);
+CREATE INDEX idx_visibility_archive_contributor
+    ON proposal_visibility_archive(stable_contributor_key, archive_id);
 
 CREATE TABLE token_fates (
     receipt_id TEXT PRIMARY KEY REFERENCES cycle_receipts(receipt_id),
@@ -367,7 +426,9 @@ CREATE TABLE artifact_publications (
     owning_epoch INTEGER NOT NULL CHECK (owning_epoch >= 1),
     state TEXT NOT NULL CHECK (state IN ('prepared', 'committed', 'orphan', 'deleted')),
     created_at REAL NOT NULL,
-    PRIMARY KEY(publication_id, artifact_kind)
+    PRIMARY KEY(publication_id, artifact_kind),
+    UNIQUE(relative_path),
+    CHECK (artifact_kind IN ('weight', 'outer_state'))
 );
 
 CREATE TABLE control_publications (

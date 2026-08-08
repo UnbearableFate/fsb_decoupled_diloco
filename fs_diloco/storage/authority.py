@@ -23,12 +23,18 @@ from ..core.versions import AUTHORITY_SCHEMA_VERSION, PROTOCOL_VERSION
 from ..protocol._validation import identity as validate_identity
 from ..protocol.authority import (
     ContributorProgress,
+    DynamicAdmission,
+    MergeFenceConflict,
     ProposalDisposition,
     PublicationIntent,
+    ReadResult,
+    ReadStatus,
     SelectionBatch,
+    SelectionAttempt,
     SelectionCandidate,
     StaticBinding,
     TerminalState,
+    VisibilityDecision,
 )
 from ..protocol.contributor import (
     DynamicContributorFence,
@@ -44,6 +50,7 @@ from .leader_lease import (
     LeaseUnavailableError,
     StaleLeaderTokenError,
 )
+from .object_store import verify_proposal_payload, verify_publication_artifact
 
 
 AUTHORITY_APPLICATION_ID = 0x46534434  # "FSD4"
@@ -62,6 +69,14 @@ class CommandConflictError(RuntimeError):
 
 class MembershipFenceError(RuntimeError):
     """A contributor fence is not current."""
+
+
+class ProposalPayloadError(RuntimeError):
+    """A proposal payload is not currently safe to ingest."""
+
+    def __init__(self, result: ReadResult[Any]) -> None:
+        self.result = result
+        super().__init__(f"{result.status.value}: {result.diagnostic}")
 
 
 @dataclass(frozen=True)
@@ -103,6 +118,7 @@ class CommittedVersion:
     optim_relative_path: str
     optim_size: int
     optim_sha256: str
+    theta_sha256: str
     committed_by_epoch: int
     committed_by_owner_id: str
     committed_at: float
@@ -412,6 +428,8 @@ class LeaderAuthority:
         lease_duration_seconds: float = 90.0,
         max_clock_skew_seconds: float = 2.0,
         busy_timeout_ms: int = 60_000,
+        run_root: str | Path | None = None,
+        orphan_grace_seconds: float | None = None,
         wall_clock: Callable[[], float] = time.time,
         lease_safety_check: Callable[[LeaderToken], None] | None = None,
     ) -> None:
@@ -434,12 +452,24 @@ class LeaderAuthority:
             connection.close()
             raise
         self._path = path
+        self._run_root = (
+            Path(run_root)
+            if run_root is not None
+            else (path.parent.parent if path.parent.name == "control" else path.parent)
+        ).resolve()
         self._identity = identity
         self._scope = membership_scope
         self._connection = connection
         self._wall_clock = wall_clock
         self._lease_duration_seconds = float(lease_duration_seconds)
         self._max_clock_skew_seconds = float(max_clock_skew_seconds)
+        minimum_orphan_grace = self._lease_duration_seconds + 2.0 * self._max_clock_skew_seconds
+        self._orphan_grace_seconds = (
+            minimum_orphan_grace if orphan_grace_seconds is None else float(orphan_grace_seconds)
+        )
+        if self._orphan_grace_seconds < minimum_orphan_grace:
+            connection.close()
+            raise ValueError("orphan grace must cover lease duration plus twice clock skew")
         self._lease_safety_check = lease_safety_check
         self.metadata = metadata
         self.read = AuthorityReadModel(self)
@@ -801,7 +831,11 @@ class LeaderSession:
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
             if receipt.run_id != self._authority._identity.run_id:
                 raise MembershipFenceError("receipt belongs to another run")
-            self._require_current_fence(connection, receipt.contributor_fence)
+            self._require_current_fence(
+                connection,
+                receipt.contributor_fence,
+                update_id=receipt.planned_update_id,
+            )
             progress = connection.execute(
                 "SELECT * FROM contributor_progress WHERE stable_contributor_key=?",
                 (receipt.stable_contributor_key,),
@@ -911,12 +945,91 @@ class LeaderSession:
     def ingest_proposal(
         self, *, command_id: str, proposal: FullUpdateProposalV2
     ) -> ProposalDisposition:
-        request = proposal.as_dict()
+        verification = verify_proposal_payload(self._authority._run_root, proposal)
+        if verification.status is not ReadStatus.OK or verification.value is None:
+            raise ProposalPayloadError(verification)
+        verified_payload = verification.value
+        request = {"proposal": proposal.as_dict(), "verified_payload": asdict(verified_payload)}
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
             if proposal.run_id != self._authority._identity.run_id:
                 raise MembershipFenceError("proposal belongs to another run")
-            self._require_current_fence(connection, proposal.contributor_fence)
+            self._require_current_fence(
+                connection, proposal.contributor_fence, update_id=proposal.update_id
+            )
+            proposal_digest = proposal.immutable_sha256()
+            existing = connection.execute(
+                "SELECT * FROM updates WHERE update_id=?", (proposal.update_id,)
+            ).fetchone()
+            if existing is not None:
+                disposition = (
+                    ProposalDisposition.EXACT_REPLAY
+                    if existing["proposal_sha256"] == proposal_digest
+                    else ProposalDisposition.IDENTITY_COLLISION
+                )
+                observation_id = self._record_observation(connection, proposal, disposition)
+                if disposition is ProposalDisposition.IDENTITY_COLLISION:
+                    connection.execute(
+                        """
+                        INSERT INTO proposal_conflicts(
+                            observation_id, conflict_kind, existing_update_id,
+                            incoming_update_id, bounded_diagnostic, fingerprint
+                        ) VALUES (?, 'identity_collision', ?, ?, ?, ?)
+                        """,
+                        (
+                            observation_id,
+                            existing["update_id"],
+                            proposal.update_id,
+                            "update identity already has different immutable bytes",
+                            proposal_digest,
+                        ),
+                    )
+                    self._record_quarantine(
+                        connection,
+                        proposal=proposal,
+                        disposition="identity_collision",
+                        fingerprint=proposal_digest,
+                        diagnostic="update identity already has different immutable bytes",
+                        observation_id=observation_id,
+                    )
+                self._advance_proposal_frontier(connection, proposal, observation_id)
+                return {"disposition": disposition.value}
+            conflict = connection.execute(
+                """
+                SELECT update_id FROM updates
+                WHERE run_id=? AND stable_contributor_key=? AND cycle_seq=?
+                """,
+                (proposal.run_id, proposal.stable_contributor_key, proposal.cycle_seq),
+            ).fetchone()
+            if conflict is not None:
+                observation_id = self._record_observation(
+                    connection, proposal, ProposalDisposition.CONFLICT
+                )
+                connection.execute(
+                    """
+                    INSERT INTO proposal_conflicts(
+                        observation_id, conflict_kind, existing_update_id, incoming_update_id,
+                        bounded_diagnostic, fingerprint
+                    ) VALUES (?, 'logical_key', ?, ?, ?, ?)
+                    """,
+                    (
+                        observation_id,
+                        conflict["update_id"],
+                        proposal.update_id,
+                        "logical proposal key already has a different update ID",
+                        proposal_digest,
+                    ),
+                )
+                self._record_quarantine(
+                    connection,
+                    proposal=proposal,
+                    disposition="conflict",
+                    fingerprint=proposal_digest,
+                    diagnostic="logical proposal key already has a different update ID",
+                    observation_id=observation_id,
+                )
+                self._advance_proposal_frontier(connection, proposal, observation_id)
+                return {"disposition": ProposalDisposition.CONFLICT.value}
             receipt = connection.execute(
                 "SELECT * FROM cycle_receipts WHERE receipt_id=?",
                 (proposal.cycle_receipt_id,),
@@ -945,45 +1058,12 @@ class LeaderSession:
             }
             if any(receipt[name] != value for name, value in receipt_fields.items()):
                 raise ValueError("proposal immutable fields do not match its cycle receipt")
-            existing = connection.execute(
-                "SELECT * FROM updates WHERE update_id=?", (proposal.update_id,)
-            ).fetchone()
-            proposal_digest = proposal.immutable_sha256()
-            if existing is not None:
-                disposition = (
-                    ProposalDisposition.EXACT_REPLAY
-                    if existing["proposal_sha256"] == proposal_digest
-                    else ProposalDisposition.IDENTITY_COLLISION
-                )
-                self._record_observation(connection, proposal, disposition)
-                return {"disposition": disposition.value}
-            conflict = connection.execute(
-                """
-                SELECT update_id FROM updates
-                WHERE run_id=? AND stable_contributor_key=? AND cycle_seq=?
-                """,
-                (proposal.run_id, proposal.stable_contributor_key, proposal.cycle_seq),
-            ).fetchone()
-            if conflict is not None:
-                observation_id = self._record_observation(
-                    connection, proposal, ProposalDisposition.CONFLICT
-                )
-                connection.execute(
-                    """
-                    INSERT INTO proposal_conflicts(
-                        observation_id, conflict_kind, existing_update_id, incoming_update_id,
-                        bounded_diagnostic, fingerprint
-                    ) VALUES (?, 'logical_key', ?, ?, ?, ?)
-                    """,
-                    (
-                        observation_id,
-                        conflict["update_id"],
-                        proposal.update_id,
-                        "logical proposal key already has a different update ID",
-                        proposal_digest,
-                    ),
-                )
-                return {"disposition": ProposalDisposition.CONFLICT.value}
+            if (
+                verified_payload.relative_path != proposal.payload_relative_path
+                or verified_payload.size_bytes != proposal.payload_size
+                or verified_payload.sha256 != proposal.payload_sha256
+            ):
+                raise ValueError("verified payload identity does not match proposal metadata")
             now = float(self._authority._wall_clock())
             connection.execute(
                 """
@@ -1090,7 +1170,10 @@ class LeaderSession:
                     """,
                     (self.token.epoch, now, proposal.cycle_receipt_id),
                 )
-            self._record_observation(connection, proposal, ProposalDisposition.ACCEPTED)
+            observation_id = self._record_observation(
+                connection, proposal, ProposalDisposition.ACCEPTED
+            )
+            self._advance_proposal_frontier(connection, proposal, observation_id)
             return {"disposition": ProposalDisposition.ACCEPTED.value}
 
         result = self._command(command_id, "ingest_proposal", request, operation)
@@ -1103,6 +1186,289 @@ class LeaderSession:
 
         return self.ingest_proposal(command_id=command_id, proposal=proposal)
 
+    def observe_proposal_visibility(
+        self,
+        *,
+        command_id: str,
+        stable_contributor_key: str,
+        cycle_seq: int,
+        update_id: str,
+        object_identity: str,
+        pointer_signature: str,
+        pointer_sequence: int,
+        source_relative_path: str,
+        result: ReadResult[Any],
+        grace_seconds: float,
+        operator_deadline_seconds: float,
+        max_archived_signatures: int = 32,
+    ) -> VisibilityDecision:
+        """Persist one typed read result and apply stable terminal thresholds."""
+
+        for name, value in (
+            ("stable_contributor_key", stable_contributor_key),
+            ("update_id", update_id),
+            ("object_identity", object_identity),
+            ("pointer_signature", pointer_signature),
+        ):
+            validate_identity(value, name=name)
+        if isinstance(cycle_seq, bool) or not isinstance(cycle_seq, int) or cycle_seq < 1:
+            raise ValueError("cycle_seq must be a positive integer")
+        if (
+            isinstance(pointer_sequence, bool)
+            or not isinstance(pointer_sequence, int)
+            or pointer_sequence < 0
+        ):
+            raise ValueError("pointer_sequence must be a non-negative integer")
+        if grace_seconds < 0.0 or operator_deadline_seconds < grace_seconds:
+            raise ValueError("visibility deadlines must satisfy 0 <= grace <= operator deadline")
+        if max_archived_signatures < 1:
+            raise ValueError("max_archived_signatures must be positive")
+        if (
+            not source_relative_path
+            or source_relative_path.startswith("/")
+            or ".." in Path(source_relative_path).parts
+        ):
+            raise ValueError("source_relative_path must be normalized and run-root-relative")
+        diagnostic = (result.diagnostic or "")[:512]
+        raw_fingerprint = result.fingerprint or diagnostic or result.status.value
+        fingerprint = (
+            raw_fingerprint
+            if len(raw_fingerprint) == 64
+            and all(item in "0123456789abcdef" for item in raw_fingerprint)
+            else hashlib.sha256(raw_fingerprint.encode("utf-8")).hexdigest()
+        )
+        request = {
+            "stable_contributor_key": stable_contributor_key,
+            "cycle_seq": cycle_seq,
+            "update_id": update_id,
+            "object_identity": object_identity,
+            "pointer_signature": pointer_signature,
+            "pointer_sequence": pointer_sequence,
+            "source_relative_path": source_relative_path,
+            "status": result.status.value,
+            "diagnostic": diagnostic,
+            "fingerprint": fingerprint,
+            "grace_seconds": float(grace_seconds),
+            "operator_deadline_seconds": float(operator_deadline_seconds),
+            "max_archived_signatures": max_archived_signatures,
+        }
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            now = float(self._authority._wall_clock())
+            newest = connection.execute(
+                """
+                SELECT * FROM proposal_visibility
+                WHERE stable_contributor_key=? AND object_identity=?
+                ORDER BY pointer_sequence DESC, visibility_id DESC LIMIT 1
+                """,
+                (stable_contributor_key, object_identity),
+            ).fetchone()
+            if newest is not None and pointer_sequence < int(newest["pointer_sequence"]):
+                return {
+                    "status": result.status.value,
+                    "stable_failure_count": 0,
+                    "terminal_disposition": None,
+                    "observation_id": None,
+                }
+            if newest is not None and str(newest["pointer_signature"]) != pointer_signature:
+                connection.execute(
+                    """
+                    INSERT INTO proposal_visibility_archive(
+                        stable_contributor_key, object_identity, pointer_signature,
+                        last_read_status, stable_failure_count, last_fingerprint,
+                        terminal_disposition, archived_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(stable_contributor_key, object_identity, pointer_signature)
+                    DO UPDATE SET last_read_status=excluded.last_read_status,
+                        stable_failure_count=excluded.stable_failure_count,
+                        last_fingerprint=excluded.last_fingerprint,
+                        terminal_disposition=excluded.terminal_disposition,
+                        archived_at=excluded.archived_at
+                    """,
+                    (
+                        stable_contributor_key,
+                        object_identity,
+                        newest["pointer_signature"],
+                        newest["last_read_status"],
+                        newest["stable_failure_count"],
+                        newest["last_fingerprint"],
+                        newest["terminal_disposition"],
+                        now,
+                    ),
+                )
+                connection.execute(
+                    "DELETE FROM proposal_visibility WHERE visibility_id=?",
+                    (newest["visibility_id"],),
+                )
+                newest = None
+            previous = connection.execute(
+                """
+                SELECT * FROM proposal_visibility
+                WHERE stable_contributor_key=? AND object_identity=? AND pointer_signature=?
+                """,
+                (stable_contributor_key, object_identity, pointer_signature),
+            ).fetchone()
+            if previous is not None and previous["terminal_disposition"] is not None:
+                return {
+                    "status": result.status.value,
+                    "stable_failure_count": int(previous["stable_failure_count"]),
+                    "terminal_disposition": str(previous["terminal_disposition"]),
+                    "observation_id": int(previous["terminal_observation_id"]),
+                }
+            first_observed = now if previous is None else float(previous["first_observed_at"])
+            first_failure: float | None = None
+            count = 0
+            if result.status is ReadStatus.NOT_FOUND:
+                same = previous is not None and previous["last_read_status"] == "not_found"
+                count = int(previous["stable_failure_count"]) + 1 if same else 1
+                first_failure = (
+                    float(previous["first_stable_failure_at"])
+                    if same and previous["first_stable_failure_at"] is not None
+                    else now
+                )
+            elif result.status is ReadStatus.MALFORMED:
+                same = (
+                    previous is not None
+                    and previous["last_read_status"] == "malformed"
+                    and previous["last_fingerprint"] == fingerprint
+                )
+                count = int(previous["stable_failure_count"]) + 1 if same else 1
+                first_failure = (
+                    float(previous["first_stable_failure_at"])
+                    if same and previous["first_stable_failure_at"] is not None
+                    else now
+                )
+            elif result.status is ReadStatus.TRANSIENT_IO:
+                same = previous is not None and previous["last_read_status"] == "transient_io"
+                first_failure = (
+                    float(previous["first_stable_failure_at"])
+                    if same and previous["first_stable_failure_at"] is not None
+                    else now
+                )
+            terminal: str | None = None
+            if result.status is ReadStatus.IDENTITY_MISMATCH:
+                terminal = "identity_mismatch"
+            elif (
+                result.status is ReadStatus.NOT_FOUND
+                and count >= 3
+                and first_failure is not None
+                and now - first_failure >= grace_seconds
+            ):
+                terminal = "missing"
+            elif (
+                result.status is ReadStatus.MALFORMED
+                and count >= 2
+                and first_failure is not None
+                and now - first_failure >= grace_seconds
+            ):
+                terminal = "malformed"
+            elif (
+                result.status is ReadStatus.TRANSIENT_IO
+                and first_failure is not None
+                and now - first_failure >= operator_deadline_seconds
+            ):
+                terminal = "manual_review"
+            connection.execute(
+                """
+                INSERT INTO proposal_visibility(
+                    stable_contributor_key, cycle_seq, update_id, object_identity,
+                    pointer_signature, pointer_sequence, first_observed_at,
+                    first_stable_failure_at, last_observed_at, stable_failure_count,
+                    last_read_status, last_fingerprint, bounded_diagnostic
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(stable_contributor_key, object_identity, pointer_signature)
+                DO UPDATE SET cycle_seq=excluded.cycle_seq, update_id=excluded.update_id,
+                    pointer_sequence=excluded.pointer_sequence,
+                    first_stable_failure_at=excluded.first_stable_failure_at,
+                    last_observed_at=excluded.last_observed_at,
+                    stable_failure_count=excluded.stable_failure_count,
+                    last_read_status=excluded.last_read_status,
+                    last_fingerprint=excluded.last_fingerprint,
+                    bounded_diagnostic=excluded.bounded_diagnostic
+                """,
+                (
+                    stable_contributor_key,
+                    cycle_seq,
+                    update_id,
+                    object_identity,
+                    pointer_signature,
+                    pointer_sequence,
+                    first_observed,
+                    first_failure,
+                    now,
+                    count,
+                    result.status.value,
+                    fingerprint,
+                    diagnostic,
+                ),
+            )
+            observation_id: int | None = None
+            if terminal is not None:
+                disposition = {
+                    "missing": ProposalDisposition.MISSING,
+                    "malformed": ProposalDisposition.MALFORMED,
+                    "identity_mismatch": ProposalDisposition.IDENTITY_MISMATCH,
+                    "manual_review": ProposalDisposition.MANUAL_REVIEW,
+                }[terminal]
+                observation_id = self._record_visibility_terminal(
+                    connection,
+                    stable_contributor_key=stable_contributor_key,
+                    cycle_seq=cycle_seq,
+                    update_id=update_id,
+                    pointer_sequence=pointer_sequence,
+                    disposition=disposition,
+                    diagnostic=diagnostic,
+                    source_relative_path=source_relative_path,
+                    fingerprint=fingerprint,
+                )
+                connection.execute(
+                    """
+                    UPDATE proposal_visibility SET terminal_disposition=?,
+                        terminal_observation_id=?
+                    WHERE stable_contributor_key=? AND object_identity=?
+                        AND pointer_signature=?
+                    """,
+                    (
+                        terminal,
+                        observation_id,
+                        stable_contributor_key,
+                        object_identity,
+                        pointer_signature,
+                    ),
+                )
+                self._advance_frontier_values(
+                    connection,
+                    stable_contributor_key=stable_contributor_key,
+                    cycle_seq=cycle_seq,
+                    observation_id=observation_id,
+                )
+            connection.execute(
+                """
+                DELETE FROM proposal_visibility_archive
+                WHERE archive_id IN (
+                    SELECT archive_id FROM proposal_visibility_archive
+                    WHERE stable_contributor_key=? ORDER BY archive_id DESC LIMIT -1 OFFSET ?
+                )
+                """,
+                (stable_contributor_key, max_archived_signatures),
+            )
+            return {
+                "status": result.status.value,
+                "stable_failure_count": count,
+                "terminal_disposition": terminal,
+                "observation_id": observation_id,
+            }
+
+        payload = self._command(command_id, "observe_proposal_visibility", request, operation)
+        return VisibilityDecision(
+            status=ReadStatus(payload["status"]),
+            stable_failure_count=int(payload["stable_failure_count"]),
+            terminal_disposition=payload["terminal_disposition"],
+            observation_id=(
+                None if payload["observation_id"] is None else int(payload["observation_id"])
+            ),
+        )
+
     def initialize_v0(
         self,
         *,
@@ -1114,6 +1480,8 @@ class LeaderSession:
         optim_relative_path: str,
         optim_size: int,
         optim_sha256: str,
+        weight_theta_sha256: str,
+        optim_theta_sha256: str,
     ) -> CommittedVersion:
         """Run v0 through the same prepared-intent and fenced commit chain."""
 
@@ -1128,8 +1496,15 @@ class LeaderSession:
             optim_relative_path=optim_relative_path,
             optim_size=optim_size,
             optim_sha256=optim_sha256,
+            weight_theta_sha256=weight_theta_sha256,
+            optim_theta_sha256=optim_theta_sha256,
         )
-        return self.commit_merge(command_id=f"{command_id}-commit", publication_id=publication_id)
+        committed = self.commit_merge(
+            command_id=f"{command_id}-commit", publication_id=publication_id
+        )
+        if isinstance(committed, MergeFenceConflict):
+            raise RuntimeError("v0 unexpectedly encountered a membership fence conflict")
+        return committed
 
     def initialize_dynamic_membership(self, *, command_id: str) -> tuple[int, ...]:
         """Create the configured dynamic stream pool exactly once."""
@@ -1166,6 +1541,222 @@ class LeaderSession:
         result = self._command(command_id, "initialize_dynamic_membership", request, operation)
         return tuple(int(item) for item in result["stream_ids"])
 
+    def admit_dynamic_incarnation(
+        self,
+        *,
+        command_id: str,
+        instance_id: str,
+        placement_id: str,
+        stream_id: int,
+        admission_token_sha256: str,
+        hostname: str,
+        pid: int,
+        launch_request_id: str | None = None,
+        replace_instance_id: str | None = None,
+        replacement_reason: str | None = None,
+    ) -> DynamicAdmission:
+        """Admit one current dynamic incarnation, optionally replacing one exact owner."""
+
+        validate_identity(instance_id, name="instance_id")
+        validate_identity(placement_id, name="placement_id")
+        validate_identity(hostname, name="hostname")
+        if launch_request_id is not None:
+            validate_identity(launch_request_id, name="launch_request_id")
+        if replace_instance_id is not None:
+            validate_identity(replace_instance_id, name="replace_instance_id")
+        if isinstance(stream_id, bool) or not isinstance(stream_id, int) or stream_id < 0:
+            raise ValueError("stream_id must be a non-negative integer")
+        if isinstance(pid, bool) or not isinstance(pid, int) or pid < 0:
+            raise ValueError("pid must be a non-negative integer")
+        if len(admission_token_sha256) != 64 or any(
+            item not in "0123456789abcdef" for item in admission_token_sha256
+        ):
+            raise ValueError("admission_token_sha256 must be a lowercase SHA-256 digest")
+        if replacement_reason is not None and not replacement_reason:
+            raise ValueError("replacement_reason must not be empty")
+        request = {
+            "instance_id": instance_id,
+            "placement_id": placement_id,
+            "stream_id": stream_id,
+            "admission_token_sha256": admission_token_sha256,
+            "hostname": hostname,
+            "pid": pid,
+            "launch_request_id": launch_request_id,
+            "replace_instance_id": replace_instance_id,
+            "replacement_reason": replacement_reason,
+        }
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            if not isinstance(self._authority._scope, DynamicMembershipScope):
+                raise RuntimeError("dynamic admission requires dynamic authority mode")
+            if stream_id >= self._authority._scope.stream_pool_size:
+                raise MembershipFenceError("stream_id is outside the configured pool")
+            stream = connection.execute(
+                "SELECT * FROM streams WHERE stream_id=?", (stream_id,)
+            ).fetchone()
+            if stream is None:
+                raise AuthoritySchemaError("dynamic stream pool is not initialized")
+            existing_instance = connection.execute(
+                "SELECT * FROM learner_instances WHERE instance_id=?", (instance_id,)
+            ).fetchone()
+            if existing_instance is not None:
+                fence = self._dynamic_fence_from_instance(existing_instance)
+                self._require_current_fence(connection, fence, allow_draining=True)
+                if (
+                    fence.placement_id != placement_id
+                    or fence.stream_id != stream_id
+                    or fence.admission_token_sha256 != admission_token_sha256
+                ):
+                    raise MembershipFenceError("instance ID was replayed with different admission")
+                return {
+                    "fence": fence.as_dict(),
+                    "resume_cursor": int(stream["resume_cursor"]),
+                }
+            placement = connection.execute(
+                "SELECT * FROM placements WHERE placement_id=?", (placement_id,)
+            ).fetchone()
+            occupied = {
+                str(value)
+                for value in (
+                    None if placement is None else placement["current_instance_id"],
+                    stream["current_instance_id"],
+                )
+                if value is not None
+            }
+            if len(occupied) > 1:
+                raise AuthoritySchemaError("placement and stream have different current owners")
+            if occupied:
+                current_instance_id = next(iter(occupied))
+                if replace_instance_id != current_instance_id or replacement_reason is None:
+                    raise MembershipFenceError(
+                        "occupied dynamic admission requires exact replacement authorization"
+                    )
+                current = connection.execute(
+                    "SELECT * FROM learner_instances WHERE instance_id=?",
+                    (current_instance_id,),
+                ).fetchone()
+                if current is None:
+                    raise AuthoritySchemaError("current dynamic instance row is missing")
+                self._retire_dynamic_in_transaction(
+                    connection,
+                    fence=self._dynamic_fence_from_instance(current),
+                    reason=replacement_reason,
+                    final_status="revoked",
+                )
+                placement = connection.execute(
+                    "SELECT * FROM placements WHERE placement_id=?", (placement_id,)
+                ).fetchone()
+                stream = connection.execute(
+                    "SELECT * FROM streams WHERE stream_id=?", (stream_id,)
+                ).fetchone()
+                assert stream is not None
+            now = float(self._authority._wall_clock())
+            if placement is None:
+                placement_epoch = 1
+                connection.execute(
+                    """
+                    INSERT INTO placements(
+                        placement_id, current_placement_epoch, current_instance_id, updated_at
+                    ) VALUES (?, ?, ?, ?)
+                    """,
+                    (placement_id, placement_epoch, instance_id, now),
+                )
+            else:
+                placement_epoch = int(placement["current_placement_epoch"]) + 1
+                connection.execute(
+                    """
+                    UPDATE placements SET current_placement_epoch=?, current_instance_id=?,
+                        reusable_stream_id=?, updated_at=? WHERE placement_id=?
+                    """,
+                    (placement_epoch, instance_id, stream_id, now, placement_id),
+                )
+            prior_stream_uses = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM learner_instances WHERE stream_id=?", (stream_id,)
+                ).fetchone()[0]
+            )
+            stream_epoch = int(stream["current_stream_epoch"]) + (1 if prior_stream_uses else 0)
+            generation = (
+                int(
+                    connection.execute(
+                        """
+                    SELECT COALESCE(MAX(admission_generation), 0) FROM learner_instances
+                    WHERE placement_id=?
+                    """,
+                        (placement_id,),
+                    ).fetchone()[0]
+                )
+                + 1
+            )
+            connection.execute(
+                """
+                INSERT INTO learner_instances(
+                    instance_id, placement_id, placement_epoch, stream_id, stream_epoch,
+                    admission_generation, admission_token_sha256, launch_request_id,
+                    hostname, pid, status, registered_at, admitted_at, last_seen,
+                    admitted_by_epoch
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'admitted', ?, ?, ?, ?)
+                """,
+                (
+                    instance_id,
+                    placement_id,
+                    placement_epoch,
+                    stream_id,
+                    stream_epoch,
+                    generation,
+                    admission_token_sha256,
+                    launch_request_id,
+                    hostname,
+                    pid,
+                    now,
+                    now,
+                    now,
+                    self.token.epoch,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE streams SET current_stream_epoch=?, current_instance_id=?,
+                    state='active', updated_at=? WHERE stream_id=?
+                """,
+                (stream_epoch, instance_id, now, stream_id),
+            )
+            connection.execute(
+                """
+                INSERT INTO admission_history(
+                    instance_id, stream_id, stream_epoch, placement_id, placement_epoch,
+                    admission_generation, event, reason, command_epoch, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 'admitted', NULL, ?, ?)
+                """,
+                (
+                    instance_id,
+                    stream_id,
+                    stream_epoch,
+                    placement_id,
+                    placement_epoch,
+                    generation,
+                    self.token.epoch,
+                    now,
+                ),
+            )
+            fence = DynamicContributorFence(
+                kind="dynamic",
+                instance_id=instance_id,
+                placement_id=placement_id,
+                placement_epoch=placement_epoch,
+                stream_id=stream_id,
+                stream_epoch=stream_epoch,
+                admission_generation=generation,
+                admission_token_sha256=admission_token_sha256,
+            )
+            return {"fence": fence.as_dict(), "resume_cursor": int(stream["resume_cursor"])}
+
+        result = self._command(command_id, "admit_dynamic_incarnation", request, operation)
+        return DynamicAdmission(
+            fence=DynamicContributorFence.from_dict(result["fence"]),
+            resume_cursor=int(result["resume_cursor"]),
+        )
+
     def retire_incarnation(
         self,
         *,
@@ -1173,69 +1764,32 @@ class LeaderSession:
         fence: DynamicContributorFence,
         reason: str,
         final_status: str = "revoked",
+        final_update_id: str | None = None,
     ) -> tuple[str, ...]:
         """Retire one current dynamic incarnation and terminalize its active proposals."""
 
-        if final_status not in {"stopped", "revoked", "expired"}:
-            raise ValueError("final_status must be stopped, revoked, or expired")
+        if final_status not in {"draining", "stopped", "revoked", "expired"}:
+            raise ValueError("final_status must be draining, stopped, revoked, or expired")
+        if (final_status == "draining") != (final_update_id is not None):
+            raise ValueError("draining requires exactly one final_update_id")
+        if final_update_id is not None:
+            validate_identity(final_update_id, name="final_update_id")
         if not reason:
             raise ValueError("retirement reason must not be empty")
         request = {
             "fence": fence.as_dict(),
             "reason": reason,
             "final_status": final_status,
+            "final_update_id": final_update_id,
         }
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
-            self._require_current_fence(connection, fence)
-            now = float(self._authority._wall_clock())
-            update_ids = self._terminalize_fenced_updates(
+            update_ids = self._retire_dynamic_in_transaction(
                 connection,
-                fence_json=_canonical_json(fence.as_dict()),
+                fence=fence,
                 reason=reason,
-            )
-            connection.execute(
-                """
-                UPDATE learner_instances
-                SET status=?, stopped_at=?, status_reason=?
-                WHERE instance_id=?
-                """,
-                (final_status, now, reason, fence.instance_id),
-            )
-            connection.execute(
-                """
-                UPDATE placements SET current_instance_id=NULL, updated_at=?
-                WHERE placement_id=? AND current_instance_id=?
-                    AND current_placement_epoch=?
-                """,
-                (now, fence.placement_id, fence.instance_id, fence.placement_epoch),
-            )
-            connection.execute(
-                """
-                UPDATE streams SET current_instance_id=NULL, state='available', updated_at=?
-                WHERE stream_id=? AND current_instance_id=? AND current_stream_epoch=?
-                """,
-                (now, fence.stream_id, fence.instance_id, fence.stream_epoch),
-            )
-            connection.execute(
-                """
-                INSERT INTO admission_history(
-                    instance_id, stream_id, stream_epoch, placement_id, placement_epoch,
-                    admission_generation, event, reason, command_epoch, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    fence.instance_id,
-                    fence.stream_id,
-                    fence.stream_epoch,
-                    fence.placement_id,
-                    fence.placement_epoch,
-                    fence.admission_generation,
-                    final_status,
-                    reason,
-                    self.token.epoch,
-                    now,
-                ),
+                final_status=final_status,
+                final_update_id=final_update_id,
             )
             return {"terminalized_update_ids": list(update_ids)}
 
@@ -1244,7 +1798,7 @@ class LeaderSession:
 
     def try_select_batch(
         self, *, command_id: str, quorum_min: int, quorum_max: int
-    ) -> SelectionBatch | None:
+    ) -> SelectionAttempt:
         if isinstance(quorum_min, bool) or not isinstance(quorum_min, int) or quorum_min < 1:
             raise ValueError("quorum_min must be a positive integer")
         if isinstance(quorum_max, bool) or not isinstance(quorum_max, int):
@@ -1265,12 +1819,37 @@ class LeaderSession:
                     ON s.stable_contributor_key = u.stable_contributor_key
                 WHERE u.status='pending' AND u.base_global_version <= ?
                 ORDER BY selection_credit ASC, u.stable_contributor_key ASC, u.update_id ASC
-                LIMIT ?
                 """,
-                (int(latest), quorum_max),
+                (int(latest),),
             ).fetchall()
-            if len(rows) < quorum_min:
-                return {"selected": False}
+            valid_rows: list[sqlite3.Row] = []
+            invalid_ids: list[str] = []
+            seen_contributors: set[str] = set()
+            for row in rows:
+                update_id = str(row["update_id"])
+                if not self._fence_is_current_json(
+                    connection, str(row["fence_json"]), update_id=update_id
+                ):
+                    self._drop_active_update(
+                        connection,
+                        row,
+                        reason="stale_fence_at_selection",
+                    )
+                    invalid_ids.append(update_id)
+                    continue
+                stable_key = str(row["stable_contributor_key"])
+                if stable_key in seen_contributors:
+                    continue
+                seen_contributors.add(stable_key)
+                valid_rows.append(row)
+            eligible_count = len(valid_rows)
+            selected_rows = valid_rows[:quorum_max]
+            if len(selected_rows) < quorum_min:
+                return {
+                    "selected": False,
+                    "invalid_update_ids": invalid_ids,
+                    "eligible_contributors": eligible_count,
+                }
             target_version = int(latest) + 1
             batch_id = "batch-" + hashlib.sha256(command_id.encode("utf-8")).hexdigest()[:32]
             now = float(self._authority._wall_clock())
@@ -1282,8 +1861,9 @@ class LeaderSession:
                 """,
                 (batch_id, command_id, self.token.epoch, target_version, now),
             )
-            for reduction_order, row in enumerate(rows):
-                self._require_current_fence_json(connection, str(row["fence_json"]))
+            for reduction_order, row in enumerate(
+                sorted(selected_rows, key=lambda item: str(item["stable_contributor_key"]))
+            ):
                 connection.execute(
                     """
                     INSERT INTO selection_batch_updates(
@@ -1306,12 +1886,20 @@ class LeaderSession:
                     """,
                     (batch_id, self.token.epoch, row["update_id"]),
                 )
-            return {"selected": True, "batch_id": batch_id}
+            return {
+                "selected": True,
+                "batch_id": batch_id,
+                "invalid_update_ids": invalid_ids,
+                "eligible_contributors": eligible_count,
+            }
 
         result = self._command(command_id, "try_select_batch", request, operation)
-        if not result["selected"]:
-            return None
-        return self._load_selection_batch(str(result["batch_id"]))
+        batch = self._load_selection_batch(str(result["batch_id"])) if result["selected"] else None
+        return SelectionAttempt(
+            batch=batch,
+            invalid_update_ids=tuple(str(item) for item in result["invalid_update_ids"]),
+            eligible_contributors=int(result["eligible_contributors"]),
+        )
 
     def prepare_publication(
         self,
@@ -1326,7 +1914,11 @@ class LeaderSession:
         optim_relative_path: str,
         optim_size: int,
         optim_sha256: str,
+        weight_theta_sha256: str,
+        optim_theta_sha256: str,
     ) -> PublicationIntent:
+        if weight_theta_sha256 != optim_theta_sha256:
+            raise ValueError("weight and outer-state theta identities do not match")
         predecessor = None if target_version == 0 else target_version - 1
         intent = PublicationIntent(
             publication_id=publication_id,
@@ -1341,6 +1933,7 @@ class LeaderSession:
             optim_relative_path=optim_relative_path,
             optim_size=optim_size,
             optim_sha256=optim_sha256,
+            theta_sha256=weight_theta_sha256,
         )
         request = asdict(intent)
 
@@ -1370,8 +1963,8 @@ class LeaderSession:
                     publication_id, command_id, owner_epoch, target_version,
                     predecessor_version, selection_batch_id, weight_relative_path,
                     weight_size, weight_sha256, optim_relative_path, optim_size,
-                    optim_sha256, state, prepared_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'prepared', ?)
+                    optim_sha256, theta_sha256, state, prepared_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'prepared', ?)
                 """,
                 (
                     publication_id,
@@ -1386,7 +1979,36 @@ class LeaderSession:
                     optim_relative_path,
                     optim_size,
                     optim_sha256,
+                    weight_theta_sha256,
                     now,
+                ),
+            )
+            connection.executemany(
+                """
+                INSERT INTO artifact_publications(
+                    publication_id, artifact_kind, relative_path, size_bytes, sha256,
+                    owning_epoch, state, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 'prepared', ?)
+                """,
+                (
+                    (
+                        publication_id,
+                        "weight",
+                        weight_relative_path,
+                        weight_size,
+                        weight_sha256,
+                        self.token.epoch,
+                        now,
+                    ),
+                    (
+                        publication_id,
+                        "outer_state",
+                        optim_relative_path,
+                        optim_size,
+                        optim_sha256,
+                        self.token.epoch,
+                        now,
+                    ),
                 ),
             )
             if selection_batch_id is not None:
@@ -1407,15 +2029,40 @@ class LeaderSession:
         result = self._command(command_id, "prepare_publication", request, operation)
         return _decode_publication_intent(result)
 
-    def commit_merge(self, *, command_id: str, publication_id: str) -> CommittedVersion:
+    def commit_merge(
+        self, *, command_id: str, publication_id: str
+    ) -> CommittedVersion | MergeFenceConflict:
         request = {"publication_id": publication_id}
+        self._authority._verify_token(self.token)
+        self._verify_prepared_publication_artifacts(publication_id)
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
             intent = connection.execute(
                 "SELECT * FROM publication_intents WHERE publication_id=?",
                 (publication_id,),
             ).fetchone()
-            if intent is None or intent["state"] != "prepared":
+            if intent is None:
+                raise ValueError("publication intent does not exist")
+            if intent["state"] == "abandoned" and intent["selection_batch_id"] is not None:
+                rows = connection.execute(
+                    """
+                    SELECT u.update_id, u.status FROM selection_batch_updates AS b
+                    JOIN updates AS u ON u.update_id=b.update_id
+                    WHERE b.batch_id=? ORDER BY b.reduction_order
+                    """,
+                    (intent["selection_batch_id"],),
+                ).fetchall()
+                return {
+                    "outcome": "fence_conflict",
+                    "publication_id": publication_id,
+                    "invalid_update_ids": [
+                        str(row["update_id"]) for row in rows if row["status"] == "dropped"
+                    ],
+                    "reset_pending_update_ids": [
+                        str(row["update_id"]) for row in rows if row["status"] == "pending"
+                    ],
+                }
+            if intent["state"] != "prepared":
                 raise ValueError("publication intent is not prepared")
             target = int(intent["target_version"])
             latest = connection.execute("SELECT MAX(version) FROM global_versions").fetchone()[0]
@@ -1440,10 +2087,29 @@ class LeaderSession:
                 ).fetchall()
                 if not selected_rows:
                     raise ValueError("non-v0 publication has an empty selection")
-                for row in selected_rows:
-                    if row["status"] != "selected":
-                        raise ValueError("selection contains a non-selected update")
-                    self._require_current_fence_json(connection, str(row["fence_json"]))
+                invalid_ids = [
+                    str(row["update_id"])
+                    for row in selected_rows
+                    if row["status"] != "selected"
+                    or not self._fence_is_current_json(
+                        connection,
+                        str(row["fence_json"]),
+                        update_id=str(row["update_id"]),
+                    )
+                ]
+                if invalid_ids:
+                    reset_ids = self._reconcile_invalid_batch(
+                        connection,
+                        batch_id=str(batch_id),
+                        invalid_update_ids=tuple(invalid_ids),
+                        reason="stale_fence_at_commit",
+                    )
+                    return {
+                        "outcome": "fence_conflict",
+                        "publication_id": publication_id,
+                        "invalid_update_ids": invalid_ids,
+                        "reset_pending_update_ids": list(reset_ids),
+                    }
             direct_tokens = sum(int(row["effective_tokens_this_update"]) for row in selected_rows)
             now = float(self._authority._wall_clock())
             connection.execute(
@@ -1452,8 +2118,8 @@ class LeaderSession:
                     version, predecessor_version, publication_id, weight_relative_path,
                     weight_size, weight_sha256, optim_relative_path, optim_size,
                     optim_sha256, committed_by_epoch, committed_by_owner_id, committed_at,
-                    direct_weight_tokens_applied
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    theta_sha256, direct_weight_tokens_applied
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     target,
@@ -1468,6 +2134,7 @@ class LeaderSession:
                     self.token.epoch,
                     self.token.owner_id,
                     now,
+                    intent["theta_sha256"],
                     direct_tokens,
                 ),
             )
@@ -1477,6 +2144,13 @@ class LeaderSession:
                 WHERE publication_id=? AND state='prepared'
                 """,
                 (now, publication_id),
+            )
+            connection.execute(
+                """
+                UPDATE artifact_publications SET state='committed'
+                WHERE publication_id=? AND state='prepared'
+                """,
+                (publication_id,),
             )
             if batch_id is not None:
                 connection.execute(
@@ -1526,10 +2200,18 @@ class LeaderSession:
                 "SELECT * FROM global_versions WHERE version=?", (target,)
             ).fetchone()
             assert result is not None
-            return dict(result)
+            return {"outcome": "committed", "version": dict(result)}
 
         result = self._command(command_id, "commit_merge", request, operation)
-        return _decode_committed_version(result)
+        if result["outcome"] == "fence_conflict":
+            return MergeFenceConflict(
+                publication_id=str(result["publication_id"]),
+                invalid_update_ids=tuple(str(item) for item in result["invalid_update_ids"]),
+                reset_pending_update_ids=tuple(
+                    str(item) for item in result["reset_pending_update_ids"]
+                ),
+            )
+        return _decode_committed_version(result["version"])
 
     def abandon_publication(
         self, *, command_id: str, publication_id: str, reason: str
@@ -1544,30 +2226,15 @@ class LeaderSession:
             if row is None or row["state"] != "prepared":
                 raise ValueError("only a prepared publication can be abandoned")
             now = float(self._authority._wall_clock())
-            connection.execute(
-                """
-                UPDATE publication_intents
-                SET state='abandoned', abandoned_at=?, abandon_reason=?
-                WHERE publication_id=?
-                """,
-                (now, reason, publication_id),
+            self._abandon_publication_artifacts(
+                connection, publication_id=publication_id, reason=reason, now=now
             )
             if row["selection_batch_id"] is not None:
-                connection.execute(
-                    """
-                    UPDATE selection_batches
-                    SET state='abandoned', abandoned_at=?, abandon_reason=?
-                    WHERE batch_id=?
-                    """,
-                    (now, reason, row["selection_batch_id"]),
-                )
-                connection.execute(
-                    """
-                    UPDATE updates SET status='pending', selected_batch_id=NULL,
-                        selected_by_epoch=NULL
-                    WHERE selected_batch_id=? AND status='selected'
-                    """,
-                    (row["selection_batch_id"],),
+                self._reconcile_invalid_batch(
+                    connection,
+                    batch_id=str(row["selection_batch_id"]),
+                    invalid_update_ids=(),
+                    reason=reason,
                 )
             result = connection.execute(
                 "SELECT * FROM publication_intents WHERE publication_id=?",
@@ -1578,6 +2245,74 @@ class LeaderSession:
 
         result = self._command(command_id, "abandon_publication", request, operation)
         return _decode_publication_intent(result)
+
+    def reconcile_publications(self, *, command_id: str) -> tuple[str, ...]:
+        """Abandon prepared intents owned by an expired predecessor epoch."""
+
+        request: dict[str, Any] = {}
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            rows = connection.execute(
+                """
+                SELECT * FROM publication_intents
+                WHERE state='prepared' AND owner_epoch<>? ORDER BY publication_id
+                """,
+                (self.token.epoch,),
+            ).fetchall()
+            reconciled: list[str] = []
+            now = float(self._authority._wall_clock())
+            for row in rows:
+                publication_id = str(row["publication_id"])
+                if row["selection_batch_id"] is None:
+                    self._abandon_publication_artifacts(
+                        connection,
+                        publication_id=publication_id,
+                        reason="predecessor_epoch_expired",
+                        now=now,
+                    )
+                else:
+                    self._reconcile_invalid_batch(
+                        connection,
+                        batch_id=str(row["selection_batch_id"]),
+                        invalid_update_ids=(),
+                        reason="predecessor_epoch_expired",
+                    )
+                reconciled.append(publication_id)
+            return {"publication_ids": reconciled}
+
+        result = self._command(command_id, "reconcile_publications", request, operation)
+        return tuple(str(item) for item in result["publication_ids"])
+
+    def claim_orphan_gc(self, *, command_id: str, limit: int = 64) -> tuple[str, ...]:
+        """Claim only lease-safe orphan paths; deletion remains external I/O."""
+
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+            raise ValueError("orphan GC limit must be a positive integer")
+        request = {"limit": limit}
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            now = float(self._authority._wall_clock())
+            rows = connection.execute(
+                """
+                SELECT relative_path FROM gc_candidates
+                WHERE state='pending' AND not_before<=?
+                ORDER BY not_before, relative_path LIMIT ?
+                """,
+                (now, limit),
+            ).fetchall()
+            paths = [str(row["relative_path"]) for row in rows]
+            for path in paths:
+                connection.execute(
+                    """
+                    UPDATE gc_candidates SET state='claimed'
+                    WHERE relative_path=? AND state='pending'
+                    """,
+                    (path,),
+                )
+            return {"relative_paths": paths}
+
+        result = self._command(command_id, "claim_orphan_gc", request, operation)
+        return tuple(str(item) for item in result["relative_paths"])
 
     def begin_terminal_close(self, *, command_id: str, reason: str) -> TerminalState:
         request = {"reason": reason}
@@ -1693,12 +2428,151 @@ class LeaderSession:
         )
         return int(cursor.lastrowid)
 
+    def _record_visibility_terminal(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        stable_contributor_key: str,
+        cycle_seq: int,
+        update_id: str,
+        pointer_sequence: int,
+        disposition: ProposalDisposition,
+        diagnostic: str,
+        source_relative_path: str,
+        fingerprint: str,
+    ) -> int:
+        now = float(self._authority._wall_clock())
+        cursor = connection.execute(
+            """
+            INSERT INTO proposal_observations(
+                stable_contributor_key, cycle_seq, update_id, pointer_sequence,
+                disposition, diagnostic, source_relative_path, object_sha256,
+                observed_by_epoch, observed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                stable_contributor_key,
+                cycle_seq,
+                update_id,
+                pointer_sequence,
+                disposition.value,
+                diagnostic[:512],
+                source_relative_path,
+                fingerprint,
+                self.token.epoch,
+                now,
+            ),
+        )
+        observation_id = int(cursor.lastrowid)
+        connection.execute(
+            """
+            INSERT INTO proposal_quarantine(
+                stable_contributor_key, cycle_seq, update_id, disposition, fingerprint,
+                bounded_diagnostic, source_relative_path, observation_id, quarantined_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                stable_contributor_key,
+                cycle_seq,
+                update_id,
+                disposition.value,
+                fingerprint,
+                diagnostic[:512],
+                source_relative_path,
+                observation_id,
+                now,
+            ),
+        )
+        return observation_id
+
+    def _record_quarantine(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        proposal: FullUpdateProposalV2,
+        disposition: str,
+        fingerprint: str,
+        diagnostic: str,
+        observation_id: int,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO proposal_quarantine(
+                stable_contributor_key, cycle_seq, update_id, disposition, fingerprint,
+                bounded_diagnostic, source_relative_path, observation_id, quarantined_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                proposal.stable_contributor_key,
+                proposal.cycle_seq,
+                proposal.update_id,
+                disposition,
+                fingerprint,
+                diagnostic[:512],
+                proposal.payload_relative_path,
+                observation_id,
+                float(self._authority._wall_clock()),
+            ),
+        )
+
+    def _advance_proposal_frontier(
+        self,
+        connection: sqlite3.Connection,
+        proposal: FullUpdateProposalV2,
+        observation_id: int,
+    ) -> None:
+        self._advance_frontier_values(
+            connection,
+            stable_contributor_key=proposal.stable_contributor_key,
+            cycle_seq=proposal.cycle_seq,
+            observation_id=observation_id,
+        )
+
+    def _advance_frontier_values(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        stable_contributor_key: str,
+        cycle_seq: int,
+        observation_id: int,
+    ) -> None:
+        observation = connection.execute(
+            "SELECT 1 FROM proposal_observations WHERE observation_id=?",
+            (observation_id,),
+        ).fetchone()
+        if observation is None:
+            raise AuthoritySchemaError("proposal frontier requires a terminal observation")
+        now = float(self._authority._wall_clock())
+        connection.execute(
+            """
+            INSERT INTO proposal_frontiers(
+                run_id, stable_contributor_key, last_terminal_cycle_seq,
+                terminal_observation_id, updated_by_epoch, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(run_id, stable_contributor_key) DO UPDATE SET
+                last_terminal_cycle_seq=excluded.last_terminal_cycle_seq,
+                terminal_observation_id=excluded.terminal_observation_id,
+                updated_by_epoch=excluded.updated_by_epoch,
+                updated_at=excluded.updated_at
+            WHERE excluded.last_terminal_cycle_seq >= proposal_frontiers.last_terminal_cycle_seq
+            """,
+            (
+                self._authority._identity.run_id,
+                stable_contributor_key,
+                cycle_seq,
+                observation_id,
+                self.token.epoch,
+                now,
+            ),
+        )
+
     def _terminalize_fenced_updates(
         self,
         connection: sqlite3.Connection,
         *,
         fence_json: str,
         reason: str,
+        preserve_update_id: str | None = None,
     ) -> tuple[str, ...]:
         """Drop one stale fence's work and reconcile every affected durable batch."""
 
@@ -1707,112 +2581,267 @@ class LeaderSession:
             SELECT update_id, cycle_receipt_id, selected_batch_id
             FROM updates
             WHERE fence_json=? AND status IN ('pending', 'selected')
+                AND (? IS NULL OR update_id<>?)
             """,
-            (fence_json,),
+            (fence_json, preserve_update_id, preserve_update_id),
         ).fetchall()
         batch_ids = sorted(
             {str(row["selected_batch_id"]) for row in affected if row["selected_batch_id"]}
         )
-        now = float(self._authority._wall_clock())
         for batch_id in batch_ids:
-            connection.execute(
-                """
-                UPDATE publication_intents
-                SET state='abandoned', abandoned_at=?, abandon_reason=?
-                WHERE selection_batch_id=? AND state='prepared'
-                """,
-                (now, reason, batch_id),
+            invalid = tuple(
+                str(row["update_id"])
+                for row in affected
+                if str(row["selected_batch_id"] or "") == batch_id
             )
-            connection.execute(
-                """
-                UPDATE selection_batches
-                SET state='abandoned', abandoned_at=?, abandon_reason=?
-                WHERE batch_id=? AND state IN ('selected', 'prepared')
-                """,
-                (now, reason, batch_id),
+            self._reconcile_invalid_batch(
+                connection,
+                batch_id=batch_id,
+                invalid_update_ids=invalid,
+                reason=reason,
             )
-            batch_updates = connection.execute(
-                """
-                SELECT u.* FROM selection_batch_updates AS b
-                JOIN updates AS u ON u.update_id=b.update_id
-                WHERE b.batch_id=? AND u.status='selected'
-                """,
-                (batch_id,),
-            ).fetchall()
-            for row in batch_updates:
-                row_fence_json = str(row["fence_json"])
-                if row_fence_json == fence_json:
-                    replacement_status = "dropped"
-                    drop_reason = reason
-                else:
-                    try:
-                        self._require_current_fence_json(connection, row_fence_json)
-                    except MembershipFenceError:
-                        replacement_status = "dropped"
-                        drop_reason = "stale_fence_during_reconciliation"
-                    else:
-                        pending = connection.execute(
-                            """
-                            SELECT 1 FROM updates
-                            WHERE stable_contributor_key=? AND status='pending'
-                            LIMIT 1
-                            """,
-                            (row["stable_contributor_key"],),
-                        ).fetchone()
-                        replacement_status = "pending" if pending is None else "dropped"
-                        drop_reason = (
-                            None if pending is None else "superseded_during_reconciliation"
-                        )
-                connection.execute(
-                    """
-                    UPDATE updates SET status=?, selected_batch_id=NULL,
-                        selected_by_epoch=NULL, dropped_by_epoch=?, drop_reason=?
-                    WHERE update_id=? AND status='selected'
-                    """,
-                    (
-                        replacement_status,
-                        self.token.epoch if replacement_status == "dropped" else None,
-                        drop_reason,
-                        row["update_id"],
-                    ),
-                )
-                if replacement_status == "dropped":
-                    connection.execute(
-                        """
-                        UPDATE token_fates SET direct_fate='dropped', fate_reason=?,
-                            updated_by_epoch=?, updated_at=? WHERE receipt_id=?
-                        """,
-                        (
-                            drop_reason,
-                            self.token.epoch,
-                            now,
-                            row["cycle_receipt_id"],
-                        ),
-                    )
         update_ids = tuple(str(row["update_id"]) for row in affected)
         for row in affected:
-            cursor = connection.execute(
-                """
-                UPDATE updates SET status='dropped', selected_batch_id=NULL,
-                    selected_by_epoch=NULL, dropped_by_epoch=?, drop_reason=?
-                WHERE update_id=? AND status IN ('pending', 'selected')
-                """,
-                (self.token.epoch, reason, row["update_id"]),
-            )
-            if cursor.rowcount:
-                connection.execute(
-                    """
-                    UPDATE token_fates SET direct_fate='dropped', fate_reason=?,
-                        updated_by_epoch=?, updated_at=? WHERE receipt_id=?
-                    """,
-                    (reason, self.token.epoch, now, row["cycle_receipt_id"]),
-                )
+            current = connection.execute(
+                "SELECT * FROM updates WHERE update_id=?", (row["update_id"],)
+            ).fetchone()
+            if current is not None and current["status"] in {"pending", "selected"}:
+                self._drop_active_update(connection, current, reason=reason)
         return update_ids
+
+    def _drop_active_update(
+        self, connection: sqlite3.Connection, row: Mapping[str, Any], *, reason: str
+    ) -> bool:
+        now = float(self._authority._wall_clock())
+        cursor = connection.execute(
+            """
+            UPDATE updates SET status='dropped', selected_batch_id=NULL,
+                selected_by_epoch=NULL, dropped_by_epoch=?, drop_reason=?
+            WHERE update_id=? AND status IN ('pending', 'selected')
+            """,
+            (self.token.epoch, reason, row["update_id"]),
+        )
+        if not cursor.rowcount:
+            return False
+        connection.execute(
+            """
+            UPDATE token_fates SET direct_fate='dropped', fate_reason=?,
+                updated_by_epoch=?, updated_at=? WHERE receipt_id=?
+            """,
+            (reason, self.token.epoch, now, row["cycle_receipt_id"]),
+        )
+        return True
+
+    def _reconcile_invalid_batch(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        batch_id: str,
+        invalid_update_ids: tuple[str, ...],
+        reason: str,
+    ) -> tuple[str, ...]:
+        """Abandon one batch, drop invalid rows, and reset only still-current peers."""
+
+        invalid = set(invalid_update_ids)
+        now = float(self._authority._wall_clock())
+        intents = connection.execute(
+            """
+            SELECT publication_id FROM publication_intents
+            WHERE selection_batch_id=? AND state='prepared'
+            """,
+            (batch_id,),
+        ).fetchall()
+        for intent in intents:
+            self._abandon_publication_artifacts(
+                connection,
+                publication_id=str(intent["publication_id"]),
+                reason=reason,
+                now=now,
+            )
+        connection.execute(
+            """
+            UPDATE selection_batches SET state='abandoned', abandoned_at=?, abandon_reason=?
+            WHERE batch_id=? AND state IN ('selected', 'prepared')
+            """,
+            (now, reason, batch_id),
+        )
+        rows = connection.execute(
+            """
+            SELECT u.* FROM selection_batch_updates AS b
+            JOIN updates AS u ON u.update_id=b.update_id
+            WHERE b.batch_id=? ORDER BY b.reduction_order
+            """,
+            (batch_id,),
+        ).fetchall()
+        reset: list[str] = []
+        for row in rows:
+            update_id = str(row["update_id"])
+            is_current = self._fence_is_current_json(
+                connection, str(row["fence_json"]), update_id=update_id
+            )
+            if update_id not in invalid and row["status"] == "selected" and is_current:
+                pending = connection.execute(
+                    """
+                    SELECT 1 FROM updates WHERE stable_contributor_key=?
+                        AND status='pending' AND update_id<>? LIMIT 1
+                    """,
+                    (row["stable_contributor_key"], update_id),
+                ).fetchone()
+                if pending is None:
+                    connection.execute(
+                        """
+                        UPDATE updates SET status='pending', selected_batch_id=NULL,
+                            selected_by_epoch=NULL WHERE update_id=? AND status='selected'
+                        """,
+                        (update_id,),
+                    )
+                    reset.append(update_id)
+                    continue
+            if row["status"] in {"pending", "selected"}:
+                drop_reason = reason if update_id in invalid else "stale_or_superseded_peer"
+                self._drop_active_update(connection, row, reason=drop_reason)
+        return tuple(reset)
+
+    def _abandon_publication_artifacts(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        publication_id: str,
+        reason: str,
+        now: float,
+    ) -> None:
+        connection.execute(
+            """
+            UPDATE publication_intents SET state='abandoned', abandoned_at=?, abandon_reason=?
+            WHERE publication_id=? AND state='prepared'
+            """,
+            (now, reason, publication_id),
+        )
+        artifacts = connection.execute(
+            """
+            SELECT * FROM artifact_publications
+            WHERE publication_id=? AND state='prepared'
+            """,
+            (publication_id,),
+        ).fetchall()
+        connection.execute(
+            """
+            UPDATE artifact_publications SET state='orphan'
+            WHERE publication_id=? AND state='prepared'
+            """,
+            (publication_id,),
+        )
+        for artifact in artifacts:
+            connection.execute(
+                """
+                INSERT INTO gc_candidates(
+                    relative_path, artifact_kind, owning_epoch, publication_id, state,
+                    not_before, recorded_by_epoch, recorded_at
+                ) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
+                ON CONFLICT(relative_path) DO NOTHING
+                """,
+                (
+                    artifact["relative_path"],
+                    artifact["artifact_kind"],
+                    artifact["owning_epoch"],
+                    publication_id,
+                    now + self._authority._orphan_grace_seconds,
+                    self.token.epoch,
+                    now,
+                ),
+            )
+
+    def _retire_dynamic_in_transaction(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        fence: DynamicContributorFence,
+        reason: str,
+        final_status: str,
+        final_update_id: str | None = None,
+    ) -> tuple[str, ...]:
+        self._require_current_fence(connection, fence, allow_draining=True)
+        now = float(self._authority._wall_clock())
+        update_ids = self._terminalize_fenced_updates(
+            connection,
+            fence_json=_canonical_json(fence.as_dict()),
+            reason=reason,
+            preserve_update_id=final_update_id,
+        )
+        stopped_at = None if final_status == "draining" else now
+        connection.execute(
+            """
+            UPDATE learner_instances SET status=?, stopped_at=?, status_reason=?,
+                final_update_id=? WHERE instance_id=?
+            """,
+            (final_status, stopped_at, reason, final_update_id, fence.instance_id),
+        )
+        if final_status == "draining":
+            connection.execute(
+                """
+                UPDATE streams SET state='draining', updated_at=?
+                WHERE stream_id=? AND current_instance_id=? AND current_stream_epoch=?
+                """,
+                (now, fence.stream_id, fence.instance_id, fence.stream_epoch),
+            )
+        else:
+            connection.execute(
+                """
+                UPDATE placements SET current_instance_id=NULL, updated_at=?
+                WHERE placement_id=? AND current_instance_id=?
+                    AND current_placement_epoch=?
+                """,
+                (now, fence.placement_id, fence.instance_id, fence.placement_epoch),
+            )
+            connection.execute(
+                """
+                UPDATE streams SET current_instance_id=NULL, state='available', updated_at=?
+                WHERE stream_id=? AND current_instance_id=? AND current_stream_epoch=?
+                """,
+                (now, fence.stream_id, fence.instance_id, fence.stream_epoch),
+            )
+        connection.execute(
+            """
+            INSERT INTO admission_history(
+                instance_id, stream_id, stream_epoch, placement_id, placement_epoch,
+                admission_generation, event, reason, command_epoch, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                fence.instance_id,
+                fence.stream_id,
+                fence.stream_epoch,
+                fence.placement_id,
+                fence.placement_epoch,
+                fence.admission_generation,
+                final_status,
+                reason,
+                self.token.epoch,
+                now,
+            ),
+        )
+        return update_ids
+
+    @staticmethod
+    def _dynamic_fence_from_instance(row: Mapping[str, Any]) -> DynamicContributorFence:
+        return DynamicContributorFence(
+            kind="dynamic",
+            instance_id=str(row["instance_id"]),
+            placement_id=str(row["placement_id"]),
+            placement_epoch=int(row["placement_epoch"]),
+            stream_id=int(row["stream_id"]),
+            stream_epoch=int(row["stream_epoch"]),
+            admission_generation=int(row["admission_generation"]),
+            admission_token_sha256=str(row["admission_token_sha256"]),
+        )
 
     def _require_current_fence(
         self,
         connection: sqlite3.Connection,
         fence: StaticContributorFence | DynamicContributorFence,
+        *,
+        update_id: str | None = None,
+        allow_draining: bool = False,
     ) -> None:
         if isinstance(fence, StaticContributorFence):
             if not isinstance(self._authority._scope, StaticMembershipScope):
@@ -1840,7 +2869,10 @@ class LeaderSession:
                 JOIN streams AS s ON s.stream_id=i.stream_id
                 WHERE i.instance_id=? AND i.placement_id=? AND i.placement_epoch=?
                     AND i.stream_id=? AND i.stream_epoch=? AND i.admission_generation=?
-                    AND i.admission_token_sha256=? AND i.status='admitted'
+                    AND i.admission_token_sha256=?
+                    AND (i.status='admitted'
+                        OR (? AND i.status='draining')
+                        OR (i.status='draining' AND i.final_update_id=?))
                     AND p.current_instance_id=i.instance_id
                     AND p.current_placement_epoch=i.placement_epoch
                     AND s.current_instance_id=i.instance_id
@@ -1854,19 +2886,64 @@ class LeaderSession:
                     fence.stream_epoch,
                     fence.admission_generation,
                     fence.admission_token_sha256,
+                    int(allow_draining),
+                    update_id,
                 ),
             ).fetchone()
         if row is None:
             raise MembershipFenceError("contributor fence is stale or not admitted")
 
-    def _require_current_fence_json(self, connection: sqlite3.Connection, fence_json: str) -> None:
+    def _require_current_fence_json(
+        self,
+        connection: sqlite3.Connection,
+        fence_json: str,
+        *,
+        update_id: str | None = None,
+        allow_draining: bool = False,
+    ) -> None:
         payload = json.loads(fence_json)
         fence = (
             StaticContributorFence.from_dict(payload)
             if payload.get("kind") == "static"
             else DynamicContributorFence.from_dict(payload)
         )
-        self._require_current_fence(connection, fence)
+        self._require_current_fence(
+            connection, fence, update_id=update_id, allow_draining=allow_draining
+        )
+
+    def _fence_is_current_json(
+        self,
+        connection: sqlite3.Connection,
+        fence_json: str,
+        *,
+        update_id: str | None = None,
+    ) -> bool:
+        try:
+            self._require_current_fence_json(connection, fence_json, update_id=update_id)
+        except (MembershipFenceError, ValueError, TypeError, json.JSONDecodeError):
+            return False
+        return True
+
+    def _verify_prepared_publication_artifacts(self, publication_id: str) -> None:
+        intent = self._authority._fetchone(
+            "SELECT * FROM publication_intents WHERE publication_id=?", (publication_id,)
+        )
+        if intent is None or intent["state"] != "prepared":
+            return
+        for prefix in ("weight", "optim"):
+            result = verify_publication_artifact(
+                self._authority._run_root,
+                str(intent[f"{prefix}_relative_path"]),
+                expected_size=int(intent[f"{prefix}_size"]),
+                expected_sha256=str(intent[f"{prefix}_sha256"]),
+                expected_theta_sha256=str(intent["theta_sha256"]),
+                theta_tensor_key=(None if prefix == "weight" else "theta"),
+            )
+            if result.status is not ReadStatus.OK:
+                raise ValueError(
+                    f"{prefix} publication artifact failed verification: "
+                    f"{result.status.value}: {result.diagnostic}"
+                )
 
     def _command(
         self,
@@ -1999,6 +3076,7 @@ def _decode_publication_intent(row: Mapping[str, Any]) -> PublicationIntent:
         optim_relative_path=str(row["optim_relative_path"]),
         optim_size=int(row["optim_size"]),
         optim_sha256=str(row["optim_sha256"]),
+        theta_sha256=str(row["theta_sha256"]),
         state=str(row["state"]),
     )
 
@@ -2016,6 +3094,7 @@ def _decode_committed_version(row: Mapping[str, Any]) -> CommittedVersion:
         optim_relative_path=str(row["optim_relative_path"]),
         optim_size=int(row["optim_size"]),
         optim_sha256=str(row["optim_sha256"]),
+        theta_sha256=str(row["theta_sha256"]),
         committed_by_epoch=int(row["committed_by_epoch"]),
         committed_by_owner_id=str(row["committed_by_owner_id"]),
         committed_at=float(row["committed_at"]),

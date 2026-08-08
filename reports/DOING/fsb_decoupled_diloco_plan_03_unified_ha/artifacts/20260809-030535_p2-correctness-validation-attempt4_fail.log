@@ -1,0 +1,404 @@
+Currently Loaded Modulefiles:
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9  
+
+Key:
+(symbolic-version)  
+mg0006
+PBS_JOBID=2508745.opbs
+python=3.13.13
+platform=Linux-5.14.0-427.13.1.el9_4.aarch64+64k-aarch64-with-glibc2.34
+hypothesis=6.165.2
+pytest=9.1.1
+torch=2.13.0+cu132
+All checks passed!
+26 files already formatted
+PASS
+........................................................................ [ 51%]
+..................................................................x.x    [100%]
+139 passed, 2 xfailed in 4.47s
+........................................................................ [ 10%]
+........................................................................ [ 20%]
+........................................................................ [ 30%]
+........................................................................ [ 40%]
+........................................................................ [ 50%]
+........................................................................ [ 60%]
+........................................................................ [ 70%]
+............................................................x.x......... [ 80%]
+........................................................................ [ 90%]
+................................................FF...............        [100%]
+=================================== FAILURES ===================================
+___________ test_two_rank_ddp_update_matches_combined_batch_gradient ___________
+
+tmp_path = PosixPath('/tmp/2508745.9630/pytest-of-x10041/pytest-1/test_two_rank_ddp_update_match0')
+
+    def test_two_rank_ddp_update_matches_combined_batch_gradient(tmp_path):
+        init_file = tmp_path / "ddp-store"
+        output_dir = tmp_path / "ddp-output"
+        output_dir.mkdir()
+>       mp.spawn(
+            _ddp_equivalence_worker,
+            args=(str(init_file), str(output_dir)),
+            nprocs=2,
+            join=True,
+        )
+
+tests/test_torch_baseline_protocol.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.13/site-packages/torch/multiprocessing/spawn.py:340: in spawn
+    return start_processes(fn, args, nprocs, join, daemon, start_method="spawn")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/multiprocessing/spawn.py:296: in start_processes
+    while not context.join():
+              ^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <torch.multiprocessing.spawn.ProcessContext object at 0x4001afe46900>
+timeout = None, grace_period = None
+
+    def join(self, timeout: float | None = None, grace_period: float | None = None):
+        r"""Join one or more processes within spawn context.
+    
+        Attempt to join one or more processes in this spawn context.
+        If one of them exited with a non-zero exit status, this function
+        kills the remaining processes (optionally with a grace period)
+        and raises an exception with the cause of the first process exiting.
+    
+        Returns ``True`` if all processes have been joined successfully,
+        ``False`` if there are more processes that need to be joined.
+    
+        Args:
+            timeout (float): Wait this long (in seconds) before giving up on waiting.
+            grace_period (float): When any processes fail, wait this long (in seconds)
+                for others to shutdown gracefully before terminating them. If they
+                still don't exit, wait another grace period before killing them.
+        """
+        # Ensure this function can be called even when we're done.
+        if len(self.sentinels) == 0:
+            return True
+    
+        # Wait for any process to fail or all of them to succeed.
+        ready = multiprocessing.connection.wait(
+            self.sentinels.keys(),
+            timeout=timeout,
+        )
+    
+        error_index = None
+        for sentinel in ready:
+            index = self.sentinels.pop(sentinel)
+            process = self.processes[index]
+            process.join()
+            if process.exitcode != 0:
+                error_index = index
+                break
+    
+        # Return if there was no error.
+        if error_index is None:
+            # Return whether or not all processes have been joined.
+            return len(self.sentinels) == 0
+        # An error occurred. Clean-up all processes before returning.
+        # First, allow a grace period for processes to shutdown themselves.
+        if grace_period is not None:
+            self._join_procs_with_timeout(grace_period)
+        # Then, terminate processes that are still alive. Try SIGTERM first.
+        for process in self.processes:
+            if process.is_alive():
+                log.warning("Terminating process %s via signal SIGTERM", process.pid)
+                process.terminate()
+    
+        # Try SIGKILL if the process isn't going down after another grace_period.
+        # The reason is related to python signal handling is limited
+        # to main thread and if that is in c/c++ land and stuck it won't
+        # to handle it. We have seen processes getting stuck not handling
+        # SIGTERM for the above reason.
+        self._join_procs_with_timeout(30 if grace_period is None else grace_period)
+        for process in self.processes:
+            if process.is_alive():
+                log.warning(
+                    "Unable to shutdown process %s via SIGTERM , forcefully exiting via SIGKILL",
+                    process.pid,
+                )
+                process.kill()
+            process.join()
+    
+        # The file will only be created if the process crashed.
+        failed_process = self.processes[error_index]
+        if not os.access(self.error_files[error_index], os.R_OK):
+            exitcode = self.processes[error_index].exitcode
+            if exitcode < 0:
+                try:
+                    name = signal.Signals(-exitcode).name
+                except ValueError:
+                    name = f"<Unknown signal {-exitcode}>"
+                raise ProcessExitedException(
+                    f"process {error_index:d} terminated with signal {name}",
+                    error_index=error_index,
+                    error_pid=failed_process.pid,
+                    exit_code=exitcode,
+                    signal_name=name,
+                )
+            else:
+>               raise ProcessExitedException(
+                    f"process {error_index:d} terminated with exit code {exitcode:d}",
+                    error_index=error_index,
+                    error_pid=failed_process.pid,
+                    exit_code=exitcode,
+                )
+E               torch.multiprocessing.spawn.ProcessExitedException: process 1 terminated with exit code 1
+
+.venv/lib/python3.13/site-packages/torch/multiprocessing/spawn.py:200: ProcessExitedException
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=66, pipe_handle=70)
+                                                  ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/x10041/.local/share/uv/python/cpython-3.13.13-linux-aarch64-gnu/lib/python3.13/multiprocessing/spawn.py", line 122, in spawn_main
+    exitcode = _main(fd, parent_sentinel)
+  File "/home/x10041/.local/share/uv/python/cpython-3.13.13-linux-aarch64-gnu/lib/python3.13/multiprocessing/spawn.py", line 132, in _main
+    self = reduction.pickle.load(from_parent)
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/tests/test_torch_baseline_protocol.py", line 12, in <module>
+    from fs_diloco.baselines.protocol import (
+    ...<3 lines>...
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/baselines/protocol.py", line 15, in <module>
+    from ..runtime.learner import maybe_autocast
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/runtime/learner.py", line 34, in <module>
+    from ..modeling.param_index import (
+    ...<6 lines>...
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/modeling/param_index.py", line 10, in <module>
+    from ..storage.atomic_io import atomic_write_json, read_json
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/storage/__init__.py", line 3, in <module>
+    from .authority import (
+    ...<6 lines>...
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/storage/authority.py", line 53, in <module>
+    from .object_store import verify_proposal_payload, verify_publication_artifact
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/storage/object_store.py", line 20, in <module>
+    from .tensor_codec import tensor_content_sha256
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/storage/tensor_codec.py", line 15, in <module>
+    from ..modeling.param_index import flat_to_named_tensors, named_tensors_to_flat
+ImportError: cannot import name 'flat_to_named_tensors' from partially initialized module 'fs_diloco.modeling.param_index' (most likely due to a circular import) (/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/modeling/param_index.py)
+  File "<string>", line 1, in <module>
+    from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=66, pipe_handle=68)
+                                                  ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/x10041/.local/share/uv/python/cpython-3.13.13-linux-aarch64-gnu/lib/python3.13/multiprocessing/spawn.py", line 122, in spawn_main
+    exitcode = _main(fd, parent_sentinel)
+  File "/home/x10041/.local/share/uv/python/cpython-3.13.13-linux-aarch64-gnu/lib/python3.13/multiprocessing/spawn.py", line 132, in _main
+    self = reduction.pickle.load(from_parent)
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/tests/test_torch_baseline_protocol.py", line 12, in <module>
+    from fs_diloco.baselines.protocol import (
+    ...<3 lines>...
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/baselines/protocol.py", line 15, in <module>
+    from ..runtime.learner import maybe_autocast
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/runtime/learner.py", line 34, in <module>
+    from ..modeling.param_index import (
+    ...<6 lines>...
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/modeling/param_index.py", line 10, in <module>
+    from ..storage.atomic_io import atomic_write_json, read_json
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/storage/__init__.py", line 3, in <module>
+    from .authority import (
+    ...<6 lines>...
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/storage/authority.py", line 53, in <module>
+    from .object_store import verify_proposal_payload, verify_publication_artifact
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/storage/object_store.py", line 20, in <module>
+    from .tensor_codec import tensor_content_sha256
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/storage/tensor_codec.py", line 15, in <module>
+    from ..modeling.param_index import flat_to_named_tensors, named_tensors_to_flat
+ImportError: cannot import name 'flat_to_named_tensors' from partially initialized module 'fs_diloco.modeling.param_index' (most likely due to a circular import) (/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/modeling/param_index.py)
+W0809 03:06:34.842000 1016461 .venv/lib/python3.13/site-packages/torch/multiprocessing/spawn.py:165] Terminating process 1019171 via signal SIGTERM
+------------------------------ Captured log call -------------------------------
+WARNING  torch.multiprocessing.spawn:spawn.py:165 Terminating process 1019171 via signal SIGTERM
+______ test_two_rank_periodic_average_converges_and_preserves_local_state ______
+
+tmp_path = PosixPath('/tmp/2508745.9630/pytest-of-x10041/pytest-1/test_two_rank_periodic_average0')
+
+    def test_two_rank_periodic_average_converges_and_preserves_local_state(tmp_path):
+        init_file = tmp_path / "periodic-store"
+        output_dir = tmp_path / "periodic-output"
+        output_dir.mkdir()
+>       mp.spawn(
+            _periodic_worker,
+            args=(str(init_file), str(output_dir)),
+            nprocs=2,
+            join=True,
+        )
+
+tests/test_torch_baseline_protocol.py:246: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.13/site-packages/torch/multiprocessing/spawn.py:340: in spawn
+    return start_processes(fn, args, nprocs, join, daemon, start_method="spawn")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/multiprocessing/spawn.py:296: in start_processes
+    while not context.join():
+              ^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <torch.multiprocessing.spawn.ProcessContext object at 0x4001afe63750>
+timeout = None, grace_period = None
+
+    def join(self, timeout: float | None = None, grace_period: float | None = None):
+        r"""Join one or more processes within spawn context.
+    
+        Attempt to join one or more processes in this spawn context.
+        If one of them exited with a non-zero exit status, this function
+        kills the remaining processes (optionally with a grace period)
+        and raises an exception with the cause of the first process exiting.
+    
+        Returns ``True`` if all processes have been joined successfully,
+        ``False`` if there are more processes that need to be joined.
+    
+        Args:
+            timeout (float): Wait this long (in seconds) before giving up on waiting.
+            grace_period (float): When any processes fail, wait this long (in seconds)
+                for others to shutdown gracefully before terminating them. If they
+                still don't exit, wait another grace period before killing them.
+        """
+        # Ensure this function can be called even when we're done.
+        if len(self.sentinels) == 0:
+            return True
+    
+        # Wait for any process to fail or all of them to succeed.
+        ready = multiprocessing.connection.wait(
+            self.sentinels.keys(),
+            timeout=timeout,
+        )
+    
+        error_index = None
+        for sentinel in ready:
+            index = self.sentinels.pop(sentinel)
+            process = self.processes[index]
+            process.join()
+            if process.exitcode != 0:
+                error_index = index
+                break
+    
+        # Return if there was no error.
+        if error_index is None:
+            # Return whether or not all processes have been joined.
+            return len(self.sentinels) == 0
+        # An error occurred. Clean-up all processes before returning.
+        # First, allow a grace period for processes to shutdown themselves.
+        if grace_period is not None:
+            self._join_procs_with_timeout(grace_period)
+        # Then, terminate processes that are still alive. Try SIGTERM first.
+        for process in self.processes:
+            if process.is_alive():
+                log.warning("Terminating process %s via signal SIGTERM", process.pid)
+                process.terminate()
+    
+        # Try SIGKILL if the process isn't going down after another grace_period.
+        # The reason is related to python signal handling is limited
+        # to main thread and if that is in c/c++ land and stuck it won't
+        # to handle it. We have seen processes getting stuck not handling
+        # SIGTERM for the above reason.
+        self._join_procs_with_timeout(30 if grace_period is None else grace_period)
+        for process in self.processes:
+            if process.is_alive():
+                log.warning(
+                    "Unable to shutdown process %s via SIGTERM , forcefully exiting via SIGKILL",
+                    process.pid,
+                )
+                process.kill()
+            process.join()
+    
+        # The file will only be created if the process crashed.
+        failed_process = self.processes[error_index]
+        if not os.access(self.error_files[error_index], os.R_OK):
+            exitcode = self.processes[error_index].exitcode
+            if exitcode < 0:
+                try:
+                    name = signal.Signals(-exitcode).name
+                except ValueError:
+                    name = f"<Unknown signal {-exitcode}>"
+                raise ProcessExitedException(
+                    f"process {error_index:d} terminated with signal {name}",
+                    error_index=error_index,
+                    error_pid=failed_process.pid,
+                    exit_code=exitcode,
+                    signal_name=name,
+                )
+            else:
+>               raise ProcessExitedException(
+                    f"process {error_index:d} terminated with exit code {exitcode:d}",
+                    error_index=error_index,
+                    error_pid=failed_process.pid,
+                    exit_code=exitcode,
+                )
+E               torch.multiprocessing.spawn.ProcessExitedException: process 1 terminated with exit code 1
+
+.venv/lib/python3.13/site-packages/torch/multiprocessing/spawn.py:200: ProcessExitedException
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=66, pipe_handle=72)
+                                                  ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/x10041/.local/share/uv/python/cpython-3.13.13-linux-aarch64-gnu/lib/python3.13/multiprocessing/spawn.py", line 122, in spawn_main
+    exitcode = _main(fd, parent_sentinel)
+  File "/home/x10041/.local/share/uv/python/cpython-3.13.13-linux-aarch64-gnu/lib/python3.13/multiprocessing/spawn.py", line 132, in _main
+    self = reduction.pickle.load(from_parent)
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/tests/test_torch_baseline_protocol.py", line 12, in <module>
+    from fs_diloco.baselines.protocol import (
+    ...<3 lines>...
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/baselines/protocol.py", line 15, in <module>
+    from ..runtime.learner import maybe_autocast
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/runtime/learner.py", line 34, in <module>
+    from ..modeling.param_index import (
+    ...<6 lines>...
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/modeling/param_index.py", line 10, in <module>
+    from ..storage.atomic_io import atomic_write_json, read_json
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/storage/__init__.py", line 3, in <module>
+    from .authority import (
+    ...<6 lines>...
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/storage/authority.py", line 53, in <module>
+    from .object_store import verify_proposal_payload, verify_publication_artifact
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/storage/object_store.py", line 20, in <module>
+    from .tensor_codec import tensor_content_sha256
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/storage/tensor_codec.py", line 15, in <module>
+    from ..modeling.param_index import flat_to_named_tensors, named_tensors_to_flat
+ImportError: cannot import name 'flat_to_named_tensors' from partially initialized module 'fs_diloco.modeling.param_index' (most likely due to a circular import) (/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/modeling/param_index.py)
+  File "<string>", line 1, in <module>
+    from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=66, pipe_handle=74)
+                                                  ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/x10041/.local/share/uv/python/cpython-3.13.13-linux-aarch64-gnu/lib/python3.13/multiprocessing/spawn.py", line 122, in spawn_main
+    exitcode = _main(fd, parent_sentinel)
+  File "/home/x10041/.local/share/uv/python/cpython-3.13.13-linux-aarch64-gnu/lib/python3.13/multiprocessing/spawn.py", line 132, in _main
+    self = reduction.pickle.load(from_parent)
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/tests/test_torch_baseline_protocol.py", line 12, in <module>
+    from fs_diloco.baselines.protocol import (
+    ...<3 lines>...
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/baselines/protocol.py", line 15, in <module>
+    from ..runtime.learner import maybe_autocast
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/runtime/learner.py", line 34, in <module>
+    from ..modeling.param_index import (
+    ...<6 lines>...
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/modeling/param_index.py", line 10, in <module>
+    from ..storage.atomic_io import atomic_write_json, read_json
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/storage/__init__.py", line 3, in <module>
+    from .authority import (
+    ...<6 lines>...
+    )
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/storage/authority.py", line 53, in <module>
+    from .object_store import verify_proposal_payload, verify_publication_artifact
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/storage/object_store.py", line 20, in <module>
+    from .tensor_codec import tensor_content_sha256
+  File "/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/storage/tensor_codec.py", line 15, in <module>
+    from ..modeling.param_index import flat_to_named_tensors, named_tensors_to_flat
+ImportError: cannot import name 'flat_to_named_tensors' from partially initialized module 'fs_diloco.modeling.param_index' (most likely due to a circular import) (/work/xg24i002/x10041/fsb_decoupled_diloco/fs_diloco/modeling/param_index.py)
+W0809 03:06:36.592000 1016461 .venv/lib/python3.13/site-packages/torch/multiprocessing/spawn.py:165] Terminating process 1019302 via signal SIGTERM
+------------------------------ Captured log call -------------------------------
+WARNING  torch.multiprocessing.spawn:spawn.py:165 Terminating process 1019302 via signal SIGTERM
+=========================== short test summary info ============================
+FAILED tests/test_torch_baseline_protocol.py::test_two_rank_ddp_update_matches_combined_batch_gradient
+FAILED tests/test_torch_baseline_protocol.py::test_two_rank_periodic_average_converges_and_preserves_local_state
+2 failed, 709 passed, 2 xfailed in 48.20s
+[ERROR] Failed at line 82

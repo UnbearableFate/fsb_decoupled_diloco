@@ -36,13 +36,16 @@ CREATE TABLE learner_instances (
     last_seen REAL,
     stopped_at REAL,
     status_reason TEXT,
+    final_update_id TEXT,
     admitted_by_epoch INTEGER,
     UNIQUE(placement_id, placement_epoch),
     UNIQUE(stream_id, stream_epoch),
     CHECK ((status IN ('admitted', 'draining', 'stopped', 'revoked', 'expired')
             AND stream_id IS NOT NULL AND stream_epoch >= 1
             AND admission_generation >= 1 AND length(admission_token_sha256) = 64)
-        OR status IN ('registered', 'rejected'))
+        OR status IN ('registered', 'rejected')),
+    CHECK ((status = 'draining' AND final_update_id IS NOT NULL)
+        OR (status <> 'draining' AND final_update_id IS NULL))
 );
 
 CREATE TABLE registration_requests (

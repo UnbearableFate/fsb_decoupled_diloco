@@ -9,9 +9,27 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
+
+
+@dataclass(frozen=True)
+class ImmutablePublication:
+    path: Path
+    size_bytes: int
+    sha256: str
+    created: bool
+
+
+def _fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def ensure_dir(path: str | Path) -> Path:
@@ -32,6 +50,7 @@ def atomic_write_bytes(path: str | Path, data: bytes, mode: int = 0o644) -> Path
             os.fsync(handle.fileno())
         os.chmod(tmp_path, mode)
         os.replace(tmp_path, path)
+        _fsync_directory(path.parent)
     except Exception:
         try:
             tmp_path.unlink(missing_ok=True)
@@ -49,7 +68,9 @@ def atomic_write_json(path: str | Path, payload: dict[str, Any], mode: int = 0o6
     return atomic_write_text(path, text, mode=mode)
 
 
-def atomic_write_with_writer(path: str | Path, writer: Callable[[Path], None], mode: int = 0o644) -> Path:
+def atomic_write_with_writer(
+    path: str | Path, writer: Callable[[Path], None], mode: int = 0o644
+) -> Path:
     path = Path(path)
     ensure_dir(path.parent)
     fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
@@ -61,12 +82,90 @@ def atomic_write_with_writer(path: str | Path, writer: Callable[[Path], None], m
             os.fsync(handle.fileno())
         os.chmod(tmp_path, mode)
         os.replace(tmp_path, path)
+        _fsync_directory(path.parent)
     except Exception:
         try:
             tmp_path.unlink(missing_ok=True)
         finally:
             raise
     return path
+
+
+def publish_immutable_with_writer(
+    path: str | Path,
+    writer: Callable[[Path], None],
+    *,
+    mode: int = 0o644,
+    chunk_size: int = 1024 * 1024,
+) -> ImmutablePublication:
+    """Publish a same-directory immutable object without ever replacing its name.
+
+    An exact existing object is an idempotent replay.  Any different object at
+    the destination is an identity collision and fails closed.
+    """
+
+    target = Path(path)
+    ensure_dir(target.parent)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{target.name}.", suffix=".immutable", dir=target.parent
+    )
+    os.close(descriptor)
+    temporary = Path(temporary_name)
+    try:
+        writer(temporary)
+        with temporary.open("rb") as handle:
+            os.fsync(handle.fileno())
+        os.chmod(temporary, mode)
+        size = temporary.stat().st_size
+        digest = sha256_file(temporary, chunk_size=chunk_size)
+        try:
+            os.link(temporary, target, follow_symlinks=False)
+        except FileExistsError:
+            existing_fd = os.open(
+                target,
+                os.O_RDONLY
+                | getattr(os, "O_CLOEXEC", 0)
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_NONBLOCK", 0),
+            )
+            try:
+                metadata = os.fstat(existing_fd)
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_size != size:
+                    raise FileExistsError(f"immutable target collision: {target}")
+                existing_digest = hashlib.sha256()
+                offset = 0
+                while offset < size:
+                    chunk = os.pread(existing_fd, min(chunk_size, size - offset), offset)
+                    if not chunk:
+                        raise FileExistsError(f"immutable target collision: {target}")
+                    existing_digest.update(chunk)
+                    offset += len(chunk)
+                named = target.lstat()
+                final = os.fstat(existing_fd)
+                if existing_digest.hexdigest() != digest or (named.st_dev, named.st_ino) != (
+                    final.st_dev,
+                    final.st_ino,
+                ):
+                    raise FileExistsError(f"immutable target collision: {target}")
+            finally:
+                os.close(existing_fd)
+            return ImmutablePublication(target, size, digest, False)
+        _fsync_directory(target.parent)
+        return ImmutablePublication(target, size, digest, True)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def publish_immutable_bytes(
+    path: str | Path, data: bytes, *, mode: int = 0o644
+) -> ImmutablePublication:
+    def writer(temporary: Path) -> None:
+        with temporary.open("wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+
+    return publish_immutable_with_writer(path, writer, mode=mode)
 
 
 def read_json(path: str | Path) -> dict[str, Any]:

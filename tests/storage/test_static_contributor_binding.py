@@ -15,7 +15,12 @@ from fs_diloco.storage.authority import (
     MembershipFenceError,
     initialize_authority_v4,
 )
-from tests.support.v4_protocol import proposal_payload, receipt_payload
+from tests.support.v4_protocol import (
+    proposal_payload,
+    publish_checkpoint_pair,
+    publish_proposal_payload,
+    receipt_payload,
+)
 
 
 def test_static_binding_requires_terminal_old_attempt_and_increments_generation(
@@ -133,30 +138,22 @@ def test_active_static_replacement_atomically_abandons_prepared_work(tmp_path: P
         proposal = FullUpdateProposalV2.from_dict(
             proposal_payload(receipt_sha256=receipt.immutable_sha256(), fence=fence.as_dict())
         )
+        publish_proposal_payload(tmp_path, proposal)
         leader.ingest_proposal(command_id="proposal-1", proposal=proposal)
         leader.initialize_v0(
             command_id="initialize-v0",
             publication_id="publication-v0",
-            weight_relative_path="weights/epochs/e1/v0.safetensors",
-            weight_size=4,
-            weight_sha256="a" * 64,
-            optim_relative_path="optim/epochs/e1/v0.safetensors",
-            optim_size=4,
-            optim_sha256="b" * 64,
+            **publish_checkpoint_pair(tmp_path, version=0),
         )
-        batch = leader.try_select_batch(command_id="select-v1", quorum_min=1, quorum_max=1)
+        attempt = leader.try_select_batch(command_id="select-v1", quorum_min=1, quorum_max=1)
+        batch = attempt.batch
         assert batch is not None
         leader.prepare_publication(
             command_id="prepare-v1",
             publication_id="publication-v1",
             target_version=1,
             selection_batch_id=batch.batch_id,
-            weight_relative_path="weights/epochs/e1/v1.safetensors",
-            weight_size=4,
-            weight_sha256="c" * 64,
-            optim_relative_path="optim/epochs/e1/v1.safetensors",
-            optim_size=4,
-            optim_sha256="d" * 64,
+            **publish_checkpoint_pair(tmp_path, version=1),
         )
 
         replacement = leader.bind_or_replace_static_attempt(

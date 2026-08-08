@@ -216,3 +216,28 @@
 - 原始证据：`artifacts/20260809-022000_p1-review-remediation-validation-attempt1_fail.log`，SHA-256 `0023d20f7d9f0a7a8f4ee2ed75ecb2fc46c40ef6875e5eb86aba6f2d81a407ef`（仅规范化行尾空白）。失败fixture未留下run/checkpoint；只保留完整PBS日志。
 - 已确认根因：仅比较inode metadata不能在目标filesystem上证明两轮read之间内容不变；不是测试误替换pathname，也不是final fstat位置错误。review M2所需的不变量是同一fd内容身份，必须直接复核bytes。
 - 下一轮：在schema/finite检查之后从同一fd重新计算完整SHA-256，并要求与第一轮digest完全相同，再执行final fstat/pathname inode检查；等长快速覆写将由内容hash而非timestamp检测。重跑相同focused+full PBS门禁；新测试若通过且full通过则连续失败计数归零。
+## 2026-08-09 03:01 JST — `p2-correctness-validation-attempt1`（连续失败 1 次）
+
+- job `2508713.opbs`在compute node `mg0008`启动，Ruff check通过；format门禁错误地把整个`fs_diloco/protocol/`纳入范围，因7个本阶段未修改的既有文件未采用当前formatter输出而在pytest前失败。
+- 根因是P2 batch wrapper范围错误，不是P2 source格式或测试失败。脚本随后收敛到本阶段实际触及的protocol文件；没有格式化无关旧文件。
+- 完整证据：`artifacts/20260809-030100_p2-correctness-validation-attempt1_fail.log`。
+
+## 2026-08-09 03:02 JST — `p2-correctness-validation-attempt2`（连续失败 2 次）
+
+- job `2508727.opbs`在compute node `mg0008`通过Ruff/format/checker，focused为`65 failed, 74 passed, 2 xfailed`，未进入full suite。
+- 主要根因是测试checkpoint把同一tensor storage同时保存为named weight和flat identity，safetensors正确拒绝shared pointers，导致61项重复fixture失败；另一个独立失败是visibility deadline测试把injected wall clock推进到原90秒lease之外；drain测试在未初始化v0时错误调用selector。
+- 修复为不复制flat theta：weight artifact保存显式tensor order metadata，verifier按该order重新拼接并计算exact digest；visibility fixture使用足够长但仍受检验的lease；drain终态直接核对active rows。完整证据：`artifacts/20260809-030230_p2-correctness-validation-attempt2_fail.log`。
+
+## 2026-08-09 03:04 JST — `p2-correctness-validation-attempt3`（连续失败 3 次，已完成全面审查）
+
+- job `2508742.opbs`在compute node `mg0006`通过静态门禁；focused为`3 failed, 136 passed, 2 xfailed`。
+- 两个H-01同源失败显示`selection_batch_updates.update_id UNIQUE`把历史batch membership误建模为全生命周期唯一，合法peer在abandoned batch reset后无法加入retry batch。全面审查了selection输入、durable batch状态、invalid/current逐row输出和retry恢复，移除该错误全局唯一约束，保留`PRIMARY KEY(batch_id,update_id)`、batch内contributor/order唯一和`updates.selected_batch_id`当前状态约束。
+- 第三个失败是orphan grace到期时successor leader自身也越过lease safety boundary；测试应在长等待期间续租，而不是放宽GC fence。fixture在claim前调用`renew_leader`。
+- 完整证据：`artifacts/20260809-030440_p2-correctness-validation-attempt3_fail.log`。
+
+## 2026-08-09 03:05 JST — `p2-correctness-validation-attempt4`（全面审查后连续失败 1 次）
+
+- job `2508745.opbs`在compute node `mg0006`的focused已通过`139 passed, 2 xfailed`；full suite到多进程torch baseline时为`2 failed, 709 passed, 2 xfailed`。
+- spawn child的import链为`modeling.param_index -> storage package -> authority -> object_store -> tensor_codec -> modeling.param_index`，暴露新tensor digest helper放在依赖过高的`tensor_codec`形成环。单进程focused因导入顺序未触发，full spawn正确发现。
+- 将纯tensor identity helper下移到无storage/modeling依赖的`storage/tensor_identity.py`，`tensor_codec`只re-export/import，`object_store`直接依赖低层模块；未修改baseline逻辑。下一轮job `2508748.opbs` focused/full全部通过，失败计数归零。
+- 完整证据：`artifacts/20260809-030535_p2-correctness-validation-attempt4_fail.log`。

@@ -17,6 +17,9 @@ class ProposalDisposition(str, Enum):
     CONFLICT = "conflict"
     IDENTITY_COLLISION = "identity_collision"
     MALFORMED = "malformed"
+    MISSING = "missing"
+    IDENTITY_MISMATCH = "identity_mismatch"
+    MANUAL_REVIEW = "manual_review"
     STALE_FENCE = "stale_fence"
     POST_FENCE = "post_fence"
 
@@ -100,6 +103,44 @@ class SelectionBatch:
 
 
 @dataclass(frozen=True)
+class SelectionAttempt:
+    """One atomic selection attempt, including rows adjudicated as stale."""
+
+    batch: SelectionBatch | None
+    invalid_update_ids: tuple[str, ...]
+    eligible_contributors: int
+
+    def __post_init__(self) -> None:
+        for update_id in self.invalid_update_ids:
+            identity(update_id, name="invalid_update_id")
+        if len(set(self.invalid_update_ids)) != len(self.invalid_update_ids):
+            raise ValueError("invalid_update_ids must be unique")
+        strict_int(self.eligible_contributors, name="eligible_contributors", minimum=0)
+
+
+@dataclass(frozen=True)
+class MergeFenceConflict:
+    """Durable per-row disposition returned instead of a whole-batch exception."""
+
+    publication_id: str
+    invalid_update_ids: tuple[str, ...]
+    reset_pending_update_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        identity(self.publication_id, name="publication_id")
+        for name, values in (
+            ("invalid_update_ids", self.invalid_update_ids),
+            ("reset_pending_update_ids", self.reset_pending_update_ids),
+        ):
+            for update_id in values:
+                identity(update_id, name=name)
+            if len(set(values)) != len(values):
+                raise ValueError(f"{name} must be unique")
+        if set(self.invalid_update_ids) & set(self.reset_pending_update_ids):
+            raise ValueError("invalid and reset-pending update IDs must be disjoint")
+
+
+@dataclass(frozen=True)
 class PublicationIntent:
     publication_id: str
     command_id: str
@@ -113,6 +154,7 @@ class PublicationIntent:
     optim_relative_path: str
     optim_size: int
     optim_sha256: str
+    theta_sha256: str
     state: str = "prepared"
 
     def __post_init__(self) -> None:
@@ -137,6 +179,7 @@ class PublicationIntent:
         strict_int(self.optim_size, name="optim_size", minimum=1)
         sha256(self.weight_sha256, name="weight_sha256")
         sha256(self.optim_sha256, name="optim_sha256")
+        sha256(self.theta_sha256, name="theta_sha256")
         if self.state not in {"prepared", "committed", "abandoned"}:
             raise ValueError(f"invalid publication intent state: {self.state}")
 
@@ -178,6 +221,42 @@ class ContributorProgress:
         else:
             identity(self.last_receipt_id, name="last_receipt_id")
             sha256(self.last_receipt_sha256, name="last_receipt_sha256")
+
+
+@dataclass(frozen=True)
+class DynamicAdmission:
+    fence: ContributorFence
+    resume_cursor: int
+
+    def __post_init__(self) -> None:
+        from .contributor import DynamicContributorFence
+
+        if not isinstance(self.fence, DynamicContributorFence):
+            raise ValueError("dynamic admission requires a dynamic contributor fence")
+        strict_int(self.resume_cursor, name="resume_cursor", minimum=0)
+
+
+@dataclass(frozen=True)
+class VisibilityDecision:
+    status: ReadStatus
+    stable_failure_count: int
+    terminal_disposition: str | None
+    observation_id: int | None
+
+    def __post_init__(self) -> None:
+        strict_int(self.stable_failure_count, name="stable_failure_count", minimum=0)
+        if self.terminal_disposition not in {
+            None,
+            "missing",
+            "malformed",
+            "identity_mismatch",
+            "manual_review",
+        }:
+            raise ValueError("invalid visibility terminal disposition")
+        if self.observation_id is not None:
+            strict_int(self.observation_id, name="observation_id", minimum=1)
+        if (self.terminal_disposition is None) != (self.observation_id is None):
+            raise ValueError("terminal visibility decisions require an observation ID")
 
 
 @dataclass(frozen=True)

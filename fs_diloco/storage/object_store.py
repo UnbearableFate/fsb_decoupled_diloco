@@ -12,8 +12,12 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+import torch
+from safetensors import SafetensorError, safe_open
+
 from ..protocol.authority import ReadResult, ReadStatus
 from ..protocol.proposal import FullUpdateProposalV2, canonical_update_relative_path
+from .tensor_identity import tensor_content_sha256
 
 
 _TRANSIENT_ERRNOS = {
@@ -40,6 +44,16 @@ class TensorSchema:
     sha256: str
     dtype: str
     total_numel: int
+
+
+@dataclass(frozen=True)
+class VerifiedArtifact:
+    relative_path: str
+    size_bytes: int
+    sha256: str
+    theta_sha256: str
+    device: int
+    inode: int
 
 
 def resolve_run_relative_path(run_root: str | Path, relative_path: str) -> Path:
@@ -232,6 +246,172 @@ def verify_proposal_payload(
             relative_path=proposal.payload_relative_path,
             size_bytes=size,
             sha256=digest_value,
+            device=int(final.st_dev),
+            inode=int(final.st_ino),
+        ),
+        fingerprint=digest_value,
+    )
+
+
+def verify_publication_artifact(
+    run_root: str | Path,
+    relative_path: str,
+    *,
+    expected_size: int,
+    expected_sha256: str,
+    expected_theta_sha256: str,
+    theta_tensor_key: str | None,
+    chunk_size: int = 1024 * 1024,
+) -> ReadResult[VerifiedArtifact]:
+    """Verify an immutable safetensors checkpoint and its bound theta digest."""
+
+    try:
+        path = resolve_run_relative_path(run_root, relative_path)
+        before = path.lstat()
+        if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
+            return ReadResult(
+                ReadStatus.IDENTITY_MISMATCH,
+                diagnostic="publication artifact must be a regular non-symlink file",
+            )
+        descriptor = os.open(
+            path,
+            os.O_RDONLY
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_NONBLOCK", 0),
+        )
+        try:
+            opened = os.fstat(descriptor)
+            if not stat.S_ISREG(opened.st_mode) or (before.st_dev, before.st_ino) != (
+                opened.st_dev,
+                opened.st_ino,
+            ):
+                return ReadResult(
+                    ReadStatus.IDENTITY_MISMATCH,
+                    diagnostic="publication artifact identity changed during open",
+                )
+            digest = hashlib.sha256()
+            offset = 0
+            while offset < opened.st_size:
+                chunk = os.pread(descriptor, min(chunk_size, opened.st_size - offset), offset)
+                if not chunk:
+                    return ReadResult(
+                        ReadStatus.IDENTITY_MISMATCH,
+                        diagnostic="publication artifact became truncated",
+                    )
+                digest.update(chunk)
+                offset += len(chunk)
+            digest_value = digest.hexdigest()
+            if opened.st_size != expected_size or digest_value != expected_sha256:
+                return ReadResult(
+                    ReadStatus.IDENTITY_MISMATCH,
+                    diagnostic="publication artifact size or SHA-256 mismatch",
+                    fingerprint=digest_value,
+                )
+            descriptor_path = f"/proc/self/fd/{descriptor}"
+            with safe_open(descriptor_path, framework="pt", device="cpu") as checkpoint:
+                metadata = checkpoint.metadata() or {}
+                theta_sha256 = metadata.get("fs_diloco_theta_sha256")
+                keys = tuple(checkpoint.keys())
+                if not keys:
+                    return ReadResult(
+                        ReadStatus.MALFORMED,
+                        diagnostic="publication artifact has no tensors",
+                    )
+                if theta_tensor_key is None:
+                    try:
+                        tensor_order = json.loads(metadata["fs_diloco_theta_order"])
+                    except (KeyError, TypeError, json.JSONDecodeError) as exc:
+                        raise ValueError(
+                            "weight artifact lacks valid theta order metadata"
+                        ) from exc
+                    if (
+                        not isinstance(tensor_order, list)
+                        or not tensor_order
+                        or any(not isinstance(item, str) for item in tensor_order)
+                        or len(set(tensor_order)) != len(tensor_order)
+                        or set(tensor_order) != set(keys)
+                    ):
+                        raise ValueError("weight artifact theta order does not match tensor keys")
+                    actual_theta = torch.cat(
+                        [checkpoint.get_tensor(item).reshape(-1) for item in tensor_order]
+                    )
+                else:
+                    if theta_tensor_key not in keys:
+                        return ReadResult(
+                            ReadStatus.MALFORMED,
+                            diagnostic=f"publication artifact lacks {theta_tensor_key!r}",
+                        )
+                    actual_theta = checkpoint.get_tensor(theta_tensor_key)
+                actual_theta_sha256 = tensor_content_sha256(actual_theta)
+            verification_digest = hashlib.sha256()
+            offset = 0
+            while offset < opened.st_size:
+                chunk = os.pread(descriptor, min(chunk_size, opened.st_size - offset), offset)
+                if not chunk:
+                    return ReadResult(
+                        ReadStatus.IDENTITY_MISMATCH,
+                        diagnostic="publication artifact became truncated during recheck",
+                    )
+                verification_digest.update(chunk)
+                offset += len(chunk)
+            if verification_digest.hexdigest() != digest_value:
+                return ReadResult(
+                    ReadStatus.IDENTITY_MISMATCH,
+                    diagnostic="publication artifact changed during safetensors inspection",
+                    fingerprint=verification_digest.hexdigest(),
+                )
+            if theta_sha256 != expected_theta_sha256:
+                return ReadResult(
+                    ReadStatus.IDENTITY_MISMATCH,
+                    diagnostic="publication artifact theta identity mismatch",
+                    fingerprint=theta_sha256,
+                )
+            if actual_theta_sha256 != expected_theta_sha256:
+                return ReadResult(
+                    ReadStatus.IDENTITY_MISMATCH,
+                    diagnostic="publication artifact theta tensor digest mismatch",
+                    fingerprint=actual_theta_sha256,
+                )
+            final = os.fstat(descriptor)
+            named = path.lstat()
+            identity_before = (
+                opened.st_dev,
+                opened.st_ino,
+                opened.st_size,
+                opened.st_mtime_ns,
+                opened.st_ctime_ns,
+            )
+            identity_after = (
+                final.st_dev,
+                final.st_ino,
+                final.st_size,
+                final.st_mtime_ns,
+                final.st_ctime_ns,
+            )
+            if identity_before != identity_after or (named.st_dev, named.st_ino) != (
+                final.st_dev,
+                final.st_ino,
+            ):
+                return ReadResult(
+                    ReadStatus.IDENTITY_MISMATCH,
+                    diagnostic="publication artifact changed during verification",
+                )
+        finally:
+            os.close(descriptor)
+    except FileNotFoundError as exc:
+        return ReadResult(ReadStatus.NOT_FOUND, diagnostic=str(exc))
+    except (SafetensorError, ValueError, OSError) as exc:
+        if isinstance(exc, OSError) and exc.errno in _TRANSIENT_ERRNOS:
+            return ReadResult(ReadStatus.TRANSIENT_IO, diagnostic=str(exc))
+        return ReadResult(ReadStatus.MALFORMED, diagnostic=str(exc))
+    return ReadResult(
+        ReadStatus.OK,
+        value=VerifiedArtifact(
+            relative_path=relative_path,
+            size_bytes=int(final.st_size),
+            sha256=digest_value,
+            theta_sha256=expected_theta_sha256,
             device=int(final.st_dev),
             inode=int(final.st_ino),
         ),

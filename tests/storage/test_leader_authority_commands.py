@@ -17,7 +17,12 @@ from fs_diloco.storage.authority import (
     initialize_authority_v4,
 )
 from fs_diloco.storage.leader_lease import StaleLeaderTokenError
-from tests.support.v4_protocol import proposal_payload, receipt_payload
+from tests.support.v4_protocol import (
+    proposal_payload,
+    publish_checkpoint_pair,
+    publish_proposal_payload,
+    receipt_payload,
+)
 
 
 @dataclass
@@ -45,16 +50,11 @@ def open_authority(tmp_path: Path, clock: Clock) -> LeaderAuthority:
     )
 
 
-def commit_v0(leader) -> None:
+def commit_v0(leader, run_root: Path) -> None:
     leader.initialize_v0(
         command_id="initialize-v0",
         publication_id="publication-v0",
-        weight_relative_path="weights/epochs/e1/v0.safetensors",
-        weight_size=4,
-        weight_sha256="a" * 64,
-        optim_relative_path="optim/epochs/e1/v0.safetensors",
-        optim_size=4,
-        optim_sha256="b" * 64,
+        **publish_checkpoint_pair(run_root, version=0),
     )
 
 
@@ -63,17 +63,13 @@ def test_v0_uses_fenced_publication_chain_and_commit_is_idempotent(tmp_path: Pat
     with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
         leader = authority.open_leader(token)
+        pair = publish_checkpoint_pair(tmp_path, version=0)
         intent = leader.prepare_publication(
             command_id="prepare-v0",
             publication_id="publication-v0",
             target_version=0,
             selection_batch_id=None,
-            weight_relative_path="weights/epochs/e1/v0.safetensors",
-            weight_size=4,
-            weight_sha256="a" * 64,
-            optim_relative_path="optim/epochs/e1/v0.safetensors",
-            optim_size=4,
-            optim_sha256="b" * 64,
+            **pair,
         )
         committed = leader.commit_merge(
             command_id="commit-v0", publication_id=intent.publication_id
@@ -142,7 +138,7 @@ def test_global_version_target_cannot_skip_or_duplicate(tmp_path: Path) -> None:
     with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
         leader = authority.open_leader(token)
-        commit_v0(leader)
+        commit_v0(leader, tmp_path)
 
         with pytest.raises(ValueError, match="next version 1"):
             leader.prepare_publication(
@@ -156,6 +152,8 @@ def test_global_version_target_cannot_skip_or_duplicate(tmp_path: Path) -> None:
                 optim_relative_path="optim/epochs/e1/v2.safetensors",
                 optim_size=4,
                 optim_sha256="b" * 64,
+                weight_theta_sha256="e" * 64,
+                optim_theta_sha256="e" * 64,
             )
 
 
@@ -181,6 +179,7 @@ def test_typed_receipt_proposal_selection_and_v1_commit_flow(tmp_path: Path) -> 
         leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
         proposal_data = proposal_payload(receipt_sha256=receipt.immutable_sha256(), fence=fence)
         proposal = FullUpdateProposalV2.from_dict(proposal_data)
+        publish_proposal_payload(tmp_path, proposal)
 
         assert (
             leader.record_proposal(command_id="proposal-1", proposal=proposal).value == "accepted"
@@ -189,8 +188,9 @@ def test_typed_receipt_proposal_selection_and_v1_commit_flow(tmp_path: Path) -> 
             leader.record_proposal(command_id="proposal-replay", proposal=proposal).value
             == "exact_replay"
         )
-        commit_v0(leader)
-        batch = leader.try_select_batch(command_id="select-v1", quorum_min=1, quorum_max=1)
+        commit_v0(leader, tmp_path)
+        attempt = leader.try_select_batch(command_id="select-v1", quorum_min=1, quorum_max=1)
+        batch = attempt.batch
         assert batch is not None
         assert batch.target_version == 1
         assert batch.candidates[0].proposal == proposal
@@ -199,12 +199,7 @@ def test_typed_receipt_proposal_selection_and_v1_commit_flow(tmp_path: Path) -> 
             publication_id="publication-v1",
             target_version=1,
             selection_batch_id=batch.batch_id,
-            weight_relative_path="weights/epochs/e1/v1.safetensors",
-            weight_size=4,
-            weight_sha256="c" * 64,
-            optim_relative_path="optim/epochs/e1/v1.safetensors",
-            optim_size=4,
-            optim_sha256="d" * 64,
+            **publish_checkpoint_pair(tmp_path, version=1),
         )
         committed = leader.commit_merge(
             command_id="commit-v1", publication_id=intent.publication_id
@@ -253,6 +248,7 @@ def test_proposal_must_match_every_shared_receipt_field(
         payload = proposal_payload(receipt_sha256=receipt.immutable_sha256(), fence=fence)
         payload.update(changes)
         proposal = FullUpdateProposalV2.from_dict(payload)
+        publish_proposal_payload(tmp_path, proposal)
 
         with pytest.raises(ValueError, match="immutable fields"):
             leader.ingest_proposal(command_id="proposal-mismatch", proposal=proposal)
@@ -290,6 +286,7 @@ def test_newer_accepted_proposal_supersedes_old_pending_after_insert(tmp_path: P
         first = FullUpdateProposalV2.from_dict(
             proposal_payload(receipt_sha256=first_receipt.immutable_sha256(), fence=fence)
         )
+        publish_proposal_payload(tmp_path, first)
         leader.ingest_proposal(command_id="proposal-1", proposal=first)
         second_receipt = CycleReceiptV1.from_dict(
             receipt_payload(
@@ -309,6 +306,7 @@ def test_newer_accepted_proposal_supersedes_old_pending_after_insert(tmp_path: P
                 fence=fence,
             )
         )
+        publish_proposal_payload(tmp_path, second)
 
         assert leader.ingest_proposal(command_id="proposal-2", proposal=second).value == "accepted"
 

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 
 import torch
 from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 
-from .atomic_io import atomic_write_with_writer
+from .atomic_io import ImmutablePublication, atomic_write_with_writer, publish_immutable_with_writer
+from .tensor_identity import tensor_content_sha256
 from ..modeling.outer_optim import state_from_tensors, state_to_tensors
 from ..modeling.param_index import flat_to_named_tensors, named_tensors_to_flat
 
@@ -39,12 +41,74 @@ def save_safetensors_atomic(path: str | Path, tensors: dict[str, torch.Tensor]) 
     return atomic_write_with_writer(path, writer)
 
 
-def load_safetensors(path: str | Path, *, device: str | torch.device = "cpu") -> dict[str, torch.Tensor]:
+def publish_safetensors_immutable(
+    path: str | Path,
+    tensors: dict[str, torch.Tensor],
+    *,
+    metadata: dict[str, str] | None = None,
+) -> ImmutablePublication:
+    cpu_tensors = {key: value.detach().cpu().contiguous() for key, value in tensors.items()}
+
+    def writer(temporary: Path) -> None:
+        save_file(cpu_tensors, str(temporary), metadata=metadata)
+
+    return publish_immutable_with_writer(path, writer)
+
+
+def publish_global_weights_immutable(
+    path: str | Path,
+    theta: torch.Tensor,
+    param_index: dict,
+    *,
+    dtype: torch.dtype | None = None,
+) -> tuple[ImmutablePublication, str]:
+    published = theta.detach().cpu().contiguous()
+    if dtype is not None:
+        published = published.to(dtype=dtype)
+    theta_sha256 = tensor_content_sha256(published)
+    named_tensors = flat_to_named_tensors(published, param_index)
+    publication = publish_safetensors_immutable(
+        path,
+        named_tensors,
+        metadata={
+            "fs_diloco_theta_sha256": theta_sha256,
+            "fs_diloco_theta_order": json.dumps(list(named_tensors), separators=(",", ":")),
+        },
+    )
+    return publication, theta_sha256
+
+
+def publish_outer_state_immutable(
+    path: str | Path,
+    theta: torch.Tensor,
+    state: dict[str, torch.Tensor],
+    *,
+    dtype: torch.dtype | None = None,
+) -> tuple[ImmutablePublication, str]:
+    published = theta.detach().cpu().contiguous()
+    if dtype is not None:
+        published = published.to(dtype=dtype)
+    theta_sha256 = tensor_content_sha256(published)
+    publication = publish_safetensors_immutable(
+        path,
+        state_to_tensors(published, state, dtype=dtype),
+        metadata={"fs_diloco_theta_sha256": theta_sha256},
+    )
+    return publication, theta_sha256
+
+
+def load_safetensors(
+    path: str | Path, *, device: str | torch.device = "cpu"
+) -> dict[str, torch.Tensor]:
     return load_file(str(path), device=str(device))
 
 
-def save_update_vector(path: str | Path, flat: torch.Tensor, *, dtype: torch.dtype = torch.float32) -> Path:
-    return save_safetensors_atomic(path, {"local_params": flat.detach().cpu().to(dtype=dtype).contiguous()})
+def save_update_vector(
+    path: str | Path, flat: torch.Tensor, *, dtype: torch.dtype = torch.float32
+) -> Path:
+    return save_safetensors_atomic(
+        path, {"local_params": flat.detach().cpu().to(dtype=dtype).contiguous()}
+    )
 
 
 def load_update_vector(
