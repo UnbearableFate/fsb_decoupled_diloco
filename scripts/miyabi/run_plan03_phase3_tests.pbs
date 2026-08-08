@@ -79,12 +79,19 @@ PY
   tests/test_plan03_checker.py \
   tests/test_plan03_p0_red.py
 
-"$PYTHON_BIN" scripts/miyabi/check_plan03.py \
-  --root "$PROJECT_ROOT" \
-  --expect reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260808-223500_p0-runtime-surface-inventory_review.json \
-  --verify-boundaries \
-  --verify-phase-requirements P3-operational-robustness \
-  --inventory-output "${PLAN03_CHECKER_OUTPUT:-$PROJECT_ROOT/reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/${PBS_JOBID//./_}_p3-requirements.json}"
+CHECK_TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+CHECKER_ARGS=(
+  --root "$PROJECT_ROOT"
+  --expect reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260808-223500_p0-runtime-surface-inventory_review.json
+  --verify-boundaries
+  --inventory-output "${PLAN03_CHECKER_OUTPUT:-$PROJECT_ROOT/reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/${CHECK_TIMESTAMP}_p3-remediation-requirements_review.json}"
+)
+if [[ "${PLAN03_REQUIRE_PHASE_EVIDENCE:-1}" == "1" ]]; then
+  CHECKER_ARGS+=(--verify-phase-requirements P3-operational-robustness)
+else
+  CHECKER_ARGS+=(--verify-p3-operational-contracts)
+fi
+"$PYTHON_BIN" scripts/miyabi/check_plan03.py "${CHECKER_ARGS[@]}"
 
 "$PYTHON_BIN" -m pytest -q \
   tests/protocol \

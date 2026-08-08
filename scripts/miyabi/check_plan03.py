@@ -558,6 +558,11 @@ def main() -> None:
         metavar="PHASE_ID",
         help="require complete implementation/test/evidence bindings for one matrix phase",
     )
+    parser.add_argument(
+        "--verify-p3-operational-contracts",
+        action="store_true",
+        help="verify reviewed P3 cross-file contracts without requiring retained phase evidence",
+    )
     args = parser.parse_args()
     root = args.root.resolve()
     try:
@@ -626,6 +631,13 @@ def main() -> None:
                         f"p3_operational_contracts.{difference}"
                         for difference in operational_differences
                     )
+            elif args.verify_p3_operational_contracts:
+                operational_differences = verify_p3_operational_contracts(root)
+                checks["p3_operational_contracts"] = {"differences": operational_differences}
+                differences.extend(
+                    f"p3_operational_contracts.{difference}"
+                    for difference in operational_differences
+                )
             payload["status"] = "PASS" if not differences else "BLOCKED"
             payload["differences"] = differences
             payload["checks"] = checks
