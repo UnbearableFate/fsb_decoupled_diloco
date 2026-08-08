@@ -94,3 +94,25 @@ The attempt-3 tests correctly detected two behavior/read-model defects and one o
 2. Refactor `token_ledger_summary` so terminal gap is queried even when `token_rollups` has no singleton. Keep `TokenLedgerSummary.balance` independent of the gap and assert the empty-ledger hard-crash result is 64.
 3. Assert initializer files are 0444, explicitly chmod only inside tamper setup (or atomically replace the name), and retain the existing loader checksum diagnostics plus zero-leadership-write check.
 4. Run Ruff/format/compileall/Checker/bash/diff locally, then compute attempt 4. Exact pass condition: static and Checker PASS; focused group zero failures/xfails including the new prefix/no-credit cases; full suite zero failures/core xfails; terminal completion marker emitted. These changes avoid all three prior causes rather than relaxing the acceptance assertions.
+
+## 2026-08-09 07:15 JST — P3 incremental remediation三连失败全面审查
+
+### 范围与共同模式
+
+- 审查覆盖jobs `2509023`、`2509032`、`2509033`的同一incremental-remediation objective。attempt1/2均为新RED fixture没有准确编码既有state/lease/manifest边界；attempt3已证明production fixes和全部focused `296`项通过，唯一full failure位于evidence-checker测试生命周期。
+- production数据面（terminal ack、initializer identity、cleanup、scheduler reservation/deadline、v4 DDL）在attempt3没有失败；不得为解决artifact bootstrap放宽这些协议。
+
+### 输入、状态、持久化、恢复与输出流
+
+1. Matrix给每个P3 invariant绑定runtime test artifact和checker result artifact。runtime artifact包含PASS、完整/聚焦计数、raw-log hash、`requirements_covered`和被测source commit；checker result只汇总matrix/owner/evidence状态，不能作为自己的独立证明。
+2. `verify_phase_requirements`读取每个evidence JSON，排除当前`--inventory-output`，只接受source commit等于显式verification target的独立runtime coverage或既有checker result。正式CLI默认verification target为HEAD，因此phase-final不会接受旧target evidence。
+3. Remediation compute必须先在无新evidence的target上运行；PBS用`--verify-p3-operational-contracts`完成pre-test source/static contract检查，随后focused/full pytest产生事实。PASS后才可持久化target-bound runtime summary、更新matrix并运行phase-final requirement checker。
+4. attempt3中的repository unit test绕过上述分层，直接用当前HEAD检查matrix里上一target的retained evidence。于是新target必须先有PASS evidence才能运行产生该evidence的full suite，形成不可满足的循环；这不是stale evidence被phase-final误接受。
+5. 恢复边界：失败job保留完整raw log和结构化FAIL summary；下一target可以沿用上一target evidence做repository历史一致性测试，但正式phase-final必须在新PASS artifact生成后重新绑定HEAD。任何checker self-only路径仍BLOCKED。
+
+### 替代方案与处置
+
+- 在pytest前伪造新target PASS artifact会让未发生的runtime结果通过，拒绝。
+- 关闭source binding或重新允许checker self-proof会重引入Codex M2/Claude L4，拒绝。
+- 在unit test中验证matrix当前声明的独立runtime artifact、自带source commit并排除checker artifact；由已存在的synthetic test独立验证wrong-source和self-only均BLOCKED。采用该最小修订。
+- 正式顺序保持：pre-test operational checker → compute tests → target-bound runtime summary → matrix更新 → `--verify-phase-requirements ... --verification-target-ref HEAD` → tracked evidence gate。第四次只有这五层全部通过才归零。

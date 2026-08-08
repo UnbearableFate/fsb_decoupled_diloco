@@ -341,3 +341,10 @@
 - 唯一失败是operator-release fixture把virtual wall clock从100推进到200后才启动第二个uncertainty episode，超过默认90秒leader lease的safety boundary；authority正确抛`StaleLeaderTokenError`。这不是reservation/deadline实现缺陷。
 - 修复仅把第二episode放在110、deadline 140、manual review 141，仍严格晚于旧episode deadline 130且位于leader lease内；若attempt3仍失败，则在任何第四次运行前按三连败规则进行全面复审。
 - Evidence：`artifacts/20260809-071243_p3-incremental-remediation-tests-attempt2_fail.{json,log}`；pre-test operational checker artifact为`artifacts/20260809-071224_p3-remediation-requirements_review.json`。
+
+## 2026-08-09 07:14 JST — P3 incremental-remediation validation attempt 3（三连失败，已完成全面审查）
+
+- PBS job `2509033.opbs` on `mg0005`；静态门禁和focused `296 passed in 10.44s`全部通过，full suite为`813 passed, 1 failed in 55.39s`。
+- 唯一失败是repository-level requirement unit test把`expected_source_commit`硬绑定到当前HEAD `4251c24...`，但matrix仍正确指向上一review target `9e1b823...`的retained runtime evidence；新target只有先完成本次PBS才能生成自己的runtime evidence，因此该断言在full suite内部制造commit→test→evidence→commit循环。
+- 已按规则暂停任何第四次运行，并在`code_review.md`完成输入、control flow、持久化、恢复和输出的全面审查。处置是：unit test验证matrix绑定的独立runtime artifact及其自身source commit，并显式排除checker self artifact；synthetic test继续证明stale source/self-only会BLOCKED；phase-final CLI在新runtime artifact落盘后仍必须对HEAD执行target binding，不能降级。
+- Evidence：`artifacts/20260809-071454_p3-incremental-remediation-tests-attempt3_fail.{json,log}`；pre-test operational checker artifact为`artifacts/20260809-071347_p3-remediation-requirements_review.json`。

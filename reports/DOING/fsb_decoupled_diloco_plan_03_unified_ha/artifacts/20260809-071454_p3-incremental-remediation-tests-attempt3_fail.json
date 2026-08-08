@@ -1,0 +1,33 @@
+{
+  "artifact_version": 1,
+  "errors": [
+    {
+      "cause": "The repository-level requirement unit test enforced HEAD binding while the remediation target was deliberately running before its new retained runtime artifact existed, recreating a commit/evidence bootstrap cycle inside the full suite.",
+      "test": "tests/test_plan03_checker.py::test_plan03_p3_requirement_checker_binds_implementation_tests_and_evidence"
+    }
+  ],
+  "exit_status": 1,
+  "focused": {
+    "passed": 296,
+    "seconds": 10.44
+  },
+  "full": {
+    "failed": 1,
+    "passed": 813,
+    "seconds": 55.39
+  },
+  "host": "mg0005",
+  "job_id": "2509033.opbs",
+  "phase": "P3-operational-robustness-incremental-remediation",
+  "requirements_artifact": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-071347_p3-remediation-requirements_review.json",
+  "requirements_artifact_sha256": "83a2672cf94882a7b6f020de95228e0714cdf8a804bde976e0f6d4d36bcbcb41",
+  "resources": {
+    "elapsed": "00:01:14",
+    "nodes": 1,
+    "queue": "debug-g",
+    "requested_walltime": "00:10:00"
+  },
+  "root_log_sha256": "c96017fe1e8589b3778229e5af65329eed164fd989bc54c31385b7e5b7f85b3b",
+  "source_commit": "4251c24f12bca8995d7be752f0db299159560872",
+  "status": "FAIL"
+}

@@ -1,0 +1,65 @@
+Currently Loaded Modulefiles:
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9
+
+Key:
+(symbolic-version)
+mg0005
+PBS_JOBID=2509033.opbs
+python=3.13.13
+platform=Linux-5.14.0-427.13.1.el9_4.aarch64+64k-aarch64-with-glibc2.34
+hypothesis=6.165.2
+pytest=9.1.1
+torch=2.13.0+cu132
+All checks passed!
+40 files already formatted
+PASS
+........................................................................ [ 24%]
+........................................................................ [ 48%]
+........................................................................ [ 72%]
+........................................................................ [ 97%]
+........                                                                 [100%]
+296 passed in 10.44s
+........................................................................ [  8%]
+........................................................................ [ 17%]
+........................................................................ [ 26%]
+........................................................................ [ 35%]
+........................................................................ [ 44%]
+........................................................................ [ 53%]
+........................................................................ [ 61%]
+........................................................................ [ 70%]
+........................................................................ [ 79%]
+.F...................................................................... [ 88%]
+........................................................................ [ 97%]
+......................                                                   [100%]
+=================================== FAILURES ===================================
+__ test_plan03_p3_requirement_checker_binds_implementation_tests_and_evidence __
+
+    def test_plan03_p3_requirement_checker_binds_implementation_tests_and_evidence() -> None:
+        matrix = (
+            ROOT / "plans/DOING/plans/fsb_decoupled_diloco_plan_03_unified_ha-requirement-matrix.csv"
+        )
+        source_commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        checks, differences = verify_phase_requirements(
+            ROOT,
+            matrix,
+            "P3-operational-robustness",
+            expected_source_commit=source_commit,
+        )
+
+>       assert differences == []
+E       AssertionError: assert ['requirement...vidence', ...] == []
+E
+E         Left contains 40 more items, first extra item: 'requirements.DMB-05.structured-checker-evidence'
+E         Use -v to get more diff
+
+tests/test_plan03_checker.py:224: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_plan03_checker.py::test_plan03_p3_requirement_checker_binds_implementation_tests_and_evidence
+1 failed, 813 passed in 55.39s
+[ERROR] Failed at line 105

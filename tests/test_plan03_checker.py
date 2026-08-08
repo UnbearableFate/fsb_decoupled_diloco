@@ -207,24 +207,39 @@ def test_plan03_p3_requirement_checker_binds_implementation_tests_and_evidence()
     matrix = (
         ROOT / "plans/DOING/plans/fsb_decoupled_diloco_plan_03_unified_ha-requirement-matrix.csv"
     )
-    source_commit = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    with matrix.open(newline="", encoding="utf-8") as handle:
+        rows = [
+            row for row in csv.DictReader(handle) if row["phase"] == "P3-operational-robustness"
+        ]
+    evidence_paths = {
+        item.strip()
+        for row in rows
+        for item in row["evidence_path"].split(";")
+        if item.strip().endswith(".json")
+    }
+    evidence = {
+        path: json.loads((ROOT / path).read_text(encoding="utf-8")) for path in evidence_paths
+    }
+    runtime_paths = [
+        path for path, payload in evidence.items() if payload.get("requirements_covered")
+    ]
+    self_paths = [
+        path for path, payload in evidence.items() if payload.get("checks", {}).get("requirements")
+    ]
+    assert len(runtime_paths) == len(self_paths) == 1
+    source_commit = evidence[runtime_paths[0]]["source_commit"]
     checks, differences = verify_phase_requirements(
         ROOT,
         matrix,
         "P3-operational-robustness",
         expected_source_commit=source_commit,
+        excluded_evidence_path=self_paths[0],
     )
 
     assert differences == []
     assert checks
     assert all(item["status"] == "PASS" for item in checks.values())
-    assert all(item["structured_evidence_paths"] for item in checks.values())
+    assert all(item["structured_evidence_paths"] == runtime_paths for item in checks.values())
 
 
 def test_plan03_requirement_checker_rejects_self_evidence_and_stale_source(
