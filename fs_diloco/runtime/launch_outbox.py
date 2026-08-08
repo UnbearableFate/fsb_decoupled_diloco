@@ -430,6 +430,7 @@ class LearnerLaunchOutbox:
                             scheduler_state=observation.classification,
                             last_positive_evidence_at=now,
                             evidence_source="pbs_live_or_historical",
+                            clear_uncertainty=True,
                             observed_at=now,
                         )
                     )
@@ -493,6 +494,7 @@ class LearnerLaunchOutbox:
                         scheduler_state=found.classification,
                         last_positive_evidence_at=now,
                         evidence_source="request_fingerprint_reconciliation",
+                        clear_uncertainty=True,
                         observed_at=now,
                     )
                 )
@@ -585,6 +587,7 @@ class LearnerLaunchOutbox:
                         state="submitted",
                         pbs_job_id=str(submission["job_id_raw"]),
                         scheduler_state="submission_unknown",
+                        clear_uncertainty=True,
                         observed_at=float(self._wall_clock()),
                     )
                 )

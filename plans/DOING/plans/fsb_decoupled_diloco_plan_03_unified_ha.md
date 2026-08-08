@@ -296,7 +296,7 @@ fs_diloco/storage/schema_v4_dynamic.sql    # dynamic membership/scheduler extens
 规则：
 
 - 新 initializer 直接创建完整 v4 表，不再执行旧 `schema.sql` 后叠 `ALTER TABLE`；
-- static 和 dynamic 都写 `schema_version=5`（P0/P1/P2 的 initial v4 DDL 为 revision 4，P3 新表/列/CHECK/FK 变更后必须 fail-closed bump），同时写 `mode`、canonical `features_json` 和有序DDL bundle的 `ddl_sha256`；open时逐项重算，不只相信metadata；文件名 `schema_v4*.sql` 表示 FullProtocolV4 schema family，不等于独立 authority schema revision；
+- static 和 dynamic 都写 `schema_version=6`（P0/P1/P2 的 initial v4 DDL 为 revision 4；P3 首轮新表/列/CHECK/FK 升到5，phase review补齐两套launch reservation tombstone后再fail-closed升到6），同时写 `mode`、canonical `features_json` 和有序DDL bundle的 `ddl_sha256`；open时逐项重算，不只相信metadata；文件名 `schema_v4*.sql` 表示 FullProtocolV4 schema family，不等于独立 authority schema revision；
 - static 不创建 dynamic learner registration/placement/stream/admission/launch 表；candidate recovery outbox 属于 common leader feature，不能误塞进 dynamic extension；
 - dynamic adapter 使用 extension tables 做 current-incarnation query；
 - v4 authority只保存normalized run-root-relative artifact path + identity/hash，不保存staging或任意absolute payload path；adapter在canonical root下解析并拒绝`..`/absolute escape；
@@ -589,8 +589,8 @@ requirement matrix 必须与以下 ID 一一对应。既有 `HA-*`、`MEM-*` 和
 - **SCHED-01**：qsub 成功但 receipt 丢失能按 request identity reconcile。
 - **SCHED-02**：`no_record` 进入 uncertainty，不等于立即 failed。
 - **SCHED-03**：uncertainty 有持久 wall-clock deadline 和 evidence source。
-- **SCHED-04**：deadline 后进入 failed/expired/manual_review，不无限占用隐式状态。
-- **SCHED-05**：uncertain/manual_review 不自动重提或重复 admission。
+- **SCHED-04**：每个连续uncertainty episode只在首次观察时固定deadline；positive scheduler evidence清空该episode anchor，后续独立uncertainty重新获得完整窗口。deadline 后进入 failed/expired/manual_review；manual_review显式保留anti-duplicate reservation，leader应用audited operator failed/expired disposition时同事务写`reservation_released_at`，不得永久占用capacity。
+- **SCHED-05**：uncertain/manual_review 不自动重提或重复 admission；static candidate outbox和dynamic launch request使用同一reservation tombstone语义。
 - **SCHED-06**：不自动 qdel 已接受 job。
 
 所有改变 `learner_instances.status` 为 `revoked/stopped/expired` 或清空 current placement/stream 的代码只能调用同一个 `retire_incarnation` authority command，禁止复制 SQL。
@@ -846,7 +846,7 @@ planned → submitting → submission_unknown → submitted → started
         → terminal_uncertain → admitted | failed | expired | manual_review
 ```
 
-持久字段：first uncertain wall time、last positive evidence、deadline、evidence source、manual reason。live/historical no-record、registration receipt 和 request fingerprint 共同 reconcile；uncertain/manual_review 保留 anti-duplicate tombstone，operator action有审计。
+持久字段：first uncertain wall time、last positive evidence、deadline、evidence source、manual reason、reservation release time。live/historical no-record、registration receipt 和 request fingerprint 共同 reconcile；uncertain/manual_review 保留 anti-duplicate tombstone，positive evidence重新武装后续独立uncertainty窗口，operator terminal disposition同事务释放reservation并留审计。
 
 新增`fs_diloco/tools/resolve_scheduler_uncertainty.py`：默认dry-run；只有`--apply --expected-state-sha256 --reason`齐全时才create-no-replace写operator request。允许动作仅为`confirm_job_id / mark_failed / mark_expired / record_external_cancel_evidence`；admission仍只能来自合法registration fence。active leader摄取request并用explicit fenced command比较expected state后转移；tool本身不得连接authority DB、不得直接admit或qdel。stale request安全拒绝并保留audit。
 
@@ -857,7 +857,7 @@ planned → submitting → submission_unknown → submitted → started
 - initializer 在与 final root 同 parent/mount 的 `<run>.staging.<uuid>` 完成全部文件/DB/identity/hashed complete manifest并逐项fsync，关闭SQLite handle；descriptor 中写 final logical path而不是 staging path。发布时先把staging identity hard-link create-no-replace到 `<final-parent>/.<final-name>.identity-reservation` 并fsync parent，以该sibling object原子绑定identity；再exclusive `mkdir(final)` 并fsync parent，把staging中每个immutable object按manifest SHA-256以hard-link create-no-replace装入final、逐项fsync，最后hard-link create-no-replace发布 `.complete` manifest并再次fsync final/parent。reader在marker前视final为不存在；首次发布用strict scan核对精确协议条目集合；marker后的普通actor load只核对sibling reservation、in-directory identity、manifest声明目录/对象hash、logical path和descriptor/config/source identity，不遍历mutable subtree。manifest显式区分mutable subtree、mutable control leaf和SQLite sidecar；同identity retry必须比较完整resolved-config SHA/mode/git/source identity，不能只比较run ID/source。reservation由retention视为run identity的一部分且generic cleanup永不删除。marker前的retry只允许持有reservation同一inode的原staging恢复；另一个内容相同但inode不同的staging不得mkdir或补identity。新建reservation时发现final已存在，必须先删除并fsync本次创建的reservation再fail closed，使重复retry不能接管既有final；reservation不匹配、协议外条目、对象hash冲突或非regular/symlink collision同样fail closed。已完成run只有在不依赖sibling reservation完成显式全量自检后，才可由repair把`final/.identity` hard-link回reservation；普通initializer不执行该repair。失败可留下可解释的reserved partial final和非权威staging，但不能覆盖或暴露半初始化run；
 - cycle receipt、terminal observation、token fate和旧version metadata先写`audit/batches/<kind>/<batch_id>` immutable create-no-replace object并fsync，再在一个fenced transaction中更新`archive_batches`/cumulative rollup并prune hot rows。archive cutoff无论请求多大都必须保留`MAX(global_versions.version)`及其publication/selection/artifact dependency closure，且归档后下一version仍可提交。同batch ID若hash相同视为retry，不同则fail closed；不再多进程append共享archive文件。只有active leader的fenced maintenance可把已closed batch objects压成immutable partition + hashed manifest；manifest commit并重新验hash后才可GC已被完全覆盖的source batches。GC claim记录`claimed_by_epoch/claimed_at`，successor可重取旧epoch claim；generic cleanup无此权限。较老DB batch rows折叠为manifest cursor；analysis仍按record kind/primary key去重；
 - runtime telemetry改为`metrics/<actor-kind>/<actor-id>/<attempt-id>.jsonl`等per-actor single-writer文件；共享CSV只由离线export生成到显式输出目录，不能由多个learner append；CSV/W&B仍非权威；
-- initializer 发布 versioned artifact policy；`clean_run`缺失/损坏policy、遇到unknown class、symlinked candidate ancestor、SQLite sidecar或live DB reference时一律fail closed，并在删除时用`dir_fd + O_NOFOLLOW`重新锚定parent chain；DB只逐项登记 correctness-relevant publication，不能要求 learner 为每个 telemetry 文件写 authority row；
+- initializer 发布 versioned artifact policy；`clean_run`缺失/损坏policy、遇到unknown class、symlinked candidate ancestor、SQLite sidecar或live DB reference时默认fail closed，并在删除时用`dir_fd + O_NOFOLLOW`重新锚定parent chain；pre-P3 run只有显式`--allow-legacy-run-without-policy`才使用保守allowlist，manifest必须记录override且authority live-reference检查仍强制执行。扫描树内与候选无关的symlink/non-regular entry只跳过且绝不follow，不能让wandb的`latest-run/debug*.log` symlink阻断整次plan；DB只逐项登记 correctness-relevant publication，不能要求 learner 为每个 telemetry 文件写 authority row；
 - descriptor 冻结 source/`uv.lock`/model/tokenizer/dataset revision；P3提供actor attestation API与per-attempt single-writer telemetry原语，P4-MIGRATE把它们接入每个生产actor并删除runtime shared CSV append。GPU driver/queue/job ID 属于 actor/run evidence，不要求 initializer 在无 GPU 环境伪造。
 
 ### 8.6 Matched comparison

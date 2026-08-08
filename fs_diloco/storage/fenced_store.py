@@ -44,6 +44,9 @@ _READ_ONLY_ARGUMENT_PRAGMAS = {
     "QUICK_CHECK",
     "TABLE_INFO",
 }
+_RESERVATION_RELEASE_STATES = frozenset(
+    {"failed", "expired", "cancelled", "capacity_fulfilled", "completed"}
+)
 _PRAGMA_RE = re.compile(
     r"^\s*PRAGMA\s+(?:(?:main|temp)\.)?"
     r"(?P<name>[A-Za-z_][A-Za-z0-9_]*)"
@@ -2451,9 +2454,16 @@ class FencedSQLiteStore:
         manual_reason: str | None = None,
         last_error: str | None = None,
         increment_submission_attempts: bool = False,
+        clear_uncertainty: bool = False,
         observed_at: float | None = None,
     ) -> dict[str, Any]:
         timestamp = self._wall_clock() if observed_at is None else float(observed_at)
+        if clear_uncertainty and state not in {"submitted", "started", "admitted"}:
+            raise ValueError("only positive scheduler evidence may clear uncertainty")
+        if clear_uncertainty and (
+            first_uncertain_at is not None or uncertainty_deadline is not None
+        ):
+            raise ValueError("cannot clear and arm scheduler uncertainty together")
 
         def operation(conn: _FencedConnection) -> dict[str, Any]:
             row = conn.execute(
@@ -2481,14 +2491,16 @@ class FencedSQLiteStore:
                     scheduler_state=COALESCE(?, scheduler_state),
                     scheduler_observed_at=CASE WHEN ? IS NULL
                         THEN scheduler_observed_at ELSE ? END,
-                    first_uncertain_at=COALESCE(first_uncertain_at, ?),
+                    first_uncertain_at=CASE WHEN ? THEN NULL
+                        ELSE COALESCE(first_uncertain_at, ?) END,
                     last_positive_evidence_at=COALESCE(?, last_positive_evidence_at),
-                    uncertainty_deadline=COALESCE(uncertainty_deadline, ?),
+                    uncertainty_deadline=CASE WHEN ? THEN NULL
+                        ELSE COALESCE(uncertainty_deadline, ?) END,
                     evidence_source=COALESCE(?, evidence_source),
                     manual_reason=COALESCE(?, manual_reason),
                     last_error=?,
                     reservation_released_at=CASE
-                        WHEN ? IN ('failed','expired','cancelled','capacity_fulfilled','completed')
+                        WHEN ?
                         THEN COALESCE(reservation_released_at, ?)
                         ELSE reservation_released_at
                     END
@@ -2502,13 +2514,15 @@ class FencedSQLiteStore:
                     scheduler_state,
                     scheduler_state,
                     timestamp,
+                    int(clear_uncertainty),
                     first_uncertain_at,
                     last_positive_evidence_at,
+                    int(clear_uncertainty),
                     uncertainty_deadline,
                     evidence_source,
                     manual_reason,
                     last_error,
-                    state,
+                    int(state in _RESERVATION_RELEASE_STATES),
                     timestamp,
                     request_id,
                 ),
@@ -2518,6 +2532,53 @@ class FencedSQLiteStore:
             ).fetchone()
             assert result is not None
             return dict(result)
+
+        return self._transaction(token, operation)
+
+    def resolve_manual_review_launch_request(
+        self,
+        token: LeaderToken,
+        *,
+        request_id: str,
+        state: str,
+        reason: str,
+        evidence_source: str,
+        observed_at: float | None = None,
+    ) -> dict[str, Any]:
+        """Apply an explicit terminal disposition and release its held reservation."""
+
+        if state not in {"failed", "expired"}:
+            raise ValueError("manual-review disposition must be failed or expired")
+        if not reason.strip() or not evidence_source.strip():
+            raise ValueError("manual-review disposition requires reason and evidence source")
+        timestamp = self._wall_clock() if observed_at is None else float(observed_at)
+
+        def operation(conn: _FencedConnection) -> dict[str, Any]:
+            cursor = conn.execute(
+                """
+                UPDATE launch_requests SET state=?, updated_at=?, manual_reason=?,
+                    evidence_source=?, last_error=?,
+                    reservation_released_at=COALESCE(reservation_released_at, ?)
+                WHERE request_id=? AND state='manual_review'
+                    AND reservation_released_at IS NULL
+                """,
+                (
+                    state,
+                    timestamp,
+                    reason,
+                    evidence_source,
+                    f"operator_disposition:{reason}",
+                    timestamp,
+                    request_id,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise RuntimeError("launch request is not an unresolved manual-review reservation")
+            row = conn.execute(
+                "SELECT * FROM launch_requests WHERE request_id=?", (request_id,)
+            ).fetchone()
+            assert row is not None
+            return dict(row)
 
         return self._transaction(token, operation)
 
@@ -3082,6 +3143,9 @@ class LeaderBoundSQLiteStore:
 
     def close(self) -> None:
         self.fenced_store.close()
+
+    def resolve_manual_review_launch_request(self, **kwargs: Any) -> dict[str, Any]:
+        return self.fenced_store.resolve_manual_review_launch_request(self.token, **kwargs)
 
     def __getattr__(self, name: str) -> Any:
         target = getattr(self.fenced_store, name)

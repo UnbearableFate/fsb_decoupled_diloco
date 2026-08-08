@@ -1298,6 +1298,95 @@ def test_no_job_uncertainty_deadline_is_anchored_and_reserves_scale_capacity(
         )
         assert row["state"] == "manual_review"
         assert row["reservation_released_at"] is None
+
+        blocked_again = capacity_observation(
+            store,
+            key="no-job-low:4",
+            now=140.0,
+            eligible=0,
+            max_total_launch_requests=10,
+        )
+        assert blocked_again["launch_request"] is None
+        assert blocked_again["observation"]["reserved_launch_capacity"] == 1
+        resolved = store.resolve_manual_review_launch_request(
+            request_id=planned["request_id"],
+            state="failed",
+            reason="operator confirmed no scheduler job",
+            evidence_source="operator_accounting_review",
+            observed_at=141.0,
+        )
+        assert resolved["state"] == "failed"
+        assert resolved["reservation_released_at"] == 141.0
+        replacement = capacity_observation(
+            store,
+            key="no-job-low:5",
+            now=150.0,
+            eligible=0,
+            max_total_launch_requests=10,
+        )
+        assert replacement["observation"]["reserved_launch_capacity"] == 0
+        assert replacement["launch_request"] is not None
+    finally:
+        fenced.close()
+        lease.close()
+
+
+def test_positive_scheduler_evidence_rearms_a_later_uncertainty_window(
+    tmp_path: Path,
+) -> None:
+    paths, lease, _token, fenced, store = dynamic_store(tmp_path)
+    try:
+        launch = initialize_membership(store, pool=1, bootstrap=1)[0]
+        store.record_external_launch_jobs(
+            [
+                {
+                    "bootstrap_slot": 0,
+                    "request_id": str(launch["request_id"]),
+                    "pbs_job_id": "654.opbs",
+                }
+            ],
+            observed_at=100.0,
+        )
+        scheduler = MockScheduler()
+        scheduler.queried = PBSJobObservation("654.opbs", "no_record", None, 1, "missing")
+        now = [110.0]
+        outbox = LearnerLaunchOutbox(
+            paths=paths,
+            config=SimpleNamespace(
+                scheduler_reconcile_interval_seconds=1.0,
+                scheduler_uncertainty_timeout_seconds=30.0,
+                learner_pbs_script="learner.pbs",
+                learner_walltime="00:01:00",
+            ),
+            scheduler=scheduler,
+            descriptor_sha256="descriptor-digest",
+            wall_clock=lambda: now[0],
+        )
+        outbox.reconcile(store)
+        first = next(
+            item for item in store.launch_requests() if item["request_id"] == launch["request_id"]
+        )
+        assert first["uncertainty_deadline"] == 140.0
+
+        now[0] = 120.0
+        scheduler.queried = PBSJobObservation("654.opbs", "running", {}, 0, "")
+        outbox.reconcile(store)
+        positive = next(
+            item for item in store.launch_requests() if item["request_id"] == launch["request_id"]
+        )
+        assert positive["state"] == "started"
+        assert positive["first_uncertain_at"] is None
+        assert positive["uncertainty_deadline"] is None
+
+        now[0] = 1000.0
+        scheduler.queried = PBSJobObservation("654.opbs", "no_record", None, 1, "missing")
+        outbox.reconcile(store)
+        second = next(
+            item for item in store.launch_requests() if item["request_id"] == launch["request_id"]
+        )
+        assert second["state"] == "terminal_uncertain"
+        assert second["first_uncertain_at"] == 1000.0
+        assert second["uncertainty_deadline"] == 1030.0
     finally:
         fenced.close()
         lease.close()

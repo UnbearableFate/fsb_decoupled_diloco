@@ -539,11 +539,19 @@ def _validate_completed_protocol_identity(final_root: Path) -> None:
     for field in ("git_commit", "git_dirty", "source_fingerprint"):
         if source.get(field) != descriptor.get(field):
             raise RuntimeError(f"source manifest {field} mismatch")
+    descriptor_mode = descriptor.get("mode")
+    if descriptor_mode == "full_ha_static":
+        bootstrap_mode = "full"
+    elif descriptor_mode == "full_ha_dynamic":
+        bootstrap_mode = "full_dynamic"
+    else:
+        raise RuntimeError(f"unsupported run descriptor mode: {descriptor_mode!r}")
     identity = validate_identity_file(paths.run_identity_file)
     identity_checks = {
         "run_id": descriptor.get("run_id"),
         "source_fingerprint": descriptor.get("source_fingerprint"),
         "config_sha256": descriptor.get("resolved_config_sha256"),
+        "mode": bootstrap_mode,
         "logical_root": str(final_root),
     }
     mismatches = {
@@ -554,13 +562,6 @@ def _validate_completed_protocol_identity(final_root: Path) -> None:
     if mismatches:
         raise RuntimeError(f"run identity does not match descriptor: {mismatches}")
     ArtifactPolicy.from_dict(read_json(paths.artifact_policy_json))
-    descriptor_mode = descriptor.get("mode")
-    if descriptor_mode == "full_ha_static":
-        bootstrap_mode = "full"
-    elif descriptor_mode == "full_ha_dynamic":
-        bootstrap_mode = "full_dynamic"
-    else:
-        raise RuntimeError(f"unsupported run descriptor mode: {descriptor_mode!r}")
     connection = open_existing(
         paths.sqlite_db,
         BootstrapIdentity(

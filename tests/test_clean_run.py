@@ -116,6 +116,28 @@ def test_clean_run_preserves_authority_and_one_learner_log(tmp_path: Path) -> No
     assert json.loads(manifest.read_text(encoding="utf-8"))["status"] == "complete"
 
 
+def test_clean_run_skips_wandb_symlinks_without_following_them(tmp_path: Path) -> None:
+    run, evidence = _completed_run(tmp_path, "wandb-symlink-run")
+    offline = run / "logs" / "wandb" / "offline-run-1"
+    debug = offline / "files" / "debug.log"
+    _write(debug)
+    latest = run / "logs" / "wandb" / "latest-run"
+    latest.symlink_to(offline.name, target_is_directory=True)
+    debug_link = run / "logs" / "wandb" / "debug.log"
+    debug_link.symlink_to(debug.relative_to(debug_link.parent))
+
+    plan = build_cleanup_plan(tmp_path, run, evidence)
+
+    assert latest.is_symlink()
+    assert debug_link.is_symlink()
+    assert all(candidate.path not in {latest, debug_link} for candidate in plan.candidates)
+    manifest = tmp_path / "reports" / "DOING" / "plan" / "wandb-symlink-cleanup.json"
+    execute_cleanup(plan, manifest)
+    assert latest.is_symlink()
+    assert debug_link.is_symlink()
+    assert offline.is_dir()
+
+
 @pytest.mark.parametrize("evidence_status", ["BLOCKED", "PASS_WITH_FOLLOWUPS"])
 def test_clean_run_requires_exact_pass_evidence(
     tmp_path: Path,
@@ -340,6 +362,47 @@ def test_clean_run_fails_closed_without_artifact_policy(tmp_path: Path) -> None:
 
     with pytest.raises(CleanupRefusedError, match="policy is required"):
         build_cleanup_plan(tmp_path, run, evidence)
+
+
+def test_clean_run_legacy_policy_override_is_explicit_and_keeps_live_references(
+    tmp_path: Path,
+) -> None:
+    run, evidence = _completed_run(tmp_path, "legacy-policy-run")
+    policy = run / "control" / "artifact_policy.json"
+    policy.chmod(0o644)
+    policy.unlink()
+    candidate = run / "updates" / "payloads" / "learner-0" / "update.safetensors"
+    _write(candidate)
+    database = run / "control" / "syncer_metadata.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE updates(status TEXT, payload_relative_path TEXT)")
+        connection.execute(
+            "INSERT INTO updates(status, payload_relative_path) VALUES ('pending', ?)",
+            (candidate.relative_to(run).as_posix(),),
+        )
+
+    with pytest.raises(CleanupRefusedError, match="authority still references"):
+        build_cleanup_plan(
+            tmp_path,
+            run,
+            evidence,
+            allow_legacy_run_without_policy=True,
+        )
+
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE updates SET status='applied'")
+    plan = build_cleanup_plan(
+        tmp_path,
+        run,
+        evidence,
+        allow_legacy_run_without_policy=True,
+    )
+    assert plan.artifact_policy_sha256 is None
+    assert plan.legacy_policy_override is True
+    assert {item.path for item in plan.candidates} == {candidate}
+    manifest = tmp_path / "reports" / "DOING" / "plan" / "legacy-policy-cleanup.json"
+    result = execute_cleanup(plan, manifest)
+    assert result["legacy_policy_override"] is True
 
 
 def test_clean_run_refuses_symlinked_candidate_parent_without_touching_outside(

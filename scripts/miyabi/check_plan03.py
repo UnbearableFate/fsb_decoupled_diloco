@@ -351,6 +351,9 @@ def verify_phase_requirements(
     root: Path,
     matrix_path: Path,
     phase: str,
+    *,
+    expected_source_commit: str | None = None,
+    excluded_evidence_path: str | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """Bind every phase requirement to implementation, tests, and retained evidence."""
 
@@ -387,6 +390,8 @@ def verify_phase_requirements(
                 requirement_differences.extend(f"missing-evidence:{item}" for item in missing)
         structured_evidence: list[str] = []
         for item in evidence_paths:
+            if item == excluded_evidence_path:
+                continue
             path = root / item
             if path.suffix != ".json" or not path.is_file():
                 continue
@@ -399,9 +404,26 @@ def verify_phase_requirements(
                 if isinstance(payload, dict)
                 else {}
             )
-            if (
-                isinstance(requirement_payload, dict)
-                and requirement_payload.get("status") == "PASS"
+            source_commit = payload.get("source_commit")
+            if source_commit is None and isinstance(payload.get("checks"), dict):
+                source_commit = (
+                    payload["checks"].get("current_migration_boundaries", {}).get("source_commit")
+                )
+            source_matches = (
+                expected_source_commit is None or source_commit == expected_source_commit
+            )
+            covered_requirements = payload.get("requirements_covered", [])
+            runtime_evidence_pass = (
+                payload.get("status") == "PASS"
+                and isinstance(covered_requirements, list)
+                and requirement in covered_requirements
+            )
+            if source_matches and (
+                runtime_evidence_pass
+                or (
+                    isinstance(requirement_payload, dict)
+                    and requirement_payload.get("status") == "PASS"
+                )
             ):
                 structured_evidence.append(item)
         if row["artifact_contract"].startswith("checker requirements.") and not structured_evidence:
@@ -428,8 +450,12 @@ def verify_p3_operational_contracts(root: Path) -> list[str]:
     launch_outbox = (root / "fs_diloco/runtime/launch_outbox.py").read_text(encoding="utf-8")
     initializer = (root / "fs_diloco/storage/run_initializer.py").read_text(encoding="utf-8")
     schema = (root / "fs_diloco/storage/schema_v4.sql").read_text(encoding="utf-8")
-    if "uncertainty_deadline=COALESCE(uncertainty_deadline, ?)" not in fenced_store:
+    if "ELSE COALESCE(uncertainty_deadline, ?) END" not in fenced_store:
         differences.append("scheduler.deadline-not-first-write-wins")
+    if "clear_uncertainty=True" not in launch_outbox:
+        differences.append("scheduler.positive-evidence-does-not-rearm-deadline")
+    if "resolve_manual_review_launch_request" not in fenced_store:
+        differences.append("scheduler.manual-review-reservation-has-no-release-path")
     if fenced_store.count("reservation_released_at IS NULL") < 3:
         differences.append("scheduler.reservation-accounting-not-tombstone-based")
     if 'if state == "terminal_uncertain":' not in launch_outbox:
@@ -455,6 +481,11 @@ def verify_p3_operational_contracts(root: Path) -> list[str]:
             differences.append("initializer.startup-recursive-scan")
     if "claimed_by_epoch INTEGER" not in schema or "claimed_at REAL" not in schema:
         differences.append("audit.gc-claim-ownership-missing")
+    dynamic_schema = (root / "fs_diloco/storage/schema_v4_dynamic.sql").read_text(encoding="utf-8")
+    if "reservation_released_at REAL" not in schema or (
+        "reservation_released_at REAL" not in dynamic_schema
+    ):
+        differences.append("scheduler.v4-reservation-tombstone-missing")
     return differences
 
 
@@ -507,6 +538,10 @@ def main() -> None:
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("--inventory-output", type=Path)
     parser.add_argument("--source-ref")
+    parser.add_argument(
+        "--verification-target-ref",
+        help="commit that structured phase evidence must attest (defaults to HEAD)",
+    )
     parser.add_argument("--expect", type=Path)
     parser.add_argument(
         "--verify-boundaries",
@@ -563,12 +598,26 @@ def main() -> None:
                 )
             if args.verify_phase_requirements:
                 matrix_path = root / "plans/DOING/plans" / f"{PLAN_ID}-requirement-matrix.csv"
+                verification_target_commit = _git(
+                    root, "rev-parse", args.verification_target_ref or "HEAD"
+                )
+                excluded_evidence_path = None
+                if args.inventory_output is not None:
+                    try:
+                        excluded_evidence_path = (
+                            args.inventory_output.resolve().relative_to(root).as_posix()
+                        )
+                    except ValueError:
+                        excluded_evidence_path = None
                 requirement_checks, requirement_differences = verify_phase_requirements(
                     root,
                     matrix_path,
                     args.verify_phase_requirements,
+                    expected_source_commit=verification_target_commit,
+                    excluded_evidence_path=excluded_evidence_path,
                 )
                 checks["requirements"] = requirement_checks
+                checks["requirements_source_commit"] = verification_target_commit
                 differences.extend(requirement_differences)
                 if args.verify_phase_requirements == "P3-operational-robustness":
                     operational_differences = verify_p3_operational_contracts(root)

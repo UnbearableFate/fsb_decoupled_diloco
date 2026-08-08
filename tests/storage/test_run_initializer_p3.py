@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import shutil
 import sqlite3
@@ -155,6 +157,24 @@ def test_descriptor_validation_is_bounded_and_accepts_runtime_control_publicatio
     monkeypatch.setattr(Path, "rglob", forbidden_rglob)
     loaded = load_run_descriptor(paths.shared_root)
     assert loaded.descriptor["run_id"] == config.run.run_id
+
+
+def test_completed_descriptor_rejects_identity_mode_mismatch(tmp_path: Path) -> None:
+    config = _config(tmp_path, "identity-mode-mismatch")
+    initialize_run(config, project_root=tmp_path)
+    identity_path = RunPaths(Path(config.run.shared_root)).run_identity_file
+    identity = read_json(identity_path)
+    identity["mode"] = "full_dynamic"
+    content = {key: value for key, value in identity.items() if key != "identity_sha256"}
+    identity["identity_sha256"] = hashlib.sha256(
+        initializer_module.canonical_json_bytes(content)
+    ).hexdigest()
+    identity_path.chmod(0o644)
+    identity_path.write_text(json.dumps(identity, sort_keys=True) + "\n", encoding="utf-8")
+    identity_path.chmod(0o444)
+
+    with pytest.raises(RuntimeError, match="run identity does not match descriptor.*mode"):
+        load_run_descriptor(config.run.shared_root)
 
 
 def test_every_manifest_object_link_fault_is_invisible_and_retryable(tmp_path: Path) -> None:

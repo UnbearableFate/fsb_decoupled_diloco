@@ -1,0 +1,15 @@
+{
+  "actual_model": "claude-opus-5",
+  "base_commit": "de3d27879fdef188afa03a233acd4b40d90e5feb",
+  "permission_denials": [
+    {
+      "command": "python3 inline artifact inspection",
+      "reason": "disallowed by the static-only review policy"
+    }
+  ],
+  "requested_model": "claude-opus-5",
+  "review_target": "9e1b8238c11b15b88883dffc868ef2cd89adb1b9",
+  "session_id": "7b2aeb3c-621a-40ec-8c25-f9f9e129ca47",
+  "status": "completed",
+  "subtype": "success"
+}

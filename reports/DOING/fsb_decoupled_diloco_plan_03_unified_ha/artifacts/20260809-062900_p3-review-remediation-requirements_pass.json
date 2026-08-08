@@ -3,7 +3,7 @@
   "checks": {
     "current_migration_boundaries": {
       "differences": [],
-      "source_commit": "de3d27879fdef188afa03a233acd4b40d90e5feb",
+      "source_commit": "9e1b8238c11b15b88883dffc868ef2cd89adb1b9",
       "source_ref": "TRACKED_WORKTREE"
     },
     "frozen_inventory": {

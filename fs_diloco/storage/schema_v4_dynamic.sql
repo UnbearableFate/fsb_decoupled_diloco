@@ -84,6 +84,7 @@ CREATE TABLE launch_requests (
     first_uncertain_at REAL,
     last_positive_evidence_at REAL,
     uncertainty_deadline REAL,
+    reservation_released_at REAL,
     evidence_source TEXT,
     manual_reason TEXT,
     admitted_instance_id TEXT UNIQUE REFERENCES learner_instances(instance_id),

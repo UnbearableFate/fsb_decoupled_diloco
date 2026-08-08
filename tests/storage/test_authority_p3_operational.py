@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -619,6 +620,36 @@ def test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens(
         assert leader.finalize_terminal(command_id="finalize", reason="done").value == "finalized"
 
 
+def test_terminal_zero_cycle_ack_requires_no_receipt_and_preserves_zero_gap(
+    tmp_path: Path,
+) -> None:
+    clock = Clock()
+    with _open_static(tmp_path, clock) as authority:
+        leader = authority.open_leader(
+            authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
+        )
+        fence = StaticContributorFence.from_dict(_static_fence(leader))
+        leader.initialize_v0(
+            command_id="v0",
+            publication_id="publication-v0",
+            **publish_checkpoint_pair(tmp_path, version=0),
+        )
+        leader.begin_terminal_close(command_id="close", reason="zero work")
+
+        assert (
+            leader.acknowledge_terminal_contributor(
+                command_id="ack-zero",
+                fence=fence,
+                final_cycle_seq=0,
+            )
+            == "acked"
+        )
+        summary = authority.read.token_ledger_summary()
+        assert summary.hard_crash_gap_tokens_upper_bound == 0
+        assert summary.balance == 0
+        assert leader.finalize_terminal(command_id="finalize", reason="done").value == "finalized"
+
+
 def test_terminal_close_snapshot_cannot_be_rewritten_by_a_second_command(
     tmp_path: Path,
 ) -> None:
@@ -839,6 +870,18 @@ def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: 
         assert applied["request_state"] == "applied"
         assert applied["launch_state"] == "submitted"
 
+        with sqlite3.connect(tmp_path / "authority.sqlite3") as connection:
+            connection.row_factory = sqlite3.Row
+            submitted = dict(
+                connection.execute(
+                    "SELECT * FROM candidate_launch_outbox WHERE request_id=?",
+                    (row["request_id"],),
+                ).fetchone()
+            )
+        assert submitted["first_uncertain_at"] is None
+        assert submitted["uncertainty_deadline"] is None
+        assert submitted["reservation_released_at"] is None
+
         stale = SchedulerOperatorRequest(
             format_version=1,
             request_id="scheduler-op-stale",
@@ -853,6 +896,27 @@ def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: 
         )
         assert rejected["request_state"] == "stale_rejected"
         assert rejected["launch_state"] == "submitted"
+
+        failed_request = SchedulerOperatorRequest(
+            format_version=1,
+            request_id="scheduler-op-failed",
+            launch_request_id=row["request_id"],
+            action=SchedulerOperatorAction.MARK_FAILED,
+            expected_state_sha256=scheduler_state_sha256(submitted),
+            reason="operator confirmed terminal failure",
+            created_at=102.0,
+        )
+        failed = leader.apply_scheduler_operator_request(
+            command_id="apply-failed", operator_request=failed_request
+        )
+        assert failed["request_state"] == "applied"
+        assert failed["launch_state"] == "failed"
+        with sqlite3.connect(tmp_path / "authority.sqlite3") as connection:
+            released_at = connection.execute(
+                "SELECT reservation_released_at FROM candidate_launch_outbox WHERE request_id=?",
+                (row["request_id"],),
+            ).fetchone()[0]
+        assert released_at == clock.now
 
 
 def test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolution(

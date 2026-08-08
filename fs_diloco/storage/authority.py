@@ -1862,28 +1862,37 @@ class LeaderSession:
                 else None
             )
             positive = state in {"submitted", "started", "admitted"}
+            releases_reservation = state in {"admitted", "failed", "expired"}
             connection.execute(
                 """
                 UPDATE candidate_launch_outbox SET state=?,
                     scheduler_job_id=COALESCE(?, scheduler_job_id),
-                    first_uncertain_at=CASE WHEN ? THEN COALESCE(first_uncertain_at, ?)
+                    first_uncertain_at=CASE WHEN ? THEN NULL
+                        WHEN ? THEN COALESCE(first_uncertain_at, ?)
                         ELSE first_uncertain_at END,
                     last_positive_evidence_at=CASE WHEN ? THEN ?
                         ELSE last_positive_evidence_at END,
-                    uncertainty_deadline=CASE WHEN ? THEN COALESCE(uncertainty_deadline, ?)
+                    uncertainty_deadline=CASE WHEN ? THEN NULL
+                        WHEN ? THEN COALESCE(uncertainty_deadline, ?)
                         ELSE uncertainty_deadline END,
+                    reservation_released_at=CASE WHEN ?
+                        THEN COALESCE(reservation_released_at, ?) ELSE reservation_released_at END,
                     evidence_source=?, owner_epoch=?, updated_at=?
                 WHERE request_id=? AND state=?
                 """,
                 (
                     state,
                     scheduler_job_id,
+                    int(positive),
                     int(uncertain),
                     now,
                     int(positive),
                     now,
+                    int(positive),
                     int(uncertain),
                     deadline,
+                    int(releases_reservation),
+                    now,
                     evidence_source,
                     self.token.epoch,
                     now,
@@ -1947,6 +1956,7 @@ class LeaderSession:
                     connection.execute(
                         f"""
                         UPDATE {table} SET state='submitted', {job_column}=?,
+                            first_uncertain_at=NULL, uncertainty_deadline=NULL,
                             last_positive_evidence_at=?, evidence_source=?, updated_at=?
                         WHERE request_id=?
                         """,
@@ -1961,10 +1971,15 @@ class LeaderSession:
                 elif action is SchedulerOperatorAction.MARK_FAILED:
                     next_state = "failed"
                     connection.execute(
-                        f"UPDATE {table} SET state=?, manual_reason=?, updated_at=? WHERE request_id=?",
+                        f"""
+                        UPDATE {table} SET state=?, manual_reason=?, updated_at=?,
+                            reservation_released_at=COALESCE(reservation_released_at, ?)
+                        WHERE request_id=?
+                        """,
                         (
                             next_state,
                             operator_request.reason,
+                            now,
                             now,
                             operator_request.launch_request_id,
                         ),
@@ -1972,10 +1987,15 @@ class LeaderSession:
                 elif action is SchedulerOperatorAction.MARK_EXPIRED:
                     next_state = "expired"
                     connection.execute(
-                        f"UPDATE {table} SET state=?, manual_reason=?, updated_at=? WHERE request_id=?",
+                        f"""
+                        UPDATE {table} SET state=?, manual_reason=?, updated_at=?,
+                            reservation_released_at=COALESCE(reservation_released_at, ?)
+                        WHERE request_id=?
+                        """,
                         (
                             next_state,
                             operator_request.reason,
+                            now,
                             now,
                             operator_request.launch_request_id,
                         ),
@@ -3488,27 +3508,34 @@ class LeaderSession:
                 observed_sequence = 0 if progress is None else int(progress["last_cycle_seq"])
                 if observed_sequence != final_cycle_seq:
                     raise MembershipFenceError("final cycle receipt is not contiguous and ingested")
-                receipt = connection.execute(
-                    """
-                    SELECT proposal_expected, planned_update_id FROM cycle_receipts
-                    WHERE stable_contributor_key=? AND cycle_seq=?
-                    """,
-                    (fence.stable_contributor_key, final_cycle_seq),
-                ).fetchone()
-                if receipt is None:
-                    raise MembershipFenceError("final cycle receipt is missing")
-                proposal_expected = bool(receipt["proposal_expected"])
-                planned_update_id = receipt["planned_update_id"]
-                if proposal_expected and final_update_id is None:
-                    raise MembershipFenceError(
-                        "final receipt promised a proposal; acknowledge it or use hard-crash handling"
-                    )
-                if proposal_expected and final_update_id != planned_update_id:
-                    raise MembershipFenceError(
-                        "final update does not match the update planned by the final receipt"
-                    )
-                if not proposal_expected and final_update_id is not None:
-                    raise MembershipFenceError("final receipt did not declare a proposal")
+                if final_cycle_seq == 0:
+                    if progress is not None or final_update_id is not None:
+                        raise MembershipFenceError(
+                            "zero-cycle acknowledgement requires no receipt progress or update"
+                        )
+                else:
+                    receipt = connection.execute(
+                        """
+                        SELECT proposal_expected, planned_update_id FROM cycle_receipts
+                        WHERE stable_contributor_key=? AND cycle_seq=?
+                        """,
+                        (fence.stable_contributor_key, final_cycle_seq),
+                    ).fetchone()
+                    if receipt is None:
+                        raise MembershipFenceError("final cycle receipt is missing")
+                    proposal_expected = bool(receipt["proposal_expected"])
+                    planned_update_id = receipt["planned_update_id"]
+                    if proposal_expected and final_update_id is None:
+                        raise MembershipFenceError(
+                            "final receipt promised a proposal; acknowledge it or use hard-crash "
+                            "handling"
+                        )
+                    if proposal_expected and final_update_id != planned_update_id:
+                        raise MembershipFenceError(
+                            "final update does not match the update planned by the final receipt"
+                        )
+                    if not proposal_expected and final_update_id is not None:
+                        raise MembershipFenceError("final receipt did not declare a proposal")
                 if final_update_id is not None:
                     update = connection.execute(
                         "SELECT * FROM updates WHERE update_id=?", (final_update_id,)

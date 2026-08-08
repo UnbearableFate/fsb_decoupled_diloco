@@ -207,12 +207,78 @@ def test_plan03_p3_requirement_checker_binds_implementation_tests_and_evidence()
     matrix = (
         ROOT / "plans/DOING/plans/fsb_decoupled_diloco_plan_03_unified_ha-requirement-matrix.csv"
     )
-    checks, differences = verify_phase_requirements(ROOT, matrix, "P3-operational-robustness")
+    source_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    checks, differences = verify_phase_requirements(
+        ROOT,
+        matrix,
+        "P3-operational-robustness",
+        expected_source_commit=source_commit,
+    )
 
     assert differences == []
     assert checks
     assert all(item["status"] == "PASS" for item in checks.values())
     assert all(item["structured_evidence_paths"] for item in checks.values())
+
+
+def test_plan03_requirement_checker_rejects_self_evidence_and_stale_source(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "fs_diloco").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "fs_diloco" / "owner.py").write_text(
+        'PLAN03_REQUIREMENTS = {"REQ-1"}\n', encoding="utf-8"
+    )
+    (tmp_path / "tests" / "test_owner.py").write_text(
+        'PLAN03_REQUIREMENTS = {"REQ-1"}\n', encoding="utf-8"
+    )
+    matrix = tmp_path / "matrix.csv"
+    matrix.write_text(
+        "invariant_id,phase,artifact_contract,status,evidence_path\n"
+        "REQ-1,P3,checker requirements.REQ-1,complete,self.json;runtime.json\n",
+        encoding="utf-8",
+    )
+    self_artifact = {
+        "checks": {
+            "current_migration_boundaries": {"source_commit": "target"},
+            "requirements": {"REQ-1": {"status": "PASS"}},
+        }
+    }
+    (tmp_path / "self.json").write_text(json.dumps(self_artifact), encoding="utf-8")
+    stale_runtime = {
+        "status": "PASS",
+        "source_commit": "stale",
+        "requirements_covered": ["REQ-1"],
+    }
+    (tmp_path / "runtime.json").write_text(json.dumps(stale_runtime), encoding="utf-8")
+
+    checks, differences = verify_phase_requirements(
+        tmp_path,
+        matrix,
+        "P3",
+        expected_source_commit="target",
+        excluded_evidence_path="self.json",
+    )
+    assert checks["REQ-1"]["status"] == "BLOCKED"
+    assert differences == ["requirements.REQ-1.structured-checker-evidence"]
+
+    stale_runtime["source_commit"] = "target"
+    (tmp_path / "runtime.json").write_text(json.dumps(stale_runtime), encoding="utf-8")
+    checks, differences = verify_phase_requirements(
+        tmp_path,
+        matrix,
+        "P3",
+        expected_source_commit="target",
+        excluded_evidence_path="self.json",
+    )
+    assert differences == []
+    assert checks["REQ-1"]["structured_evidence_paths"] == ["runtime.json"]
 
 
 def test_plan03_triage_finding_ids_are_all_bound_to_matrix_requirements() -> None:

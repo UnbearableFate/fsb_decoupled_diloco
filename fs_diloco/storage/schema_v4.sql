@@ -1,6 +1,6 @@
 CREATE TABLE schema_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-    schema_version INTEGER NOT NULL CHECK (schema_version = 5),
+    schema_version INTEGER NOT NULL CHECK (schema_version = 6),
     protocol_version INTEGER NOT NULL CHECK (protocol_version = 4),
     mode TEXT NOT NULL CHECK (mode IN ('static', 'dynamic')),
     features_json TEXT NOT NULL,
@@ -543,6 +543,7 @@ CREATE TABLE candidate_launch_outbox (
     first_uncertain_at REAL,
     last_positive_evidence_at REAL,
     uncertainty_deadline REAL,
+    reservation_released_at REAL,
     evidence_source TEXT,
     manual_reason TEXT,
     created_at REAL NOT NULL,
