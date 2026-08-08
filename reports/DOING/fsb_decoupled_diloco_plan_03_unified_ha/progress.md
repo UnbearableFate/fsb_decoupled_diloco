@@ -147,3 +147,11 @@
 - 新RED覆盖missing-receipt collision/visibility gap、same-sequence pointer collision、old replay、same conflict重放、70个distinct conflict的64条hot quarantine bound、object删除后的command replay、immutable in-place write/writable replay拒绝。额外补齐`ReadResult/VisibilityDecision`直接构造的typed status边界。
 - attempt1 job `2508777.opbs`唯一失败是既有rename-race测试耦合到两种都正确的fail-closed诊断顺序，已在`failures.md`记录并只收敛断言；production verifier未改。最终job `2508780.opbs`在`mg0003`通过Ruff/format/checker，focused `142 passed, 2 xfailed in 4.52s`，full `714 passed, 2 xfailed in 49.20s`；连续失败计数归零。
 - 证据：`artifacts/20260809-032912_p2-review-remediation-tests_pass.json`与最小log（SHA-256 `4e9b64d8bfb57e9f37ba8c3e9a1b7522ef96bc0dd0cf3e296490bc49da194db4`）。本次改变immutable写保护、frontier/receipt协议和command replay边界，必须冻结新review-target并按增量门禁复审后才可phase-final。
+
+## 2026-08-09 — `P2-correctness-measurement` phase-final PASS
+
+- 增量复审范围：base `e4aba3ee0aee804b8deabb77a9b28bafcbcac7ef`、target `8b6e40c772459c5debcec25c93254adac025f7ee`，ancestry已验证。独立Codex报告 `reports/DOING/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P2-correctness-measurement/gpt-5.6-sol_8b6e40c772459c5debcec25c93254adac025f7ee.md` 结论`APPROVE_WITH_FOLLOWUPS`，确认首次审查2 High/3 Medium/1 Low均完成P2处置，无新的Critical/High/Medium。
+- Claude reviewer：fresh session `aa963dfe-b5dd-499f-bd06-0d568c440032`在0 input/output token处收到HTTP 429账户session limit；按用户及`plans/AGENTS.md`不重试，记为`skipped-session-limit`且不阻断，调用/skip metadata保存于同一phase目录。
+- 新Low处置：L2 command request canonical/hash逻辑重复为`deferred-with-justification`，owner=P5 authority职责收敛；当前两条路径使用相同算法且object缺失replay RED已通过。L3 quarantine bound通过constructor默认注入为`deferred-with-justification`的runtime wiring follow-up，owner=P4必须显式传validated maintenance值，P3 `AUDIT-02/AUDIT-04`负责observation/conflict audit archive与prune；当前P2 standalone authority严格验证并使用冻结64条bound。
+- phase门禁证据：job `2508780.opbs`在`mg0003`通过Ruff/format/Checker，focused `142 passed, 2 xfailed`、full `714 passed, 2 xfailed`；publication crash matrix仍为每点10次。剩余2项xfail精确属于P3 H-05公平选择与H-07 scheduler uncertainty。
+- `AUTH-06`、`PROP-04..10`、`DMB-01..04/06..08`、`FS-01..03`和`PUB-01`共19项matrix requirement更新为`complete`，持续回归`BASE-01`追加P2 full-suite证据。P2完成，计划推进到P3；未冒充完成P3的token/fairness/scheduler/cursor/audit/initializer/terminal工作。
