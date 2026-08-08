@@ -5,9 +5,13 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
+
 from fs_diloco.protocol.authority import ReadResult, ReadStatus
-from fs_diloco.protocol.contributor import StaticMembershipScope
+from fs_diloco.protocol.contributor import StaticContributorFence, StaticMembershipScope
+from fs_diloco.protocol.cycle_receipt import CycleReceiptV1
 from fs_diloco.storage.authority import AuthorityIdentity, LeaderAuthority, initialize_authority_v4
+from tests.support.v4_protocol import receipt_payload
 
 
 @dataclass
@@ -33,7 +37,23 @@ def open_leader(tmp_path: Path, clock: Clock):
         lease_duration_seconds=1000.0,
     )
     token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
-    return authority, authority.open_leader(token)
+    leader = authority.open_leader(token)
+    binding = leader.bind_or_replace_static_attempt(
+        command_id="bind",
+        learner_id="learner-0",
+        logical_launch_id="launch-0",
+        attempt_id="attempt-0",
+    )
+    fence = StaticContributorFence(
+        "static",
+        binding.learner_id,
+        binding.logical_launch_id,
+        binding.attempt_id,
+        binding.binding_generation,
+    )
+    receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence.as_dict()))
+    leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
+    return authority, leader
 
 
 def observe(
@@ -237,5 +257,61 @@ def test_visibility_upsert_and_pointer_archive_are_bounded(tmp_path: Path) -> No
             )
         assert query(tmp_path, "SELECT COUNT(*) FROM proposal_visibility")[0] == 1
         assert query(tmp_path, "SELECT COUNT(*) FROM proposal_visibility_archive")[0] == 8
+    finally:
+        authority.close()
+
+
+def test_visibility_requires_receipt_and_pointer_sequence_collision_fails_closed(
+    tmp_path: Path,
+) -> None:
+    clock = Clock()
+    authority, leader = open_leader(tmp_path, clock)
+    try:
+        first = observe(
+            leader,
+            command="pointer-first",
+            status=ReadStatus.OK,
+            signature="pointer-a",
+            sequence=1,
+        )
+        collision = observe(
+            leader,
+            command="pointer-collision",
+            status=ReadStatus.OK,
+            signature="pointer-b",
+            sequence=1,
+        )
+        old_replay = observe(
+            leader,
+            command="pointer-old-replay",
+            status=ReadStatus.OK,
+            signature="pointer-old",
+            sequence=0,
+        )
+
+        assert first.terminal_disposition is None
+        assert collision.status is ReadStatus.IDENTITY_MISMATCH
+        assert collision.terminal_disposition == "identity_mismatch"
+        assert old_replay.terminal_disposition is None
+        assert (
+            query(tmp_path, "SELECT pointer_signature FROM proposal_visibility")[0] == "pointer-a"
+        )
+        assert query(tmp_path, "SELECT COUNT(*) FROM proposal_quarantine")[0] == 1
+
+        with pytest.raises(ValueError, match="matching contiguous receipt"):
+            leader.observe_proposal_visibility(
+                command_id="missing-receipt",
+                stable_contributor_key="learner-0",
+                cycle_seq=2,
+                update_id="00000000-0000-4000-8000-000000000002",
+                object_identity="proposal-object-2",
+                pointer_signature="pointer-2",
+                pointer_sequence=2,
+                source_relative_path="updates/latest/learner-0.json",
+                result=ReadResult(ReadStatus.NOT_FOUND, diagnostic="missing"),
+                grace_seconds=0.0,
+                operator_deadline_seconds=1.0,
+            )
+        assert query(tmp_path, "SELECT last_terminal_cycle_seq FROM proposal_frontiers")[0] == 1
     finally:
         authority.close()

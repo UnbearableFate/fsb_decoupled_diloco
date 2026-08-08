@@ -130,7 +130,10 @@ def test_payload_rename_race_fails_identity_check(tmp_path: Path, monkeypatch: A
     result = verify_proposal_payload(tmp_path, proposal)
 
     assert result.status is ReadStatus.IDENTITY_MISMATCH
-    assert "name changed" in str(result.diagnostic)
+    assert any(
+        message in str(result.diagnostic)
+        for message in ("name changed", "changed while its tensor schema")
+    )
 
 
 def test_payload_mutation_during_schema_inspection_fails_identity_check(

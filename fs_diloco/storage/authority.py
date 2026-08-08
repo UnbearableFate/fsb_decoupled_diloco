@@ -430,6 +430,7 @@ class LeaderAuthority:
         busy_timeout_ms: int = 60_000,
         run_root: str | Path | None = None,
         orphan_grace_seconds: float | None = None,
+        max_quarantine_records_per_contributor: int = 64,
         wall_clock: Callable[[], float] = time.time,
         lease_safety_check: Callable[[LeaderToken], None] | None = None,
     ) -> None:
@@ -470,6 +471,14 @@ class LeaderAuthority:
         if self._orphan_grace_seconds < minimum_orphan_grace:
             connection.close()
             raise ValueError("orphan grace must cover lease duration plus twice clock skew")
+        if (
+            isinstance(max_quarantine_records_per_contributor, bool)
+            or not isinstance(max_quarantine_records_per_contributor, int)
+            or max_quarantine_records_per_contributor < 1
+        ):
+            connection.close()
+            raise ValueError("max quarantine records per contributor must be positive")
+        self._max_quarantine_records_per_contributor = max_quarantine_records_per_contributor
         self._lease_safety_check = lease_safety_check
         self.metadata = metadata
         self.read = AuthorityReadModel(self)
@@ -945,17 +954,24 @@ class LeaderSession:
     def ingest_proposal(
         self, *, command_id: str, proposal: FullUpdateProposalV2
     ) -> ProposalDisposition:
+        request = proposal.as_dict()
+        replay = self._command_replay(command_id, "ingest_proposal", request)
+        if replay is not None:
+            return ProposalDisposition(replay["disposition"])
         verification = verify_proposal_payload(self._authority._run_root, proposal)
         if verification.status is not ReadStatus.OK or verification.value is None:
             raise ProposalPayloadError(verification)
         verified_payload = verification.value
-        request = {"proposal": proposal.as_dict(), "verified_payload": asdict(verified_payload)}
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
             if proposal.run_id != self._authority._identity.run_id:
                 raise MembershipFenceError("proposal belongs to another run")
             self._require_current_fence(
                 connection, proposal.contributor_fence, update_id=proposal.update_id
+            )
+            receipt = self._require_proposal_receipt(
+                connection,
+                proposal,
             )
             proposal_digest = proposal.immutable_sha256()
             existing = connection.execute(
@@ -1030,34 +1046,11 @@ class LeaderSession:
                 )
                 self._advance_proposal_frontier(connection, proposal, observation_id)
                 return {"disposition": ProposalDisposition.CONFLICT.value}
-            receipt = connection.execute(
-                "SELECT * FROM cycle_receipts WHERE receipt_id=?",
-                (proposal.cycle_receipt_id,),
-            ).fetchone()
-            if receipt is None or receipt["receipt_sha256"] != proposal.cycle_receipt_sha256:
-                raise ValueError("proposal receipt reference is missing or mismatched")
             if (
                 receipt["planned_update_id"] != proposal.update_id
                 or receipt["planned_payload_sha256"] != proposal.payload_sha256
-                or int(receipt["cycle_seq"]) != proposal.cycle_seq
             ):
-                raise ValueError("proposal does not match its cycle receipt")
-            receipt_fields = {
-                "run_id": proposal.run_id,
-                "stable_contributor_key": proposal.stable_contributor_key,
-                "cycle_id": proposal.cycle_id,
-                "processed_tokens_this_cycle": proposal.processed_tokens_this_cycle,
-                "effective_tokens_this_cycle": proposal.effective_tokens_this_update,
-                "local_discarded_tokens_this_cycle": (proposal.local_discarded_tokens_this_cycle),
-                "retained_tokens_since_base": proposal.retained_tokens_since_base,
-                "data_cursor_start": proposal.data_cursor_start,
-                "data_cursor_end": proposal.data_cursor_end,
-                "fence_kind": proposal.contributor_fence.kind,
-                "fence_json": _canonical_json(proposal.contributor_fence.as_dict()),
-                "proposal_expected": 1,
-            }
-            if any(receipt[name] != value for name, value in receipt_fields.items()):
-                raise ValueError("proposal immutable fields do not match its cycle receipt")
+                raise ValueError("proposal does not match its cycle receipt plan")
             if (
                 verified_payload.relative_path != proposal.payload_relative_path
                 or verified_payload.size_bytes != proposal.payload_size
@@ -1254,6 +1247,12 @@ class LeaderSession:
         }
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            self._require_visibility_receipt(
+                connection,
+                stable_contributor_key=stable_contributor_key,
+                cycle_seq=cycle_seq,
+                update_id=update_id,
+            )
             now = float(self._authority._wall_clock())
             newest = connection.execute(
                 """
@@ -1269,6 +1268,45 @@ class LeaderSession:
                     "stable_failure_count": 0,
                     "terminal_disposition": None,
                     "observation_id": None,
+                }
+            if (
+                newest is not None
+                and pointer_sequence == int(newest["pointer_sequence"])
+                and str(newest["pointer_signature"]) != pointer_signature
+            ):
+                collision_fingerprint = hashlib.sha256(
+                    _canonical_json(
+                        {
+                            "object_identity": object_identity,
+                            "pointer_sequence": pointer_sequence,
+                            "existing_signature": str(newest["pointer_signature"]),
+                            "incoming_signature": pointer_signature,
+                        }
+                    ).encode("utf-8")
+                ).hexdigest()
+                collision_diagnostic = "pointer sequence was reused with a different signature"
+                observation_id = self._record_visibility_terminal(
+                    connection,
+                    stable_contributor_key=stable_contributor_key,
+                    cycle_seq=cycle_seq,
+                    update_id=update_id,
+                    pointer_sequence=pointer_sequence,
+                    disposition=ProposalDisposition.IDENTITY_MISMATCH,
+                    diagnostic=collision_diagnostic,
+                    source_relative_path=source_relative_path,
+                    fingerprint=collision_fingerprint,
+                )
+                self._advance_frontier_values(
+                    connection,
+                    stable_contributor_key=stable_contributor_key,
+                    cycle_seq=cycle_seq,
+                    observation_id=observation_id,
+                )
+                return {
+                    "status": ReadStatus.IDENTITY_MISMATCH.value,
+                    "stable_failure_count": 1,
+                    "terminal_disposition": "identity_mismatch",
+                    "observation_id": observation_id,
                 }
             if newest is not None and str(newest["pointer_signature"]) != pointer_signature:
                 connection.execute(
@@ -2402,6 +2440,61 @@ class LeaderSession:
         result = self._command(command_id, "finalize_terminal", request, operation)
         return TerminalState(result["state"])
 
+    def _require_proposal_receipt(
+        self,
+        connection: sqlite3.Connection,
+        proposal: FullUpdateProposalV2,
+    ) -> sqlite3.Row:
+        receipt = connection.execute(
+            "SELECT * FROM cycle_receipts WHERE receipt_id=?",
+            (proposal.cycle_receipt_id,),
+        ).fetchone()
+        if receipt is None or receipt["receipt_sha256"] != proposal.cycle_receipt_sha256:
+            raise ValueError("proposal receipt reference is missing or mismatched")
+        receipt_fields = {
+            "run_id": proposal.run_id,
+            "stable_contributor_key": proposal.stable_contributor_key,
+            "cycle_seq": proposal.cycle_seq,
+            "cycle_id": proposal.cycle_id,
+            "processed_tokens_this_cycle": proposal.processed_tokens_this_cycle,
+            "effective_tokens_this_cycle": proposal.effective_tokens_this_update,
+            "local_discarded_tokens_this_cycle": proposal.local_discarded_tokens_this_cycle,
+            "retained_tokens_since_base": proposal.retained_tokens_since_base,
+            "data_cursor_start": proposal.data_cursor_start,
+            "data_cursor_end": proposal.data_cursor_end,
+            "fence_kind": proposal.contributor_fence.kind,
+            "fence_json": _canonical_json(proposal.contributor_fence.as_dict()),
+            "proposal_expected": 1,
+        }
+        if any(receipt[name] != value for name, value in receipt_fields.items()):
+            raise ValueError("proposal immutable fields do not match its cycle receipt")
+        return receipt
+
+    def _require_visibility_receipt(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        stable_contributor_key: str,
+        cycle_seq: int,
+        update_id: str,
+    ) -> sqlite3.Row:
+        receipt = connection.execute(
+            """
+            SELECT * FROM cycle_receipts
+            WHERE run_id=? AND stable_contributor_key=? AND cycle_seq=?
+                AND proposal_expected=1 AND planned_update_id=?
+            """,
+            (
+                self._authority._identity.run_id,
+                stable_contributor_key,
+                cycle_seq,
+                update_id,
+            ),
+        ).fetchone()
+        if receipt is None:
+            raise ValueError("visibility observation requires a matching contiguous receipt")
+        return receipt
+
     def _record_observation(
         self,
         connection: sqlite3.Connection,
@@ -2442,6 +2535,21 @@ class LeaderSession:
         fingerprint: str,
     ) -> int:
         now = float(self._authority._wall_clock())
+        existing = connection.execute(
+            """
+            SELECT observation_id FROM proposal_quarantine
+            WHERE stable_contributor_key=? AND cycle_seq=? AND disposition=?
+                AND fingerprint=?
+            """,
+            (
+                stable_contributor_key,
+                cycle_seq,
+                disposition.value,
+                fingerprint,
+            ),
+        ).fetchone()
+        if existing is not None:
+            return int(existing["observation_id"])
         cursor = connection.execute(
             """
             INSERT INTO proposal_observations(
@@ -2483,6 +2591,7 @@ class LeaderSession:
                 now,
             ),
         )
+        self._prune_quarantine(connection, stable_contributor_key)
         return observation_id
 
     def _record_quarantine(
@@ -2501,6 +2610,8 @@ class LeaderSession:
                 stable_contributor_key, cycle_seq, update_id, disposition, fingerprint,
                 bounded_diagnostic, source_relative_path, observation_id, quarantined_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(stable_contributor_key, cycle_seq, disposition, fingerprint)
+            DO NOTHING
             """,
             (
                 proposal.stable_contributor_key,
@@ -2512,6 +2623,27 @@ class LeaderSession:
                 proposal.payload_relative_path,
                 observation_id,
                 float(self._authority._wall_clock()),
+            ),
+        )
+        self._prune_quarantine(connection, proposal.stable_contributor_key)
+
+    def _prune_quarantine(
+        self,
+        connection: sqlite3.Connection,
+        stable_contributor_key: str,
+    ) -> None:
+        connection.execute(
+            """
+            DELETE FROM proposal_quarantine
+            WHERE quarantine_id IN (
+                SELECT quarantine_id FROM proposal_quarantine
+                WHERE stable_contributor_key=?
+                ORDER BY quarantine_id DESC LIMIT -1 OFFSET ?
+            )
+            """,
+            (
+                stable_contributor_key,
+                self._authority._max_quarantine_records_per_contributor,
             ),
         )
 
@@ -2944,6 +3076,29 @@ class LeaderSession:
                     f"{prefix} publication artifact failed verification: "
                     f"{result.status.value}: {result.diagnostic}"
                 )
+
+    def _command_replay(
+        self,
+        command_id: str,
+        kind: str,
+        request: Mapping[str, Any],
+    ) -> dict[str, Any] | None:
+        """Return an already committed result before repeatable external I/O."""
+
+        validate_identity(command_id, name="command_id")
+        request_json = _canonical_json(dict(request))
+        request_sha = hashlib.sha256(request_json.encode("utf-8")).hexdigest()
+        self._authority._verify_token(self.token)
+        existing = self._authority._fetchone(
+            "SELECT * FROM command_records WHERE command_id=?",
+            (command_id,),
+        )
+        self._authority._verify_token(self.token)
+        if existing is None:
+            return None
+        if existing["command_kind"] != kind or existing["request_sha256"] != request_sha:
+            raise CommandConflictError("command ID was replayed with a different kind or request")
+        return json.loads(str(existing["result_json"]))
 
     def _command(
         self,

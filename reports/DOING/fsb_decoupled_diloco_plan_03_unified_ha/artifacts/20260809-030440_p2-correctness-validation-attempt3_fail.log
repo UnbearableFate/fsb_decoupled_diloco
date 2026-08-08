@@ -1,8 +1,8 @@
 Currently Loaded Modulefiles:
- 1) nvidia/25.9(default)   2) nv-hpcx/25.9  
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9
 
 Key:
-(symbolic-version)  
+(symbolic-version)
 mg0006
 PBS_JOBID=2508742.opbs
 python=3.13.13
@@ -50,11 +50,11 @@ tmp_path = PosixPath('/tmp/2508742.2466/pytest-of-x10041/pytest-0/test_revoke_af
                 reason="heartbeat_dead",
                 final_status="expired",
             )
-    
+
             conflict = leader.commit_merge(
                 command_id="commit-first", publication_id=first_intent.publication_id
             )
-    
+
             assert conflict == MergeFenceConflict(
                 publication_id=first_intent.publication_id,
                 invalid_update_ids=(stale.update_id,),
@@ -63,15 +63,15 @@ tmp_path = PosixPath('/tmp/2508742.2466/pytest-of-x10041/pytest-0/test_revoke_af
 >           retry = leader.try_select_batch(command_id="select-retry", quorum_min=1, quorum_max=1)
                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_authority_p2_dynamic.py:211: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_authority_p2_dynamic.py:211:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 fs_diloco/storage/authority.py:1896: in try_select_batch
     result = self._command(command_id, "try_select_batch", request, operation)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 fs_diloco/storage/authority.py:2975: in _command
     result = operation(connection)
              ^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 connection = <sqlite3.Connection object at 0x4001483047c0>
 
@@ -174,7 +174,7 @@ tmp_path = PosixPath('/tmp/2508742.2466/pytest-of-x10041/pytest-0/test_takeover_
             clock.now = 193.0
             second_token = authority.acquire_leader(owner_id="owner-2", hostname="host", pid=2)
             second = authority.open_leader(second_token)
-    
+
             with pytest.raises(StaleLeaderTokenError):
                 first.commit_merge(command_id="stale-commit", publication_id="publication-v0")
             assert second.reconcile_publications(command_id="reconcile") == ("publication-v0",)
@@ -183,14 +183,14 @@ tmp_path = PosixPath('/tmp/2508742.2466/pytest-of-x10041/pytest-0/test_takeover_
 >           claimed = second.claim_orphan_gc(command_id="claim-after-grace")
                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:198: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:198:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 fs_diloco/storage/authority.py:2314: in claim_orphan_gc
     result = self._command(command_id, "claim_orphan_gc", request, operation)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 fs_diloco/storage/authority.py:2963: in _command
     self._authority._verify_token(self.token)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 self = <fs_diloco.storage.authority.LeaderAuthority object at 0x4001484335f0>
 token = LeaderToken(run_id='run-v4', epoch=2, owner_id='owner-2')
@@ -224,8 +224,8 @@ tmp_path = PosixPath('/tmp/2508742.2466/pytest-of-x10041/pytest-0/test_h01b_comm
     def test_h01b_commit_conflict_terminalizes_only_invalid_rows(tmp_path: Path) -> None:
 >       _p2_revoke_after(tmp_path)
 
-tests/test_plan03_p0_red.py:29: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_plan03_p0_red.py:29:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_authority_p2_dynamic.py:211: in test_revoke_after_selection_returns_per_row_conflict_then_retry_commits
     retry = leader.try_select_batch(command_id="select-retry", quorum_min=1, quorum_max=1)
             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -235,7 +235,7 @@ fs_diloco/storage/authority.py:1896: in try_select_batch
 fs_diloco/storage/authority.py:2975: in _command
     result = operation(connection)
              ^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 connection = <sqlite3.Connection object at 0x4001486d7880>
 

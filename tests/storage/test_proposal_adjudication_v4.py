@@ -104,6 +104,10 @@ def test_replay_collision_and_logical_conflict_are_explicit_and_audited(
             leader.ingest_proposal(command_id="collision", proposal=collision)
             is ProposalDisposition.IDENTITY_COLLISION
         )
+        assert (
+            leader.ingest_proposal(command_id="collision-repeat", proposal=collision)
+            is ProposalDisposition.IDENTITY_COLLISION
+        )
 
         conflict_payload = proposal_payload(
             cycle_seq=1,
@@ -117,9 +121,13 @@ def test_replay_collision_and_logical_conflict_are_explicit_and_audited(
             leader.ingest_proposal(command_id="logical-conflict", proposal=conflict)
             is ProposalDisposition.CONFLICT
         )
+        assert (
+            leader.ingest_proposal(command_id="logical-conflict-repeat", proposal=conflict)
+            is ProposalDisposition.CONFLICT
+        )
 
         assert query_one(database, "SELECT COUNT(*) FROM updates")[0] == 1
-        assert query_one(database, "SELECT COUNT(*) FROM proposal_conflicts")[0] == 2
+        assert query_one(database, "SELECT COUNT(*) FROM proposal_conflicts")[0] == 4
         assert query_one(database, "SELECT COUNT(*) FROM proposal_quarantine")[0] == 2
         frontier = query_one(
             database,
@@ -137,6 +145,68 @@ def test_replay_collision_and_logical_conflict_are_explicit_and_audited(
             )[0]
             == "pending"
         )
+    finally:
+        authority.close()
+
+
+def test_conflict_cannot_cross_receipt_gap_and_command_replay_needs_no_object(
+    tmp_path: Path,
+) -> None:
+    authority, leader, fence = open_static(tmp_path)
+    database = tmp_path / "authority.sqlite3"
+    try:
+        _receipt, proposal = build_cycle(leader, tmp_path, fence, cycle_seq=1)
+        assert (
+            leader.ingest_proposal(command_id="accept", proposal=proposal)
+            is ProposalDisposition.ACCEPTED
+        )
+        (tmp_path / proposal.payload_relative_path).unlink()
+        assert (
+            leader.ingest_proposal(command_id="accept", proposal=proposal)
+            is ProposalDisposition.ACCEPTED
+        )
+        publish_proposal_payload(tmp_path, proposal)
+
+        missing_receipt_collision = replace(
+            proposal,
+            cycle_receipt_id="missing-receipt",
+            cycle_receipt_sha256="f" * 64,
+            base_global_version=9,
+        )
+        with pytest.raises(ValueError, match="receipt reference is missing"):
+            leader.ingest_proposal(
+                command_id="missing-receipt-collision",
+                proposal=missing_receipt_collision,
+            )
+        assert query_one(database, "SELECT COUNT(*) FROM proposal_conflicts")[0] == 0
+        assert query_one(database, "SELECT last_terminal_cycle_seq FROM proposal_frontiers")[0] == 1
+    finally:
+        authority.close()
+
+
+def test_quarantine_hot_rows_are_bounded_for_distinct_conflicts(tmp_path: Path) -> None:
+    authority, leader, fence = open_static(tmp_path)
+    database = tmp_path / "authority.sqlite3"
+    try:
+        receipt, accepted = build_cycle(leader, tmp_path, fence, cycle_seq=1)
+        leader.ingest_proposal(command_id="accept", proposal=accepted)
+        for index in range(100, 170):
+            conflict = FullUpdateProposalV2.from_dict(
+                proposal_payload(
+                    cycle_seq=1,
+                    update_id=f"00000000-0000-4000-8000-{index:012d}",
+                    receipt_sha256=receipt.immutable_sha256(),
+                    fence=fence.as_dict(),
+                )
+            )
+            publish_proposal_payload(tmp_path, conflict)
+            assert (
+                leader.ingest_proposal(command_id=f"conflict-{index}", proposal=conflict)
+                is ProposalDisposition.CONFLICT
+            )
+
+        assert query_one(database, "SELECT COUNT(*) FROM proposal_quarantine")[0] == 64
+        assert query_one(database, "SELECT COUNT(*) FROM proposal_conflicts")[0] == 70
     finally:
         authority.close()
 

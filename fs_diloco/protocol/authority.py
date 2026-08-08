@@ -43,6 +43,8 @@ class ReadResult(Generic[T]):
     fingerprint: str | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.status, ReadStatus):
+            raise ValueError("read result status must be a ReadStatus")
         if self.status is ReadStatus.OK and self.value is None:
             raise ValueError("an OK read result requires a value")
         if self.status is not ReadStatus.OK and self.value is not None:
@@ -244,6 +246,8 @@ class VisibilityDecision:
     observation_id: int | None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.status, ReadStatus):
+            raise ValueError("visibility decision status must be a ReadStatus")
         strict_int(self.stable_failure_count, name="stable_failure_count", minimum=0)
         if self.terminal_disposition not in {
             None,

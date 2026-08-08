@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+import stat
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -73,9 +74,19 @@ def test_immutable_publication_is_create_no_replace_and_exact_replay_is_idempote
     assert first.created is True
     assert replay.created is False
     assert target.read_bytes() == b"first"
+    assert stat.S_IMODE(target.stat().st_mode) & 0o222 == 0
+    with pytest.raises(PermissionError):
+        target.write_bytes(b"mutated-in-place")
     with pytest.raises(FileExistsError, match="collision"):
         publish_immutable_bytes(target, b"second")
     assert target.read_bytes() == b"first"
+
+    writable = tmp_path / "writable-existing-object"
+    writable.write_bytes(b"first")
+    with pytest.raises(FileExistsError, match="collision"):
+        publish_immutable_bytes(writable, b"first")
+    with pytest.raises(ValueError, match="must not contain write bits"):
+        publish_immutable_bytes(tmp_path / "bad-mode", b"first", mode=0o644)
 
 
 def test_concurrent_immutable_publishers_never_overwrite_the_winner(tmp_path: Path) -> None:

@@ -1,8 +1,8 @@
 Currently Loaded Modulefiles:
- 1) nvidia/25.9(default)   2) nv-hpcx/25.9  
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9
 
 Key:
-(symbolic-version)  
+(symbolic-version)
 mg0006
 PBS_JOBID=2508745.opbs
 python=3.13.13
@@ -42,30 +42,30 @@ tmp_path = PosixPath('/tmp/2508745.9630/pytest-of-x10041/pytest-1/test_two_rank_
             join=True,
         )
 
-tests/test_torch_baseline_protocol.py:187: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_torch_baseline_protocol.py:187:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.13/site-packages/torch/multiprocessing/spawn.py:340: in spawn
     return start_processes(fn, args, nprocs, join, daemon, start_method="spawn")
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/torch/multiprocessing/spawn.py:296: in start_processes
     while not context.join():
               ^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 self = <torch.multiprocessing.spawn.ProcessContext object at 0x4001afe46900>
 timeout = None, grace_period = None
 
     def join(self, timeout: float | None = None, grace_period: float | None = None):
         r"""Join one or more processes within spawn context.
-    
+
         Attempt to join one or more processes in this spawn context.
         If one of them exited with a non-zero exit status, this function
         kills the remaining processes (optionally with a grace period)
         and raises an exception with the cause of the first process exiting.
-    
+
         Returns ``True`` if all processes have been joined successfully,
         ``False`` if there are more processes that need to be joined.
-    
+
         Args:
             timeout (float): Wait this long (in seconds) before giving up on waiting.
             grace_period (float): When any processes fail, wait this long (in seconds)
@@ -75,13 +75,13 @@ timeout = None, grace_period = None
         # Ensure this function can be called even when we're done.
         if len(self.sentinels) == 0:
             return True
-    
+
         # Wait for any process to fail or all of them to succeed.
         ready = multiprocessing.connection.wait(
             self.sentinels.keys(),
             timeout=timeout,
         )
-    
+
         error_index = None
         for sentinel in ready:
             index = self.sentinels.pop(sentinel)
@@ -90,7 +90,7 @@ timeout = None, grace_period = None
             if process.exitcode != 0:
                 error_index = index
                 break
-    
+
         # Return if there was no error.
         if error_index is None:
             # Return whether or not all processes have been joined.
@@ -104,7 +104,7 @@ timeout = None, grace_period = None
             if process.is_alive():
                 log.warning("Terminating process %s via signal SIGTERM", process.pid)
                 process.terminate()
-    
+
         # Try SIGKILL if the process isn't going down after another grace_period.
         # The reason is related to python signal handling is limited
         # to main thread and if that is in c/c++ land and stuck it won't
@@ -119,7 +119,7 @@ timeout = None, grace_period = None
                 )
                 process.kill()
             process.join()
-    
+
         # The file will only be created if the process crashed.
         failed_process = self.processes[error_index]
         if not os.access(self.error_files[error_index], os.R_OK):
@@ -227,30 +227,30 @@ tmp_path = PosixPath('/tmp/2508745.9630/pytest-of-x10041/pytest-1/test_two_rank_
             join=True,
         )
 
-tests/test_torch_baseline_protocol.py:246: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_torch_baseline_protocol.py:246:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.13/site-packages/torch/multiprocessing/spawn.py:340: in spawn
     return start_processes(fn, args, nprocs, join, daemon, start_method="spawn")
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/torch/multiprocessing/spawn.py:296: in start_processes
     while not context.join():
               ^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 self = <torch.multiprocessing.spawn.ProcessContext object at 0x4001afe63750>
 timeout = None, grace_period = None
 
     def join(self, timeout: float | None = None, grace_period: float | None = None):
         r"""Join one or more processes within spawn context.
-    
+
         Attempt to join one or more processes in this spawn context.
         If one of them exited with a non-zero exit status, this function
         kills the remaining processes (optionally with a grace period)
         and raises an exception with the cause of the first process exiting.
-    
+
         Returns ``True`` if all processes have been joined successfully,
         ``False`` if there are more processes that need to be joined.
-    
+
         Args:
             timeout (float): Wait this long (in seconds) before giving up on waiting.
             grace_period (float): When any processes fail, wait this long (in seconds)
@@ -260,13 +260,13 @@ timeout = None, grace_period = None
         # Ensure this function can be called even when we're done.
         if len(self.sentinels) == 0:
             return True
-    
+
         # Wait for any process to fail or all of them to succeed.
         ready = multiprocessing.connection.wait(
             self.sentinels.keys(),
             timeout=timeout,
         )
-    
+
         error_index = None
         for sentinel in ready:
             index = self.sentinels.pop(sentinel)
@@ -275,7 +275,7 @@ timeout = None, grace_period = None
             if process.exitcode != 0:
                 error_index = index
                 break
-    
+
         # Return if there was no error.
         if error_index is None:
             # Return whether or not all processes have been joined.
@@ -289,7 +289,7 @@ timeout = None, grace_period = None
             if process.is_alive():
                 log.warning("Terminating process %s via signal SIGTERM", process.pid)
                 process.terminate()
-    
+
         # Try SIGKILL if the process isn't going down after another grace_period.
         # The reason is related to python signal handling is limited
         # to main thread and if that is in c/c++ land and stuck it won't
@@ -304,7 +304,7 @@ timeout = None, grace_period = None
                 )
                 process.kill()
             process.join()
-    
+
         # The file will only be created if the process crashed.
         failed_process = self.processes[error_index]
         if not os.access(self.error_files[error_index], os.R_OK):

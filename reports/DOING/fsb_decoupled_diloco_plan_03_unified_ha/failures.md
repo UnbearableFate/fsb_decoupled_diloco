@@ -241,3 +241,10 @@
 - spawn child的import链为`modeling.param_index -> storage package -> authority -> object_store -> tensor_codec -> modeling.param_index`，暴露新tensor digest helper放在依赖过高的`tensor_codec`形成环。单进程focused因导入顺序未触发，full spawn正确发现。
 - 将纯tensor identity helper下移到无storage/modeling依赖的`storage/tensor_identity.py`，`tensor_codec`只re-export/import，`object_store`直接依赖低层模块；未修改baseline逻辑。下一轮job `2508748.opbs` focused/full全部通过，失败计数归零。
 - 完整证据：`artifacts/20260809-030535_p2-correctness-validation-attempt4_fail.log`。
+
+## 2026-08-09 03:28 JST — `p2-review-remediation-validation-attempt1`（连续失败 1 次）
+
+- job `2508777.opbs`在compute node `mg0003`通过Ruff、format和checker；focused为`1 failed, 141 passed, 2 xfailed`，按fail-fast未进入full suite。
+- 唯一失败是既有rename-race测试把安全拒绝诊断固定为`name changed`。本轮immutable publisher改为只读mode后未修改proposal verifier；shared filesystem本次先在同一fd final metadata检查观察到target replacement导致的ctime/link变化，因此同样正确地返回`IDENTITY_MISMATCH: payload changed while its tensor schema was being inspected`，尚未执行后面的pathname-inode诊断。
+- 根因是测试耦合到两个都合法的fail-closed检查顺序/文件系统metadata可见性，不是rename race被接受。下一轮把断言收敛为稳定语义：status必须是`IDENTITY_MISMATCH`，诊断必须属于schema期间内容/metadata变化或最终pathname变化；production verifier不改。随后重跑同一focused+full门禁。
+- 完整证据：`artifacts/20260809-032752_p2-review-remediation-validation-attempt1_fail.log`，SHA-256 `dd11b1116a9edd3f65eff249b1c4bed80a68f3135d8a0eb6be93b0c60875a5e8`。

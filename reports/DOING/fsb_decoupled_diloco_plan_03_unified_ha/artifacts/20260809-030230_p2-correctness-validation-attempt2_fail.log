@@ -1,8 +1,8 @@
 Currently Loaded Modulefiles:
- 1) nvidia/25.9(default)   2) nv-hpcx/25.9  
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9
 
 Key:
-(symbolic-version)  
+(symbolic-version)
 mg0008
 PBS_JOBID=2508727.opbs
 python=3.13.13
@@ -32,8 +32,8 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_revoke_be
             current = ingest_update(leader, tmp_path, current_fence, ordinal=1)
 >           initialize_v0(leader, tmp_path)
 
-tests/storage/test_authority_p2_dynamic.py:114: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_authority_p2_dynamic.py:114:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_authority_p2_dynamic.py:100: in initialize_v0
     **publish_checkpoint_pair(run_root, version=0),
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -51,7 +51,7 @@ fs_diloco/storage/tensor_codec.py:66: in writer
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -60,30 +60,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -92,7 +92,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -114,8 +114,8 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_selection
             current = ingest_update(leader, tmp_path, current_fence, ordinal=1)
 >           initialize_v0(leader, tmp_path)
 
-tests/storage/test_authority_p2_dynamic.py:150: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_authority_p2_dynamic.py:150:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_authority_p2_dynamic.py:100: in initialize_v0
     **publish_checkpoint_pair(run_root, version=0),
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -133,7 +133,7 @@ fs_diloco/storage/tensor_codec.py:66: in writer
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -142,30 +142,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -174,7 +174,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -198,8 +198,8 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_revoke_af
             current = ingest_update(leader, tmp_path, current_fence, ordinal=1)
 >           initialize_v0(leader, tmp_path)
 
-tests/storage/test_authority_p2_dynamic.py:183: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_authority_p2_dynamic.py:183:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_authority_p2_dynamic.py:100: in initialize_v0
     **publish_checkpoint_pair(run_root, version=0),
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -217,7 +217,7 @@ fs_diloco/storage/tensor_codec.py:66: in writer
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -226,30 +226,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -258,7 +258,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -278,7 +278,7 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_draining_
             leader.initialize_dynamic_membership(command_id="initialize-membership")
             fence = admit(leader, index=0)
             final_update_id = "00000000-0000-4000-8000-000000000001"
-    
+
             leader.retire_incarnation(
                 command_id="begin-drain",
                 fence=fence,
@@ -288,7 +288,7 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_draining_
             )
             final = ingest_update(leader, tmp_path, fence, ordinal=0)
             assert final.update_id == final_update_id
-    
+
             wrong_receipt = CycleReceiptV1.from_dict(
                 receipt_payload(
                     cycle_seq=2,
@@ -305,7 +305,7 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_draining_
             )
             with pytest.raises(MembershipFenceError):
                 leader.ingest_cycle_receipt(command_id="wrong-final-receipt", receipt=wrong_receipt)
-    
+
             terminalized = leader.retire_incarnation(
                 command_id="finish-drain",
                 fence=fence,
@@ -316,15 +316,15 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_draining_
 >           attempt = leader.try_select_batch(command_id="select-none", quorum_min=1, quorum_max=1)
                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_authority_p2_dynamic.py:273: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_authority_p2_dynamic.py:273:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 fs_diloco/storage/authority.py:1896: in try_select_batch
     result = self._command(command_id, "try_select_batch", request, operation)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 fs_diloco/storage/authority.py:2975: in _command
     result = operation(connection)
              ^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 connection = <sqlite3.Connection object at 0x40014fe26980>
 
@@ -347,8 +347,8 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_v0_uses_f
 >           pair = publish_checkpoint_pair(tmp_path, version=0)
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_leader_authority_commands.py:66: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_leader_authority_commands.py:66:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/support/v4_protocol.py:151: in publish_checkpoint_pair
     weight = publish_safetensors_immutable(
 fs_diloco/storage/tensor_codec.py:68: in publish_safetensors_immutable
@@ -363,7 +363,7 @@ fs_diloco/storage/tensor_codec.py:66: in writer
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -372,30 +372,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -404,7 +404,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -421,8 +421,8 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_global_ve
             leader = authority.open_leader(token)
 >           commit_v0(leader, tmp_path)
 
-tests/storage/test_leader_authority_commands.py:141: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_leader_authority_commands.py:141:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_leader_authority_commands.py:57: in commit_v0
     **publish_checkpoint_pair(run_root, version=0),
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -440,7 +440,7 @@ fs_diloco/storage/tensor_codec.py:66: in writer
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -449,30 +449,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -481,7 +481,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -514,7 +514,7 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_typed_rec
             proposal_data = proposal_payload(receipt_sha256=receipt.immutable_sha256(), fence=fence)
             proposal = FullUpdateProposalV2.from_dict(proposal_data)
             publish_proposal_payload(tmp_path, proposal)
-    
+
             assert (
                 leader.record_proposal(command_id="proposal-1", proposal=proposal).value == "accepted"
             )
@@ -524,8 +524,8 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_typed_rec
             )
 >           commit_v0(leader, tmp_path)
 
-tests/storage/test_leader_authority_commands.py:191: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_leader_authority_commands.py:191:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_leader_authority_commands.py:57: in commit_v0
     **publish_checkpoint_pair(run_root, version=0),
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -543,7 +543,7 @@ fs_diloco/storage/tensor_codec.py:66: in writer
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -552,30 +552,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -584,7 +584,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -601,8 +601,8 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_prepared_
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:102: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:102:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -611,7 +611,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -620,30 +620,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -652,7 +652,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -667,8 +667,8 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_mismatche
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:139: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:139:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -677,7 +677,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -686,30 +686,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -718,7 +718,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -735,8 +735,8 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_takeover_
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:172: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:172:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -745,7 +745,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -754,30 +754,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -786,7 +786,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -814,8 +814,8 @@ repetition = 0, crash_point = 'before_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -824,7 +824,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -833,30 +833,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -865,7 +865,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -893,8 +893,8 @@ repetition = 1, crash_point = 'before_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -903,7 +903,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -912,30 +912,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -944,7 +944,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -972,8 +972,8 @@ repetition = 2, crash_point = 'before_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -982,7 +982,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -991,30 +991,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -1023,7 +1023,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -1051,8 +1051,8 @@ repetition = 3, crash_point = 'before_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1061,7 +1061,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -1070,30 +1070,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -1102,7 +1102,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -1130,8 +1130,8 @@ repetition = 4, crash_point = 'before_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1140,7 +1140,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -1149,30 +1149,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -1181,7 +1181,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -1209,8 +1209,8 @@ repetition = 5, crash_point = 'before_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1219,7 +1219,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -1228,30 +1228,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -1260,7 +1260,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -1288,8 +1288,8 @@ repetition = 6, crash_point = 'before_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1298,7 +1298,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -1307,30 +1307,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -1339,7 +1339,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -1367,8 +1367,8 @@ repetition = 7, crash_point = 'before_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1377,7 +1377,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -1386,30 +1386,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -1418,7 +1418,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -1446,8 +1446,8 @@ repetition = 8, crash_point = 'before_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1456,7 +1456,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -1465,30 +1465,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -1497,7 +1497,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -1525,8 +1525,8 @@ repetition = 9, crash_point = 'before_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1535,7 +1535,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -1544,30 +1544,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -1576,7 +1576,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -1604,8 +1604,8 @@ repetition = 0, crash_point = 'after_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1614,7 +1614,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -1623,30 +1623,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -1655,7 +1655,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -1683,8 +1683,8 @@ repetition = 1, crash_point = 'after_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1693,7 +1693,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -1702,30 +1702,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -1734,7 +1734,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -1762,8 +1762,8 @@ repetition = 2, crash_point = 'after_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1772,7 +1772,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -1781,30 +1781,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -1813,7 +1813,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -1841,8 +1841,8 @@ repetition = 3, crash_point = 'after_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1851,7 +1851,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -1860,30 +1860,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -1892,7 +1892,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -1920,8 +1920,8 @@ repetition = 4, crash_point = 'after_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1930,7 +1930,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -1939,30 +1939,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -1971,7 +1971,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -1999,8 +1999,8 @@ repetition = 5, crash_point = 'after_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2009,7 +2009,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -2018,30 +2018,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -2050,7 +2050,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -2078,8 +2078,8 @@ repetition = 6, crash_point = 'after_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2088,7 +2088,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -2097,30 +2097,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -2129,7 +2129,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -2157,8 +2157,8 @@ repetition = 7, crash_point = 'after_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2167,7 +2167,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -2176,30 +2176,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -2208,7 +2208,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -2236,8 +2236,8 @@ repetition = 8, crash_point = 'after_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2246,7 +2246,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -2255,30 +2255,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -2287,7 +2287,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -2315,8 +2315,8 @@ repetition = 9, crash_point = 'after_prepare'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2325,7 +2325,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -2334,30 +2334,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -2366,7 +2366,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -2394,8 +2394,8 @@ repetition = 0, crash_point = 'after_weight'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2404,7 +2404,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -2413,30 +2413,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -2445,7 +2445,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -2473,8 +2473,8 @@ repetition = 1, crash_point = 'after_weight'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2483,7 +2483,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -2492,30 +2492,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -2524,7 +2524,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -2552,8 +2552,8 @@ repetition = 2, crash_point = 'after_weight'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2562,7 +2562,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -2571,30 +2571,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -2603,7 +2603,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -2631,8 +2631,8 @@ repetition = 3, crash_point = 'after_weight'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2641,7 +2641,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -2650,30 +2650,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -2682,7 +2682,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -2710,8 +2710,8 @@ repetition = 4, crash_point = 'after_weight'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2720,7 +2720,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -2729,30 +2729,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -2761,7 +2761,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -2789,8 +2789,8 @@ repetition = 5, crash_point = 'after_weight'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2799,7 +2799,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -2808,30 +2808,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -2840,7 +2840,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -2868,8 +2868,8 @@ repetition = 6, crash_point = 'after_weight'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2878,7 +2878,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -2887,30 +2887,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -2919,7 +2919,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -2947,8 +2947,8 @@ repetition = 7, crash_point = 'after_weight'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2957,7 +2957,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -2966,30 +2966,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -2998,7 +2998,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -3026,8 +3026,8 @@ repetition = 8, crash_point = 'after_weight'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -3036,7 +3036,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -3045,30 +3045,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -3077,7 +3077,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -3105,8 +3105,8 @@ repetition = 9, crash_point = 'after_weight'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -3115,7 +3115,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -3124,30 +3124,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -3156,7 +3156,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -3184,8 +3184,8 @@ repetition = 0, crash_point = 'after_outer'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -3194,7 +3194,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -3203,30 +3203,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -3235,7 +3235,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -3263,8 +3263,8 @@ repetition = 1, crash_point = 'after_outer'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -3273,7 +3273,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -3282,30 +3282,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -3314,7 +3314,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -3342,8 +3342,8 @@ repetition = 2, crash_point = 'after_outer'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -3352,7 +3352,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -3361,30 +3361,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -3393,7 +3393,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -3421,8 +3421,8 @@ repetition = 3, crash_point = 'after_outer'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -3431,7 +3431,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -3440,30 +3440,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -3472,7 +3472,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -3500,8 +3500,8 @@ repetition = 4, crash_point = 'after_outer'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -3510,7 +3510,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -3519,30 +3519,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -3551,7 +3551,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -3579,8 +3579,8 @@ repetition = 5, crash_point = 'after_outer'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -3589,7 +3589,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -3598,30 +3598,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -3630,7 +3630,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -3658,8 +3658,8 @@ repetition = 6, crash_point = 'after_outer'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -3668,7 +3668,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -3677,30 +3677,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -3709,7 +3709,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -3737,8 +3737,8 @@ repetition = 7, crash_point = 'after_outer'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -3747,7 +3747,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -3756,30 +3756,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -3788,7 +3788,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -3816,8 +3816,8 @@ repetition = 8, crash_point = 'after_outer'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -3826,7 +3826,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -3835,30 +3835,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -3867,7 +3867,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -3895,8 +3895,8 @@ repetition = 9, crash_point = 'after_outer'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -3905,7 +3905,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -3914,30 +3914,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -3946,7 +3946,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -3974,8 +3974,8 @@ repetition = 0, crash_point = 'after_commit'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -3984,7 +3984,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -3993,30 +3993,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -4025,7 +4025,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -4053,8 +4053,8 @@ repetition = 1, crash_point = 'after_commit'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -4063,7 +4063,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -4072,30 +4072,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -4104,7 +4104,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -4132,8 +4132,8 @@ repetition = 2, crash_point = 'after_commit'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -4142,7 +4142,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -4151,30 +4151,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -4183,7 +4183,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -4211,8 +4211,8 @@ repetition = 3, crash_point = 'after_commit'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -4221,7 +4221,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -4230,30 +4230,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -4262,7 +4262,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -4290,8 +4290,8 @@ repetition = 4, crash_point = 'after_commit'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -4300,7 +4300,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -4309,30 +4309,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -4341,7 +4341,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -4369,8 +4369,8 @@ repetition = 5, crash_point = 'after_commit'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -4379,7 +4379,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -4388,30 +4388,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -4420,7 +4420,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -4448,8 +4448,8 @@ repetition = 6, crash_point = 'after_commit'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -4458,7 +4458,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -4467,30 +4467,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -4499,7 +4499,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -4527,8 +4527,8 @@ repetition = 7, crash_point = 'after_commit'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -4537,7 +4537,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -4546,30 +4546,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -4578,7 +4578,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -4606,8 +4606,8 @@ repetition = 8, crash_point = 'after_commit'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -4616,7 +4616,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -4625,30 +4625,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -4657,7 +4657,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -4685,8 +4685,8 @@ repetition = 9, crash_point = 'after_commit'
 >       weight, optim, theta_sha256 = checkpoint_bytes(0)
                                       ^^^^^^^^^^^^^^^^^^^
 
-tests/storage/test_publication_v4.py:233: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_publication_v4.py:233:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     weight = save({"parameter": theta, "fs_diloco_flat_theta": theta}, metadata=metadata)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -4695,7 +4695,7 @@ tests/storage/test_publication_v4.py:32: in checkpoint_bytes
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -4704,30 +4704,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -4736,7 +4736,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -4783,8 +4783,8 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_active_st
                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
             )
 
-tests/storage/test_static_contributor_binding.py:146: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_static_contributor_binding.py:146:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/support/v4_protocol.py:151: in publish_checkpoint_pair
     weight = publish_safetensors_immutable(
 fs_diloco/storage/tensor_codec.py:68: in publish_safetensors_immutable
@@ -4799,7 +4799,7 @@ fs_diloco/storage/tensor_codec.py:66: in writer
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -4808,30 +4808,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -4840,7 +4840,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -4867,7 +4867,7 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_transient
             assert transient.terminal_disposition is None
             assert recovered.terminal_disposition is None
             assert query(tmp_path, "SELECT COUNT(*) FROM proposal_quarantine")[0] == 0
-    
+
             clock.now = 200.0
 >           observe(
                 leader,
@@ -4876,8 +4876,8 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_transient
                 deadline=10.0,
             )
 
-tests/storage/test_visibility_v4.py:165: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/storage/test_visibility_v4.py:165:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_visibility_v4.py:50: in observe
     return leader.observe_proposal_visibility(
 fs_diloco/storage/authority.py:1462: in observe_proposal_visibility
@@ -4885,7 +4885,7 @@ fs_diloco/storage/authority.py:1462: in observe_proposal_visibility
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 fs_diloco/storage/authority.py:2963: in _command
     self._authority._verify_token(self.token)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 self = <fs_diloco.storage.authority.LeaderAuthority object at 0x40014ff91de0>
 token = LeaderToken(run_id='run-v4', epoch=1, owner_id='owner')
@@ -4919,8 +4919,8 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_h01a_revo
     def test_h01a_revoke_before_select_does_not_abort_current_batch(tmp_path: Path) -> None:
 >       _p2_revoke_before(tmp_path)
 
-tests/test_plan03_p0_red.py:25: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_plan03_p0_red.py:25:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_authority_p2_dynamic.py:114: in test_revoke_before_selection_leaves_current_quorum_progressing
     initialize_v0(leader, tmp_path)
 tests/storage/test_authority_p2_dynamic.py:100: in initialize_v0
@@ -4940,7 +4940,7 @@ fs_diloco/storage/tensor_codec.py:66: in writer
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -4949,30 +4949,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -4981,7 +4981,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -4994,8 +4994,8 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_h01b_comm
     def test_h01b_commit_conflict_terminalizes_only_invalid_rows(tmp_path: Path) -> None:
 >       _p2_revoke_after(tmp_path)
 
-tests/test_plan03_p0_red.py:29: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_plan03_p0_red.py:29:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_authority_p2_dynamic.py:183: in test_revoke_after_selection_returns_per_row_conflict_then_retry_commits
     initialize_v0(leader, tmp_path)
 tests/storage/test_authority_p2_dynamic.py:100: in initialize_v0
@@ -5015,7 +5015,7 @@ fs_diloco/storage/tensor_codec.py:66: in writer
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .venv/lib/python3.13/site-packages/safetensors/torch.py:569: in _flatten_as_ptr
     _evaluate_tensors_for_save(tensors)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
 
@@ -5024,30 +5024,30 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
             raise ValueError(
                 f"Expected a dict of [str, torch.Tensor] but received {type(tensors)}"
             )
-    
+
         sparse_tensors = []
         for k, v in tensors.items():
             if not isinstance(v, torch.Tensor):
                 raise ValueError(
                     f"Key `{k}` is invalid, expected torch.Tensor but received {type(v)}"
                 )
-    
+
             if v.layout != torch.strided:
                 sparse_tensors.append(k)
-    
+
         if sparse_tensors:
             raise ValueError(
                 f"You are trying to save a sparse tensors: `{sparse_tensors}` which this library does not support."
                 " You can make it a dense tensor before saving with `.to_dense()` but be aware this might"
                 " make a much larger file than needed."
             )
-    
+
         shared_pointers = _find_shared_tensors(tensors)
         failing = []
         for names in shared_pointers:
             if len(names) > 1:
                 failing.append(names)
-    
+
         if failing:
 >           raise RuntimeError(
                 f"""
@@ -5056,7 +5056,7 @@ tensors = {'parameter': tensor([0.]), 'fs_diloco_flat_theta': tensor([0.])}
                 More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
                 """
             )
-E           RuntimeError: 
+E           RuntimeError:
 E                       Some tensors share memory, this will lead to duplicate memory on disk and potential differences when loading them again: [{'parameter', 'fs_diloco_flat_theta'}].
 E                       A potential way to correctly save your model is to use `save_model`.
 E                       More information at https://huggingface.co/docs/safetensors/torch_shared_tensors
@@ -5071,8 +5071,8 @@ tmp_path = PosixPath('/tmp/2508727.2083/pytest-of-x10041/pytest-0/test_h06_trans
     ) -> None:
 >       _p2_transient(tmp_path)
 
-tests/test_plan03_p0_red.py:58: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_plan03_p0_red.py:58:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/storage/test_visibility_v4.py:165: in test_transient_recovery_never_drops_and_deadline_enters_manual_review
     observe(
 tests/storage/test_visibility_v4.py:50: in observe
@@ -5082,7 +5082,7 @@ fs_diloco/storage/authority.py:1462: in observe_proposal_visibility
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 fs_diloco/storage/authority.py:2963: in _command
     self._authority._verify_token(self.token)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 self = <fs_diloco.storage.authority.LeaderAuthority object at 0x40014ff93ee0>
 token = LeaderToken(run_id='run-v4', epoch=1, owner_id='owner')

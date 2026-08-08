@@ -1,0 +1,53 @@
+{
+  "artifact_version": 1,
+  "status": "PASS",
+  "experiment_id": "p2-review-remediation-validation-attempt2",
+  "recorded_at": "2026-08-09T03:30:20+09:00",
+  "phase_id": "P2-correctness-measurement",
+  "review_base_commit": "7bdf832823b092cc9bdb4195cdf064ea76c68e4d",
+  "review_target_commit": "e4aba3ee0aee804b8deabb77a9b28bafcbcac7ef",
+  "source_tree": "review target plus P2 Codex-review remediation; plans/AGENTS.md excluded",
+  "environment": {
+    "pbs_job_id": "2508780.opbs",
+    "compute_host": "mg0003",
+    "queue": "debug-g",
+    "select": "1:mpiprocs=1",
+    "walltime": "00:10:00",
+    "group_list": "xg24i002",
+    "python": "3.13.13",
+    "pytest": "9.1.1",
+    "hypothesis": "6.165.2",
+    "torch": "2.13.0+cu132"
+  },
+  "command": "qsub scripts/miyabi/run_plan03_phase2_tests.pbs",
+  "stages": {
+    "ruff": "PASS",
+    "ruff_format": "PASS",
+    "plan03_checker_verify_boundaries": "PASS",
+    "focused": {
+      "passed": 142,
+      "xfailed": 2,
+      "failed": 0,
+      "duration_seconds": 4.52
+    },
+    "full": {
+      "passed": 714,
+      "xfailed": 2,
+      "failed": 0,
+      "duration_seconds": 49.20
+    }
+  },
+  "retained_log": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-032912_p2-review-remediation-tests_pass.log",
+  "retained_log_sha256": "4e9b64d8bfb57e9f37ba8c3e9a1b7522ef96bc0dd0cf3e296490bc49da194db4",
+  "supersedes_failed_attempt": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-032752_p2-review-remediation-validation-attempt1_fail.log",
+  "normalized_original_failure_log_sha256": {
+    "20260809-030100_p2-correctness-validation-attempt1_fail.log": "d21a9a4d6ca59a7b484b1063d2a4207a31d09ae5cc3c50350dc5da4ef164e071",
+    "20260809-030230_p2-correctness-validation-attempt2_fail.log": "b0415a1aee8240b0fffca8ec62ca6f4f8ae3f90228a00113a6188dff2557399a",
+    "20260809-030440_p2-correctness-validation-attempt3_fail.log": "ba9862338a71e19a248cc3d0d87e3ff7755a9ce2fedabf82519d1f7a9cf763e9",
+    "20260809-030535_p2-correctness-validation-attempt4_fail.log": "4349a9d7d60f0fc9a4cbacdca295e7c750c7e41ceefc06729b3e637a4d6abc81"
+  },
+  "remaining_xfails": [
+    "H-05 persistent fair selection (P3 owner)",
+    "H-07 scheduler no-record uncertainty (P3 owner)"
+  ]
+}

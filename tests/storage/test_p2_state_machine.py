@@ -9,12 +9,18 @@ import pytest
 from hypothesis import given, strategies as st
 
 from fs_diloco.protocol.authority import ReadResult, ReadStatus
-from fs_diloco.protocol.contributor import DynamicMembershipScope, StaticMembershipScope
+from fs_diloco.protocol.contributor import (
+    DynamicMembershipScope,
+    StaticContributorFence,
+    StaticMembershipScope,
+)
+from fs_diloco.protocol.cycle_receipt import CycleReceiptV1
 from fs_diloco.storage.authority import AuthorityIdentity, LeaderAuthority, initialize_authority_v4
 from tests.storage.test_proposal_adjudication_v4 import (
     build_cycle as _build_static_cycle,
     open_static as _open_static,
 )
+from tests.support.v4_protocol import receipt_payload
 
 
 @pytest.mark.state_machine
@@ -48,6 +54,21 @@ def test_visibility_state_machine_is_bounded_and_terminal_is_sticky(
         with LeaderAuthority(database, identity, scope, wall_clock=lambda: now[0]) as authority:
             token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
             leader = authority.open_leader(token)
+            binding = leader.bind_or_replace_static_attempt(
+                command_id="bind",
+                learner_id="learner-0",
+                logical_launch_id="launch-0",
+                attempt_id="attempt-0",
+            )
+            fence = StaticContributorFence(
+                "static",
+                binding.learner_id,
+                binding.logical_launch_id,
+                binding.attempt_id,
+                binding.binding_generation,
+            )
+            receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence.as_dict()))
+            leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
             terminal_observation: int | None = None
             for index, status in enumerate(events):
                 now[0] += 1.0

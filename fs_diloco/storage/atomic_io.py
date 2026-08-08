@@ -95,7 +95,7 @@ def publish_immutable_with_writer(
     path: str | Path,
     writer: Callable[[Path], None],
     *,
-    mode: int = 0o644,
+    mode: int = 0o444,
     chunk_size: int = 1024 * 1024,
 ) -> ImmutablePublication:
     """Publish a same-directory immutable object without ever replacing its name.
@@ -104,6 +104,8 @@ def publish_immutable_with_writer(
     the destination is an identity collision and fails closed.
     """
 
+    if mode & 0o222:
+        raise ValueError("immutable publication mode must not contain write bits")
     target = Path(path)
     ensure_dir(target.parent)
     descriptor, temporary_name = tempfile.mkstemp(
@@ -113,9 +115,9 @@ def publish_immutable_with_writer(
     temporary = Path(temporary_name)
     try:
         writer(temporary)
+        os.chmod(temporary, mode)
         with temporary.open("rb") as handle:
             os.fsync(handle.fileno())
-        os.chmod(temporary, mode)
         size = temporary.stat().st_size
         digest = sha256_file(temporary, chunk_size=chunk_size)
         try:
@@ -130,7 +132,11 @@ def publish_immutable_with_writer(
             )
             try:
                 metadata = os.fstat(existing_fd)
-                if not stat.S_ISREG(metadata.st_mode) or metadata.st_size != size:
+                if (
+                    not stat.S_ISREG(metadata.st_mode)
+                    or metadata.st_size != size
+                    or metadata.st_mode & 0o222
+                ):
                     raise FileExistsError(f"immutable target collision: {target}")
                 existing_digest = hashlib.sha256()
                 offset = 0
@@ -157,7 +163,7 @@ def publish_immutable_with_writer(
 
 
 def publish_immutable_bytes(
-    path: str | Path, data: bytes, *, mode: int = 0o644
+    path: str | Path, data: bytes, *, mode: int = 0o444
 ) -> ImmutablePublication:
     def writer(temporary: Path) -> None:
         with temporary.open("wb") as handle:
