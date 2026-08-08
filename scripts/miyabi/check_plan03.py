@@ -385,7 +385,11 @@ def verify_phase_requirements(
         if not evidence_paths or evidence_paths == ["TBD"]:
             requirement_differences.append("evidence")
         else:
-            missing = [item for item in evidence_paths if not (root / item).exists()]
+            missing = [
+                item
+                for item in evidence_paths
+                if item != excluded_evidence_path and not (root / item).exists()
+            ]
             if missing:
                 requirement_differences.extend(f"missing-evidence:{item}" for item in missing)
         structured_evidence: list[str] = []

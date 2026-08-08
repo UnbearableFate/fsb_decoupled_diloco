@@ -285,6 +285,7 @@ def test_plan03_requirement_checker_rejects_self_evidence_and_stale_source(
 
     stale_runtime["source_commit"] = "target"
     (tmp_path / "runtime.json").write_text(json.dumps(stale_runtime), encoding="utf-8")
+    (tmp_path / "self.json").unlink()
     checks, differences = verify_phase_requirements(
         tmp_path,
         matrix,
