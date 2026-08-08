@@ -94,3 +94,10 @@
 - Low处置：oracle negative test复用主比较函数并实际篡改theta，补非零staleness/乱序/quorum截断tape；RED摘要精确匹配；performance clock显式注入，主timer在最后actor wait返回时停止，补classic分支；fresh clone创建runs；phase-final提供tracked-evidence gate；P0 performance artifact显式非正式。正式G10改为固定20 pairs、AB/BA各10次。全局放开所有reports artifact会暴露大量历史ignored产物，因此`.gitignore`仍按plan显式放行，此项作为repository-wide policy不在Plan03扩 scope。
 - compute验证：attempt 1/2只暴露matrix contract生命周期与file/directory evidence fixture错误，均逐次记录；attempt 3 job `2508527.opbs`在`mg0003`通过。checker/FS probe PASS；focused `30 passed, 5 xfailed in 12.37s`；RED精确`5 failed in 0.34s`；full `556 passed, 5 xfailed in 44.74s`。核心artifact为`20260809-003335_p0-phase-review-remediation-tests_pass.json`、`20260809-003335_p0-current-boundary-check_review.json`、`20260809-003337_p0-shared-fs-capability_pass.json`和`20260809-003353_p0-red-runxfail_review.log`。
 - paired feasibility job `2508517.opbs`也通过，artifact `20260809-002758_p0-paired-tiny-feasibility_pass.json`显式`is_formal_gate=false`；P0不使用observed effect改变10% margin。
+
+## 2026-08-09 — `P0-freeze-oracles` phase-final PASS
+
+- 最终增量审查范围为base `0993737978da3c52990734cb6eef1aee84172d1f`、target `1024cf53df603c0468b36e05a44f007eec0865a6`，ancestry已验证。独立Codex报告`gpt-5.6-sol_1024cf53df603c0468b36e05a44f007eec0865a6.md`结论`APPROVE_WITH_FOLLOWUPS`，无Critical/High/Medium；3项Low分别绑定P3结构化FS failure artifact、P3真实多进程/跨节点initializer并发测试和P5 current-boundary snapshot增强，不阻断P0。
+- fresh Claude Opus 5调用实际canonical model为`claude-opus-5`、session `138a8a42-9f07-45fa-8393-3a2f414264c1`，无permission denial；在返回报告前触发可核验HTTP 429账户session limit，resume在0 token处收到相同限制。依据当前`plans/AGENTS.md`记为`skipped-session-limit`且不阻断；attempt metadata和skip disposition均保存，未伪造Claude报告。
+- phase-final静态门禁在target commit后执行：`check_plan03.py --expect ... --verify-boundaries --require-tracked-evidence`输出`PASS`，frozen inventory、当前migration boundaries和所有non-pending evidence均零difference。用户对`plans/AGENTS.md`的会话限额规则修改属于target外既有worktree改动，未纳入phase commit。
+- P0关联compute证据仍为job `2508527.opbs`：focused `30 passed, 5 xfailed`、RED精确`5 failed`、full `556 passed, 5 xfailed`；FS、current boundary、paired feasibility及失败日志均已tracked。10条P0 matrix requirement更新为`complete`，P1现在可以开始。

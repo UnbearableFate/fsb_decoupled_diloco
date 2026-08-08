@@ -1,0 +1,16 @@
+{
+  "status": "api_error",
+  "requested_model": "claude-opus-5",
+  "canonical_model": "claude-opus-5",
+  "session_id": "138a8a42-9f07-45fa-8393-3a2f414264c1",
+  "subtype": "success",
+  "terminal_reason": "api_error",
+  "api_error_status": 429,
+  "permission_denials": [],
+  "base_commit": "0993737978da3c52990734cb6eef1aee84172d1f",
+  "target_commit": "1024cf53df603c0468b36e05a44f007eec0865a6",
+  "report_created": false,
+  "resume_attempt": true,
+  "retry_after": "2026-08-09T03:50:00+09:00",
+  "error_summary": "Resuming the completed review session was rejected immediately by the same account session limit"
+}

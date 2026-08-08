@@ -16,6 +16,14 @@
 - 根因：从单文件evidence扩展到目录evidence时未定义prefix语义；同时把phase-final使用时点修正了，但测试fixture没有与该时点解耦。均为checker test建模错误，不是production/FS协议失败。
 - 下一轮：目录evidence要求至少一个tracked child且全部位于prefix下；phase-final gate用隔离临时Git仓库分别证明tracked file/directory通过与untracked file阻塞。若attempt 3仍失败，将在第四次提交前按规则完成完整审查。
 
+## 2026-08-09 00:48 JST — P0 third incremental Claude review attempt 1 blocked by service limit
+
+- 范围：base `0993737978da3c52990734cb6eef1aee84172d1f`，target `1024cf53df603c0468b36e05a44f007eec0865a6`。独立Codex报告已先保存，结论`APPROVE_WITH_FOLLOWUPS`。
+- 命令：fresh `claude -p --model claude-opus-5 --output-format json <read-only review prompt>`；未授权写入、qsub/qdel或secret读取。
+- 实际：canonical model确认为`claude-opus-5`，CLI完成33 turns后在返回最终report前收到HTTP 429 session limit；提示`resets 3:50am (Asia/Tokyo)`。无permission denial，没有生成可用Claude review正文。
+- 处置：保存最小invocation metadata，不把失败调用伪装为review通过，也不进入P1。限制重置后用fresh session重试同一base/target；成功前P0保持completion-candidate。
+- 00:49 JST补充：尝试只让同一session返回已完成报告的`--resume`调用在0 token/0 tool turn处立即收到相同429，确认不是长prompt或repository读取造成；保存attempt 2 metadata。无需再消耗调用，等待服务声明的03:50 JST重置点。
+
 ## 2026-08-08 22:20 JST — `p0-baseline-attempt1`（连续失败 1 次）
 
 - 环境：Miyabi-G compute node `mg0004`，interactive PBS job `2508036.opbs`，source commit `a00a3d64a50f10a2478c3f4fe795e658d1b3b52f`。

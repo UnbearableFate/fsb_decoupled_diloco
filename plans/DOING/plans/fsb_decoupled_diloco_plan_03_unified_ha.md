@@ -2,7 +2,7 @@
 
 计划 ID：`fsb_decoupled_diloco_plan_03_unified_ha`
 
-状态：执行中（2026-08-08，P0 completion candidate，等待 phase review）
+状态：执行中（2026-08-09，P0 已完成，P1 待实施）
 
 配套 requirement matrix：
 
