@@ -1,5 +1,21 @@
 # Plan 03 失败记录
 
+## 2026-08-09 00:28 JST — P0 second-review remediation batch attempt 1
+
+- 环境/命令：Miyabi-G compute，PBS job `2508516.opbs`（`mg0005`）；提交前全体PBS `bash -n`通过，literal group `xg24i002`，10分钟walltime。
+- 预期：冻结snapshot与当前migration boundary checker、修订后的shared-FS probe、focused/RED/full suite全部通过。
+- 实际：checker与shared-FS probe均PASS并分别生成`20260809-002803_p0-current-boundary-check_review.json`和`20260808-152805_p0-shared-fs-capability_pass.json`；focused suite在P0-SURFACE contract校验失败，因为matrix已声明新的`_p0-current-boundary-check_review.json` contract，却尚未把同批刚生成的artifact绑定到`evidence_path`。结果为`1 failed, 28 passed, 5 xfailed`，batch在RED/full suite前fail-fast。
+- 根因：新增证据contract与同批生成证据的matrix绑定顺序不一致，不是checker/FS/runtime协议失败。已把生成artifact绑定到P0-SURFACE；phase-final tracked evidence检查改为checker显式`--require-tracked-evidence`门禁，普通precommit pytest仍只验证可由正常`git add`发现，避免在artifact生成和commit之间制造循环依赖。
+- 下一轮：先完成同staging并发窗口的持久化判定修订，再以同一batch目标重跑；若再次失败，按同一实验attempt 2记录。
+
+## 2026-08-09 00:31 JST — P0 second-review remediation batch attempt 2
+
+- 环境/命令：Miyabi-G compute，PBS job `2508522.opbs`（`mg0019`）；目标、资源和batch顺序与attempt 1相同。
+- 预期：修正contract绑定后focused/RED/full suite通过；phase-final tracked gate实现本身由单测覆盖，但不在precommit状态要求新artifact已tracked。
+- 实际：checker和含same-staging peer-race、reservation repair的新shared-FS probe PASS；focused suite为`2 failed, 28 passed, 5 xfailed`。第一项失败是通用evidence检查把合法目录contract `tests/support/`的多文件`git ls-files`输出错误地与目录字符串逐字比较；第二项是phase-final gate单测仍直接要求当前precommit worktree的同批新artifact已tracked，重现了attempt 1已识别的生命周期循环。
+- 根因：从单文件evidence扩展到目录evidence时未定义prefix语义；同时把phase-final使用时点修正了，但测试fixture没有与该时点解耦。均为checker test建模错误，不是production/FS协议失败。
+- 下一轮：目录evidence要求至少一个tracked child且全部位于prefix下；phase-final gate用隔离临时Git仓库分别证明tracked file/directory通过与untracked file阻塞。若attempt 3仍失败，将在第四次提交前按规则完成完整审查。
+
 ## 2026-08-08 22:20 JST — `p0-baseline-attempt1`（连续失败 1 次）
 
 - 环境：Miyabi-G compute node `mg0004`，interactive PBS job `2508036.opbs`，source commit `a00a3d64a50f10a2478c3f4fe795e658d1b3b52f`。

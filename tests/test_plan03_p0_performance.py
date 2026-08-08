@@ -58,7 +58,7 @@ def test_process_result_collection_does_not_pipe_block_on_large_output(tmp_path:
                     text=True,
                 )
             )
-        results = performance._collect_process_results(
+        results, completed = performance._collect_process_results(
             roles,
             processes,
             log_dir=tmp_path,
@@ -74,6 +74,7 @@ def test_process_result_collection_does_not_pipe_block_on_large_output(tmp_path:
 
     assert [row["returncode"] for row in results] == [0, 0, 0]
     assert all(row["output_tail"] == ["x"] * 20 for row in results)
+    assert completed <= time.monotonic()
 
 
 def test_ha_arm_timer_starts_before_initializer(
@@ -91,15 +92,17 @@ def test_ha_arm_timer_starts_before_initializer(
         events.append("init")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(performance.time, "monotonic", monotonic)
     monkeypatch.setattr(performance.subprocess, "run", run)
     monkeypatch.setattr(
         performance,
         "_run_processes",
-        lambda *_args, **_kwargs: [
-            {"role": role, "returncode": 0, "output_tail": []}
-            for role in ("syncer", "learner_000", "learner_001")
-        ],
+        lambda *_args, **_kwargs: (
+            [
+                {"role": role, "returncode": 0, "output_tail": []}
+                for role in ("syncer", "learner_000", "learner_001")
+            ],
+            15.0,
+        ),
     )
     monkeypatch.setattr(
         performance,
@@ -117,6 +120,7 @@ def test_ha_arm_timer_starts_before_initializer(
         pair=0,
         warmup=False,
         timeout_seconds=90.0,
+        clock=monotonic,
     )
 
     assert events[0] == "clock"
@@ -126,3 +130,42 @@ def test_ha_arm_timer_starts_before_initializer(
         "pre_actor_initialization_seconds": 2.0,
         "actor_process_seconds": 3.0,
     }
+
+
+def test_classic_arm_uses_common_timer_anchor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = iter((20.0, 20.0))
+    monkeypatch.setattr(
+        performance,
+        "_run_processes",
+        lambda *_args, **_kwargs: (
+            [
+                {"role": role, "returncode": 0, "output_tail": []}
+                for role in ("syncer", "learner_000", "learner_001")
+            ],
+            24.0,
+        ),
+    )
+    monkeypatch.setattr(
+        performance,
+        "_authority_summary",
+        lambda _root: {"final_version": 2, "total_seen_tokens": 256, "integrity": ["ok"]},
+    )
+    monkeypatch.setattr(performance.shutil, "rmtree", lambda _path: None)
+
+    result = performance._run_arm(
+        tmp_path,
+        tmp_path / "scratch",
+        arm="classic",
+        config=tmp_path / "config.yaml",
+        environment={},
+        pair=0,
+        warmup=False,
+        timeout_seconds=90.0,
+        clock=lambda: next(clock),
+    )
+
+    assert result["elapsed_seconds"] == 4.0
+    assert result["timing"]["pre_actor_initialization_seconds"] == 0.0

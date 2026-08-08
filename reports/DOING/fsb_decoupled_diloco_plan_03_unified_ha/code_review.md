@@ -2,6 +2,13 @@
 
 初始创建时尚未触发同一实验连续三次失败升级。
 
+## 2026-08-09 00:34 JST — 第二轮增量review finding disposition
+
+- Codex Medium（checker differences未落盘）已修：PBS传入`--inventory-output`，artifact同时保存frozen/current两组source ref与differences。Codex Low（oracle mutation自比较）已修：主oracle和negative test共用`_assert_fixture_matches`，negative从真实store/filesystem projection篡改theta。
+- Claude H-1已修并补反例：preexisting final连续两次均fail closed且不留reservation；foreign entry不被认领/可见；different staging不能抢reservation；same staging peer mkdir race以reservation/final identity同inode证明；reservation缺失时普通reader不可见，只有completed全量自检后的显式repair恢复。
+- Claude M-1..M-5全部fixed。旧`20260808-225600`只保留为历史记录，不再是matrix gate evidence；authoritative FS artifact为`20260809-003337`。阶段结束前必须在commit后运行`check_plan03.py --expect ... --verify-boundaries --require-tracked-evidence`。
+- L-1/2/3/4/5/7/8/9/10/12/13 fixed；L-6以正式G10固定20 pairs处置；L-11拒绝在本phase全局unignore所有历史reports artifacts，因为静态检查证明会暴露大量其他计划产物，Plan03自身已正确放行。所有High/Medium均无defer。
+
 ## 2026-08-09 00:06 JST — `p0-static-gate-wrapper` 三连失败审查
 
 - 范围：三次一次性静态验证wrapper失败；均发生在验证器读取目标输入阶段，而不是production/test behavior断言阶段。

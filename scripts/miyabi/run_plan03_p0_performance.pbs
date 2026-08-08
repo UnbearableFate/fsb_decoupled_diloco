@@ -17,6 +17,7 @@ PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 cd "$PROJECT_ROOT"
 
+mkdir -p "$PROJECT_ROOT/runs"
 OUTPUT="reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/$(date +%Y%m%d-%H%M%S)_p0-paired-tiny-feasibility_pass.json"
 "$PYTHON_BIN" scripts/miyabi/plan03_p0_performance.py \
   --project-root "$PROJECT_ROOT" \

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import csv
 import hashlib
 import json
 import os
@@ -25,6 +26,14 @@ PLAN_ID = "fsb_decoupled_diloco_plan_03_unified_ha"
 ARCHIVE_TAGS = (
     "archive/classic-full-v1-final",
     "archive/fragment-v0-final",
+)
+BOUNDARY_COUNT_KEYS = (
+    "bound_mutators",
+    "fragment_enabled_configs",
+    "fragment_pbs",
+    "torch_baseline_configs",
+    "torch_baseline_pbs",
+    "torch_baseline_tests",
 )
 
 
@@ -254,6 +263,87 @@ def verify_inventory(actual: dict[str, Any], expected: dict[str, Any]) -> list[s
     return differences
 
 
+def _boundary_manifest(payload: dict[str, Any]) -> dict[str, str]:
+    boundaries = payload["migration_boundaries"]
+    paths = {
+        *boundaries["fragment_enabled_configs_delete_in_p5"],
+        *boundaries["fragment_pbs_delete_in_p5"],
+        boundaries["historical_full_control_archive_separately"]["config"],
+        boundaries["historical_full_control_archive_separately"]["pbs"],
+        *boundaries["torch_baseline_retain"]["configs"],
+        *boundaries["torch_baseline_retain"]["pbs"],
+        *boundaries["torch_baseline_retain"]["tests"],
+        boundaries["recursive_config_anchor"],
+        "fs_diloco/storage/fenced_store.py",
+    }
+    baseline_package = str(boundaries["torch_baseline_retain"]["package"]).rstrip("/") + "/"
+    paths.update(
+        path for path in payload["inventory"]["source"] if path.startswith(baseline_package)
+    )
+    return {path: payload["manifest_sha256"][path] for path in sorted(paths)}
+
+
+def verify_boundaries(actual: dict[str, Any], expected: dict[str, Any]) -> list[str]:
+    """Compare only migration boundaries that must remain frozen through P0-P4."""
+    differences: list[str] = []
+    comparisons = (
+        (
+            "source_identity.archive_tag_targets",
+            actual["source_identity"]["archive_tag_targets"],
+            expected["source_identity"]["archive_tag_targets"],
+        ),
+        (
+            "boundary_counts",
+            {key: actual["counts"][key] for key in BOUNDARY_COUNT_KEYS},
+            {key: expected["counts"][key] for key in BOUNDARY_COUNT_KEYS},
+        ),
+        (
+            "inventory.bound_mutators",
+            actual["inventory"]["bound_mutators"],
+            expected["inventory"]["bound_mutators"],
+        ),
+        (
+            "migration_boundaries",
+            actual["migration_boundaries"],
+            expected["migration_boundaries"],
+        ),
+        ("boundary_manifest_sha256", _boundary_manifest(actual), _boundary_manifest(expected)),
+    )
+    for label, actual_value, expected_value in comparisons:
+        if actual_value != expected_value:
+            differences.append(label)
+    return differences
+
+
+def verify_tracked_evidence(root: Path, matrix_path: Path) -> list[str]:
+    differences: list[str] = []
+    with matrix_path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    for row in rows:
+        if row["status"] == "pending":
+            continue
+        for evidence in (item.strip() for item in row["evidence_path"].split(";")):
+            if not evidence or evidence == "TBD":
+                continue
+            try:
+                tracked = _git(root, "ls-files", "--error-unmatch", "--", evidence)
+            except subprocess.CalledProcessError:
+                differences.append(f"{row['invariant_id']}:{evidence}:not-tracked")
+                continue
+            tracked_paths = tracked.splitlines()
+            directory_evidence = evidence.endswith("/")
+            if (
+                not tracked_paths
+                or (
+                    directory_evidence
+                    and not all(path.startswith(evidence) for path in tracked_paths)
+                )
+                or (not directory_evidence and tracked_paths != [evidence])
+            ):
+                differences.append(f"{row['invariant_id']}:{evidence}:ambiguous")
+    return differences
+
+
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
@@ -275,6 +365,16 @@ def main() -> None:
     parser.add_argument("--inventory-output", type=Path)
     parser.add_argument("--source-ref")
     parser.add_argument("--expect", type=Path)
+    parser.add_argument(
+        "--verify-boundaries",
+        action="store_true",
+        help="also compare the current tree migration boundary against --expect",
+    )
+    parser.add_argument(
+        "--require-tracked-evidence",
+        action="store_true",
+        help="phase-final gate: require every non-pending matrix evidence path in Git",
+    )
     args = parser.parse_args()
     root = args.root.resolve()
     try:
@@ -282,12 +382,40 @@ def main() -> None:
         source_ref = args.source_ref
         if args.expect is not None:
             expected = json.loads(args.expect.resolve().read_text(encoding="utf-8"))
-            source_ref = source_ref or str(expected["source_identity"]["commit"])
-        payload = inventory(root, source_ref=source_ref)
+        frozen_source_ref = source_ref or (
+            str(expected["source_identity"]["commit"]) if expected is not None else None
+        )
+        payload = inventory(root, source_ref=frozen_source_ref)
         if expected is not None:
             differences = verify_inventory(payload, expected)
+            checks: dict[str, Any] = {
+                "frozen_inventory": {
+                    "source_ref": frozen_source_ref,
+                    "differences": list(differences),
+                }
+            }
+            if args.verify_boundaries:
+                current = inventory(root, source_ref=args.source_ref)
+                boundary_differences = verify_boundaries(current, expected)
+                checks["current_migration_boundaries"] = {
+                    "source_ref": args.source_ref or "TRACKED_WORKTREE",
+                    "source_commit": current["source_identity"]["commit"],
+                    "differences": boundary_differences,
+                }
+                differences.extend(
+                    f"current_migration_boundaries.{difference}"
+                    for difference in boundary_differences
+                )
+            if args.require_tracked_evidence:
+                matrix_path = root / "plans/DOING/plans" / f"{PLAN_ID}-requirement-matrix.csv"
+                evidence_differences = verify_tracked_evidence(root, matrix_path)
+                checks["tracked_evidence"] = {"differences": evidence_differences}
+                differences.extend(
+                    f"tracked_evidence.{difference}" for difference in evidence_differences
+                )
             payload["status"] = "PASS" if not differences else "BLOCKED"
             payload["differences"] = differences
+            payload["checks"] = checks
     except (OSError, RuntimeError, KeyError, ValueError, subprocess.CalledProcessError) as exc:
         payload = {
             "artifact_version": 1,

@@ -1,0 +1,167 @@
+{
+  "artifact_version": 1,
+  "experiment_id": "p0-shared-fs-capability",
+  "host": "mg0003",
+  "pbs_job_id": "2508527.opbs",
+  "recorded_at": "2026-08-09T00:33:37.889098+09:00",
+  "results": {
+    "dir_fd_openat_nofollow_and_parent_fsync": {
+      "parent_directory_fsync": true,
+      "status": "PASS",
+      "symlink_errno": 40
+    },
+    "directory_publish_fallback": {
+      "completed_root_overwrite": "fail_closed",
+      "crash_prefixes": [
+        {
+          "crash_after": "before_any_step",
+          "next_step": "link_parent_reservation",
+          "prefix": 0,
+          "visible_after_retry": true,
+          "visible_before_retry": false
+        },
+        {
+          "crash_after": "link_parent_reservation",
+          "next_step": "fsync_parent_reservation",
+          "prefix": 1,
+          "visible_after_retry": true,
+          "visible_before_retry": false
+        },
+        {
+          "crash_after": "fsync_parent_reservation",
+          "next_step": "mkdir_final",
+          "prefix": 2,
+          "visible_after_retry": true,
+          "visible_before_retry": false
+        },
+        {
+          "crash_after": "mkdir_final",
+          "next_step": "fsync_parent_final",
+          "prefix": 3,
+          "visible_after_retry": true,
+          "visible_before_retry": false
+        },
+        {
+          "crash_after": "fsync_parent_final",
+          "next_step": "link_final_identity",
+          "prefix": 4,
+          "visible_after_retry": true,
+          "visible_before_retry": false
+        },
+        {
+          "crash_after": "link_final_identity",
+          "next_step": "fsync_final_identity",
+          "prefix": 5,
+          "visible_after_retry": true,
+          "visible_before_retry": false
+        },
+        {
+          "crash_after": "fsync_final_identity",
+          "next_step": "link_descriptor.json",
+          "prefix": 6,
+          "visible_after_retry": true,
+          "visible_before_retry": false
+        },
+        {
+          "crash_after": "link_descriptor.json",
+          "next_step": "fsync_descriptor.json",
+          "prefix": 7,
+          "visible_after_retry": true,
+          "visible_before_retry": false
+        },
+        {
+          "crash_after": "fsync_descriptor.json",
+          "next_step": "link_authority.sqlite",
+          "prefix": 8,
+          "visible_after_retry": true,
+          "visible_before_retry": false
+        },
+        {
+          "crash_after": "link_authority.sqlite",
+          "next_step": "fsync_authority.sqlite",
+          "prefix": 9,
+          "visible_after_retry": true,
+          "visible_before_retry": false
+        },
+        {
+          "crash_after": "fsync_authority.sqlite",
+          "next_step": "link_bootstrap.json",
+          "prefix": 10,
+          "visible_after_retry": true,
+          "visible_before_retry": false
+        },
+        {
+          "crash_after": "link_bootstrap.json",
+          "next_step": "fsync_bootstrap.json",
+          "prefix": 11,
+          "visible_after_retry": true,
+          "visible_before_retry": false
+        },
+        {
+          "crash_after": "fsync_bootstrap.json",
+          "next_step": "link_complete_marker",
+          "prefix": 12,
+          "visible_after_retry": true,
+          "visible_before_retry": false
+        }
+      ],
+      "different_identity_collision": "fail_closed",
+      "different_staging_concurrency": "fail_closed_until_final_identity_exists",
+      "foreign_entry_visibility": "fail_closed",
+      "post_visibility_prefixes": [
+        {
+          "completed_steps": 13,
+          "crash_after": "link_complete_marker",
+          "visible_after_retry": true,
+          "visible_before_retry": true
+        },
+        {
+          "completed_steps": 14,
+          "crash_after": "fsync_final_complete",
+          "visible_after_retry": true,
+          "visible_before_retry": true
+        }
+      ],
+      "preexisting_final_retry": "repeatable_fail_closed_without_reservation_leak",
+      "protocol": "parent-hardlink-identity-reservation+exclusive-mkdir+hashed-hardlink-objects+complete-manifest",
+      "reservation_lifecycle": "retain_with_run; verified completed run supports same-inode repair",
+      "reservation_loss_before_repair_visible": false,
+      "reservation_repair": "PASS",
+      "same_identity_retry": true,
+      "same_identity_retry_requires_original_staging_inode_until_identity_link": true,
+      "same_staging_concurrency": "converges_when_peer_links_reserved_identity",
+      "status": "PASS",
+      "visibility_linearization_point": "link_complete_marker"
+    },
+    "directory_rename_no_replace": {
+      "errno": 22,
+      "error": "[Errno 22] Invalid argument: PosixPath('/work/xg24i002/x10041/fsb_decoupled_diloco/runs/.plan03-fs-capability-jzcdb6h8/run.final')",
+      "fallback_required": true,
+      "status": "UNSUPPORTED"
+    },
+    "hardlink_create_no_replace": {
+      "collision_errno": 17,
+      "same_inode": true,
+      "status": "PASS"
+    },
+    "sqlite_delete_journal_lock": {
+      "contended_error": "database is locked",
+      "contended_error_code": 5,
+      "integrity_check": [
+        "ok"
+      ],
+      "journal_mode": "delete",
+      "status": "PASS",
+      "success_after_release": true,
+      "waited_seconds": 0.05111068800033536
+    }
+  },
+  "shared_parent": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs",
+  "source_identity": {
+    "git_commit": "0993737978da3c52990734cb6eef1aee84172d1f",
+    "git_dirty": true,
+    "source_fingerprint": "sha256:b609912c4868f1673fb246bb27975373830f6a7fd8147ee7b5526f6d869a3891"
+  },
+  "status": "PASS",
+  "temporary_path_removed": true
+}

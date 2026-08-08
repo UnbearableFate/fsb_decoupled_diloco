@@ -207,6 +207,10 @@ def _fixture_projection(projection: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _assert_fixture_matches(projection: dict[str, Any], fixture: dict[str, Any]) -> None:
+    assert _fixture_projection(projection) == fixture
+
+
 def test_classic_and_static_ha_share_exact_semantic_projection(tmp_path: Path) -> None:
     tape = _event_tape()
     classic = SQLiteStore(tmp_path / "classic.sqlite")
@@ -266,20 +270,54 @@ def test_classic_and_static_ha_share_exact_semantic_projection(tmp_path: Path) -
             (fixture_root / "static_ha_v1_trace.json").read_text(encoding="utf-8")
         )["semantic_projection"]
         assert classic_fixture == ha_fixture
-        assert _fixture_projection(classic_projection) == classic_fixture
-        assert _fixture_projection(ha_projection) == ha_fixture
+        _assert_fixture_matches(classic_projection, classic_fixture)
+        _assert_fixture_matches(ha_projection, ha_fixture)
     finally:
         classic.close()
         fenced.close()
         lease.close()
 
 
-def test_oracle_fixture_comparison_detects_semantic_mutation() -> None:
+def test_oracle_fixture_comparison_detects_semantic_mutation(tmp_path: Path) -> None:
     fixture_root = Path(__file__).resolve().parents[1] / "fixtures/golden"
     fixture = json.loads((fixture_root / "classic_full_v1_trace.json").read_text(encoding="utf-8"))[
         "semantic_projection"
     ]
-    mutated = {**fixture, "predecessor_version": fixture["predecessor_version"] + 1}
+    classic = SQLiteStore(tmp_path / "classic.sqlite")
+    try:
+        projection = _semantic_projection(
+            classic,
+            _event_tape(),
+            ha=False,
+            artifact_root=tmp_path / "classic-artifacts",
+        )
+    finally:
+        classic.close()
+    projection["theta"] = projection["theta"].clone()
+    projection["theta"][0] += 1.0
 
     with pytest.raises(AssertionError):
-        assert mutated == fixture
+        _assert_fixture_matches(projection, fixture)
+
+
+def test_selection_tape_observes_arrival_staleness_and_quorum_truncation() -> None:
+    learner_0_old = _metadata("learner_000", "proposal-000-old", committed_at=30.0)
+    learner_0_old["local_step_end"] = 2
+    learner_0_old["base_global_version"] = 0
+    learner_0_new = _metadata("learner_000", "proposal-000-new", committed_at=10.0)
+    learner_0_new["local_step_end"] = 4
+    learner_0_new["base_global_version"] = 1
+    learner_1 = _metadata("learner_001", "proposal-001", committed_at=20.0)
+    learner_1["base_global_version"] = 2
+    learner_2 = _metadata("learner_002", "proposal-002", committed_at=5.0)
+    learner_2["base_global_version"] = 2
+
+    selected = select_one_per_learner(
+        [learner_2, learner_0_old, learner_1, learner_0_new],
+        quorum_max=2,
+    )
+    weights = normalized_update_weights(selected, current_version=2, staleness_lambda=1.0)
+
+    assert [row["update_id"] for row in selected] == ["proposal-000-new", "proposal-001"]
+    assert weights["proposal-000-new"] < weights["proposal-001"]
+    assert "proposal-002" not in weights

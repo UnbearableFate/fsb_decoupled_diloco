@@ -32,15 +32,24 @@ print(f"pytest={pytest.__version__}")
 print(f"torch={torch.__version__}")
 PY
 
+CHECKER_OUTPUT="reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/$(date +%Y%m%d-%H%M%S)_p0-current-boundary-check_review.json"
 "$PYTHON_BIN" scripts/miyabi/check_plan03.py \
   --root "$PROJECT_ROOT" \
-  --expect reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260808-223500_p0-runtime-surface-inventory_review.json
+  --expect reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260808-223500_p0-runtime-surface-inventory_review.json \
+  --verify-boundaries \
+  --inventory-output "$CHECKER_OUTPUT"
+printf 'PLAN03_CHECKER_ARTIFACT=%s\n' "$CHECKER_OUTPUT"
 
-FS_OUTPUT="reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/$(date +%Y%m%d-%H%M%S)_p0-shared-fs-capability_pass.json"
+mkdir -p "$PROJECT_ROOT/runs"
 "$PYTHON_BIN" scripts/miyabi/plan03_fs_capability.py \
-  --shared-parent reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts \
-  --output "$FS_OUTPUT"
-printf 'PLAN03_FS_CAPABILITY_ARTIFACT=%s\n' "$FS_OUTPUT"
+  --project-root "$PROJECT_ROOT" \
+  --shared-parent "$PROJECT_ROOT/runs" \
+  --output-dir reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts
+if find reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts \
+  -maxdepth 1 -type d -name '.plan03-fs-capability-*' -print -quit | grep -q .; then
+  echo "FS capability scratch leaked into the evidence directory" >&2
+  exit 1
+fi
 
 "$PYTHON_BIN" -m pytest -q \
   tests/test_plan03_support.py \
@@ -55,7 +64,7 @@ set +e
 "$PYTHON_BIN" -m pytest -q --runxfail tests/test_plan03_p0_red.py >"$RED_LOG" 2>&1
 RED_STATUS=$?
 set -e
-if [[ "$RED_STATUS" -ne 1 ]] || ! grep -Eq '5 failed' "$RED_LOG"; then
+if [[ "$RED_STATUS" -ne 1 ]] || ! grep -Eq '(^|[^0-9])5 failed([^0-9]|$)' "$RED_LOG"; then
   cat "$RED_LOG"
   echo "Unexpected RED evidence status: $RED_STATUS" >&2
   exit 1

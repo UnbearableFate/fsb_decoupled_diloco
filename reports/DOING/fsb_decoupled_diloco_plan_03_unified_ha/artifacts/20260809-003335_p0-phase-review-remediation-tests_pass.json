@@ -1,0 +1,57 @@
+{
+  "artifact_version": 1,
+  "experiment_id": "p0-phase-review-remediation-tests",
+  "status": "PASS",
+  "reviewed_target": "0993737978da3c52990734cb6eef1aee84172d1f",
+  "source_identity": {
+    "git_commit": "0993737978da3c52990734cb6eef1aee84172d1f",
+    "git_dirty": true,
+    "source_fingerprint": "sha256:b609912c4868f1673fb246bb27975373830f6a7fd8147ee7b5526f6d869a3891"
+  },
+  "pbs": {
+    "job_id": "2508527.opbs",
+    "queue": "debug-g",
+    "group": "xg24i002",
+    "nodes": 1,
+    "hostname": "mg0003",
+    "walltime_requested": "00:10:00",
+    "walltime_used": "00:01:09",
+    "exit_status": 0
+  },
+  "environment": {
+    "python": "3.13.13",
+    "pytest": "9.1.1",
+    "torch": "2.13.0+cu132",
+    "platform": "Linux-5.14.0-427.13.1.el9_4.aarch64+64k-aarch64-with-glibc2.34"
+  },
+  "frozen_inventory_and_current_boundary_checker": {
+    "status": "PASS",
+    "artifact": "artifacts/20260809-003335_p0-current-boundary-check_review.json",
+    "artifact_sha256": "71ae706e4cd624d974d99e6032b3eafe54b118c546c470c061c80981bc97c47c",
+    "differences": []
+  },
+  "shared_fs_capability": {
+    "status": "PASS",
+    "artifact": "artifacts/20260809-003337_p0-shared-fs-capability_pass.json",
+    "artifact_sha256": "5cd29178bf7f1ba539c3922351807dbc17c7a0c72f3b775c0b2e26bc10f49dea"
+  },
+  "focused_suite": {
+    "passed": 30,
+    "xfailed": 5,
+    "seconds": 12.37
+  },
+  "red_runxfail": {
+    "failed_as_expected": 5,
+    "seconds": 0.34,
+    "log": "artifacts/20260809-003353_p0-red-runxfail_review.log",
+    "log_sha256": "5d588b031e5485127d9552fbb573e11275700d5142050cc1eab9a1fd2e0e4fe9"
+  },
+  "full_suite": {
+    "passed": 556,
+    "xfailed": 5,
+    "seconds": 44.74
+  },
+  "accepted_xfail_scope": "tests/test_plan03_p0_red.py only; each xfail is constrained to AssertionError and H-01a converts only the exact target selection-fence RuntimeError",
+  "log": "artifacts/20260809-003335_p0-phase-review-remediation-tests_pass.log",
+  "log_sha256": "602e35d63ef7048e88a275f108795c64c1b7e1f2a8c6def306a69558ec1f7e1c"
+}

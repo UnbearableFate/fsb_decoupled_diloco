@@ -14,6 +14,7 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Any
+from collections.abc import Callable
 
 import yaml
 
@@ -37,13 +38,15 @@ def _collect_process_results(
     *,
     log_dir: Path,
     deadline: float,
-) -> list[dict[str, Any]]:
+    clock: Callable[[], float] = time.monotonic,
+) -> tuple[list[dict[str, Any]], float]:
     results: list[dict[str, Any]] = []
     for role, process in zip(roles, processes, strict=True):
-        remaining = deadline - time.monotonic()
+        remaining = deadline - clock()
         if remaining <= 0:
             raise TimeoutError(f"tiny arm timed out before {role} completed")
         process.wait(timeout=remaining)
+    completed = clock()
     for role, process in zip(roles, processes, strict=True):
         output = (log_dir / f"{role}.log").read_text(encoding="utf-8")
         results.append(
@@ -56,7 +59,7 @@ def _collect_process_results(
     failed = [result for result in results if result["returncode"] != 0]
     if failed:
         raise RuntimeError(f"tiny arm process failure: {failed}")
-    return results
+    return results, completed
 
 
 def _run_processes(
@@ -68,7 +71,8 @@ def _run_processes(
     environment: dict[str, str],
     deadline: float,
     log_dir: Path,
-) -> list[dict[str, Any]]:
+    clock: Callable[[], float] = time.monotonic,
+) -> tuple[list[dict[str, Any]], float]:
     commands = [
         [
             str(python),
@@ -117,7 +121,13 @@ def _run_processes(
             )
         for handle in log_handles:
             handle.flush()
-        results = _collect_process_results(roles, processes, log_dir=log_dir, deadline=deadline)
+        results, completed = _collect_process_results(
+            roles,
+            processes,
+            log_dir=log_dir,
+            deadline=deadline,
+            clock=clock,
+        )
     finally:
         for process in processes:
             if process.poll() is None:
@@ -131,7 +141,7 @@ def _run_processes(
                     process.wait(timeout=5.0)
         for handle in log_handles:
             handle.close()
-    return results
+    return results, completed
 
 
 def _authority_summary(run_root: Path) -> dict[str, Any]:
@@ -162,16 +172,17 @@ def _run_arm(
     pair: int,
     warmup: bool,
     timeout_seconds: float,
+    clock: Callable[[], float] = time.monotonic,
 ) -> dict[str, Any]:
     ha = arm == "static_ha"
     run_id = f"plan03-p0-{'warmup' if warmup else f'pair{pair}'}-{arm}"
     run_root = scratch / run_id
     log_dir = scratch / f".{run_id}-process-logs"
     python = project_root / ".venv/bin/python"
-    started = time.monotonic()
+    started = clock()
     deadline = started + timeout_seconds
     if ha:
-        remaining = deadline - time.monotonic()
+        remaining = deadline - clock()
         if remaining <= 0:
             raise TimeoutError("HA tiny arm timed out before initialization")
         init = subprocess.run(
@@ -199,8 +210,8 @@ def _run_arm(
                 f"HA tiny init failed: {(init.stdout + init.stderr).splitlines()[-30:]}"
             )
         config = run_root / "control" / "run_config.resolved.yaml"
-    actors_started = time.monotonic()
-    processes = _run_processes(
+    actors_started = clock()
+    processes, completed = _run_processes(
         python,
         config,
         run_id,
@@ -208,8 +219,8 @@ def _run_arm(
         environment=environment,
         deadline=deadline,
         log_dir=log_dir,
+        clock=clock,
     )
-    completed = time.monotonic()
     summary = _authority_summary(run_root)
     if summary["final_version"] < 1:
         raise RuntimeError(f"tiny arm did not complete a merge: {summary}")
@@ -348,6 +359,7 @@ def run(project_root: Path, shared_parent: Path) -> dict[str, Any]:
             "median_overhead": statistic.median_overhead,
             "bootstrap_upper_95": statistic.bootstrap_upper_95,
             "noninferiority_pass_is_not_a_p0_gate": statistic.passes,
+            "is_formal_gate": False,
             "workload_equivalent": True,
             "workload_signature": {
                 "final_version": workload_signature[0],

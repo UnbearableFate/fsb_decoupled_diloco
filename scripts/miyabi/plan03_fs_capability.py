@@ -7,6 +7,7 @@ import argparse
 import ctypes
 import errno
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -15,8 +16,9 @@ import stat
 import sys
 import tempfile
 import time
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 AT_FDCWD = -100
@@ -165,6 +167,19 @@ def _reservation_path(final: Path) -> Path:
     return final.parent / f".{final.name}.identity-reservation"
 
 
+def _same_regular_inode(first: Path, second: Path) -> bool:
+    try:
+        first_stat = os.stat(first, follow_symlinks=False)
+        second_stat = os.stat(second, follow_symlinks=False)
+    except OSError:
+        return False
+    return (
+        stat.S_ISREG(first_stat.st_mode)
+        and stat.S_ISREG(second_stat.st_mode)
+        and (first_stat.st_dev, first_stat.st_ino) == (second_stat.st_dev, second_stat.st_ino)
+    )
+
+
 def _link_verified(source: Path, target: Path, *, expected_sha256: str) -> bool:
     if _sha256_regular_nofollow(source) != expected_sha256:
         raise RuntimeError(f"staged object digest mismatch: {source.name}")
@@ -179,6 +194,50 @@ def _link_verified(source: Path, target: Path, *, expected_sha256: str) -> bool:
         if target_sha256 != expected_sha256:
             raise RuntimeError(f"publication object collision: {target.name}")
         return False
+
+
+def _remove_owned_reservation(staging_identity: Path, reservation: Path) -> None:
+    if not _same_regular_inode(staging_identity, reservation):
+        raise RuntimeError("created identity reservation no longer belongs to this staging root")
+    reservation.unlink()
+    _fsync_dir(reservation.parent)
+
+
+def _assert_protocol_entries(final: Path, *, complete: bool) -> None:
+    allowed = {".identity", ".complete", *FALLBACK_OBJECT_NAMES}
+    try:
+        actual = {entry.name for entry in os.scandir(final)}
+    except OSError as exc:
+        raise RuntimeError("final root collision could not be inspected") from exc
+    unexpected = sorted(actual - allowed)
+    if unexpected:
+        raise RuntimeError(f"final root contains non-protocol entries: {unexpected}")
+    if complete and actual != allowed:
+        raise RuntimeError(f"completed final root entry set mismatch: {sorted(actual)}")
+
+
+def _wait_for_peer_identity(
+    final: Path,
+    reservation: Path,
+    *,
+    expected_sha256: str,
+    timeout_seconds: float = 0.5,
+) -> bool:
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        try:
+            digest = _sha256_regular_nofollow(final / ".identity")
+        except OSError:
+            pass
+        except RuntimeError:
+            return False
+        else:
+            return digest == expected_sha256 and _same_regular_inode(
+                reservation, final / ".identity"
+            )
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.01)
 
 
 def _load_staged_manifest(staging: Path, *, identity: bytes) -> dict[str, str]:
@@ -203,6 +262,7 @@ def _fallback_publish(
     *,
     identity: bytes,
     stop_after_step: int | None = None,
+    before_final_mkdir: Callable[[], None] | None = None,
 ) -> bool:
     if stop_after_step is not None and not 0 <= stop_after_step < len(FALLBACK_STEPS):
         raise ValueError("stop_after_step outside crash-prefix range")
@@ -218,25 +278,48 @@ def _fallback_publish(
         return stop_after_step == completed_steps
 
     reservation = _reservation_path(final)
+    staging_identity = staging / ".identity"
     reservation_created = _link_verified(
-        staging / ".identity", reservation, expected_sha256=identity_sha256
+        staging_identity, reservation, expected_sha256=identity_sha256
     )
+    reservation_owned_by_staging = _same_regular_inode(staging_identity, reservation)
     if crash_after_step():
         return False
     _fsync_dir(final.parent)
     if crash_after_step():
         return False
+    if not reservation_created and not reservation_owned_by_staging and not final.exists():
+        raise RuntimeError("identity reservation is owned by another staging root")
+    if before_final_mkdir is not None:
+        before_final_mkdir()
     try:
         final.mkdir()
     except FileExistsError:
-        if reservation_created:
-            raise RuntimeError("final root predates its identity reservation")
         try:
             mode = os.lstat(final).st_mode
         except OSError as exc:
             raise RuntimeError("final root collision could not be inspected") from exc
         if not stat.S_ISDIR(mode):
+            if reservation_created:
+                _remove_owned_reservation(staging_identity, reservation)
             raise RuntimeError("final root collision is not a directory")
+        if reservation_created:
+            if not _wait_for_peer_identity(
+                final,
+                reservation,
+                expected_sha256=identity_sha256,
+            ):
+                _remove_owned_reservation(staging_identity, reservation)
+                raise RuntimeError("final root predates its identity reservation")
+        _assert_protocol_entries(final, complete=False)
+        try:
+            final_identity_sha256 = _sha256_regular_nofollow(final / ".identity")
+        except OSError:
+            if not reservation_owned_by_staging:
+                raise RuntimeError("final initialization is owned by another staging root")
+        else:
+            if final_identity_sha256 != identity_sha256:
+                raise RuntimeError("final root identity collision")
     if crash_after_step():
         return False
     _fsync_dir(final.parent)
@@ -280,7 +363,8 @@ def _fallback_visible(final: Path, *, identity: bytes) -> bool:
             return False
         if _sha256_regular_nofollow(final / ".identity") != identity_sha256:
             return False
-    except (FileNotFoundError, NotADirectoryError, OSError, RuntimeError, json.JSONDecodeError):
+        _assert_protocol_entries(final, complete=True)
+    except (OSError, RuntimeError, json.JSONDecodeError):
         return False
     if marker_payload.get("schema") != "plan03.init.complete.v1":
         return False
@@ -294,8 +378,40 @@ def _fallback_visible(final: Path, *, identity: bytes) -> bool:
             _sha256_regular_nofollow(final / name) == str(objects[name])
             for name in FALLBACK_OBJECT_NAMES
         )
-    except (FileNotFoundError, NotADirectoryError, OSError, RuntimeError):
+    except (OSError, RuntimeError):
         return False
+
+
+def _repair_missing_reservation(final: Path, *, identity: bytes) -> bool:
+    """Restore a completed run's same-inode sibling reservation after verified loss."""
+    reservation = _reservation_path(final)
+    if reservation.exists():
+        return _fallback_visible(final, identity=identity)
+    identity_sha256 = hashlib.sha256(identity).hexdigest()
+    try:
+        marker = json.loads(_read_regular_nofollow(final / ".complete"))
+        _assert_protocol_entries(final, complete=True)
+        if marker.get("schema") != "plan03.init.complete.v1":
+            return False
+        if marker.get("identity_sha256") != identity_sha256:
+            return False
+        objects = marker.get("objects")
+        if not isinstance(objects, dict) or set(objects) != set(FALLBACK_OBJECT_NAMES):
+            return False
+        if _sha256_regular_nofollow(final / ".identity") != identity_sha256:
+            return False
+        if not all(
+            _sha256_regular_nofollow(final / name) == str(objects[name])
+            for name in FALLBACK_OBJECT_NAMES
+        ):
+            return False
+        _link_verified(final / ".identity", reservation, expected_sha256=identity_sha256)
+        _fsync_dir(final.parent)
+    except (OSError, RuntimeError, json.JSONDecodeError):
+        return False
+    return _same_regular_inode(final / ".identity", reservation) and _fallback_visible(
+        final, identity=identity
+    )
 
 
 def _probe_directory_publish_fallback(root: Path) -> dict[str, Any]:
@@ -404,11 +520,73 @@ def _probe_directory_publish_fallback(root: Path) -> dict[str, Any]:
         _fallback_publish(staging, orphan, identity=identity)
     except RuntimeError as exc:
         orphan_error = str(exc)
-    if orphan_error != "final root predates its identity reservation":
+    orphan_retry_error = None
+    try:
+        _fallback_publish(staging, orphan, identity=identity)
+    except RuntimeError as exc:
+        orphan_retry_error = str(exc)
+    if (
+        orphan_error != "final root predates its identity reservation"
+        or orphan_retry_error != orphan_error
+        or _reservation_path(orphan).exists()
+    ):
         raise RuntimeError(f"unreserved final root did not fail closed: {orphan_error}")
+    foreign = root / "fallback-foreign-entry"
+    foreign.mkdir()
+    _write_exclusive(foreign / "foreign.txt", b"must-not-be-claimed")
+    foreign_error = None
+    try:
+        _fallback_publish(staging, foreign, identity=identity)
+    except RuntimeError as exc:
+        foreign_error = str(exc)
+    if (
+        foreign_error != "final root predates its identity reservation"
+        or _reservation_path(foreign).exists()
+        or not (foreign / "foreign.txt").is_file()
+    ):
+        raise RuntimeError(f"foreign final root did not fail closed: {foreign_error}")
+    concurrent_staging = root / "fallback-concurrent.staging"
+    shutil.copytree(staging, concurrent_staging)
+    concurrent = root / "fallback-concurrent"
+    if _fallback_publish(staging, concurrent, identity=identity, stop_after_step=1):
+        raise RuntimeError("reservation-only prefix unexpectedly completed")
+    concurrent_error = None
+    try:
+        _fallback_publish(concurrent_staging, concurrent, identity=identity)
+    except RuntimeError as exc:
+        concurrent_error = str(exc)
+    if concurrent_error != "identity reservation is owned by another staging root":
+        raise RuntimeError(f"concurrent staging stole reservation: {concurrent_error}")
+    if not _fallback_publish(staging, concurrent, identity=identity):
+        raise RuntimeError("reservation owner did not recover concurrent run")
+    same_staging_peer = root / "fallback-same-staging-peer"
+
+    def peer_wins_final_mkdir() -> None:
+        same_staging_peer.mkdir()
+        os.link(
+            _reservation_path(same_staging_peer),
+            same_staging_peer / ".identity",
+            follow_symlinks=False,
+        )
+
+    if not _fallback_publish(
+        staging,
+        same_staging_peer,
+        identity=identity,
+        before_final_mkdir=peer_wins_final_mkdir,
+    ) or not _fallback_visible(same_staging_peer, identity=identity):
+        raise RuntimeError("same-staging peer mkdir race did not converge")
     complete = root / "fallback-complete"
     if not _fallback_publish(staging, complete, identity=identity):
         raise RuntimeError("complete fallback publication returned false")
+    complete_reservation = _reservation_path(complete)
+    complete_reservation.unlink()
+    _fsync_dir(complete.parent)
+    invisible_after_reservation_loss = _fallback_visible(complete, identity=identity)
+    if invisible_after_reservation_loss or not _repair_missing_reservation(
+        complete, identity=identity
+    ):
+        raise RuntimeError("verified reservation repair did not recover completed run")
     second_identity_error = None
     try:
         _fallback_publish(conflicting_staging, complete, identity=conflicting_identity)
@@ -426,8 +604,16 @@ def _probe_directory_publish_fallback(root: Path) -> dict[str, Any]:
         "crash_prefixes": crash_prefixes,
         "post_visibility_prefixes": post_visibility_prefixes,
         "same_identity_retry": True,
+        "same_identity_retry_requires_original_staging_inode_until_identity_link": True,
+        "different_staging_concurrency": "fail_closed_until_final_identity_exists",
+        "same_staging_concurrency": "converges_when_peer_links_reserved_identity",
         "different_identity_collision": "fail_closed",
         "completed_root_overwrite": "fail_closed",
+        "preexisting_final_retry": "repeatable_fail_closed_without_reservation_leak",
+        "foreign_entry_visibility": "fail_closed",
+        "reservation_lifecycle": "retain_with_run; verified completed run supports same-inode repair",
+        "reservation_loss_before_repair_visible": invisible_after_reservation_loss,
+        "reservation_repair": "PASS",
     }
 
 
@@ -500,10 +686,27 @@ def _probe_sqlite_delete_lock(root: Path) -> dict[str, Any]:
     }
 
 
-def probe(shared_parent: Path) -> dict[str, Any]:
+def _capture_source_identity(project_root: Path) -> dict[str, Any]:
+    capture_path = project_root / "scripts/miyabi/capture_source_identity.py"
+    spec = importlib.util.spec_from_file_location("plan03_fs_capture_source_identity", capture_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load source identity helper: {capture_path}")
+    capture_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(capture_module)
+    source = capture_module.capture(project_root)
+    return {
+        "git_commit": source["git_commit"],
+        "git_dirty": source["git_dirty"],
+        "source_fingerprint": source["source_fingerprint"],
+    }
+
+
+def probe(shared_parent: Path, *, project_root: Path | None = None) -> dict[str, Any]:
     shared_parent = shared_parent.resolve()
     if not shared_parent.is_dir():
         raise FileNotFoundError(shared_parent)
+    project_root = (project_root or Path(__file__).resolve().parents[2]).resolve()
+    recorded_at = datetime.now(UTC).astimezone()
     temporary = Path(tempfile.mkdtemp(prefix=".plan03-fs-capability-", dir=shared_parent))
     try:
         results = {
@@ -523,6 +726,8 @@ def probe(shared_parent: Path) -> dict[str, Any]:
             else "FAIL",
             "host": os.uname().nodename,
             "pbs_job_id": os.environ.get("PBS_JOBID"),
+            "recorded_at": recorded_at.isoformat(),
+            "source_identity": _capture_source_identity(project_root),
             "shared_parent": str(shared_parent),
             "temporary_path_removed": True,
             "results": results,
@@ -547,15 +752,27 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
         raise
 
 
-def main() -> None:
+def _result_artifact_path(output_dir: Path, payload: dict[str, Any]) -> Path:
+    result = "pass" if payload["status"] == "PASS" else "fail"
+    recorded_at = datetime.fromisoformat(str(payload["recorded_at"]))
+    timestamp = recorded_at.strftime("%Y%m%d-%H%M%S")
+    return output_dir / f"{timestamp}_p0-shared-fs-capability_{result}.json"
+
+
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--shared-parent", type=Path, required=True)
-    parser.add_argument("--output", type=Path)
-    args = parser.parse_args()
-    payload = probe(args.shared_parent)
-    if args.output is not None:
-        _atomic_write_json(args.output.resolve(), payload)
+    parser.add_argument("--project-root", type=Path, default=Path(__file__).resolve().parents[2])
+    parser.add_argument("--output-dir", type=Path)
+    args = parser.parse_args(argv)
+    payload = probe(args.shared_parent, project_root=args.project_root)
+    artifact_path = None
+    if args.output_dir is not None:
+        artifact_path = _result_artifact_path(args.output_dir.resolve(), payload)
+        _atomic_write_json(artifact_path, payload)
     print(json.dumps(payload, indent=2, sort_keys=True))
+    if artifact_path is not None:
+        print(f"PLAN03_FS_CAPABILITY_ARTIFACT={artifact_path}")
     if payload["status"] != "PASS":
         sys.exit(1)
 
