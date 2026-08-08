@@ -164,3 +164,37 @@
 - attempt2：`artifacts/20260808-233400_p0-phase-review-remediation-attempt2_fail.log`，SHA-256 `53a487405b81be0abc29e2f7f6e02f934a33322bac09d8045bb809034df3e174`。
 - attempt3：`artifacts/20260808-233600_p0-phase-review-remediation-attempt3_fail.log`，SHA-256 `068b95b7b1d8fb228a9caa2e6c180b867745686e44e788e034d74146c67a4f6b`。
 - 第四次在全面审查后通过，连续失败计数归零。重复的successful FS/RED/test/performance产物与PBS根日志已在保留最终结构化证据后精确删除；没有删除失败证据、source、config或user run。
+
+## 2026-08-09 01:47 JST — `p1-typed-foundation-validation-attempt1`（连续失败 1 次）
+
+- 环境/命令：Miyabi-G compute，PBS job `2508626.opbs`；single-node `debug-g`，literal group `xg24i002`，10分钟walltime。Ruff先通过，focused P1/config/baseline测试随后运行。
+- 预期：新增shared `Config.validate(profile)`和`ConfigV4.validate(profile)`阻止full/baseline profile spoof，focused suite全部通过。
+- 实际：`1 failed, 223 passed in 12.09s`；失败仅为 `test_v4_profile_cannot_spoof_torch_baseline_constraints` 的message regex期待`cannot be used`，实际更早的shared validator正确地以 `full_v4_shared profile cannot validate a torch baseline config` fail closed。没有进入full suite。
+- 已确认根因：测试耦合到外层validator措辞；新增统一shared validator后，安全拒绝发生在更靠近共享profile边界的位置，行为和拒绝类别正确。不是profile绕过或config被接受。
+- 原始证据：`artifacts/20260809-014750_p1-typed-foundation-validation-attempt1_fail.log`。
+- 下一轮：将断言收敛为稳定语义 `cannot .* torch baseline config`，不改变validator行为；随后重跑同一focused+full PBS门禁。
+
+## 2026-08-09 01:51 JST — `p1-typed-foundation-validation-attempt2`（连续失败 2 次）
+
+- 环境/命令：Miyabi-G compute，PBS job `2508633.opbs`；资源、Ruff和focused/full顺序同attempt1。attempt1的profile断言已修且越过，新增payload rename-race负例在focused suite失败。
+- 预期：verifier在同一已打开fd完成digest+safetensors schema/finite检查后，重新确认canonical name仍指向同一inode；并发rename/replace返回`IDENTITY_MISMATCH`。
+- 实际：`1 failed, 224 passed in 12.04s`，`test_payload_rename_race_fails_identity_check`得到`ReadStatus.OK`；没有进入full suite。完整日志：`artifacts/20260809-015127_p1-typed-foundation-validation-attempt2_fail.log`。
+- 已确认根因：实现确实增加了pathname-to-open-fd inode复检，但该复检错误地位于 `_inspect_safetensors()` 之前；fault hook在tensor检查期间替换pathname，因此唯一一次复检已发生，之后直接返回OK。不是inode比较或fixture失效。
+- 下一轮：把final pathname inode复检移动到全部fd内验证之后，并保留打开前lstat/open比较、fd前后size/mtime/ctime比较；同一负例将精确证伪顺序错误。随后重跑完整P1 PBS门禁；若同一门禁第三次失败，按scoped规则在第四次前启动全面Codex+GPT审查。
+
+## 2026-08-09 01:55 JST — `p1-current-boundary-static-gate-attempt1`（连续失败 1 次）
+
+- 环境/命令：Miyabi-G login，仅静态执行 `.venv/bin/python scripts/miyabi/check_plan03.py --root . --expect <P0 frozen inventory> --verify-boundaries`；未运行pytest/torch或计算负载。
+- 预期：P1按计划把optimizer helper移入`modeling`并仅修改`baselines/train.py`的import后，fragment/delete边界、torch baseline config/PBS/test清单和baseline协议语义边界仍通过。
+- 实际：checker输出`BLOCKED`；diagnostic payload的唯一difference为`current_migration_boundaries.boundary_manifest_sha256`。精确比较定位到checker把`fs_diloco/baselines/`全部source hash冻结到P4，而计划§1.1、§6.1(6)和BASE-01明确要求P1修改`baselines/train.py`以删除runtime learner反向依赖。configs、PBS、baseline tests、`baselines/protocol.py|artifacts.py|health.py`和全部fragment边界均未漂移。
+- 已确认根因：P0 checker把“baseline package必须保留且语义回归”过度实现成“baseline train composition文件字节不可变到P4”，与P1已冻结工作单元冲突。不是意外baseline协议修改。
+- 原始诊断：`/tmp/plan03-p1-check.json`（临时，只含可重建inventory；核心difference已记录于此）。
+- 下一轮：从长期hash冻结中只排除计划明确要求改import的`fs_diloco/baselines/train.py`，继续冻结baseline protocol/artifact/health源码、4 configs、2 PBS和3原有tests；新增checker单测证明train composition可迁移而protocol hash漂移仍BLOCKED，再重跑静态门禁。
+
+## 2026-08-09 01:57 JST — `p1-pre-submit-static-wrapper-attempt1`（连续失败 1 次）
+
+- 环境/命令：Miyabi-G login；wrapper先成功执行全体PBS `bash -n`和group placeholder扫描，随后错误地把shell文件 `scripts/miyabi/run_plan03_phase1_tests.pbs`传给Python Ruff parser。
+- 预期：Ruff只检查修改的Python checker/tests，PBS由已通过的`bash -n`负责语法。
+- 实际：Ruff对合法bash从`set -eEuo pipefail`起报告51个Python `invalid-syntax`并退出非零；未qsub、未运行pytest。`bash -n scripts/miyabi/*.pbs`已经独立PASS，因此没有PBS语法缺陷。
+- 已确认根因：一次性静态wrapper的文件类型选择错误，不是source或PBS失败。
+- 下一轮：保持repo不变，Ruff参数仅包含`.py`文件；PBS继续只用`bash -n`及literal group扫描。两者均通过后再提交compute job。

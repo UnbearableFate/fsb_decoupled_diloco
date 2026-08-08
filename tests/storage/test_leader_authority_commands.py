@@ -1,0 +1,214 @@
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass
+from pathlib import Path
+
+import pytest
+
+from fs_diloco.protocol.contributor import StaticMembershipScope
+from fs_diloco.protocol.cycle_receipt import CycleReceiptV1
+from fs_diloco.protocol.proposal import FullUpdateProposalV2
+from fs_diloco.storage.authority import (
+    AuthorityIdentity,
+    CommandConflictError,
+    LeaderAuthority,
+    initialize_authority_v4,
+)
+from fs_diloco.storage.leader_lease import StaleLeaderTokenError
+from tests.support.v4_protocol import proposal_payload, receipt_payload
+
+
+@dataclass
+class Clock:
+    now: float = 100.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def open_authority(tmp_path: Path, clock: Clock) -> LeaderAuthority:
+    database = tmp_path / "authority.sqlite3"
+    identity = AuthorityIdentity(
+        "run-v4", "source-fingerprint", hashlib.sha256(b"config").hexdigest()
+    )
+    scope = StaticMembershipScope(("learner-0",))
+    initialize_authority_v4(database, identity, scope, wall_clock=clock)
+    return LeaderAuthority(
+        database,
+        identity,
+        scope,
+        lease_duration_seconds=20.0,
+        max_clock_skew_seconds=2.0,
+        wall_clock=clock,
+    )
+
+
+def commit_v0(leader) -> None:
+    leader.initialize_v0(
+        command_id="initialize-v0",
+        publication_id="publication-v0",
+        weight_relative_path="weights/epochs/e1/v0.safetensors",
+        weight_size=4,
+        weight_sha256="a" * 64,
+        optim_relative_path="optim/epochs/e1/v0.safetensors",
+        optim_size=4,
+        optim_sha256="b" * 64,
+    )
+
+
+def test_v0_uses_fenced_publication_chain_and_commit_is_idempotent(tmp_path: Path) -> None:
+    clock = Clock()
+    with open_authority(tmp_path, clock) as authority:
+        token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
+        leader = authority.open_leader(token)
+        intent = leader.prepare_publication(
+            command_id="prepare-v0",
+            publication_id="publication-v0",
+            target_version=0,
+            selection_batch_id=None,
+            weight_relative_path="weights/epochs/e1/v0.safetensors",
+            weight_size=4,
+            weight_sha256="a" * 64,
+            optim_relative_path="optim/epochs/e1/v0.safetensors",
+            optim_size=4,
+            optim_sha256="b" * 64,
+        )
+        committed = leader.commit_merge(
+            command_id="commit-v0", publication_id=intent.publication_id
+        )
+        replay = leader.commit_merge(command_id="commit-v0", publication_id=intent.publication_id)
+
+        assert committed == replay
+        assert committed.version == 0
+        assert committed.predecessor_version is None
+        assert authority.read.latest_committed_version() == committed
+
+
+def test_command_id_replay_with_different_request_fails_closed(tmp_path: Path) -> None:
+    clock = Clock()
+    with open_authority(tmp_path, clock) as authority:
+        token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
+        leader = authority.open_leader(token)
+        leader.bind_or_replace_static_attempt(
+            command_id="bind-1",
+            learner_id="learner-0",
+            logical_launch_id="launch-0",
+            attempt_id="attempt-1",
+        )
+
+        with pytest.raises(CommandConflictError, match="different"):
+            leader.bind_or_replace_static_attempt(
+                command_id="bind-1",
+                learner_id="learner-0",
+                logical_launch_id="launch-0",
+                attempt_id="attempt-2",
+            )
+
+
+def test_stale_token_cannot_execute_a_named_business_command(tmp_path: Path) -> None:
+    clock = Clock()
+    with open_authority(tmp_path, clock) as authority:
+        first = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
+        stale = authority.open_leader(first)
+        clock.now = 123.0
+        second = authority.acquire_leader(owner_id="owner-2", hostname="host", pid=2)
+        current = authority.open_leader(second)
+        current.bind_or_replace_static_attempt(
+            command_id="bind-current",
+            learner_id="learner-0",
+            logical_launch_id="launch-0",
+            attempt_id="attempt-2",
+        )
+
+        with pytest.raises(StaleLeaderTokenError):
+            stale.begin_terminal_close(command_id="stale-close", reason="stale")
+
+
+def test_authority_surface_does_not_offer_direct_sql_or_raw_connection(tmp_path: Path) -> None:
+    clock = Clock()
+    with open_authority(tmp_path, clock) as authority:
+        token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
+        leader = authority.open_leader(token)
+
+        for forbidden in ("conn", "connection", "execute", "executemany", "transaction"):
+            assert not hasattr(authority, forbidden)
+            assert not hasattr(leader, forbidden)
+
+
+def test_global_version_target_cannot_skip_or_duplicate(tmp_path: Path) -> None:
+    clock = Clock()
+    with open_authority(tmp_path, clock) as authority:
+        token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
+        leader = authority.open_leader(token)
+        commit_v0(leader)
+
+        with pytest.raises(ValueError, match="next version 1"):
+            leader.prepare_publication(
+                command_id="prepare-v2",
+                publication_id="publication-v2",
+                target_version=2,
+                selection_batch_id=None,
+                weight_relative_path="weights/epochs/e1/v2.safetensors",
+                weight_size=4,
+                weight_sha256="a" * 64,
+                optim_relative_path="optim/epochs/e1/v2.safetensors",
+                optim_size=4,
+                optim_sha256="b" * 64,
+            )
+
+
+def test_typed_receipt_proposal_selection_and_v1_commit_flow(tmp_path: Path) -> None:
+    clock = Clock()
+    with open_authority(tmp_path, clock) as authority:
+        token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
+        leader = authority.open_leader(token)
+        binding = leader.bind_or_replace_static_attempt(
+            command_id="bind-1",
+            learner_id="learner-0",
+            logical_launch_id="launch-0",
+            attempt_id="attempt-1",
+        )
+        fence = {
+            "kind": "static",
+            "learner_id": binding.learner_id,
+            "logical_launch_id": binding.logical_launch_id,
+            "attempt_id": binding.attempt_id,
+            "binding_generation": binding.binding_generation,
+        }
+        receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence))
+        leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
+        proposal_data = proposal_payload(receipt_sha256=receipt.immutable_sha256(), fence=fence)
+        proposal = FullUpdateProposalV2.from_dict(proposal_data)
+
+        assert (
+            leader.record_proposal(command_id="proposal-1", proposal=proposal).value == "accepted"
+        )
+        assert (
+            leader.record_proposal(command_id="proposal-replay", proposal=proposal).value
+            == "exact_replay"
+        )
+        commit_v0(leader)
+        batch = leader.try_select_batch(command_id="select-v1", quorum_min=1, quorum_max=1)
+        assert batch is not None
+        assert batch.target_version == 1
+        assert batch.candidates[0].proposal == proposal
+        intent = leader.prepare_publication(
+            command_id="prepare-v1",
+            publication_id="publication-v1",
+            target_version=1,
+            selection_batch_id=batch.batch_id,
+            weight_relative_path="weights/epochs/e1/v1.safetensors",
+            weight_size=4,
+            weight_sha256="c" * 64,
+            optim_relative_path="optim/epochs/e1/v1.safetensors",
+            optim_size=4,
+            optim_sha256="d" * 64,
+        )
+        committed = leader.commit_merge(
+            command_id="commit-v1", publication_id=intent.publication_id
+        )
+
+        assert committed.version == 1
+        assert committed.predecessor_version == 0
+        assert committed.direct_weight_tokens_applied == 6

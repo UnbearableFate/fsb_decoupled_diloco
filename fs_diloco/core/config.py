@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import dataclasses
+import math
 import os
 import time
+import types
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, TypeVar, get_args, get_origin, get_type_hints
+from typing import Any, TypeVar, Union, get_args, get_origin, get_type_hints
 
 import yaml
 
@@ -25,8 +27,84 @@ REMOVED_CONFIG_KEYS: dict[str, str | None] = {
 }
 
 
+class ConfigSection:
+    """Pure structural validation shared by every dataclass config section."""
+
+    def validate(self, *, path: str | None = None) -> None:
+        section_path = path or type(self).__name__.removesuffix("Section").lower()
+        type_hints = get_type_hints(type(self))
+        for field_info in dataclasses.fields(self):
+            value = getattr(self, field_info.name)
+            field_path = f"{section_path}.{field_info.name}" if section_path else field_info.name
+            annotation = type_hints.get(field_info.name, field_info.type)
+            _validate_config_value(value, annotation, field_path)
+            if isinstance(value, ConfigSection):
+                value.validate(path=field_path)
+
+
+def _validate_config_value(value: Any, annotation: Any, path: str) -> None:
+    if path == "io.checkpoint_digest_mode" and value is False:
+        # PyYAML 1.1 decodes an unquoted ``off`` as false.  The resolver
+        # normalizes this one historical spelling before semantic validation.
+        return
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+    if origin in {types.UnionType, Union}:
+        if value is None and type(None) in args:
+            return
+        errors: list[ValueError] = []
+        for option in (item for item in args if item is not type(None)):
+            try:
+                _validate_config_value(value, option, path)
+                return
+            except ValueError as exc:
+                errors.append(exc)
+        raise ValueError(f"{path} has the wrong type") from (errors[-1] if errors else None)
+    if origin is list:
+        if not isinstance(value, list):
+            raise ValueError(f"{path} must be a list")
+        if args:
+            for index, item in enumerate(value):
+                _validate_config_value(item, args[0], f"{path}[{index}]")
+        return
+    if origin is tuple:
+        if not isinstance(value, tuple):
+            raise ValueError(f"{path} must be a tuple")
+        if len(args) == 2 and args[1] is Ellipsis:
+            for index, item in enumerate(value):
+                _validate_config_value(item, args[0], f"{path}[{index}]")
+        elif args and len(value) != len(args):
+            raise ValueError(f"{path} has the wrong tuple length")
+        else:
+            for index, (item, option) in enumerate(zip(value, args, strict=True)):
+                _validate_config_value(item, option, f"{path}[{index}]")
+        return
+    if annotation is Any:
+        return
+    if annotation is bool:
+        if not isinstance(value, bool):
+            raise ValueError(f"{path} must be a boolean")
+        return
+    if annotation is int:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"{path} must be an integer")
+        return
+    if annotation is float:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{path} must be a number")
+        if not math.isfinite(float(value)):
+            raise ValueError(f"{path} must be finite")
+        return
+    if annotation is str:
+        if not isinstance(value, str):
+            raise ValueError(f"{path} must be a string")
+        return
+    if isinstance(annotation, type) and not isinstance(value, annotation):
+        raise ValueError(f"{path} must be {annotation.__name__}")
+
+
 @dataclass
-class RunSection:
+class RunSection(ConfigSection):
     name: str = "fs_diloco_gpt2_wikitext2_8l"
     run_id: str | None = None
     shared_root: str | None = None
@@ -37,12 +115,12 @@ class RunSection:
 
 
 @dataclass
-class InitSection:
+class InitSection(ConfigSection):
     resume: bool = False
 
 
 @dataclass
-class ModelSection:
+class ModelSection(ConfigSection):
     name_or_path: str = "gpt2"
     trust_remote_code: bool = False
     dtype: str = "bfloat16"
@@ -52,7 +130,7 @@ class ModelSection:
 
 
 @dataclass
-class DataSection:
+class DataSection(ConfigSection):
     dataset_name: str = "wikitext"
     dataset_config_name: str | None = "wikitext-2-raw-v1"
     train_split: str = "train"
@@ -66,7 +144,7 @@ class DataSection:
 
 
 @dataclass
-class GraceWindowSection:
+class GraceWindowSection(ConfigSection):
     mode: str = "fixed"
     fixed_seconds: float = 20.0
     initial_seconds: float = 10.0
@@ -74,7 +152,7 @@ class GraceWindowSection:
 
 
 @dataclass
-class SyncSection:
+class SyncSection(ConfigSection):
     num_learners: int = 8
     quorum_min: int = 4
     quorum_max: int = 8
@@ -91,7 +169,7 @@ class SyncSection:
 
 
 @dataclass
-class SyncerSection:
+class SyncerSection(ConfigSection):
     device: str = "auto"
     compute_dtype: str = "float32"
     publish_dtype: str = "float32"
@@ -99,7 +177,7 @@ class SyncerSection:
 
 
 @dataclass
-class SyncerHASection:
+class SyncerHASection(ConfigSection):
     enabled: bool = False
     lease_duration_seconds: float = 90.0
     renew_interval_seconds: float = 10.0
@@ -116,7 +194,7 @@ class SyncerHASection:
 
 
 @dataclass
-class RecoverySubmissionSection:
+class RecoverySubmissionSection(ConfigSection):
     enabled: bool = False
     claim_timeout_seconds: float = 120.0
     reconciliation_interval_seconds: float = 60.0
@@ -131,7 +209,7 @@ class RecoverySubmissionSection:
 
 
 @dataclass
-class CoordinationSection:
+class CoordinationSection(ConfigSection):
     syncer_ha: SyncerHASection = field(default_factory=SyncerHASection)
     recovery_submission: RecoverySubmissionSection = field(
         default_factory=RecoverySubmissionSection
@@ -139,7 +217,7 @@ class CoordinationSection:
 
 
 @dataclass
-class MembershipSection:
+class MembershipSection(ConfigSection):
     mode: str = "static"
     stream_pool_size: int = 8
     bootstrap_instances: int = 8
@@ -157,7 +235,7 @@ class MembershipSection:
 
 
 @dataclass
-class ScalingSection:
+class ScalingSection(ConfigSection):
     enabled: bool = False
     desired_contributors: int = 8
     low_contributor_threshold: int = 6
@@ -180,7 +258,7 @@ class ScalingSection:
 
 
 @dataclass
-class TerminalSection:
+class TerminalSection(ConfigSection):
     admission_close_policy: str = "global_target_or_launch_budget"
     deadline_seconds: float | None = None
     drain_ack_timeout_seconds: float = 300.0
@@ -191,7 +269,7 @@ class TerminalSection:
 
 
 @dataclass
-class LivenessSection:
+class LivenessSection(ConfigSection):
     heartbeat_interval_seconds: float = 30.0
     stale_after_seconds: float = 120.0
     dead_after_seconds: float = 300.0
@@ -201,7 +279,7 @@ class LivenessSection:
 
 
 @dataclass
-class TrainingSection:
+class TrainingSection(ConfigSection):
     inner_steps: int = 100
     micro_batch_size: int = 2
     gradient_accumulation_steps: int = 8
@@ -215,7 +293,7 @@ class TrainingSection:
 
 
 @dataclass
-class InnerOptimizerSection:
+class InnerOptimizerSection(ConfigSection):
     name: str = "adamw"
     lr: float = 5.0e-5
     betas: tuple[float, float] = (0.9, 0.95)
@@ -228,7 +306,7 @@ class InnerOptimizerSection:
 
 
 @dataclass
-class OuterOptimizerSection:
+class OuterOptimizerSection(ConfigSection):
     name: str = "nesterov"
     lr: float = 0.7
     momentum: float = 0.9
@@ -238,7 +316,7 @@ class OuterOptimizerSection:
 
 
 @dataclass
-class IOSection:
+class IOSection(ConfigSection):
     tensor_dtype: str = "float32"
     atomic_write: bool = True
     compute_sha256: bool = False
@@ -246,12 +324,12 @@ class IOSection:
 
 
 @dataclass
-class PredictionSection:
+class PredictionSection(ConfigSection):
     reconcile_timeout_seconds: float = 60.0
 
 
 @dataclass
-class LearnerSection:
+class LearnerSection(ConfigSection):
     poll_latest_during_inner_steps: bool = False
     adopt_global_after_upload: bool = True
     global_adoption_strategy: str = "replace"
@@ -261,7 +339,7 @@ class LearnerSection:
 
 
 @dataclass
-class FragmentSection:
+class FragmentSection(ConfigSection):
     enabled: bool = False
     strategy: str = "full"
     num_fragments: int = 1
@@ -272,7 +350,7 @@ class FragmentSection:
 
 
 @dataclass
-class FailureSimSection:
+class FailureSimSection(ConfigSection):
     enabled: bool = False
     sleep_jitter_seconds: float = 0.0
     upload_skip_probability: float = 0.0
@@ -280,7 +358,7 @@ class FailureSimSection:
 
 
 @dataclass
-class WandbSection:
+class WandbSection(ConfigSection):
     enabled: bool = True
     mode: str | None = "offline"
     entity: str | None = None
@@ -289,14 +367,14 @@ class WandbSection:
 
 
 @dataclass
-class TorchBaselineSection:
+class TorchBaselineSection(ConfigSection):
     enabled: bool = False
     backend: str = "nccl"
     require_distinct_hosts: bool = True
 
 
 @dataclass
-class Config:
+class Config(ConfigSection):
     run: RunSection = field(default_factory=RunSection)
     init: InitSection = field(default_factory=InitSection)
     model: ModelSection = field(default_factory=ModelSection)
@@ -317,6 +395,18 @@ class Config:
     failure_sim: FailureSimSection = field(default_factory=FailureSimSection)
     wandb: WandbSection = field(default_factory=WandbSection)
     torch_baseline: TorchBaselineSection = field(default_factory=TorchBaselineSection)
+
+    def validate(self, *, profile: str = "legacy_oracle", path: str | None = None) -> None:
+        if profile not in {"legacy_oracle", "full_v4_shared", "torch_baseline"}:
+            raise ValueError(f"unknown config validation profile: {profile}")
+        for field_info in dataclasses.fields(self):
+            section = getattr(self, field_info.name)
+            if isinstance(section, ConfigSection):
+                section.validate(path=field_info.name)
+        if profile == "torch_baseline" and not self.torch_baseline.enabled:
+            raise ValueError("torch_baseline profile requires torch_baseline.enabled=true")
+        if profile != "torch_baseline" and self.torch_baseline.enabled:
+            raise ValueError(f"{profile} profile cannot validate a torch baseline config")
 
 
 def _coerce_scalar(value: Any, target_type: Any) -> Any:
@@ -386,7 +476,11 @@ def load_config(path: str | Path | None = None) -> Config:
         if not isinstance(loaded, dict):
             raise ValueError(f"config {path} must contain a mapping")
         data = loaded
-    return _from_dict(Config, data)
+    config = _from_dict(Config, data)
+    config.validate(
+        profile="torch_baseline" if config.torch_baseline.enabled else "legacy_oracle"
+    )
+    return config
 
 
 def load_resolved_config_snapshot(path: str | Path) -> Config:
@@ -422,7 +516,11 @@ def load_resolved_config_snapshot(path: str | Path) -> Config:
         present, value = pop_dotted(loaded, removed)
         if present and replacement is not None:
             set_dotted_if_missing(loaded, replacement, value)
-    return _from_dict(Config, loaded)
+    config = _from_dict(Config, loaded)
+    config.validate(
+        profile="torch_baseline" if config.torch_baseline.enabled else "legacy_oracle"
+    )
+    return config
 
 
 def _default_run_id(name: str) -> str:
@@ -460,6 +558,7 @@ def resolve_config(
     parallel_checkpoint_writes: bool | None = None,
     materialize_full_every_events: int | None = None,
     project_root: str | Path | None = None,
+    profile: str | None = None,
 ) -> Config:
     config = load_config(path)
     git_commit = os.environ.get("FS_DILOCO_GIT_COMMIT")
@@ -890,6 +989,10 @@ def resolve_config(
         if int(config.training.inner_steps) <= 0:
             raise ValueError("torch baseline training.inner_steps must be > 0")
     config.training.block_size = config.data.block_size
+    selected_profile = profile or (
+        "torch_baseline" if config.torch_baseline.enabled else "legacy_oracle"
+    )
+    config.validate(profile=selected_profile)
     return config
 
 

@@ -1,0 +1,36 @@
+{
+  "artifact_version": 1,
+  "status": "REVIEW",
+  "recorded_at": "2026-08-09T01:54:00+09:00",
+  "phase_id": "P1-typed-foundation",
+  "full_protocol_v4": {
+    "PROTOCOL_VERSION": 4,
+    "AUTHORITY_SCHEMA_VERSION": 4,
+    "CONFIG_SCHEMA_VERSION": 1,
+    "PROPOSAL_FORMAT_VERSION": 2,
+    "PROPOSAL_POINTER_FORMAT_VERSION": 2,
+    "CYCLE_RECEIPT_FORMAT_VERSION": 1,
+    "PROGRESS_POINTER_FORMAT_VERSION": 1,
+    "LEARNER_HEARTBEAT_FORMAT_VERSION": 2,
+    "SYNCER_HEARTBEAT_FORMAT_VERSION": 2,
+    "CONTROL_FORMAT_VERSION": 2,
+    "MEMBERSHIP_FORMAT_VERSION": 2,
+    "LAUNCH_RECORD_FORMAT_VERSION": 2,
+    "RUN_DESCRIPTOR_FORMAT_VERSION": 2,
+    "SOURCE_MANIFEST_FORMAT_VERSION": 2,
+    "ACTOR_ATTESTATION_FORMAT_VERSION": 1,
+    "ARTIFACT_POLICY_FORMAT_VERSION": 1,
+    "PARAM_INDEX_FORMAT_VERSION": 1
+  },
+  "implementation": "fs_diloco/core/versions.py",
+  "legacy_boundary": {
+    "module": "fs_diloco/core/constants.py",
+    "status": "unchanged P1 oracle; producer/consumer cutover and generic FORMAT_VERSION deletion remain P4/P5",
+    "runtime_imports_v4_versions": 0
+  },
+  "notes": [
+    "Versions are independent constants; param-index v1 was not artificially bumped.",
+    "Full Protocol v4 and proposal wire format v2 are named separately.",
+    "The production v1-v3 runtime remains runnable as the frozen oracle until the mandatory P4 cutover."
+  ]
+}

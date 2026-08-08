@@ -61,7 +61,7 @@ markers = [
 ]
 
 [tool.setuptools.package-data]
-"fs_diloco.storage" = ["schema.sql"]
+"fs_diloco.storage" = ["schema.sql", "schema_v4.sql", "schema_v4_dynamic.sql"]
 
 [tool.setuptools.packages.find]
 include = ["fs_diloco*"]

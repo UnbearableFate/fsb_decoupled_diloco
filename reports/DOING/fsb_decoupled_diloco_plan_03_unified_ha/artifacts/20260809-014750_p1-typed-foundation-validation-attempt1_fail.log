@@ -1,0 +1,38 @@
+Currently Loaded Modulefiles:
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9
+
+Key:
+(symbolic-version)
+mg0002
+PBS_JOBID=2508626.opbs
+python=3.13.13
+platform=Linux-5.14.0-427.13.1.el9_4.aarch64+64k-aarch64-with-glibc2.34
+pytest=9.1.1
+torch=2.13.0+cu132
+All checks passed!
+........................................................................ [ 32%]
+........................................................................ [ 64%]
+....................................F................................... [ 96%]
+........                                                                 [100%]
+=================================== FAILURES ===================================
+___________ test_v4_profile_cannot_spoof_torch_baseline_constraints ____________
+
+    def test_v4_profile_cannot_spoof_torch_baseline_constraints():
+        full = ConfigV4()
+        with pytest.raises(ValueError, match="requires torch_baseline.enabled"):
+            full.validate(ConfigProfile.TORCH_BASELINE)
+
+        baseline = ConfigV4()
+        baseline.shared.torch_baseline.enabled = True
+        baseline.shared.training.max_local_steps = 10
+>       with pytest.raises(ValueError, match="cannot be used"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'cannot be used'
+E         Actual message: 'full_v4_shared profile cannot validate a torch baseline config'
+
+tests/test_config.py:556: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_config.py::test_v4_profile_cannot_spoof_torch_baseline_constraints
+1 failed, 223 passed in 12.09s
+[ERROR] Failed at line 53

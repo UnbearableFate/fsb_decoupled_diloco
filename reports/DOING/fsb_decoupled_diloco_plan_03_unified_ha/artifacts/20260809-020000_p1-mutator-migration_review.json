@@ -1,0 +1,90 @@
+{
+  "artifact_version": 1,
+  "status": "REVIEW",
+  "recorded_at": "2026-08-09T02:00:00+09:00",
+  "phase_id": "P1-typed-foundation",
+  "source_disposition": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260808-224000_p0-mutator-disposition_review.csv",
+  "legacy_oracle": {
+    "bound_mutator_count": 42,
+    "proxy_module": "fs_diloco/storage/fenced_store.py",
+    "status": "unchanged and reachable only from the frozen v1-v3 runtime until P4 cutover; deleted in P5",
+    "v4_imports_legacy_proxy": false
+  },
+  "v4_authority": {
+    "module": "fs_diloco/storage/authority.py",
+    "raw_connection_public": false,
+    "execute_public": false,
+    "dynamic_dispatch": false,
+    "every_implemented_business_command_begins_immediate_and_revalidates_token": true,
+    "implemented_public_commands": [
+      "abandon_publication",
+      "begin_terminal_close",
+      "bind_or_replace_static_attempt",
+      "commit_merge",
+      "finalize_terminal",
+      "ingest_cycle_receipt",
+      "ingest_proposal",
+      "initialize_dynamic_membership",
+      "initialize_v0",
+      "mark_static_attempt_terminal",
+      "prepare_publication",
+      "record_proposal",
+      "retire_incarnation",
+      "try_select_batch"
+    ]
+  },
+  "mapping_summary": {
+    "old_mutators": 42,
+    "p0_dispositions": {
+      "keep": 5,
+      "merge": 30,
+      "delete": 7
+    },
+    "unmapped": 0
+  },
+  "p1_foundation_mappings": {
+    "commit_full_merge": "commit_merge",
+    "finalize_terminal_state": "finalize_terminal",
+    "initialize_full_run": "initialize_v0",
+    "initialize_dynamic_membership": "initialize_dynamic_membership",
+    "insert_update_metadata": "ingest_proposal",
+    "mark_updates_selected": "try_select_batch",
+    "prepare_full_resume": "abandon_publication plus successor reconciliation; old-run resume deleted",
+    "revoke_dead_instances": "retire_incarnation",
+    "update_learner_status": "bind/terminal static attempt commands",
+    "upsert_learner": "bind/terminal static attempt commands",
+    "upsert_global_version": "initialize_v0 or commit_merge only",
+    "mark_updates_applied": "commit_merge only",
+    "reset_selected_to_pending": "abandon_publication for a named batch only",
+    "reset_all_selected_to_pending": "deleted",
+    "set_controller_state": "begin_terminal_close/finalize_terminal only",
+    "set_run_state": "deleted",
+    "drop_updates": "deleted; later typed disposition commands only"
+  },
+  "later_phase_mappings": {
+    "P2-correctness-measurement": [
+      "admit_dynamic_registration",
+      "adjudicate_registration",
+      "authorize_dynamic_replacement",
+      "adjudicate_proposals",
+      "reconcile_selection_batch",
+      "commit_control_publication",
+      "finalize_unconsumed_proposals"
+    ],
+    "P3-operational-robustness": [
+      "observe_contributor_heartbeats",
+      "record_capacity_observation",
+      "record_external_launch_jobs",
+      "transition_launch_request",
+      "claim_gc_batch",
+      "finalize_gc_batch",
+      "archive_audit_batch",
+      "reconcile_terminal_gc"
+    ],
+    "P4-mandatory-fenced-runtime": [
+      "begin_terminal_drain",
+      "reconcile_terminal_drain"
+    ]
+  },
+  "interpretation": "The complete 42-row semantic migration is fixed, and no v4 application can use the legacy proxy. P1 implements the common command transaction/token/idempotency shell and commands required by the typed/schema foundation. Concern-specific commands remain owned by their explicitly scheduled P2-P4 behavior phases; this artifact does not claim those later semantics are already implemented."
+}

@@ -35,6 +35,7 @@ BOUNDARY_COUNT_KEYS = (
     "torch_baseline_pbs",
     "torch_baseline_tests",
 )
+P1_BASELINE_COMPOSITION_MIGRATION = "fs_diloco/baselines/train.py"
 
 
 def _git(root: Path, *args: str) -> str:
@@ -278,13 +279,16 @@ def _boundary_manifest(payload: dict[str, Any]) -> dict[str, str]:
     }
     baseline_package = str(boundaries["torch_baseline_retain"]["package"]).rstrip("/") + "/"
     paths.update(
-        path for path in payload["inventory"]["source"] if path.startswith(baseline_package)
+        path
+        for path in payload["inventory"]["source"]
+        if path.startswith(baseline_package)
+        and path != P1_BASELINE_COMPOSITION_MIGRATION
     )
     return {path: payload["manifest_sha256"][path] for path in sorted(paths)}
 
 
 def verify_boundaries(actual: dict[str, Any], expected: dict[str, Any]) -> list[str]:
-    """Compare only migration boundaries that must remain frozen through P0-P4."""
+    """Compare retained migration boundaries, excluding planned P1 composition wiring."""
     differences: list[str] = []
     comparisons = (
         (

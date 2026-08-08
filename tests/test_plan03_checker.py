@@ -90,6 +90,21 @@ def test_plan03_checker_blocks_real_tracked_fragment_boundary_drift(tmp_path: Pa
     assert "migration_boundaries" in differences
 
 
+def test_plan03_boundary_allows_p1_baseline_composition_but_not_protocol_drift() -> None:
+    expected = _expected()
+    actual = inventory(ROOT, source_ref=str(expected["source_identity"]["commit"]))
+    train = "fs_diloco/baselines/train.py"
+    protocol = "fs_diloco/baselines/protocol.py"
+
+    composition_only = copy.deepcopy(actual)
+    composition_only["manifest_sha256"][train] = "0" * 64
+    assert verify_boundaries(composition_only, expected) == []
+
+    protocol_drift = copy.deepcopy(actual)
+    protocol_drift["manifest_sha256"][protocol] = "0" * 64
+    assert verify_boundaries(protocol_drift, expected) == ["boundary_manifest_sha256"]
+
+
 def test_plan03_completed_candidate_evidence_is_tracked_and_matches_contract() -> None:
     matrix = (
         ROOT / "plans/DOING/plans/fsb_decoupled_diloco_plan_03_unified_ha-requirement-matrix.csv"

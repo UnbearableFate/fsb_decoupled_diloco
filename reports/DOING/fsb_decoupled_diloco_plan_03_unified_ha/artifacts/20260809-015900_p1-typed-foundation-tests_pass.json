@@ -1,0 +1,63 @@
+{
+  "artifact_version": 1,
+  "experiment_id": "p1-typed-foundation-tests",
+  "status": "PASS",
+  "recorded_at": "2026-08-09T01:59:00+09:00",
+  "phase_id": "P1-typed-foundation",
+  "base_commit": "889051d15dfd126e1b9c80eaa222a996570d8423",
+  "source_state": "review-target worktree before freeze commit",
+  "environment": {
+    "system": "Miyabi-G",
+    "pbs_job_id": "2508645.opbs",
+    "compute_host": "mg0021",
+    "queue": "debug-g",
+    "group": "xg24i002",
+    "nodes": 1,
+    "walltime": "00:10:00",
+    "python": "3.13.13",
+    "pytest": "9.1.1",
+    "torch": "2.13.0+cu132"
+  },
+  "pre_submission_checks": {
+    "bash_n_all_miyabi_pbs": "PASS",
+    "group_placeholders": 0,
+    "literal_group_id": "xg24i002",
+    "ruff": "PASS",
+    "plan03_current_boundary_checker": "PASS",
+    "git_diff_check": "PASS",
+    "py_compile": "PASS"
+  },
+  "focused": {
+    "command": ".venv/bin/python -m pytest -q tests/protocol/test_proposal_v2.py tests/protocol/test_cycle_receipt_v1.py tests/storage/test_schema_v4.py tests/storage/test_leader_authority_commands.py tests/storage/test_contributor_progress.py tests/storage/test_static_contributor_binding.py tests/storage/test_object_store_v4.py tests/architecture/test_authority_surface.py tests/architecture/test_dependency_boundaries.py tests/test_plan03_checker.py tests/test_config.py tests/test_inner_scheduler.py tests/test_torch_baseline_protocol.py tests/test_torch_baseline_artifacts_and_data.py tests/test_torch_baseline_health.py",
+    "passed": 233,
+    "failed": 0,
+    "duration_seconds": 20.51
+  },
+  "full_suite": {
+    "command": ".venv/bin/python -m pytest -q",
+    "passed": 620,
+    "xfailed": 5,
+    "failed": 0,
+    "duration_seconds": 42.97,
+    "xfail_scope": "P0-frozen accepted RED defects scheduled for P2/P3"
+  },
+  "validated": [
+    "strict typed FullUpdateProposalV2 and CycleReceiptV1 boundaries",
+    "fresh static/dynamic authority schema v4 initialization and exact reopen validation",
+    "explicit token-fenced authority commands, v0 continuity, and idempotent command replay",
+    "static logical-launch/attempt/generation fencing and contiguous contributor progress",
+    "canonical non-symlink payload path, digest, safetensors schema/dtype/numel, finite tensor, and rename-race checks",
+    "shared pure config validation with full_v4/torch_baseline profile fencing",
+    "torch baseline optimizer helper dependency moved from runtime to modeling",
+    "current migration checker permits only the planned baseline composition import change while retaining protocol/config/PBS/test hashes"
+  ],
+  "raw_log": {
+    "path": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-015900_p1-typed-foundation-tests_pass.log",
+    "sha256": "2915a30ef84f5abb7f393e0d397939fdf770d286068416fca9f1e226f7b8988c"
+  },
+  "failed_attempts": [
+    "2508626.opbs",
+    "2508633.opbs"
+  ],
+  "failure_counter_reset": true
+}

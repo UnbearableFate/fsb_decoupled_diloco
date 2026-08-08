@@ -1,0 +1,129 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import struct
+from typing import Any
+from pathlib import Path
+
+from fs_diloco.protocol.authority import ReadStatus
+from fs_diloco.protocol.proposal import FullUpdateProposalV2
+from fs_diloco.storage.object_store import tensor_schema_sha256, verify_proposal_payload
+from fs_diloco.storage import object_store
+from tests.support.v4_protocol import proposal_payload
+
+
+def safetensors_payload(value: float = 1.0, *, key: str = "flat_update") -> bytes:
+    header = json.dumps(
+        {key: {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]}},
+        separators=(",", ":"),
+    ).encode("utf-8")
+    padding = b" " * ((8 - len(header) % 8) % 8)
+    padded = header + padding
+    return len(padded).to_bytes(8, "little") + padded + struct.pack("<f", value)
+
+
+def proposal_for(content: bytes, *, key: str = "flat_update") -> FullUpdateProposalV2:
+    payload = proposal_payload(
+        payload_size=len(content), payload_sha256=hashlib.sha256(content).hexdigest()
+    )
+    payload["tensor_schema_sha256"] = tensor_schema_sha256(
+        [{"key": key, "dtype": "float32", "shape": [1]}]
+    )
+    return FullUpdateProposalV2.from_dict(payload)
+
+
+def test_verified_payload_requires_regular_nonsymlink_identity_bound_file(
+    tmp_path: Path,
+) -> None:
+    content = safetensors_payload()
+    proposal = proposal_for(content)
+    path = tmp_path / proposal.payload_relative_path
+    path.parent.mkdir(parents=True)
+    path.write_bytes(content)
+
+    result = verify_proposal_payload(tmp_path, proposal)
+
+    assert result.status is ReadStatus.OK
+    assert result.value is not None
+    assert result.value.sha256 == hashlib.sha256(content).hexdigest()
+
+
+def test_payload_symlink_and_parent_symlink_fail_closed(tmp_path: Path) -> None:
+    content = safetensors_payload()
+    proposal = proposal_for(content)
+    outside = tmp_path / "outside.safetensors"
+    outside.write_bytes(content)
+    payload_path = tmp_path / proposal.payload_relative_path
+    payload_path.parent.mkdir(parents=True)
+    payload_path.symlink_to(outside)
+
+    assert verify_proposal_payload(tmp_path, proposal).status is ReadStatus.IDENTITY_MISMATCH
+
+    payload_path.unlink()
+    payload_path.parent.rmdir()
+    (tmp_path / "updates" / "payloads").rmdir()
+    (tmp_path / "updates").rmdir()
+    (tmp_path / "real-parent").mkdir()
+    (tmp_path / "updates").symlink_to(tmp_path / "real-parent", target_is_directory=True)
+    assert verify_proposal_payload(tmp_path, proposal).status is ReadStatus.IDENTITY_MISMATCH
+
+
+def test_payload_missing_size_and_digest_results_are_typed(tmp_path: Path) -> None:
+    content = safetensors_payload()
+    proposal = proposal_for(content)
+    assert verify_proposal_payload(tmp_path, proposal).status is ReadStatus.NOT_FOUND
+
+    path = tmp_path / proposal.payload_relative_path
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"wrong")
+    mismatch = verify_proposal_payload(tmp_path, proposal)
+    assert mismatch.status is ReadStatus.MALFORMED
+
+
+def test_payload_digest_tensor_schema_and_nonfinite_values_fail_closed(tmp_path: Path) -> None:
+    content = safetensors_payload(1.0)
+    proposal = proposal_for(content)
+    path = tmp_path / proposal.payload_relative_path
+    path.parent.mkdir(parents=True)
+
+    path.write_bytes(safetensors_payload(2.0))
+    digest_mismatch = verify_proposal_payload(tmp_path, proposal)
+    assert digest_mismatch.status is ReadStatus.IDENTITY_MISMATCH
+    assert "SHA-256" in str(digest_mismatch.diagnostic)
+
+    schema_content = safetensors_payload(1.0, key="different_key")
+    schema_proposal = proposal_for(schema_content)
+    path.write_bytes(schema_content)
+    schema_mismatch = verify_proposal_payload(tmp_path, schema_proposal)
+    assert schema_mismatch.status is ReadStatus.IDENTITY_MISMATCH
+    assert "schema" in str(schema_mismatch.diagnostic)
+
+    nonfinite_content = safetensors_payload(float("nan"))
+    nonfinite_proposal = proposal_for(nonfinite_content)
+    path.write_bytes(nonfinite_content)
+    nonfinite = verify_proposal_payload(tmp_path, nonfinite_proposal)
+    assert nonfinite.status is ReadStatus.MALFORMED
+    assert "non-finite" in str(nonfinite.diagnostic)
+
+
+def test_payload_rename_race_fails_identity_check(tmp_path: Path, monkeypatch: Any) -> None:
+    content = safetensors_payload()
+    proposal = proposal_for(content)
+    path = tmp_path / proposal.payload_relative_path
+    path.parent.mkdir(parents=True)
+    path.write_bytes(content)
+    replacement = path.with_name("replacement.safetensors")
+    replacement.write_bytes(content)
+    inspect = object_store._inspect_safetensors
+
+    def replace_name(descriptor: int, *, file_size: int):
+        replacement.replace(path)
+        return inspect(descriptor, file_size=file_size)
+
+    monkeypatch.setattr(object_store, "_inspect_safetensors", replace_name)
+
+    result = verify_proposal_payload(tmp_path, proposal)
+
+    assert result.status is ReadStatus.IDENTITY_MISMATCH
+    assert "name changed" in str(result.diagnostic)

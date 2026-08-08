@@ -2,7 +2,14 @@ from pathlib import Path
 
 import pytest
 
-from fs_diloco.core.config import config_to_dict, load_config, resolve_config
+from fs_diloco.core.config import Config, SyncSection, config_to_dict, load_config, resolve_config
+from fs_diloco.core.config_v4 import (
+    ConfigProfile,
+    ConfigV4,
+    LeaderSection,
+    MaintenanceSection,
+    load_config_v4,
+)
 
 
 CONFIG_PATHS = sorted(Path("configs").glob("*.yaml"))
@@ -492,3 +499,105 @@ learner:
 def test_every_repository_config_resolves(path):
     config = resolve_config(path)
     assert config.run.name == path.stem
+
+
+def test_v4_full_profile_validates_leader_maintenance_and_removed_semantics():
+    config = ConfigV4()
+    config.validate(ConfigProfile.FULL_V4)
+
+    config.shared.data.streaming = True
+    with pytest.raises(ValueError, match="streaming=true"):
+        config.validate(ConfigProfile.FULL_V4)
+
+
+def test_every_config_section_has_pure_structural_validation():
+    section = SyncSection(scan_interval_seconds=float("nan"))
+    with pytest.raises(ValueError, match="must be finite"):
+        section.validate(path="sync")
+
+    config = Config()
+    config.training.inner_steps = True
+    with pytest.raises(ValueError, match="must be an integer"):
+        config.validate(profile="legacy_oracle")
+
+
+@pytest.mark.parametrize(
+    "leader",
+    [
+        LeaderSection(lease_duration_seconds=0.0),
+        LeaderSection(renew_interval_seconds=float("nan")),
+        LeaderSection(max_clock_skew_seconds=float("inf")),
+        LeaderSection(lease_busy_timeout_ms=True),
+    ],
+)
+def test_v4_leader_rejects_zero_nonfinite_and_bool_numeric_values(leader):
+    with pytest.raises(ValueError):
+        ConfigV4(leader=leader).validate(ConfigProfile.FULL_V4)
+
+
+def test_v4_orphan_grace_covers_lease_and_clock_skew():
+    config = ConfigV4(
+        leader=LeaderSection(lease_duration_seconds=90.0, max_clock_skew_seconds=2.0),
+        maintenance=MaintenanceSection(publication_orphan_grace_seconds=93.0),
+    )
+
+    with pytest.raises(ValueError, match="orphan_grace"):
+        config.validate(ConfigProfile.FULL_V4)
+
+
+def test_v4_profile_cannot_spoof_torch_baseline_constraints():
+    full = ConfigV4()
+    with pytest.raises(ValueError, match="requires torch_baseline.enabled"):
+        full.validate(ConfigProfile.TORCH_BASELINE)
+
+    baseline = ConfigV4()
+    baseline.shared.torch_baseline.enabled = True
+    baseline.shared.training.max_local_steps = 10
+    with pytest.raises(ValueError, match=r"cannot .*torch baseline config"):
+        baseline.validate(ConfigProfile.FULL_V4)
+    baseline.validate(ConfigProfile.TORCH_BASELINE)
+
+
+@pytest.mark.parametrize(
+    ("yaml_text", "message"),
+    [
+        ("config_schema_version: 2\n", "config_schema_version"),
+        ("config_schema_version: 1\ninit:\n  resume: false\n", "removed v4"),
+        ("config_schema_version: 1\nfragments:\n  enabled: false\n", "removed v4"),
+        (
+            "config_schema_version: 1\ncoordination:\n  syncer_ha:\n    enabled: true\n",
+            "removed v4",
+        ),
+        (
+            "config_schema_version: 1\nsync:\n  stop_after_global_tokens: 10\n",
+            "removed v4",
+        ),
+    ],
+)
+def test_v4_loader_rejects_unknown_version_and_removed_keys(tmp_path, yaml_text, message):
+    path = tmp_path / "v4.yaml"
+    path.write_text(yaml_text, encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        load_config_v4(path, profile=ConfigProfile.FULL_V4)
+
+
+def test_v4_loader_accepts_explicit_full_schema_and_direct_weight_stop(tmp_path):
+    path = tmp_path / "v4.yaml"
+    path.write_text(
+        """
+config_schema_version: 1
+sync:
+  stop_after_outer_steps: null
+  stop_after_direct_weight_tokens_applied: 100
+coordination:
+  leader: {}
+maintenance: {}
+""",
+        encoding="utf-8",
+    )
+
+    config = load_config_v4(path, profile=ConfigProfile.FULL_V4)
+
+    assert config.stop_after_direct_weight_tokens_applied == 100
+    assert config.config_schema_version == 1

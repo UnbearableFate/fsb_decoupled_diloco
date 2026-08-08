@@ -1,0 +1,77 @@
+#!/bin/bash
+#PBS -N fsdiloco_plan03_p1
+#PBS -q debug-g
+#PBS -W group_list=xg24i002
+#PBS -l select=1:mpiprocs=1
+#PBS -l walltime=00:10:00
+#PBS -j oe
+
+set -eEuo pipefail
+trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
+
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+export PYTHONDONTWRITEBYTECODE=1
+module list 2>&1 | cat
+
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+RUFF_BIN="${RUFF_BIN:-$PROJECT_ROOT/.venv/bin/ruff}"
+cd "$PROJECT_ROOT"
+
+hostname
+printf 'PBS_JOBID=%s\n' "${PBS_JOBID:-unknown}"
+"$PYTHON_BIN" - <<'PY'
+import platform
+import sys
+
+import pytest
+import torch
+
+print(f"python={sys.version.split()[0]}")
+print(f"platform={platform.platform()}")
+print(f"pytest={pytest.__version__}")
+print(f"torch={torch.__version__}")
+PY
+
+"$RUFF_BIN" check \
+  fs_diloco/core/config_v4.py \
+  fs_diloco/core/versions.py \
+  fs_diloco/legacy \
+  fs_diloco/modeling/training.py \
+  fs_diloco/protocol/authority.py \
+  fs_diloco/protocol/contributor.py \
+  fs_diloco/protocol/cycle_receipt.py \
+  fs_diloco/protocol/proposal.py \
+  fs_diloco/storage/authority.py \
+  fs_diloco/storage/object_store.py \
+  tests/architecture \
+  tests/protocol \
+  tests/storage \
+  tests/support/v4_protocol.py \
+  tests/test_config.py
+
+"$PYTHON_BIN" scripts/miyabi/check_plan03.py \
+  --root "$PROJECT_ROOT" \
+  --expect reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260808-223500_p0-runtime-surface-inventory_review.json \
+  --verify-boundaries
+
+"$PYTHON_BIN" -m pytest -q \
+  tests/protocol/test_proposal_v2.py \
+  tests/protocol/test_cycle_receipt_v1.py \
+  tests/storage/test_schema_v4.py \
+  tests/storage/test_leader_authority_commands.py \
+  tests/storage/test_contributor_progress.py \
+  tests/storage/test_static_contributor_binding.py \
+  tests/storage/test_object_store_v4.py \
+  tests/architecture/test_authority_surface.py \
+  tests/architecture/test_dependency_boundaries.py \
+  tests/test_plan03_checker.py \
+  tests/test_config.py \
+  tests/test_inner_scheduler.py \
+  tests/test_torch_baseline_protocol.py \
+  tests/test_torch_baseline_artifacts_and_data.py \
+  tests/test_torch_baseline_health.py
+
+"$PYTHON_BIN" -m pytest -q
+
+printf 'PLAN03_PHASE1_TESTS_COMPLETE=%s\n' "${PBS_JOBID:-unknown}"

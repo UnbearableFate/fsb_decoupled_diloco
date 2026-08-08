@@ -20,11 +20,11 @@ from torch.nn.parallel import DistributedDataParallel
 from ..core.config import Config, config_to_dict, resolve_config
 from ..modeling.hf_data import build_batch_iterator
 from ..modeling.hf_model import load_causal_lm_and_tokenizer
-from ..observability.logging_utils import JsonlLogger
-from ..runtime.learner import (
+from ..modeling.training import (
     build_inner_optimizer_and_scheduler,
     current_inner_learning_rate,
 )
+from ..observability.logging_utils import JsonlLogger
 from ..storage.atomic_io import atomic_write_json
 from .artifacts import (
     RANK_METRIC_FIELDS,
@@ -62,6 +62,7 @@ def _resolve_baseline_config(args: argparse.Namespace) -> tuple[Config, int, int
         args.config,
         run_id=args.run_id,
         shared_root=args.shared_root,
+        profile="torch_baseline",
     )
     if not config.torch_baseline.enabled:
         raise ValueError("config must set torch_baseline.enabled=true")
