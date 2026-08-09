@@ -611,3 +611,14 @@
 - After evidence commit `df0e63b`, the final tracked-evidence Checker passed for clean source target `fb4f067327818f3e29a44777447d0b2172c721a5`: frozen/current boundaries, all nine P4 requirements, source equivalence and every tracked evidence path have empty difference lists.
 - Final gate: `artifacts/20260809-160000_p4-final-review-remediation-tracked-evidence-gate_pass.json`. The continuous P4 review sequence is closed: all Codex findings are fixed or previously owned by P5/P6, every available Claude report is dispositioned, and the two explicit session-limit calls are recorded as user-authorized non-blocking skips.
 - P4 is complete. The next work unit is P5 deletion/compatibility cleanup; P6 resource bounds and acceptance experiments remain mandatory before plan completion.
+
+## 2026-08-09 17:11 JST — P5 deletion/legacy/docs compute gate PASS
+
+- 删除了 classic full/Fragment V0 writer、旧 layered schema/bootstrap、dynamic proxy mutator、旧 runtime config/PBS 和 dead Plan01/02 checker/probe surface；public `fs_diloco.{syncer,learner,analysis,eval_lm_harness}` shims保留并只指向 current runtime/tool。
+- exact fragment inventory 为8个enabled config和5个PBS；另将1个full no-fragment历史control config/PBS独立归档，不误计为fragment。current-state audit另发现 classic partial-terminal capture writer已删除但config/key仍是no-op，因此删除该classic-only config/key，同时保留既有capture的query-only evaluation reader。
+- architecture收敛：filesystem admission/control adapter从`protocol/`移到`storage/`；protocol不依赖Path/storage/runtime/PBS，runtime不import legacy，baseline不import runtime learner，entrypoint不拼SQL或scheduler命令。fresh v4 DDL不创建四张fragment表。
+- legacy边界完成：旧full/Fragment V0 DB用`mode=ro + PRAGMA query_only=ON`；旧config只在analysis/export/eval显式投影，strict production loader继续拒绝removed/unknown key；旧root不bootstrap、repair、resume或GC。
+- test deletion accounting逐项覆盖37个删除文件/252个test function：208 `migrate-to-unified`、4 `retain-legacy-reader`、40 `delete-obsolete`，绑定57个current replacement assertions。P4 collected 894到P5 collected 573的净变化-321已解释并保留逐函数/静态参数化明细。
+- 三连失败后已先在`code_review.md`完成全面审查并修复全部High/Medium。最终compute job `2510920.opbs`（mg0007）通过Ruff、33文件format scope、P5 Checker、focused `382 passed in 21.06s`和full `573 passed in 50.66s`，core xfail=0，completion marker存在。raw log SHA-256为`5d8e0aecdb684fa749b00cf673530c25536132dde96f9a084a73c1ad3c7e7353`。
+- README、docs/00..07和全部module docs已改为Full Protocol v4 current-state；只新增`docs/08-compatibility-and-migration.md`，归档tag和完整commit `a00a3d64a50f10a2478c3f4fe795e658d1b3b52f`均记录。9-node且超过50x10后的verified-result增量同步仍归P6。
+- Evidence：`artifacts/20260809-171100_p5-tests_pass.json`、`artifacts/20260809-171100_p5-fragment-archive_review.json`、`artifacts/20260809-171100_p5-test-deletion-accounting_pass.json`、`artifacts/20260809-171100_p5-docs_review.json`。P5仍需review-target commit、Codex/Claude phase review和finding处置，尚未complete。

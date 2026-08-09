@@ -31,16 +31,11 @@ PLAN03_REQUIREMENTS = frozenset(
 )
 
 
-def test_v4_rejects_fake_streaming_and_ambiguous_global_token_stop() -> None:
+def test_v4_rejects_fake_streaming_and_accepts_direct_weight_stop() -> None:
     streaming = ConfigV4()
     streaming.shared.data.streaming = True
     with pytest.raises(ValueError, match="not resumable"):
         streaming.validate(ConfigProfile.FULL_V4)
-
-    ambiguous = ConfigV4()
-    ambiguous.shared.sync.stop_after_global_tokens = 1
-    with pytest.raises(ValueError, match="ambiguous and removed"):
-        ambiguous.validate(ConfigProfile.FULL_V4)
 
     direct = ConfigV4(stop_after_direct_weight_tokens_applied=1)
     direct.validate(ConfigProfile.FULL_V4)

@@ -12,7 +12,7 @@ import torch
 import torch.distributed as dist
 
 from ..modeling.hf_data import Batch
-from ..runtime.learner import maybe_autocast
+from ..modeling.training import maybe_autocast
 
 
 @dataclass(frozen=True)
@@ -65,9 +65,7 @@ def train_optimizer_step(
     for microbatch_index in range(accumulation_steps):
         is_final = microbatch_index + 1 == accumulation_steps
         sync_context = (
-            contextlib.nullcontext()
-            if not ddp_gradient_sync or is_final
-            else model.no_sync()
+            contextlib.nullcontext() if not ddp_gradient_sync or is_final else model.no_sync()
         )
         batch: Batch = next(batch_iter).to(device)
         backward_start = None
@@ -146,17 +144,16 @@ def average_trainable_parameters(
         raise ValueError("world_size must be >= 1")
 
     flat = torch.cat(
-        [
-            parameter.detach().reshape(-1).to(dtype=communication_dtype)
-            for parameter in parameters
-        ]
+        [parameter.detach().reshape(-1).to(dtype=communication_dtype) for parameter in parameters]
     )
     if not torch.isfinite(flat).all():
         raise FloatingPointError("non-finite parameter before periodic average")
     reduce = all_reduce_fn
     if reduce is None:
+
         def reduce(tensor: torch.Tensor) -> None:
             dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
+
     started = time.monotonic()
     reduce(flat)
     flat.div_(world_size)

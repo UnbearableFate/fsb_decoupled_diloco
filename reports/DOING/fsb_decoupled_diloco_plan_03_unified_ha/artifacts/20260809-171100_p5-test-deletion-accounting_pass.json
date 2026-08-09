@@ -1,0 +1,2952 @@
+{
+  "artifact_version": 1,
+  "classification_vocabulary": [
+    "migrate-to-unified",
+    "retain-legacy-reader",
+    "delete-obsolete"
+  ],
+  "current_replacement_assertions": [
+    "tests/observability/test_p3_operational_evidence.py::test_actor_telemetry_claim_prevents_shared_attempt_append",
+    "tests/observability/test_p3_operational_evidence.py::test_actor_telemetry_payload_cannot_override_frozen_actor_identity",
+    "tests/protocol/test_p3_accounting_selection_cursor.py::test_full_quorum_keeps_stable_set_and_reduction_order",
+    "tests/protocol/test_p3_accounting_selection_cursor.py::test_merge_weights_reject_nonfinite_or_negative_weight_parameters",
+    "tests/protocol/test_p3_accounting_selection_cursor.py::test_merge_weights_use_stable_fsum_and_reject_duplicate_ids",
+    "tests/protocol/test_p3_accounting_selection_cursor.py::test_persistent_fair_selector_meets_frozen_1000_round_gate",
+    "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count",
+    "tests/protocol/test_p3_accounting_selection_cursor.py::test_prepublication_replace_discards_old_segment_and_resets_effective_metrics",
+    "tests/protocol/test_p3_unified_v4_golden.py::test_unified_no_change_case_is_exactly_anchored_to_both_p0_projections",
+    "tests/protocol/test_p3_unified_v4_golden.py::test_unified_v4_merge_math_generates_the_p0_semantic_projection",
+    "tests/runtime/test_p4_mandatory_runtime.py::test_authority_missing_fails_closed_even_when_fixed_cache_exists",
+    "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt",
+    "tests/runtime/test_p4_mandatory_runtime.py::test_epoch_control_ignores_polluted_fixed_cache_and_repairs_it",
+    "tests/runtime/test_p4_mandatory_runtime.py::test_heartbeat_publication_uses_exact_committed_lease_and_rejects_delay",
+    "tests/runtime/test_p4_mandatory_runtime.py::test_latest_head_rejects_path_escape_and_payload_identity_mismatch",
+    "tests/runtime/test_p4_mandatory_runtime.py::test_production_v4_entrypoint_closure_has_no_classic_authority_or_shared_csv",
+    "tests/runtime/test_p4_mandatory_runtime.py::test_stale_epoch_admission_response_cannot_open_torch_gate",
+    "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+    "tests/storage/test_authority_p2_dynamic.py::test_revoke_after_selection_returns_per_row_conflict_then_retry_commits",
+    "tests/storage/test_authority_p2_dynamic.py::test_revoke_before_selection_leaves_current_quorum_progressing",
+    "tests/storage/test_authority_p2_dynamic.py::test_selection_classifies_stale_rows_without_partial_abort",
+    "tests/storage/test_authority_p3_operational.py::test_active_leader_compacts_audit_batches_before_exact_source_gc",
+    "tests/storage/test_authority_p3_operational.py::test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolution",
+    "tests/storage/test_authority_p3_operational.py::test_telemetry_deletion_cannot_change_authoritative_token_summary",
+    "tests/storage/test_authority_p3_operational.py::test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_update",
+    "tests/storage/test_authority_p3_operational.py::test_terminal_close_freezes_fence_blocks_admission_and_accounts_hard_crash",
+    "tests/storage/test_authority_p3_operational.py::test_terminal_close_snapshot_cannot_be_rewritten_by_a_second_command",
+    "tests/storage/test_authority_p3_operational.py::test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens",
+    "tests/storage/test_contributor_progress.py::test_contributor_progress_advances_only_contiguous_receipt_chain",
+    "tests/storage/test_contributor_progress.py::test_contributor_progress_rejects_sequence_hole_and_cursor_mismatch",
+    "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+    "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+    "tests/storage/test_leader_authority_commands.py::test_typed_receipt_proposal_selection_and_v1_commit_flow",
+    "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+    "tests/storage/test_p2_state_machine.py::test_proposal_state_machine_keeps_one_pending_and_monotonic_frontier",
+    "tests/storage/test_proposal_adjudication_v4.py::test_insert_supersede_and_frontier_failures_roll_back_as_one_unit",
+    "tests/storage/test_proposal_adjudication_v4.py::test_quarantine_hot_rows_are_bounded_for_distinct_conflicts",
+    "tests/storage/test_publication_v4.py::test_concurrent_immutable_publishers_never_overwrite_the_winner",
+    "tests/storage/test_publication_v4.py::test_prepared_intent_precedes_io_and_commit_verifies_exact_theta_pair",
+    "tests/storage/test_publication_v4.py::test_publication_crash_prefix_is_reconciled_idempotently",
+    "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe",
+    "tests/storage/test_run_initializer_p3.py::test_actor_attestation_requires_explicit_runtime_resource_evidence",
+    "tests/storage/test_run_initializer_p3.py::test_completed_descriptor_rejects_identity_mode_mismatch",
+    "tests/storage/test_run_initializer_p3.py::test_retry_and_completed_replay_bind_the_entire_resolved_config_identity",
+    "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+    "tests/storage/test_visibility_v4.py::test_not_found_requires_three_stable_observations_and_grace",
+    "tests/storage/test_visibility_v4.py::test_transient_recovery_never_drops_and_deadline_enters_manual_review",
+    "tests/storage/test_visibility_v4.py::test_visibility_requires_receipt_and_pointer_sequence_collision_fails_closed",
+    "tests/storage/test_visibility_v4.py::test_visibility_upsert_and_pointer_archive_are_bounded",
+    "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+    "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+    "tests/test_adoption_strategy.py::test_rebase_context_returns_actual_latest_from_retry_helper",
+    "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+    "tests/test_clean_run.py::test_clean_run_applies_artifact_policy_and_authority_live_references",
+    "tests/test_fragment_analysis.py::test_fragment_v0_analysis_uses_legacy_pure_decoders",
+    "tests/test_plan03_support.py::test_paired_performance_keeps_signed_deltas_and_fixed_bootstrap",
+    "tests/test_plan03_support.py::test_paired_performance_rejects_nonpositive_or_nonfinite_durations"
+  ],
+  "deleted_tests": [
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/reference/test_plan03_classic_static_oracle.py",
+      "old_test": "test_classic_and_static_ha_share_exact_semantic_projection",
+      "reason": "The frozen classic arm is tag-only; its semantic projection is retained by unified v4 golden tests.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_unified_v4_golden.py::test_unified_no_change_case_is_exactly_anchored_to_both_p0_projections",
+        "tests/protocol/test_p3_unified_v4_golden.py::test_unified_v4_merge_math_generates_the_p0_semantic_projection"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/reference/test_plan03_classic_static_oracle.py",
+      "old_test": "test_oracle_fixture_comparison_detects_semantic_mutation",
+      "reason": "The frozen classic arm is tag-only; its semantic projection is retained by unified v4 golden tests.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_unified_v4_golden.py::test_unified_no_change_case_is_exactly_anchored_to_both_p0_projections",
+        "tests/protocol/test_p3_unified_v4_golden.py::test_unified_v4_merge_math_generates_the_p0_semantic_projection"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/reference/test_plan03_classic_static_oracle.py",
+      "old_test": "test_selection_tape_observes_arrival_staleness_and_quorum_truncation",
+      "reason": "The frozen classic arm is tag-only; its semantic projection is retained by unified v4 golden tests.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_unified_v4_golden.py::test_unified_no_change_case_is_exactly_anchored_to_both_p0_projections",
+        "tests/protocol/test_p3_unified_v4_golden.py::test_unified_v4_merge_math_generates_the_p0_semantic_projection"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_adoption_telemetry.py",
+      "old_test": "test_full_adoption_event_splits_load_apply_and_optimizer_reset_time",
+      "reason": "Shared CSV append telemetry was replaced by immutable actor-scoped JSONL telemetry.",
+      "replacement_assertions": [
+        "tests/observability/test_p3_operational_evidence.py::test_actor_telemetry_claim_prevents_shared_attempt_append",
+        "tests/observability/test_p3_operational_evidence.py::test_actor_telemetry_payload_cannot_override_frozen_actor_identity"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_adoption_telemetry.py",
+      "old_test": "test_fragment_adoption_event_excludes_wait_before_helper_and_splits_reset_time",
+      "reason": "Shared CSV append telemetry was replaced by immutable actor-scoped JSONL telemetry.",
+      "replacement_assertions": [
+        "tests/observability/test_p3_operational_evidence.py::test_actor_telemetry_claim_prevents_shared_attempt_append",
+        "tests/observability/test_p3_operational_evidence.py::test_actor_telemetry_payload_cannot_override_frozen_actor_identity"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_adoption_telemetry.py",
+      "old_test": "test_analysis_aggregates_adoption_pause_over_completed_cycle_elapsed",
+      "reason": "Shared CSV append telemetry was replaced by immutable actor-scoped JSONL telemetry.",
+      "replacement_assertions": [
+        "tests/observability/test_p3_operational_evidence.py::test_actor_telemetry_claim_prevents_shared_attempt_append",
+        "tests/observability/test_p3_operational_evidence.py::test_actor_telemetry_payload_cannot_override_frozen_actor_identity"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_bounded_1000_cycles.py",
+      "old_test": "test_thousand_cycles_keep_db_and_discovery_surface_bounded",
+      "reason": "The bounded-surface invariant is covered by v4 visibility/frontier/quarantine authority.",
+      "replacement_assertions": [
+        "tests/storage/test_visibility_v4.py::test_visibility_upsert_and_pointer_archive_are_bounded",
+        "tests/storage/test_proposal_adjudication_v4.py::test_quarantine_hot_rows_are_bounded_for_distinct_conflicts"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_fragment_codec.py",
+      "old_test": "test_fragment_extract_scatter_round_trip",
+      "reason": "Fragment tensor extraction and update writing are unsupported production-writer behavior.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_fragment_codec.py",
+      "old_test": "test_fragment_update_safetensors_round_trip",
+      "reason": "Fragment tensor extraction and update writing are unsupported production-writer behavior.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_fragment_codec.py",
+      "old_test": "test_extract_fragment_from_model_matches_flat_extraction",
+      "reason": "Fragment tensor extraction and update writing are unsupported production-writer behavior.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_fragment_codec.py",
+      "old_test": "test_fragment_update_can_store_bfloat16",
+      "reason": "Fragment tensor extraction and update writing are unsupported production-writer behavior.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_fragment_final_wait.py",
+      "old_test": "test_final_fragment_wait_heartbeats_until_timeout",
+      "reason": "Heartbeat-based fragment shutdown is gone; the shared terminal drain/ack invariant is v4 authority state.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p3_operational.py::test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens",
+        "tests/storage/test_authority_p3_operational.py::test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_update"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_fragment_final_wait.py",
+      "old_test": "test_final_fragment_wait_heartbeat_reflects_adopted_progress",
+      "reason": "Heartbeat-based fragment shutdown is gone; the shared terminal drain/ack invariant is v4 authority state.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p3_operational.py::test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens",
+        "tests/storage/test_authority_p3_operational.py::test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_update"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_fragment_final_wait.py",
+      "old_test": "test_final_fragment_wait_stops_without_extra_heartbeat",
+      "reason": "Heartbeat-based fragment shutdown is gone; the shared terminal drain/ack invariant is v4 authority state.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p3_operational.py::test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens",
+        "tests/storage/test_authority_p3_operational.py::test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_update"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_fragment_final_wait.py",
+      "old_test": "test_final_fragment_adoption_failure_still_attempts_stopped_heartbeat",
+      "reason": "Heartbeat-based fragment shutdown is gone; the shared terminal drain/ack invariant is v4 authority state.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p3_operational.py::test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens",
+        "tests/storage/test_authority_p3_operational.py::test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_update"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "retain-legacy-reader",
+      "old_path": "tests/test_fragment_index.py",
+      "old_test": "test_full_fragment_strategy_covers_all_params",
+      "reason": "Historical fragment index coverage/validation remains a pure legacy decoder concern.",
+      "replacement_assertions": [
+        "tests/test_fragment_analysis.py::test_fragment_v0_analysis_uses_legacy_pure_decoders"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "retain-legacy-reader",
+      "old_path": "tests/test_fragment_index.py",
+      "old_test": "test_balanced_tensor_fragments_are_nonempty_and_cover_vector",
+      "reason": "Historical fragment index coverage/validation remains a pure legacy decoder concern.",
+      "replacement_assertions": [
+        "tests/test_fragment_analysis.py::test_fragment_v0_analysis_uses_legacy_pure_decoders"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "retain-legacy-reader",
+      "old_path": "tests/test_fragment_index.py",
+      "old_test": "test_balanced_tensor_rejects_more_fragments_than_tensors",
+      "reason": "Historical fragment index coverage/validation remains a pure legacy decoder concern.",
+      "replacement_assertions": [
+        "tests/test_fragment_analysis.py::test_fragment_v0_analysis_uses_legacy_pure_decoders"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_fragment_latest_retry.py",
+      "old_test": "test_fragment_initial_load_retries_one_consistent_new_snapshot",
+      "reason": "Mixed-version retry is replaced by epoch-scoped, identity-checked v4 controls.",
+      "replacement_assertions": [
+        "tests/runtime/test_p4_mandatory_runtime.py::test_epoch_control_ignores_polluted_fixed_cache_and_repairs_it",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_latest_head_rejects_path_escape_and_payload_identity_mismatch"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_fragment_latest_retry.py",
+      "old_test": "test_fragment_incremental_retry_does_not_commit_mixed_versions",
+      "reason": "Mixed-version retry is replaced by epoch-scoped, identity-checked v4 controls.",
+      "replacement_assertions": [
+        "tests/runtime/test_p4_mandatory_runtime.py::test_epoch_control_ignores_polluted_fixed_cache_and_repairs_it",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_latest_head_rejects_path_escape_and_payload_identity_mismatch"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_fragment_materialization.py",
+      "old_test": "test_fragment_materialization_interval_is_required_positive",
+      "reason": "Fragment materialization scheduling was part of the removed writer and has no current runtime meaning.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 3
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_fragment_materialization.py",
+      "old_test": "test_materialization_schedule_has_no_implicit_none_branch",
+      "reason": "Fragment materialization scheduling was part of the removed writer and has no current runtime meaning.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_fragment_materialization.py",
+      "old_test": "test_force_materialization_captures_nonperiodic_terminal_event",
+      "reason": "Fragment materialization scheduling was part of the removed writer and has no current runtime meaning.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_fragment_merge.py",
+      "old_test": "test_fragment_weighting_and_selection_are_fragment_version_based",
+      "reason": "Selection-before-weighting and deterministic reduction are retained in unified proposal selection.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_merge_weights_use_stable_fsum_and_reject_duplicate_ids",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_full_quorum_keeps_stable_set_and_reduction_order"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_fragment_merge.py",
+      "old_test": "test_selection_filters_are_applied_before_one_per_learner",
+      "reason": "Selection-before-weighting and deterministic reduction are retained in unified proposal selection.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_merge_weights_use_stable_fsum_and_reject_duplicate_ids",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_full_quorum_keeps_stable_set_and_reduction_order"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_fragment_pipeline_smoke.py",
+      "old_test": "test_fragment_pipeline_artifacts_are_present",
+      "reason": "The test asserted that unsupported fragment production artifacts existed.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_fragment_pointer_discovery.py",
+      "old_test": "test_fragment_writer_uses_one_atomic_pointer_per_learner_fragment",
+      "reason": "Fixed discovery, latest-wins/frontier, boundedness, and no-overwrite moved to v4 visibility/publication.",
+      "replacement_assertions": [
+        "tests/storage/test_visibility_v4.py::test_visibility_upsert_and_pointer_archive_are_bounded",
+        "tests/storage/test_visibility_v4.py::test_visibility_requires_receipt_and_pointer_sequence_collision_fails_closed",
+        "tests/storage/test_publication_v4.py::test_concurrent_immutable_publishers_never_overwrite_the_winner"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_fragment_pointer_discovery.py",
+      "old_test": "test_fragment_frontier_is_transactional_latest_wins_per_pair",
+      "reason": "Fixed discovery, latest-wins/frontier, boundedness, and no-overwrite moved to v4 visibility/publication.",
+      "replacement_assertions": [
+        "tests/storage/test_visibility_v4.py::test_visibility_upsert_and_pointer_archive_are_bounded",
+        "tests/storage/test_visibility_v4.py::test_visibility_requires_receipt_and_pointer_sequence_collision_fails_closed",
+        "tests/storage/test_publication_v4.py::test_concurrent_immutable_publishers_never_overwrite_the_winner"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_fragment_pointer_discovery.py",
+      "old_test": "test_fragment_discovery_is_fixed_surface_and_signature_cached",
+      "reason": "Fixed discovery, latest-wins/frontier, boundedness, and no-overwrite moved to v4 visibility/publication.",
+      "replacement_assertions": [
+        "tests/storage/test_visibility_v4.py::test_visibility_upsert_and_pointer_archive_are_bounded",
+        "tests/storage/test_visibility_v4.py::test_visibility_requires_receipt_and_pointer_sequence_collision_fails_closed",
+        "tests/storage/test_publication_v4.py::test_concurrent_immutable_publishers_never_overwrite_the_winner"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_fragment_pointer_discovery.py",
+      "old_test": "test_fragment_discovery_surface_stays_bounded_for_1000_cycles",
+      "reason": "Fixed discovery, latest-wins/frontier, boundedness, and no-overwrite moved to v4 visibility/publication.",
+      "replacement_assertions": [
+        "tests/storage/test_visibility_v4.py::test_visibility_upsert_and_pointer_archive_are_bounded",
+        "tests/storage/test_visibility_v4.py::test_visibility_requires_receipt_and_pointer_sequence_collision_fails_closed",
+        "tests/storage/test_publication_v4.py::test_concurrent_immutable_publishers_never_overwrite_the_winner"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_fragment_scheduler.py",
+      "old_test": "test_round_robin_fragment_schedule",
+      "reason": "Round-robin fragment production scheduling is unsupported.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "retain-legacy-reader",
+      "old_path": "tests/test_fragment_scheduler.py",
+      "old_test": "test_expected_fragment_versions_for_50_events",
+      "reason": "Only the historical event-to-version decoder remains useful for legacy analysis.",
+      "replacement_assertions": [
+        "tests/test_fragment_analysis.py::test_fragment_v0_analysis_uses_legacy_pure_decoders"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_fragment_store.py",
+      "old_test": "test_fragment_version_and_update_lifecycle",
+      "reason": "Shared lifecycle, supersession, rollback, frontier, and terminal invariants are explicit v4 tests.",
+      "replacement_assertions": [
+        "tests/storage/test_p2_state_machine.py::test_proposal_state_machine_keeps_one_pending_and_monotonic_frontier",
+        "tests/storage/test_authority_p3_operational.py::test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_update",
+        "tests/storage/test_proposal_adjudication_v4.py::test_insert_supersede_and_frontier_failures_roll_back_as_one_unit"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_fragment_store.py",
+      "old_test": "test_fragment_supersession_is_scoped_to_same_fragment",
+      "reason": "Shared lifecycle, supersession, rollback, frontier, and terminal invariants are explicit v4 tests.",
+      "replacement_assertions": [
+        "tests/storage/test_p2_state_machine.py::test_proposal_state_machine_keeps_one_pending_and_monotonic_frontier",
+        "tests/storage/test_authority_p3_operational.py::test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_update",
+        "tests/storage/test_proposal_adjudication_v4.py::test_insert_supersede_and_frontier_failures_roll_back_as_one_unit"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_fragment_store.py",
+      "old_test": "test_fragment_staleness_uses_fragment_version",
+      "reason": "Shared lifecycle, supersession, rollback, frontier, and terminal invariants are explicit v4 tests.",
+      "replacement_assertions": [
+        "tests/storage/test_p2_state_machine.py::test_proposal_state_machine_keeps_one_pending_and_monotonic_frontier",
+        "tests/storage/test_authority_p3_operational.py::test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_update",
+        "tests/storage/test_proposal_adjudication_v4.py::test_insert_supersede_and_frontier_failures_roll_back_as_one_unit"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_fragment_store.py",
+      "old_test": "test_fragment_shutdown_finalizes_unconsumed_updates",
+      "reason": "Shared lifecycle, supersession, rollback, frontier, and terminal invariants are explicit v4 tests.",
+      "replacement_assertions": [
+        "tests/storage/test_p2_state_machine.py::test_proposal_state_machine_keeps_one_pending_and_monotonic_frontier",
+        "tests/storage/test_authority_p3_operational.py::test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_update",
+        "tests/storage/test_proposal_adjudication_v4.py::test_insert_supersede_and_frontier_failures_roll_back_as_one_unit"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_interval_telemetry.py",
+      "old_test": "test_interval_breakdown_uses_nonoverlapping_components_and_explicit_residual",
+      "reason": "Non-authoritative shared CSV intervals were replaced by actor telemetry and authority accounting.",
+      "replacement_assertions": [
+        "tests/observability/test_p3_operational_evidence.py::test_actor_telemetry_payload_cannot_override_frozen_actor_identity",
+        "tests/storage/test_authority_p3_operational.py::test_telemetry_deletion_cannot_change_authoritative_token_summary"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_interval_telemetry.py",
+      "old_test": "test_interval_breakdown_rejects_overlapping_or_negative_durations",
+      "reason": "Non-authoritative shared CSV intervals were replaced by actor telemetry and authority accounting.",
+      "replacement_assertions": [
+        "tests/observability/test_p3_operational_evidence.py::test_actor_telemetry_payload_cannot_override_frozen_actor_identity",
+        "tests/storage/test_authority_p3_operational.py::test_telemetry_deletion_cannot_change_authoritative_token_summary"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_latest_load_retry.py",
+      "old_test": "test_load_or_refresh_latest_retries_whole_callback_on_newer_pointer",
+      "reason": "Current epoch controls replace classic fixed latest retry and fail closed without authority.",
+      "replacement_assertions": [
+        "tests/runtime/test_p4_mandatory_runtime.py::test_latest_head_rejects_path_escape_and_payload_identity_mismatch",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_authority_missing_fails_closed_even_when_fixed_cache_exists"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_latest_load_retry.py",
+      "old_test": "test_load_or_refresh_latest_exhaustion_preserves_file_error_chain",
+      "reason": "Current epoch controls replace classic fixed latest retry and fail closed without authority.",
+      "replacement_assertions": [
+        "tests/runtime/test_p4_mandatory_runtime.py::test_latest_head_rejects_path_escape_and_payload_identity_mismatch",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_authority_missing_fails_closed_even_when_fixed_cache_exists"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_latest_load_retry.py",
+      "old_test": "test_full_initial_style_adoption_loads_actual_recovered_version",
+      "reason": "Current epoch controls replace classic fixed latest retry and fail closed without authority.",
+      "replacement_assertions": [
+        "tests/runtime/test_p4_mandatory_runtime.py::test_latest_head_rejects_path_escape_and_payload_identity_mismatch",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_authority_missing_fails_closed_even_when_fixed_cache_exists"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_completion.py",
+      "old_test": "test_global_only_completion_ignores_local_horizon_until_stop_is_published",
+      "reason": "Completion is now a fenced controller/terminal state machine rather than fixed stop/watchdog files.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p3_operational.py::test_terminal_close_freezes_fence_blocks_admission_and_accounts_hard_crash",
+        "tests/storage/test_authority_p3_operational.py::test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_completion.py",
+      "old_test": "test_default_completion_keeps_local_or_global_behavior",
+      "reason": "Completion is now a fenced controller/terminal state machine rather than fixed stop/watchdog files.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p3_operational.py::test_terminal_close_freezes_fence_blocks_admission_and_accounts_hard_crash",
+        "tests/storage/test_authority_p3_operational.py::test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_completion.py",
+      "old_test": "test_stop_requested_truth_table",
+      "reason": "Completion is now a fenced controller/terminal state machine rather than fixed stop/watchdog files.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p3_operational.py::test_terminal_close_freezes_fence_blocks_admission_and_accounts_hard_crash",
+        "tests/storage/test_authority_p3_operational.py::test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens"
+      ],
+      "statically_enumerable_cases": 6
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_learner_completion.py",
+      "old_test": "test_fragment_stop_checks_global_stop_before_local_horizon",
+      "reason": "The fragment learner stop branch is unsupported.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_completion.py",
+      "old_test": "test_syncer_watchdog_refresh_and_deadline_boundaries",
+      "reason": "Completion is now a fenced controller/terminal state machine rather than fixed stop/watchdog files.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p3_operational.py::test_terminal_close_freezes_fence_blocks_admission_and_accounts_hard_crash",
+        "tests/storage/test_authority_p3_operational.py::test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_completion.py",
+      "old_test": "test_syncer_watchdog_confirms_latest_before_triggering",
+      "reason": "Completion is now a fenced controller/terminal state machine rather than fixed stop/watchdog files.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p3_operational.py::test_terminal_close_freezes_fence_blocks_admission_and_accounts_hard_crash",
+        "tests/storage/test_authority_p3_operational.py::test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens"
+      ],
+      "statically_enumerable_cases": 2
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_adopt_global_loads_bfloat16_checkpoint_without_fp32_flattening",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_rebase_preserves_only_progress_after_each_published_reference",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_rebase_rejects_reference_with_wrong_size",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_prediction_reconcile_helper_clears_state_and_preserves_event_shape",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 2
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_prediction_state_rejects_partial_active_state",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_prediction_reconcile_timeout_does_not_emit_partial_reconcile",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_prediction_is_abandoned_when_stop_arrives_during_inner_steps",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_reconcile_uses_configured_bfloat16_compute_dtype",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_rebase_reconciliation_preserves_optimizer_and_scheduler_state",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_post_publish_wait_polls_until_newer_latest",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_post_publish_wait_stops_at_deadline",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_prediction_preparation_recovers_collected_cached_checkpoint",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_prediction_preparation_prefers_latest_published_during_snapshot",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_prediction_preparation_keeps_snapshot_when_latest_is_unchanged",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_compute_placement_prefers_cuda_when_estimate_fits",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_compute_placement_falls_back_for_estimated_cuda_oom",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_prediction_retries_on_cpu_after_cuda_oom",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_predict_next_global_uses_token_weighted_delta_and_outer_step",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_predict_next_global_uses_configured_bfloat16_compute_dtype",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_learner_rebase.py",
+      "old_test": "test_predict_next_global_bootstraps_zero_token_initial_checkpoint",
+      "reason": "Model adoption/rebase behavior remains shared modeling logic and v4 segment accounting.",
+      "replacement_assertions": [
+        "tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop",
+        "tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_liveness.py",
+      "old_test": "test_heartbeat_ingest_and_status_transitions",
+      "reason": "Classic heartbeat tables/pointers were replaced by leader-fenced v4 heartbeat/control evidence.",
+      "replacement_assertions": [
+        "tests/runtime/test_p4_mandatory_runtime.py::test_heartbeat_publication_uses_exact_committed_lease_and_rejects_delay",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_stale_epoch_admission_response_cannot_open_torch_gate"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_liveness.py",
+      "old_test": "test_stopped_preserved_and_no_progress_timeout",
+      "reason": "Classic heartbeat tables/pointers were replaced by leader-fenced v4 heartbeat/control evidence.",
+      "replacement_assertions": [
+        "tests/runtime/test_p4_mandatory_runtime.py::test_heartbeat_publication_uses_exact_committed_lease_and_rejects_delay",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_stale_epoch_admission_response_cannot_open_torch_gate"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_liveness.py",
+      "old_test": "test_resume_heartbeat_fence_ignores_old_pointer_until_atomic_replacement",
+      "reason": "Classic heartbeat tables/pointers were replaced by leader-fenced v4 heartbeat/control evidence.",
+      "replacement_assertions": [
+        "tests/runtime/test_p4_mandatory_runtime.py::test_heartbeat_publication_uses_exact_committed_lease_and_rejects_delay",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_stale_epoch_admission_response_cannot_open_torch_gate"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_liveness.py",
+      "old_test": "test_resume_heartbeat_fence_excludes_invalid_or_foreign_pointers",
+      "reason": "Classic heartbeat tables/pointers were replaced by leader-fenced v4 heartbeat/control evidence.",
+      "replacement_assertions": [
+        "tests/runtime/test_p4_mandatory_runtime.py::test_heartbeat_publication_uses_exact_committed_lease_and_rejects_delay",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_stale_epoch_admission_response_cannot_open_torch_gate"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_midcycle_adoption_metadata.py",
+      "old_test": "test_midcycle_adoption_tracker_records_latest_step_and_resets",
+      "reason": "Adoption metadata is represented by cycle-segment receipts and explicit token fate.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_prepublication_replace_discards_old_segment_and_resets_effective_metrics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_midcycle_adoption_metadata.py",
+      "old_test": "test_write_update_always_publishes_midcycle_adoption_fields",
+      "reason": "Adoption metadata is represented by cycle-segment receipts and explicit token fate.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_prepublication_replace_discards_old_segment_and_resets_effective_metrics",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_predict_rebase_retains_work_without_loss_or_double_count"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_parallel_publication.py",
+      "old_test": "test_publish_global_writes_weight_and_outer_concurrently_before_db_commit",
+      "reason": "Publication ordering/rollback moved from classic worker futures to fenced v4 publication intents.",
+      "replacement_assertions": [
+        "tests/storage/test_publication_v4.py::test_prepared_intent_precedes_io_and_commit_verifies_exact_theta_pair",
+        "tests/storage/test_publication_v4.py::test_publication_crash_prefix_is_reconciled_idempotently"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_parallel_publication.py",
+      "old_test": "test_checkpoint_wait_callback_is_absent_when_ingestion_disabled",
+      "reason": "Publication ordering/rollback moved from classic worker futures to fenced v4 publication intents.",
+      "replacement_assertions": [
+        "tests/storage/test_publication_v4.py::test_prepared_intent_precedes_io_and_commit_verifies_exact_theta_pair",
+        "tests/storage/test_publication_v4.py::test_publication_crash_prefix_is_reconciled_idempotently"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_parallel_publication.py",
+      "old_test": "test_serial_experiment_mode_preserves_weight_then_outer_commit_order",
+      "reason": "Publication ordering/rollback moved from classic worker futures to fenced v4 publication intents.",
+      "replacement_assertions": [
+        "tests/storage/test_publication_v4.py::test_prepared_intent_precedes_io_and_commit_verifies_exact_theta_pair",
+        "tests/storage/test_publication_v4.py::test_publication_crash_prefix_is_reconciled_idempotently"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_parallel_publication.py",
+      "old_test": "test_single_checkpoint_failure_never_commits_db_or_latest",
+      "reason": "Publication ordering/rollback moved from classic worker futures to fenced v4 publication intents.",
+      "replacement_assertions": [
+        "tests/storage/test_publication_v4.py::test_prepared_intent_precedes_io_and_commit_verifies_exact_theta_pair",
+        "tests/storage/test_publication_v4.py::test_publication_crash_prefix_is_reconciled_idempotently"
+      ],
+      "statically_enumerable_cases": 2
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_parallel_publication.py",
+      "old_test": "test_main_thread_can_ingest_while_checkpoint_workers_are_pending",
+      "reason": "Publication ordering/rollback moved from classic worker futures to fenced v4 publication intents.",
+      "replacement_assertions": [
+        "tests/storage/test_publication_v4.py::test_prepared_intent_precedes_io_and_commit_verifies_exact_theta_pair",
+        "tests/storage/test_publication_v4.py::test_publication_crash_prefix_is_reconciled_idempotently"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan01_checker.py",
+      "old_test": "test_validate_resume_progress_requires_new_liveness_generation_before_commit",
+      "reason": "Classic resume-progress checking is replaced by authoritative receipt hash/cursor continuity.",
+      "replacement_assertions": [
+        "tests/storage/test_contributor_progress.py::test_contributor_progress_advances_only_contiguous_receipt_chain",
+        "tests/storage/test_contributor_progress.py::test_contributor_progress_rejects_sequence_hole_and_cursor_mismatch"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan01_checker.py",
+      "old_test": "test_validate_resume_progress_rejects_false_progress",
+      "reason": "Classic resume-progress checking is replaced by authoritative receipt hash/cursor continuity.",
+      "replacement_assertions": [
+        "tests/storage/test_contributor_progress.py::test_contributor_progress_advances_only_contiguous_receipt_chain",
+        "tests/storage/test_contributor_progress.py::test_contributor_progress_rejects_sequence_hole_and_cursor_mismatch"
+      ],
+      "statically_enumerable_cases": 2
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan01_checker.py",
+      "old_test": "test_validate_resume_progress_rejects_incomplete_fence_set",
+      "reason": "Classic resume-progress checking is replaced by authoritative receipt hash/cursor continuity.",
+      "replacement_assertions": [
+        "tests/storage/test_contributor_progress.py::test_contributor_progress_advances_only_contiguous_receipt_chain",
+        "tests/storage/test_contributor_progress.py::test_contributor_progress_rejects_sequence_hole_and_cursor_mismatch"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_plan02_feasibility.py",
+      "old_test": "test_writer_lock_probe_proves_availability_boundary",
+      "reason": "Plan02 feasibility/checker/PBS probe fixtures are frozen evidence, not current runtime tests.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_plan02_feasibility.py",
+      "old_test": "test_writer_lock_combiner_requires_distinct_cross_node_hosts",
+      "reason": "Plan02 feasibility/checker/PBS probe fixtures are frozen evidence, not current runtime tests.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_plan02_feasibility.py",
+      "old_test": "test_old_cache_writer_probe_selects_canonical_and_repairs",
+      "reason": "Plan02 feasibility/checker/PBS probe fixtures are frozen evidence, not current runtime tests.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_plan02_feasibility.py",
+      "old_test": "test_source_pinning_probe_blocks_each_mismatch_before_runtime",
+      "reason": "Plan02 feasibility/checker/PBS probe fixtures are frozen evidence, not current runtime tests.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_plan02_feasibility.py",
+      "old_test": "test_pbs_state_normalization_and_classification",
+      "reason": "Plan02 feasibility/checker/PBS probe fixtures are frozen evidence, not current runtime tests.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_plan02_feasibility.py",
+      "old_test": "test_pbs_array_probe_explicitly_requests_rerunable_mode",
+      "reason": "Plan02 feasibility/checker/PBS probe fixtures are frozen evidence, not current runtime tests.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_plan02_feasibility.py",
+      "old_test": "test_pbs_scalar_probe_requests_a_future_start_for_queued_evidence",
+      "reason": "Plan02 feasibility/checker/PBS probe fixtures are frozen evidence, not current runtime tests.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_plan02_feasibility.py",
+      "old_test": "test_pbs_child_marker_does_not_hide_terminal_failure",
+      "reason": "Plan02 feasibility/checker/PBS probe fixtures are frozen evidence, not current runtime tests.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_plan02_feasibility.py",
+      "old_test": "test_feasibility_checker_stdout_contract_and_fail_closed",
+      "reason": "Plan02 feasibility/checker/PBS probe fixtures are frozen evidence, not current runtime tests.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_plan02_feasibility.py",
+      "old_test": "test_feasibility_checker_rejects_missing_or_self_asserted_evidence",
+      "reason": "Plan02 feasibility/checker/PBS probe fixtures are frozen evidence, not current runtime tests.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_plan02_feasibility.py",
+      "old_test": "test_clock_aggregate_requires_measured_two_way_bound",
+      "reason": "Plan02 feasibility/checker/PBS probe fixtures are frozen evidence, not current runtime tests.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_plan02_feasibility.py",
+      "old_test": "test_contention_aggregate_requires_structured_host_evidence",
+      "reason": "Plan02 feasibility/checker/PBS probe fixtures are frozen evidence, not current runtime tests.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_plan02_feasibility.py",
+      "old_test": "test_source_gate_directly_rejects_independent_identity_and_marker_errors",
+      "reason": "Plan02 feasibility/checker/PBS probe fixtures are frozen evidence, not current runtime tests.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_plan02_feasibility.py",
+      "old_test": "test_checker_persists_probe_failure_in_blocked_artifact",
+      "reason": "Plan02 feasibility/checker/PBS probe fixtures are frozen evidence, not current runtime tests.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_plan02_feasibility.py",
+      "old_test": "test_phase0_pbs_scripts_use_literal_group_and_have_workload_markers",
+      "reason": "Plan02 feasibility/checker/PBS probe fixtures are frozen evidence, not current runtime tests.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_ha_config_defaults_and_artifact_versions",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_independent_launcher_requires_explicit_minimum_walltime_for_submit",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_independent_launcher_validates_walltime_before_creating_run",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_independent_launcher_preserves_syncer_receipt_when_learner_qsub_fails",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_acceptance_launcher_persists_every_accepted_job_before_later_qsub_failure",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 2
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_syncer_releases_acquired_lease_when_leader_store_open_fails",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_syncer_cleans_all_acquired_resources_when_renewer_start_fails",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_syncer_cleans_acquired_resources_when_post_renewer_startup_fails",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_ha_config_rejects_invalid_combinations",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 6
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_schema_bootstrap_has_double_version_identity_and_readonly_open",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_ha_initializer_writes_identical_root_and_control_config",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_run_descriptor_rejects_all_identity_tampering_without_lease_writes",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_incomplete_or_pre_ha_database_fails_closed",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_lease_epoch_is_monotonic_and_stale_owner_cannot_renew",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_concurrent_first_acquire_has_exactly_one_winner",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_candidate_retries_writer_lock_until_release_and_times_out_cleanly",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_lease_renewer_retries_transient_sqlite_busy",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_final_lease_metrics_are_observed_only_after_renewer_stop",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_final_lease_metrics_propagate_stop_failure",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_all_fenced_public_mutators_require_token",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_fenced_store_rejects_raw_and_superseded_writes",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_fenced_connection_rejects_unrecognized_or_disguised_mutations",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 7
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_fenced_store_enforces_local_monotonic_lease_boundary",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_fenced_named_parameter_mutation_preserves_metadata_values",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_epoch_control_ignores_fixed_cache_pollution_and_repairs_takeover",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_epoch_reader_ignores_torn_lower_epoch_but_fails_on_current_torn_epoch",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_epoch_reader_scan_cache_avoids_repeated_recursive_scans",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_ha_watchdog_uses_heartbeat_progress_and_recovery_budget_not_model_merges",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_incomplete_completed_terminal_is_repaired_before_future_rejection",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_learner_directory_creation_does_not_create_authority",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_run_paths_recursively_discovers_ha_runtime_surfaces",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_recovery_claim_has_one_mkdir_winner_and_queued_job_stays_outstanding",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_recovery_global_budget_is_atomic_across_distinct_observations",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_eight_recovery_claimants_create_only_one_attempt_and_submission",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_recovery_reconciles_historical_scheduler_state_before_retry",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_recovery_archival_does_not_reset_current_observation_budget",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_pbs_scheduler_failures_are_nonfatal_observations",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_pbs_scheduler_matches_exact_request_variable_not_substring",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_readonly_store_rejects_mutating_surface",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_ha_gc_registers_then_rechecks_and_deletes_only_archived_publication",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_ha_maintenance_does_not_delete_current_authority_writer_temp",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_stale_gc_after_takeover_deletes_only_frozen_orphans",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_ha_checkpoint_digest_modes_preserve_publication_contract",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 3
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_ha_gc_removes_only_unreferenced_superseded_epoch_orphans",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_phase1_checker_blocks_late_runtime_failures",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_phase1_checker_derives_stale_writer_violations_from_persisted_rows",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_phase1_checker_derives_canonical_adoption_errors_per_expected_learner",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_phase1_checker_accepts_only_identity_bound_frozen_matched_gates",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_phase1_checker_blocks_missing_or_regressed_matched_evidence",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_matched_business_schedule_is_fine_grained_balanced_ab_ba",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_phase1_checker_requires_matched_block_and_writer_instrumentation",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_epoch_history_compaction_keeps_active_rows_bounded",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase1_ha.py",
+      "old_test": "test_1000_takeover_and_claim_cycles_keep_active_surfaces_bounded",
+      "reason": "Lease/schema/fencing/takeover/GC invariants moved to finite v4 authority commands and tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_stale_token_cannot_execute_a_named_business_command",
+        "tests/storage/test_leader_authority_commands.py::test_authority_surface_does_not_offer_direct_sql_or_raw_connection",
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_dynamic_identity_cli_and_fixed_stream_mapping",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_dynamic_config_mode_matrix_and_limits",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_bootstrap_registration_replay_rejection_and_authorized_replacement",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_registration_waits_for_scheduler_identity_binding",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_registration_rejects_wrong_scheduler_identity_after_binding",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_pending_scheduler_registration_rejects_changed_request",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_all_bootstrap_slots_admit_and_ninth_unsolicited_is_rejected",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_bootstrap_scheduler_manifest_reconciles_external_jobs",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_fault_injection_publishes_admission_signal",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_acceptance_launcher_gates_victim_failure_on_admission",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_logical_launch_request_admits_at_most_one_instance",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_conflicting_registration_replay_preserves_canonical_admission",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_dynamic_heartbeat_scan_uses_one_fenced_transaction",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_commit_revalidates_membership_and_selector_uniqueness",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_capacity_observation_idempotency_hysteresis_and_limits",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_pbs_learner_submission_can_override_acceptance_queue",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_launch_outbox_reconciles_qsub_windows_and_retains_scheduler_capacity",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_no_job_uncertainty_deadline_is_anchored_and_reserves_scale_capacity",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_positive_scheduler_evidence_rearms_a_later_uncertainty_window",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_bootstrap_job_remains_reserved_until_scheduler_terminal",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_dynamic_drain_ack_timeout_admission_fence_and_visibility",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_manual_deadline_and_launch_budget_close_requests",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_dynamic_state_is_bounded_after_1000_churn_cycles",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_replacement_without_same_placement_stream_reuse_releases_old_stream",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_scale_budget_and_cooldown_survive_history_archival",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_dynamic.py",
+      "old_test": "test_matched_launcher_uses_independent_learners_and_persists_receipts",
+      "reason": "Dynamic admission/replacement/scheduler identities are now fenced v4 state and current runtime tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_authorized_replacement_atomically_retires_old_incarnation",
+        "tests/storage/test_p2_state_machine.py::test_dynamic_membership_state_machine_has_one_current_incarnation",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_dynamic_launcher_preserves_each_partial_submission_receipt"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_review_remediation.py",
+      "old_test": "test_merge_and_capacity_observation_share_one_rollback_boundary",
+      "reason": "Cross-command rollback and scheduler uncertainty are retained at the v4 authority boundary.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_revoke_after_selection_returns_per_row_conflict_then_retry_commits",
+        "tests/storage/test_authority_p3_operational.py::test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolution"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_review_remediation.py",
+      "old_test": "test_merge_and_starvation_observations_reject_non_atomic_public_writes",
+      "reason": "Cross-command rollback and scheduler uncertainty are retained at the v4 authority boundary.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_revoke_after_selection_returns_per_row_conflict_then_retry_commits",
+        "tests/storage/test_authority_p3_operational.py::test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolution"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_review_remediation.py",
+      "old_test": "test_starvation_generation_and_observation_share_one_rollback_boundary",
+      "reason": "Cross-command rollback and scheduler uncertainty are retained at the v4 authority boundary.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_revoke_after_selection_returns_per_row_conflict_then_retry_commits",
+        "tests/storage/test_authority_p3_operational.py::test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolution"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_review_remediation.py",
+      "old_test": "test_token_target_freezes_dynamic_terminal_version_at_committed_head",
+      "reason": "Cross-command rollback and scheduler uncertainty are retained at the v4 authority boundary.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_revoke_after_selection_returns_per_row_conflict_then_retry_commits",
+        "tests/storage/test_authority_p3_operational.py::test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolution"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_review_remediation.py",
+      "old_test": "test_dynamic_no_progress_enters_persisted_drain_and_open_terminal_is_rejected",
+      "reason": "Cross-command rollback and scheduler uncertainty are retained at the v4 authority boundary.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_revoke_after_selection_returns_per_row_conflict_then_retry_commits",
+        "tests/storage/test_authority_p3_operational.py::test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolution"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan02_phase2_review_remediation.py",
+      "old_test": "test_completed_checker_requires_one_merge_observation_per_committed_version",
+      "reason": "Cross-command rollback and scheduler uncertainty are retained at the v4 authority boundary.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_revoke_after_selection_returns_per_row_conflict_then_retry_commits",
+        "tests/storage/test_authority_p3_operational.py::test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolution"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan03_p0_performance.py",
+      "old_test": "test_measured_workload_validation_rejects_mismatch_and_duplicate",
+      "reason": "The classic executable is tag-only; the reusable paired-performance method remains current.",
+      "replacement_assertions": [
+        "tests/test_plan03_support.py::test_paired_performance_keeps_signed_deltas_and_fixed_bootstrap",
+        "tests/test_plan03_support.py::test_paired_performance_rejects_nonpositive_or_nonfinite_durations"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan03_p0_performance.py",
+      "old_test": "test_performance_runner_loads_source_identity_without_sys_path_mutation",
+      "reason": "The classic executable is tag-only; the reusable paired-performance method remains current.",
+      "replacement_assertions": [
+        "tests/test_plan03_support.py::test_paired_performance_keeps_signed_deltas_and_fixed_bootstrap",
+        "tests/test_plan03_support.py::test_paired_performance_rejects_nonpositive_or_nonfinite_durations"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan03_p0_performance.py",
+      "old_test": "test_process_result_collection_does_not_pipe_block_on_large_output",
+      "reason": "The classic executable is tag-only; the reusable paired-performance method remains current.",
+      "replacement_assertions": [
+        "tests/test_plan03_support.py::test_paired_performance_keeps_signed_deltas_and_fixed_bootstrap",
+        "tests/test_plan03_support.py::test_paired_performance_rejects_nonpositive_or_nonfinite_durations"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan03_p0_performance.py",
+      "old_test": "test_ha_arm_timer_starts_before_initializer",
+      "reason": "The classic executable is tag-only; the reusable paired-performance method remains current.",
+      "replacement_assertions": [
+        "tests/test_plan03_support.py::test_paired_performance_keeps_signed_deltas_and_fixed_bootstrap",
+        "tests/test_plan03_support.py::test_paired_performance_rejects_nonpositive_or_nonfinite_durations"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan03_p0_performance.py",
+      "old_test": "test_classic_arm_uses_common_timer_anchor",
+      "reason": "The classic executable is tag-only; the reusable paired-performance method remains current.",
+      "replacement_assertions": [
+        "tests/test_plan03_support.py::test_paired_performance_keeps_signed_deltas_and_fixed_bootstrap",
+        "tests/test_plan03_support.py::test_paired_performance_rejects_nonpositive_or_nonfinite_durations"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan03_p0_red.py",
+      "old_test": "test_h01a_revoke_before_select_does_not_abort_current_batch",
+      "reason": "All accepted P0 RED findings have direct current v4 regression tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_revoke_before_selection_leaves_current_quorum_progressing",
+        "tests/storage/test_authority_p2_dynamic.py::test_revoke_after_selection_returns_per_row_conflict_then_retry_commits",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_persistent_fair_selector_meets_frozen_1000_round_gate",
+        "tests/storage/test_visibility_v4.py::test_transient_recovery_never_drops_and_deadline_enters_manual_review"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan03_p0_red.py",
+      "old_test": "test_h01b_commit_conflict_terminalizes_only_invalid_rows",
+      "reason": "All accepted P0 RED findings have direct current v4 regression tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_revoke_before_selection_leaves_current_quorum_progressing",
+        "tests/storage/test_authority_p2_dynamic.py::test_revoke_after_selection_returns_per_row_conflict_then_retry_commits",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_persistent_fair_selector_meets_frozen_1000_round_gate",
+        "tests/storage/test_visibility_v4.py::test_transient_recovery_never_drops_and_deadline_enters_manual_review"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan03_p0_red.py",
+      "old_test": "test_h05_quorum_truncation_serves_every_continuously_ready_contributor",
+      "reason": "All accepted P0 RED findings have direct current v4 regression tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_revoke_before_selection_leaves_current_quorum_progressing",
+        "tests/storage/test_authority_p2_dynamic.py::test_revoke_after_selection_returns_per_row_conflict_then_retry_commits",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_persistent_fair_selector_meets_frozen_1000_round_gate",
+        "tests/storage/test_visibility_v4.py::test_transient_recovery_never_drops_and_deadline_enters_manual_review"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan03_p0_red.py",
+      "old_test": "test_h06_transient_registration_eio_preserves_request_for_retry",
+      "reason": "All accepted P0 RED findings have direct current v4 regression tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_revoke_before_selection_leaves_current_quorum_progressing",
+        "tests/storage/test_authority_p2_dynamic.py::test_revoke_after_selection_returns_per_row_conflict_then_retry_commits",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_persistent_fair_selector_meets_frozen_1000_round_gate",
+        "tests/storage/test_visibility_v4.py::test_transient_recovery_never_drops_and_deadline_enters_manual_review"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_plan03_p0_red.py",
+      "old_test": "test_h07_known_job_no_record_enters_bounded_uncertainty",
+      "reason": "All accepted P0 RED findings have direct current v4 regression tests.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p2_dynamic.py::test_revoke_before_selection_leaves_current_quorum_progressing",
+        "tests/storage/test_authority_p2_dynamic.py::test_revoke_after_selection_returns_per_row_conflict_then_retry_commits",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_persistent_fair_selector_meets_frozen_1000_round_gate",
+        "tests/storage/test_visibility_v4.py::test_transient_recovery_never_drops_and_deadline_enters_manual_review"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_resume.py",
+      "old_test": "test_initialize_writes_matching_resolved_config_at_run_root_and_control",
+      "reason": "In-place classic resume is unsupported; v4 retries/restarts use immutable init plus authority cursor state.",
+      "replacement_assertions": [
+        "tests/storage/test_run_initializer_p3.py::test_retry_and_completed_replay_bind_the_entire_resolved_config_identity",
+        "tests/storage/test_contributor_progress.py::test_contributor_progress_advances_only_contiguous_receipt_chain"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_resume.py",
+      "old_test": "test_resume_repairs_latest_from_persistent_db",
+      "reason": "In-place classic resume is unsupported; v4 retries/restarts use immutable init plus authority cursor state.",
+      "replacement_assertions": [
+        "tests/storage/test_run_initializer_p3.py::test_retry_and_completed_replay_bind_the_entire_resolved_config_identity",
+        "tests/storage/test_contributor_progress.py::test_contributor_progress_advances_only_contiguous_receipt_chain"
+      ],
+      "statically_enumerable_cases": 5
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_resume.py",
+      "old_test": "test_resume_resets_selected_and_is_idempotent",
+      "reason": "In-place classic resume is unsupported; v4 retries/restarts use immutable init plus authority cursor state.",
+      "replacement_assertions": [
+        "tests/storage/test_run_initializer_p3.py::test_retry_and_completed_replay_bind_the_entire_resolved_config_identity",
+        "tests/storage/test_contributor_progress.py::test_contributor_progress_advances_only_contiguous_receipt_chain"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_resume.py",
+      "old_test": "test_resume_fences_stopped_heartbeat_generation_and_resets_learners",
+      "reason": "In-place classic resume is unsupported; v4 retries/restarts use immutable init plus authority cursor state.",
+      "replacement_assertions": [
+        "tests/storage/test_run_initializer_p3.py::test_retry_and_completed_replay_bind_the_entire_resolved_config_identity",
+        "tests/storage/test_contributor_progress.py::test_contributor_progress_advances_only_contiguous_receipt_chain"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_resume.py",
+      "old_test": "test_prepare_full_resume_rolls_back_selected_and_liveness_together",
+      "reason": "In-place classic resume is unsupported; v4 retries/restarts use immutable init plus authority cursor state.",
+      "replacement_assertions": [
+        "tests/storage/test_run_initializer_p3.py::test_retry_and_completed_replay_bind_the_entire_resolved_config_identity",
+        "tests/storage/test_contributor_progress.py::test_contributor_progress_advances_only_contiguous_receipt_chain"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_resume.py",
+      "old_test": "test_resume_rejects_completed_run_and_preserves_terminal_markers",
+      "reason": "In-place classic resume is unsupported; v4 retries/restarts use immutable init plus authority cursor state.",
+      "replacement_assertions": [
+        "tests/storage/test_run_initializer_p3.py::test_retry_and_completed_replay_bind_the_entire_resolved_config_identity",
+        "tests/storage/test_contributor_progress.py::test_contributor_progress_advances_only_contiguous_receipt_chain"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_resume.py",
+      "old_test": "test_resume_archives_interrupted_error_markers",
+      "reason": "In-place classic resume is unsupported; v4 retries/restarts use immutable init plus authority cursor state.",
+      "replacement_assertions": [
+        "tests/storage/test_run_initializer_p3.py::test_retry_and_completed_replay_bind_the_entire_resolved_config_identity",
+        "tests/storage/test_contributor_progress.py::test_contributor_progress_advances_only_contiguous_receipt_chain"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_resume.py",
+      "old_test": "test_resume_fails_closed_for_missing_or_mismatched_checkpoint",
+      "reason": "In-place classic resume is unsupported; v4 retries/restarts use immutable init plus authority cursor state.",
+      "replacement_assertions": [
+        "tests/storage/test_run_initializer_p3.py::test_retry_and_completed_replay_bind_the_entire_resolved_config_identity",
+        "tests/storage/test_contributor_progress.py::test_contributor_progress_advances_only_contiguous_receipt_chain"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_resume.py",
+      "old_test": "test_resume_rejects_absent_db_even_when_latest_exists",
+      "reason": "In-place classic resume is unsupported; v4 retries/restarts use immutable init plus authority cursor state.",
+      "replacement_assertions": [
+        "tests/storage/test_run_initializer_p3.py::test_retry_and_completed_replay_bind_the_entire_resolved_config_identity",
+        "tests/storage/test_contributor_progress.py::test_contributor_progress_advances_only_contiguous_receipt_chain"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_resume.py",
+      "old_test": "test_non_resume_initialization_rejects_committed_db",
+      "reason": "In-place classic resume is unsupported; v4 retries/restarts use immutable init plus authority cursor state.",
+      "replacement_assertions": [
+        "tests/storage/test_run_initializer_p3.py::test_retry_and_completed_replay_bind_the_entire_resolved_config_identity",
+        "tests/storage/test_contributor_progress.py::test_contributor_progress_advances_only_contiguous_receipt_chain"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_retention.py",
+      "old_test": "test_archive_prune_and_reference_driven_current_only_gc",
+      "reason": "Reference-driven GC, crash recovery, audit ordering, and cleanup fail-closed behavior are v4 tests.",
+      "replacement_assertions": [
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe",
+        "tests/storage/test_authority_p3_operational.py::test_active_leader_compacts_audit_batches_before_exact_source_gc",
+        "tests/test_clean_run.py::test_clean_run_applies_artifact_policy_and_authority_live_references"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_retention.py",
+      "old_test": "test_unpublished_payload_grace_and_temp_cleanup",
+      "reason": "Reference-driven GC, crash recovery, audit ordering, and cleanup fail-closed behavior are v4 tests.",
+      "replacement_assertions": [
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe",
+        "tests/storage/test_authority_p3_operational.py::test_active_leader_compacts_audit_batches_before_exact_source_gc",
+        "tests/test_clean_run.py::test_clean_run_applies_artifact_policy_and_authority_live_references"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_retention.py",
+      "old_test": "test_temp_cleanup_tolerates_atomic_writer_renaming_after_glob",
+      "reason": "Reference-driven GC, crash recovery, audit ordering, and cleanup fail-closed behavior are v4 tests.",
+      "replacement_assertions": [
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe",
+        "tests/storage/test_authority_p3_operational.py::test_active_leader_compacts_audit_batches_before_exact_source_gc",
+        "tests/test_clean_run.py::test_clean_run_applies_artifact_policy_and_authority_live_references"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_retention.py",
+      "old_test": "test_gc_pending_insert_rolls_back_with_archived_row_delete",
+      "reason": "Reference-driven GC, crash recovery, audit ordering, and cleanup fail-closed behavior are v4 tests.",
+      "replacement_assertions": [
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe",
+        "tests/storage/test_authority_p3_operational.py::test_active_leader_compacts_audit_batches_before_exact_source_gc",
+        "tests/test_clean_run.py::test_clean_run_applies_artifact_policy_and_authority_live_references"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_retention.py",
+      "old_test": "test_gc_pending_is_idempotent_persistent_and_recovers_archive_unlink_crash",
+      "reason": "Reference-driven GC, crash recovery, audit ordering, and cleanup fail-closed behavior are v4 tests.",
+      "replacement_assertions": [
+        "tests/storage/test_publication_v4.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe",
+        "tests/storage/test_authority_p3_operational.py::test_active_leader_compacts_audit_batches_before_exact_source_gc",
+        "tests/test_clean_run.py::test_clean_run_applies_artifact_policy_and_authority_live_references"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_shared_runtime_primitives.py",
+      "old_test": "test_parameterized_proposal_source_preserves_selection_and_missing_file_behavior",
+      "reason": "The useful proposal visibility/adoption primitives moved to typed v4 services and modeling strategy tests.",
+      "replacement_assertions": [
+        "tests/storage/test_visibility_v4.py::test_not_found_requires_three_stable_observations_and_grace",
+        "tests/test_adoption_strategy.py::test_rebase_context_returns_actual_latest_from_retry_helper"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_shared_runtime_primitives.py",
+      "old_test": "test_parameterized_missing_file_helper_can_be_used_before_grace_window",
+      "reason": "The useful proposal visibility/adoption primitives moved to typed v4 services and modeling strategy tests.",
+      "replacement_assertions": [
+        "tests/storage/test_visibility_v4.py::test_not_found_requires_three_stable_observations_and_grace",
+        "tests/test_adoption_strategy.py::test_rebase_context_returns_actual_latest_from_retry_helper"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_shared_runtime_primitives.py",
+      "old_test": "test_fragment_adoption_helper_preserves_all_four_call_contexts",
+      "reason": "The fragment learner adoption call surface is unsupported.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 4
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_source_identity.py",
+      "old_test": "test_source_identity_is_recorded_from_frozen_launcher_environment",
+      "reason": "Source identity is frozen in the v4 descriptor and actor attestations.",
+      "replacement_assertions": [
+        "tests/storage/test_run_initializer_p3.py::test_actor_attestation_requires_explicit_runtime_resource_evidence",
+        "tests/storage/test_run_initializer_p3.py::test_completed_descriptor_rejects_identity_mode_mismatch"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_source_identity.py",
+      "old_test": "test_required_source_identity_fails_closed",
+      "reason": "Source identity is frozen in the v4 descriptor and actor attestations.",
+      "replacement_assertions": [
+        "tests/storage/test_run_initializer_p3.py::test_actor_attestation_requires_explicit_runtime_resource_evidence",
+        "tests/storage/test_run_initializer_p3.py::test_completed_descriptor_rejects_identity_mode_mismatch"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_sqlite_store.py",
+      "old_test": "test_persistent_pragmas_and_reopen",
+      "reason": "Shared SQLite atomicity, eligibility, merge rollback, and terminalization are v4 authority tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_typed_receipt_proposal_selection_and_v1_commit_flow",
+        "tests/storage/test_authority_p2_dynamic.py::test_selection_classifies_stale_rows_without_partial_abort"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_sqlite_store.py",
+      "old_test": "test_connect_migrates_old_full_update_metadata_columns",
+      "reason": "Shared SQLite atomicity, eligibility, merge rollback, and terminalization are v4 authority tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_typed_receipt_proposal_selection_and_v1_commit_flow",
+        "tests/storage/test_authority_p2_dynamic.py::test_selection_classifies_stale_rows_without_partial_abort"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_sqlite_store.py",
+      "old_test": "test_fixed_pointer_latest_wins_and_frontier_survives_pruning",
+      "reason": "Shared SQLite atomicity, eligibility, merge rollback, and terminalization are v4 authority tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_typed_receipt_proposal_selection_and_v1_commit_flow",
+        "tests/storage/test_authority_p2_dynamic.py::test_selection_classifies_stale_rows_without_partial_abort"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_sqlite_store.py",
+      "old_test": "test_full_update_midcycle_adoption_metadata_is_persisted",
+      "reason": "Shared SQLite atomicity, eligibility, merge rollback, and terminalization are v4 authority tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_typed_receipt_proposal_selection_and_v1_commit_flow",
+        "tests/storage/test_authority_p2_dynamic.py::test_selection_classifies_stale_rows_without_partial_abort"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_sqlite_store.py",
+      "old_test": "test_eligibility_rejects_future_and_honors_staleness_boundary",
+      "reason": "Shared SQLite atomicity, eligibility, merge rollback, and terminalization are v4 authority tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_typed_receipt_proposal_selection_and_v1_commit_flow",
+        "tests/storage/test_authority_p2_dynamic.py::test_selection_classifies_stale_rows_without_partial_abort"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_sqlite_store.py",
+      "old_test": "test_full_merge_is_one_transaction_and_validates_selected_set",
+      "reason": "Shared SQLite atomicity, eligibility, merge rollback, and terminalization are v4 authority tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_typed_receipt_proposal_selection_and_v1_commit_flow",
+        "tests/storage/test_authority_p2_dynamic.py::test_selection_classifies_stale_rows_without_partial_abort"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_sqlite_store.py",
+      "old_test": "test_full_merge_failure_rolls_back_global_and_update_state",
+      "reason": "Shared SQLite atomicity, eligibility, merge rollback, and terminalization are v4 authority tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_typed_receipt_proposal_selection_and_v1_commit_flow",
+        "tests/storage/test_authority_p2_dynamic.py::test_selection_classifies_stale_rows_without_partial_abort"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_sqlite_store.py",
+      "old_test": "test_full_merge_rejects_duplicate_learner_and_non_selected",
+      "reason": "Shared SQLite atomicity, eligibility, merge rollback, and terminalization are v4 authority tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_typed_receipt_proposal_selection_and_v1_commit_flow",
+        "tests/storage/test_authority_p2_dynamic.py::test_selection_classifies_stale_rows_without_partial_abort"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_sqlite_store.py",
+      "old_test": "test_normal_shutdown_finalizes_selected_and_pending_updates",
+      "reason": "Shared SQLite atomicity, eligibility, merge rollback, and terminalization are v4 authority tests.",
+      "replacement_assertions": [
+        "tests/storage/test_schema_v4.py::test_fresh_v4_schema_initializes_reopens_and_is_integral",
+        "tests/storage/test_leader_authority_commands.py::test_typed_receipt_proposal_selection_and_v1_commit_flow",
+        "tests/storage/test_authority_p2_dynamic.py::test_selection_classifies_stale_rows_without_partial_abort"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_staleness_evidence.py",
+      "old_test": "test_full_and_fragment_staleness_evidence_is_weighted_and_counted",
+      "reason": "Staleness weighting is unified; fragment-specific evidence columns are archived only.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_merge_weights_reject_nonfinite_or_negative_weight_parameters",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_merge_weights_use_stable_fsum_and_reject_duplicate_ids"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_staleness_evidence.py",
+      "old_test": "test_observational_link_uses_first_subsequent_learner_loss",
+      "reason": "Staleness weighting is unified; fragment-specific evidence columns are archived only.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_merge_weights_reject_nonfinite_or_negative_weight_parameters",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_merge_weights_use_stable_fsum_and_reject_duplicate_ids"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_syncer_runtime.py",
+      "old_test": "test_full_syncer_computes_publishes_and_resumes_bfloat16_on_cpu",
+      "reason": "Full sync/publish and device behavior is exercised by the mandatory v4 runtime; fragment runtime is gone.",
+      "replacement_assertions": [
+        "tests/storage/test_publication_v4.py::test_prepared_intent_precedes_io_and_commit_verifies_exact_theta_pair",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_production_v4_entrypoint_closure_has_no_classic_authority_or_shared_csv"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_syncer_runtime.py",
+      "old_test": "test_fragment_syncer_computes_and_publishes_bfloat16_on_cpu",
+      "reason": "The fragment syncer writer is unsupported.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_syncer_runtime.py",
+      "old_test": "test_explicit_cpu_device_is_honored",
+      "reason": "Full sync/publish and device behavior is exercised by the mandatory v4 runtime; fragment runtime is gone.",
+      "replacement_assertions": [
+        "tests/storage/test_publication_v4.py::test_prepared_intent_precedes_io_and_commit_verifies_exact_theta_pair",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_production_v4_entrypoint_closure_has_no_classic_authority_or_shared_csv"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_syncer_runtime.py",
+      "old_test": "test_publication_dtype_is_the_authoritative_quantization_boundary",
+      "reason": "Full sync/publish and device behavior is exercised by the mandatory v4 runtime; fragment runtime is gone.",
+      "replacement_assertions": [
+        "tests/storage/test_publication_v4.py::test_prepared_intent_precedes_io_and_commit_verifies_exact_theta_pair",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_production_v4_entrypoint_closure_has_no_classic_authority_or_shared_csv"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_syncer_runtime.py",
+      "old_test": "test_explicit_cuda_device_fails_when_cuda_is_unavailable",
+      "reason": "Full sync/publish and device behavior is exercised by the mandatory v4 runtime; fragment runtime is gone.",
+      "replacement_assertions": [
+        "tests/storage/test_publication_v4.py::test_prepared_intent_precedes_io_and_commit_verifies_exact_theta_pair",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_production_v4_entrypoint_closure_has_no_classic_authority_or_shared_csv"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_syncer_selection.py",
+      "old_test": "test_syncer_selection_respects_quorum_max",
+      "reason": "Selection, grace/visibility, quorum, and drain behavior are authoritative v4 state.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_persistent_fair_selector_meets_frozen_1000_round_gate",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_full_quorum_keeps_stable_set_and_reduction_order",
+        "tests/storage/test_visibility_v4.py::test_not_found_requires_three_stable_observations_and_grace"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_syncer_selection.py",
+      "old_test": "test_fastest_next_upload_eta_uses_measured_cycle_compute_time",
+      "reason": "Selection, grace/visibility, quorum, and drain behavior are authoritative v4 state.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_persistent_fair_selector_meets_frozen_1000_round_gate",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_full_quorum_keeps_stable_set_and_reduction_order",
+        "tests/storage/test_visibility_v4.py::test_not_found_requires_three_stable_observations_and_grace"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_syncer_selection.py",
+      "old_test": "test_update_first_seen_registry_is_stable_bounded_and_discardable",
+      "reason": "Selection, grace/visibility, quorum, and drain behavior are authoritative v4 state.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_persistent_fair_selector_meets_frozen_1000_round_gate",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_full_quorum_keeps_stable_set_and_reduction_order",
+        "tests/storage/test_visibility_v4.py::test_not_found_requires_three_stable_observations_and_grace"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_syncer_selection.py",
+      "old_test": "test_adaptive_grace_starts_at_ten_seconds_and_only_shortens",
+      "reason": "Selection, grace/visibility, quorum, and drain behavior are authoritative v4 state.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_persistent_fair_selector_meets_frozen_1000_round_gate",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_full_quorum_keeps_stable_set_and_reduction_order",
+        "tests/storage/test_visibility_v4.py::test_not_found_requires_three_stable_observations_and_grace"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_syncer_selection.py",
+      "old_test": "test_full_discovery_reads_only_fixed_pointer_surface",
+      "reason": "Selection, grace/visibility, quorum, and drain behavior are authoritative v4 state.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_persistent_fair_selector_meets_frozen_1000_round_gate",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_full_quorum_keeps_stable_set_and_reduction_order",
+        "tests/storage/test_visibility_v4.py::test_not_found_requires_three_stable_observations_and_grace"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_syncer_selection.py",
+      "old_test": "test_terminal_drain_requires_stopped_and_keeps_strict_eligibility",
+      "reason": "Selection, grace/visibility, quorum, and drain behavior are authoritative v4 state.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_persistent_fair_selector_meets_frozen_1000_round_gate",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_full_quorum_keeps_stable_set_and_reduction_order",
+        "tests/storage/test_visibility_v4.py::test_not_found_requires_three_stable_observations_and_grace"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_syncer_selection.py",
+      "old_test": "test_fragment_terminal_drain_allows_partial_quorum_and_rejects_future",
+      "reason": "Fragment-specific drain selection is unsupported.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_syncer_selection.py",
+      "old_test": "test_terminal_drain_distinguishes_closed_empty_from_reopened",
+      "reason": "Selection, grace/visibility, quorum, and drain behavior are authoritative v4 state.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_persistent_fair_selector_meets_frozen_1000_round_gate",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_full_quorum_keeps_stable_set_and_reduction_order",
+        "tests/storage/test_visibility_v4.py::test_not_found_requires_three_stable_observations_and_grace"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_syncer_selection.py",
+      "old_test": "test_all_expected_learners_stopped_requires_exact_expected_set",
+      "reason": "Selection, grace/visibility, quorum, and drain behavior are authoritative v4 state.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_persistent_fair_selector_meets_frozen_1000_round_gate",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_full_quorum_keeps_stable_set_and_reduction_order",
+        "tests/storage/test_visibility_v4.py::test_not_found_requires_three_stable_observations_and_grace"
+      ],
+      "statically_enumerable_cases": 6
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_syncer_selection.py",
+      "old_test": "test_shutdown_wait_ingests_final_heartbeats_into_learner_table",
+      "reason": "Selection, grace/visibility, quorum, and drain behavior are authoritative v4 state.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_persistent_fair_selector_meets_frozen_1000_round_gate",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_full_quorum_keeps_stable_set_and_reduction_order",
+        "tests/storage/test_visibility_v4.py::test_not_found_requires_three_stable_observations_and_grace"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_syncer_selection.py",
+      "old_test": "test_shutdown_timeout_formula_and_unconfirmed_learner_details",
+      "reason": "Selection, grace/visibility, quorum, and drain behavior are authoritative v4 state.",
+      "replacement_assertions": [
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_persistent_fair_selector_meets_frozen_1000_round_gate",
+        "tests/protocol/test_p3_accounting_selection_cursor.py::test_full_quorum_keeps_stable_set_and_reduction_order",
+        "tests/storage/test_visibility_v4.py::test_not_found_requires_three_stable_observations_and_grace"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_terminal_predecessor_capture.py",
+      "old_test": "test_terminal_predecessor_capture_is_default_off",
+      "reason": "This was a classic partial-terminal-merge research writer; read-only evaluation of existing captures remains.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_terminal_predecessor_capture.py",
+      "old_test": "test_capture_only_runs_for_input_closed_partial_terminal_merge",
+      "reason": "This was a classic partial-terminal-merge research writer; read-only evaluation of existing captures remains.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_terminal_predecessor_capture.py",
+      "old_test": "test_terminal_partial_selection_captures_without_mutating_runtime_authority",
+      "reason": "This was a classic partial-terminal-merge research writer; read-only evaluation of existing captures remains.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_terminal_predecessor_capture.py",
+      "old_test": "test_capture_hardlinks_weight_and_does_not_mutate_authorities",
+      "reason": "This was a classic partial-terminal-merge research writer; read-only evaluation of existing captures remains.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_terminal_predecessor_capture.py",
+      "old_test": "test_capture_falls_back_to_atomic_copy_and_supports_multiple_versions",
+      "reason": "This was a classic partial-terminal-merge research writer; read-only evaluation of existing captures remains.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_terminal_predecessor_capture.py",
+      "old_test": "test_capture_reuses_uncommitted_equal_copy_and_commits_manifest",
+      "reason": "This was a classic partial-terminal-merge research writer; read-only evaluation of existing captures remains.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_terminal_predecessor_capture.py",
+      "old_test": "test_capture_atomically_repairs_wrong_uncommitted_checkpoint",
+      "reason": "This was a classic partial-terminal-merge research writer; read-only evaluation of existing captures remains.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_terminal_predecessor_capture.py",
+      "old_test": "test_capture_recovers_after_checkpoint_before_manifest_crash",
+      "reason": "This was a classic partial-terminal-merge research writer; read-only evaluation of existing captures remains.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_terminal_predecessor_capture.py",
+      "old_test": "test_committed_capture_is_byte_idempotent",
+      "reason": "This was a classic partial-terminal-merge research writer; read-only evaluation of existing captures remains.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_terminal_predecessor_capture.py",
+      "old_test": "test_committed_capture_conflicts_fail_closed",
+      "reason": "This was a classic partial-terminal-merge research writer; read-only evaluation of existing captures remains.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 3
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_terminal_predecessor_capture.py",
+      "old_test": "test_committed_capture_rejects_source_mutation",
+      "reason": "This was a classic partial-terminal-merge research writer; read-only evaluation of existing captures remains.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_terminal_state_machine.py",
+      "old_test": "test_full_terminal_grace_rechecks_reopened_input_before_stopping",
+      "reason": "Classic discovery loops were replaced by the fenced v4 terminal state machine.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p3_operational.py::test_terminal_close_snapshot_cannot_be_rewritten_by_a_second_command",
+        "tests/storage/test_authority_p3_operational.py::test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "migrate-to-unified",
+      "old_path": "tests/test_terminal_state_machine.py",
+      "old_test": "test_full_closed_empty_runs_only_terminal_discovery",
+      "reason": "Classic discovery loops were replaced by the fenced v4 terminal state machine.",
+      "replacement_assertions": [
+        "tests/storage/test_authority_p3_operational.py::test_terminal_close_snapshot_cannot_be_rewritten_by_a_second_command",
+        "tests/storage/test_authority_p3_operational.py::test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens"
+      ],
+      "statically_enumerable_cases": 1
+    },
+    {
+      "classification": "delete-obsolete",
+      "old_path": "tests/test_terminal_state_machine.py",
+      "old_test": "test_fragment_closed_empty_runs_only_terminal_discovery",
+      "reason": "Fragment-specific terminal discovery is unsupported.",
+      "replacement_assertions": [],
+      "statically_enumerable_cases": 1
+    }
+  ],
+  "phase": "P5-delete-classic-refactor",
+  "scope": "every deleted test function between the P5 base and current worktree",
+  "source_base": "77e047cc5e291153736f9abbffb8986e6b912330",
+  "status": "PASS",
+  "summary": {
+    "classification_counts": {
+      "delete-obsolete": 40,
+      "migrate-to-unified": 208,
+      "retain-legacy-reader": 4
+    },
+    "collected_case_net_change": -321,
+    "count_explanation": "The collection delta includes deletion of classic/fragment and obsolete Plan01/02 fixtures, migration into denser parameterized v4 authority tests, and new P5 architecture/legacy/config regressions. Static case counts include only literal parametrize decorators; the compute pytest collection is authoritative.",
+    "current_statically_enumerable_cases": 453,
+    "current_test_functions": 363,
+    "deleted_statically_enumerable_cases": 291,
+    "deleted_test_files": 37,
+    "deleted_test_functions": 252,
+    "p4_baseline_collected": 894,
+    "p5_current_collected": 573,
+    "unique_current_replacement_assertions": 57
+  }
+}

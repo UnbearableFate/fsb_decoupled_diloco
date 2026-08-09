@@ -85,7 +85,7 @@ def main(argv: list[str] | None = None) -> None:
         raise RuntimeError("syncer candidate must use the immutable descriptor config")
     # Opening the strict authority is deliberately after the immutable
     # descriptor/bootstrap gate. It is the only writable runtime adapter.
-    from ..protocol.control_v4 import V4ControlPublisher
+    from ..storage.control import V4ControlPublisher
     from ..storage.authority import AuthorityIdentity, LeaderAuthority
     from ..storage.leader_lease import LeaseUnavailableError
 

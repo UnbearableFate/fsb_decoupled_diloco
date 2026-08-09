@@ -6,7 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
-from ..protocol.admission_v4 import publish_static_replacement_authorization
+from ..storage.admission import publish_static_replacement_authorization
 from ..protocol.contributor import StaticContributorFence
 from ..storage.paths import RunPaths
 
@@ -27,7 +27,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
     paths = RunPaths(Path(args.shared_root).resolve())
     old_fence = StaticContributorFence(
         kind="static",
@@ -36,15 +37,21 @@ def main(argv: list[str] | None = None) -> None:
         attempt_id=args.old_attempt_id,
         binding_generation=args.old_binding_generation,
     )
-    target = publish_static_replacement_authorization(
-        paths,
-        run_id=args.run_id,
-        descriptor_sha256=args.descriptor_sha256,
-        old_fence=old_fence,
-        new_logical_launch_id=args.new_logical_launch_id,
-        new_attempt_id=args.new_attempt_id,
-        reason=args.reason,
-    )
+    try:
+        target = publish_static_replacement_authorization(
+            paths,
+            run_id=args.run_id,
+            descriptor_sha256=args.descriptor_sha256,
+            old_fence=old_fence,
+            new_logical_launch_id=args.new_logical_launch_id,
+            new_attempt_id=args.new_attempt_id,
+            reason=args.reason,
+        )
+    except FileExistsError:
+        parser.error(
+            "immutable authorization collision: the requested attempt identity is already "
+            "bound to different content; issue the replacement with a fresh --new-attempt-id"
+        )
     print(json.dumps({"authorization_path": str(target)}, sort_keys=True))
 
 

@@ -25,7 +25,7 @@ from fs_diloco.core.config_v4 import (
 )
 from fs_diloco.modeling.hf_data import build_indexed_batch_iterator
 from fs_diloco.protocol._validation import identity as validate_identity
-from fs_diloco.protocol.admission_v4 import (
+from fs_diloco.storage.admission import (
     AdmissionAuthorizationError,
     AdmissionRejectedError,
     admission_request_sha256,
@@ -39,13 +39,13 @@ from fs_diloco.protocol.admission_v4 import (
     read_admission_response,
     read_static_replacement_authorization,
 )
-from fs_diloco.protocol import admission_v4 as admission_protocol
+from fs_diloco.storage import admission as admission_protocol
 from fs_diloco.protocol.contributor import (
     DynamicContributorFence,
     StaticContributorFence,
     StaticMembershipScope,
 )
-from fs_diloco.protocol.control_v4 import (
+from fs_diloco.storage.control import (
     V4ControlPublisher,
     read_current_control,
     wait_for_receipt_barrier,
@@ -173,13 +173,15 @@ def test_torch_baseline_configs_keep_explicit_shared_schema(path: Path) -> None:
     assert config.config_schema_version == 1
 
 
-def test_strict_v4_configs_have_a_temporary_validated_classic_oracle_projection() -> None:
-    local = resolve_config("configs/fs_diloco_tiny_local.yaml")
-    static_ha = resolve_config("configs/fs_diloco_tiny_ha_static.yaml")
-
-    assert local.coordination.syncer_ha.enabled is False
-    assert static_ha.coordination.syncer_ha.enabled is True
-    assert static_ha.coordination.syncer_ha.lease_duration_seconds == 30.0
+def test_strict_v4_configs_have_no_classic_oracle_projection() -> None:
+    for path in (
+        "configs/fs_diloco_tiny_local.yaml",
+        "configs/fs_diloco_tiny_ha_static.yaml",
+    ):
+        shared = resolve_config(path)
+        assert not hasattr(shared, "init")
+        assert not hasattr(shared, "fragments")
+        assert not hasattr(shared, "coordination")
 
 
 def test_retained_full_pbs_use_initializer_and_only_v4_runtime_shape() -> None:
@@ -216,8 +218,8 @@ def test_production_v4_entrypoint_closure_has_no_classic_authority_or_shared_csv
         Path("fs_diloco/runtime/syncer_v4.py"),
         Path("fs_diloco/runtime/learner_entrypoint.py"),
         Path("fs_diloco/runtime/learner_v4.py"),
-        Path("fs_diloco/protocol/control_v4.py"),
-        Path("fs_diloco/protocol/admission_v4.py"),
+        Path("fs_diloco/storage/control.py"),
+        Path("fs_diloco/storage/admission.py"),
     )
     forbidden = (
         "ha_mode",
@@ -696,9 +698,9 @@ def test_one_shot_hot_read_error_retries_without_discarding_valid_request(
         attempt_id="attempt-1",
         expected_generation=None,
     )
-    from fs_diloco.protocol import admission_v4
+    from fs_diloco.storage import admission
 
-    original_read = admission_v4._read_hot_request
+    original_read = admission._read_hot_request
     injected = False
 
     def fail_once(path: Path):
@@ -708,7 +710,7 @@ def test_one_shot_hot_read_error_retries_without_discarding_valid_request(
             raise OSError(5, "injected shared-filesystem read failure")
         return original_read(path)
 
-    monkeypatch.setattr(admission_v4, "_read_hot_request", fail_once)
+    monkeypatch.setattr(admission, "_read_hot_request", fail_once)
     try:
         _admit_requests(loaded, authority, leader, telemetry)
         assert request_path.is_file()
@@ -1585,13 +1587,13 @@ def test_heartbeat_publication_uses_exact_committed_lease_and_rejects_delay(
         assert renewed.heartbeat_seq == 2
 
         publisher = V4ControlPublisher(paths, token)
-        monkeypatch.setattr("fs_diloco.protocol.control_v4.time.time", lambda: 124.0)
+        monkeypatch.setattr("fs_diloco.storage.control.time.time", lambda: 124.0)
         heartbeat = publisher.publish_heartbeat(renewed)
         assert heartbeat["renewed_at"] == 105.0
         assert heartbeat["lease_expires_at"] == 125.0
         assert heartbeat["heartbeat_seq"] == 2
 
-        monkeypatch.setattr("fs_diloco.protocol.control_v4.time.time", lambda: 126.0)
+        monkeypatch.setattr("fs_diloco.storage.control.time.time", lambda: 126.0)
         with pytest.raises(RuntimeError, match="expired"):
             publisher.publish_heartbeat(renewed)
 

@@ -13,8 +13,7 @@ from typing import Any
 
 DEFAULT_SOURCE_RUN_ID = "20260709_142811_fs_diloco_gpt2_wikitext2_8l_5000steps"
 DEFAULT_CHECKPOINT_RELATIVE = (
-    "runs/fs_diloco/"
-    f"{DEFAULT_SOURCE_RUN_ID}/weights/global_v000047.safetensors"
+    f"runs/fs_diloco/{DEFAULT_SOURCE_RUN_ID}/weights/global_v000047.safetensors"
 )
 DEFAULT_CONFIG_RELATIVE = "configs/fs_diloco_gpt2_wikitext2_8l_5000steps.yaml"
 
@@ -67,7 +66,9 @@ def _find_latest_run_root(project_root: Path) -> Path:
             sort_key = latest_path.stat().st_mtime
         candidates.append((sort_key, latest_path.parent.parent))
     if not candidates:
-        raise FileNotFoundError(f"no usable latest.json found below {project_root / 'runs/fs_diloco'}")
+        raise FileNotFoundError(
+            f"no usable latest.json found below {project_root / 'runs/fs_diloco'}"
+        )
     return max(candidates, key=lambda item: item[0])[1].resolve()
 
 
@@ -122,7 +123,9 @@ def resolve_checkpoint(
     latest_version = None
     if latest.get("version") is not None:
         latest_version = int(latest["version"])
-    total_seen_tokens = latest.get("total_seen_tokens") if latest_version == global_version else None
+    total_seen_tokens = (
+        latest.get("total_seen_tokens") if latest_version == global_version else None
+    )
 
     param_index_value = latest.get("param_index_path")
     param_index_path = (
@@ -137,7 +140,9 @@ def resolve_checkpoint(
         config_path = _coerce_path(config, base=project_root)
     else:
         resolved_config = source_run_root / "control" / "run_config.resolved.yaml"
-        config_path = resolved_config if resolved_config.exists() else project_root / DEFAULT_CONFIG_RELATIVE
+        config_path = (
+            resolved_config if resolved_config.exists() else project_root / DEFAULT_CONFIG_RELATIVE
+        )
     if not config_path.exists():
         raise FileNotFoundError(f"config does not exist: {config_path}")
 
@@ -167,7 +172,7 @@ def export_checkpoint(
 ) -> dict[str, Any]:
     """Export an FS DiLoCo global checkpoint as a HuggingFace model directory."""
 
-    from ..core.config import load_config
+    from ..legacy.config_v1_v3 import load_query_config_snapshot
     from ..modeling.hf_model import load_causal_lm_and_tokenizer
     from ..modeling.param_index import (
         build_param_index,
@@ -189,7 +194,7 @@ def export_checkpoint(
     manifest["eval_id"] = eval_id
     manifest["export_dir"] = str(export_dir)
 
-    config_obj = load_config(manifest["config_path"])
+    config_obj = load_query_config_snapshot(manifest["config_path"])
     model, tokenizer = load_causal_lm_and_tokenizer(config_obj.model)
 
     param_index = load_param_index(manifest["param_index_path"])
@@ -291,7 +296,9 @@ def results_to_csv(
                     continue
                 rows.append(
                     {
-                        "eval_id": eval_id or manifest_payload.get("eval_id") or lm_eval_output.name,
+                        "eval_id": eval_id
+                        or manifest_payload.get("eval_id")
+                        or lm_eval_output.name,
                         "source_run_id": manifest_payload.get("source_run_id"),
                         "global_version": manifest_payload.get("global_version"),
                         "total_seen_tokens": manifest_payload.get("total_seen_tokens"),

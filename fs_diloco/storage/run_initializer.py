@@ -19,7 +19,6 @@ from .atomic_io import (
 )
 from .artifact_policy import ArtifactPolicy
 from .paths import RunPaths
-from .schema_bootstrap import BootstrapIdentity, open_existing
 
 
 PLAN03_REQUIREMENTS = frozenset({"AUDIT-01", "ENV-01", "INIT-01"})
@@ -29,7 +28,6 @@ _MUTABLE_SUBTREES = (
     "audit",
     "control/scheduler_operator_requests",
     "control/syncer_epochs",
-    "control/syncer_launch_claims",
     "control/registration_requests",
     "eval_checkpoints",
     "heartbeats",
@@ -578,55 +576,36 @@ def _validate_completed_protocol_identity(final_root: Path, *, validate_authorit
     ArtifactPolicy.from_dict(read_json(paths.artifact_policy_json))
     if not validate_authority:
         return
-    from ..core.versions import PROTOCOL_VERSION as V4_PROTOCOL_VERSION
     from ..protocol.contributor import DynamicMembershipScope, StaticMembershipScope
     from .authority import AuthorityIdentity, LeaderAuthority
 
-    if descriptor.get("protocol_version") == V4_PROTOCOL_VERSION:
-        if descriptor_mode == "full_ha_dynamic":
-            stream_pool_size = descriptor.get("stream_pool_size")
-            if isinstance(stream_pool_size, bool) or not isinstance(stream_pool_size, int):
-                raise RuntimeError("dynamic descriptor stream_pool_size is invalid")
-            scope = DynamicMembershipScope(stream_pool_size)
-        else:
-            learner_ids = descriptor.get("static_learner_ids")
-            if not isinstance(learner_ids, list) or not learner_ids:
-                raise RuntimeError("static descriptor learner IDs are invalid")
-            scope = StaticMembershipScope(tuple(str(item) for item in learner_ids))
-        authority = LeaderAuthority(
-            paths.sqlite_db,
-            AuthorityIdentity(
-                run_id=str(descriptor.get("run_id", "")),
-                source_fingerprint=str(descriptor.get("source_fingerprint", "")),
-                config_sha256=str(descriptor.get("resolved_config_sha256", "")),
-            ),
-            scope,
-            marker_path=paths.bootstrap_complete_json,
-            run_root=final_root,
-        )
-        try:
-            integrity = authority.read.integrity_check()
-            if integrity != ("ok",):
-                raise RuntimeError(f"run authority integrity check failed: {integrity}")
-        finally:
-            authority.close()
+    if descriptor_mode == "full_ha_dynamic":
+        stream_pool_size = descriptor.get("stream_pool_size")
+        if isinstance(stream_pool_size, bool) or not isinstance(stream_pool_size, int):
+            raise RuntimeError("dynamic descriptor stream_pool_size is invalid")
+        scope = DynamicMembershipScope(stream_pool_size)
     else:
-        connection = open_existing(
-            paths.sqlite_db,
-            BootstrapIdentity(
-                run_id=str(descriptor.get("run_id", "")),
-                source_fingerprint=str(descriptor.get("source_fingerprint", "")),
-                config_sha256=str(descriptor.get("resolved_config_sha256", "")),
-                mode=bootstrap_mode,
-            ),
-            marker_path=paths.bootstrap_complete_json,
-        )
-        try:
-            integrity = tuple(str(row[0]) for row in connection.execute("PRAGMA integrity_check"))
-            if integrity != ("ok",):
-                raise RuntimeError(f"run authority integrity check failed: {integrity}")
-        finally:
-            connection.close()
+        learner_ids = descriptor.get("static_learner_ids")
+        if not isinstance(learner_ids, list) or not learner_ids:
+            raise RuntimeError("static descriptor learner IDs are invalid")
+        scope = StaticMembershipScope(tuple(str(item) for item in learner_ids))
+    authority = LeaderAuthority(
+        paths.sqlite_db,
+        AuthorityIdentity(
+            run_id=str(descriptor.get("run_id", "")),
+            source_fingerprint=str(descriptor.get("source_fingerprint", "")),
+            config_sha256=str(descriptor.get("resolved_config_sha256", "")),
+        ),
+        scope,
+        marker_path=paths.bootstrap_complete_json,
+        run_root=final_root,
+    )
+    try:
+        integrity = authority.read.integrity_check()
+        if integrity != ("ok",):
+            raise RuntimeError(f"run authority integrity check failed: {integrity}")
+    finally:
+        authority.close()
 
 
 def _link_exact(source: Path, target: Path) -> None:

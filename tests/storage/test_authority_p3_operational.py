@@ -53,6 +53,7 @@ PLAN03_REQUIREMENTS = frozenset(
         "CLOCK-01",
         "DATA-02",
         "DATA-03",
+        "DMB-05",
         "DMB-09",
         "DMB-10",
         "SCHED-01",

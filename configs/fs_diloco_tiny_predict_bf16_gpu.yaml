@@ -78,11 +78,6 @@ learner:
   post_publish_latest_poll_seconds: 0.05
   prediction:
     reconcile_timeout_seconds: 5.0
-failure_sim:
-  enabled: false
-  sleep_jitter_seconds: 0.0
-  upload_skip_probability: 0.0
-  crash_probability: 0.0
 wandb:
   enabled: false
 coordination:

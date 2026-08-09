@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 
 from ..core.run_descriptor import load_run_descriptor
-from ..protocol.admission_v4 import (
+from ..storage.admission import (
     highest_static_generation,
     new_attempt_id,
     publish_dynamic_request_with_sha256,

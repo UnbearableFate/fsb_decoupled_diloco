@@ -5,6 +5,7 @@ import pytest
 import torch
 
 from fs_diloco.core.config import load_config, load_resolved_config_snapshot
+from fs_diloco.legacy.config_v1_v3 import load_query_config_snapshot
 from fs_diloco.tools.validation_eval import (
     attach_validation_to_summary,
     causal_cross_entropy_sum,
@@ -145,7 +146,7 @@ def test_summary_attachment_is_atomic_idempotent_and_mismatch_safe(tmp_path):
         )
 
 
-def test_historical_snapshot_loader_migrates_only_known_removed_keys(tmp_path):
+def test_current_snapshot_loader_refuses_legacy_runtime_keys(tmp_path):
     snapshot = tmp_path / "resolved.yaml"
     snapshot.write_text(
         """
@@ -159,5 +160,48 @@ learner:
 
     with pytest.raises(ValueError, match="sync.upload_mode"):
         load_config(snapshot)
-    config = load_resolved_config_snapshot(snapshot)
-    assert config.learner.prediction.reconcile_timeout_seconds == 12.5
+    with pytest.raises(ValueError, match="sync.upload_mode"):
+        load_resolved_config_snapshot(snapshot)
+
+    projected = load_query_config_snapshot(snapshot)
+    assert projected.sync.stop_after_outer_steps == 20
+    assert projected.learner.prediction.reconcile_timeout_seconds == 12.5
+
+
+def test_query_config_projection_supports_old_fragment_eval_without_runtime_modes(
+    tmp_path,
+):
+    snapshot = tmp_path / "legacy-fragment.yaml"
+    snapshot.write_text(
+        """config_schema_version: 1
+run:
+  name: historical-fragment
+model:
+  name_or_path: gpt2
+data:
+  dataset_name: wikitext
+  validation_split: validation
+fragments:
+  enabled: true
+failure_sim:
+  enabled: false
+coordination:
+  syncer_ha:
+    enabled: true
+sync:
+  upload_mode: fragment
+  stop_after_global_tokens: 1024
+learner:
+  prediction_reconcile_timeout_seconds: 17.0
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="移除|removed"):
+        load_resolved_config_snapshot(snapshot)
+    projected = load_query_config_snapshot(snapshot)
+
+    assert projected.run.name == "historical-fragment"
+    assert projected.model.name_or_path == "gpt2"
+    assert projected.data.validation_split == "validation"
+    assert projected.learner.prediction.reconcile_timeout_seconds == 17.0

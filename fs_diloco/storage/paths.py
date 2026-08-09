@@ -44,23 +44,6 @@ class RunPaths:
         return self.shared_root / "updates" / "payloads"
 
     @property
-    def updates_pending(self) -> Path:
-        """Compatibility alias for fragment proposal payload storage."""
-        return self.updates_payloads
-
-    @property
-    def fragments(self) -> Path:
-        return self.shared_root / "fragments"
-
-    @property
-    def fragment_weights(self) -> Path:
-        return self.fragments / "weights"
-
-    @property
-    def fragment_optim(self) -> Path:
-        return self.fragments / "optim"
-
-    @property
     def heartbeats(self) -> Path:
         return self.shared_root / "heartbeats"
 
@@ -75,10 +58,6 @@ class RunPaths:
     @property
     def syncer_epochs(self) -> Path:
         return self.control / "syncer_epochs"
-
-    @property
-    def syncer_launch_claims(self) -> Path:
-        return self.control / "syncer_launch_claims"
 
     @property
     def registration_requests(self) -> Path:
@@ -182,10 +161,6 @@ class RunPaths:
         return self.control / "param_index.json"
 
     @property
-    def fragment_index_json(self) -> Path:
-        return self.fragments / "fragment_index.json"
-
-    @property
     def resolved_config_yaml(self) -> Path:
         return self.control / "run_config.resolved.yaml"
 
@@ -209,15 +184,8 @@ class RunPaths:
     def syncer_epoch_history_jsonl(self) -> Path:
         return self.metrics / "syncer_epoch_history.jsonl"
 
-    @property
-    def recovery_submission_history_jsonl(self) -> Path:
-        return self.metrics / "recovery_submission_history.jsonl"
-
     def update_pointer_path(self, learner_id: str) -> Path:
         return self.updates_latest / f"{learner_id}.json"
-
-    def fragment_update_pointer_path(self, learner_id: str, fragment_id: int) -> Path:
-        return self.updates_latest / f"{learner_id}_f{int(fragment_id):03d}.json"
 
     def update_payload_dir(self, learner_id: str) -> Path:
         return self.updates_payloads / learner_id
@@ -422,12 +390,6 @@ class RunPaths:
         if self.registration_requests.is_dir():
             yield from sorted(self.registration_requests.glob("*.json"))
 
-    def fragment_weight_path(self, fragment_id: int, version: int) -> Path:
-        return self.fragment_weights / f"fragment_{fragment_id:03d}" / f"v{version:06d}.safetensors"
-
-    def fragment_outer_optim_path(self, fragment_id: int, version: int) -> Path:
-        return self.fragment_optim / f"fragment_{fragment_id:03d}" / f"v{version:06d}.safetensors"
-
 
 def prepare_run_dirs(paths: RunPaths, num_learners: int) -> None:
     for directory in [
@@ -436,9 +398,6 @@ def prepare_run_dirs(paths: RunPaths, num_learners: int) -> None:
         paths.optim,
         paths.updates_latest,
         paths.updates_payloads,
-        paths.fragments,
-        paths.fragment_weights,
-        paths.fragment_optim,
         paths.heartbeats,
         paths.logs,
         paths.metrics,
@@ -459,14 +418,10 @@ def prepare_authority_dirs(paths: RunPaths) -> None:
         paths.optim_epochs,
         paths.updates_latest,
         paths.updates_payloads,
-        paths.fragments,
-        paths.fragment_weights,
-        paths.fragment_optim,
         paths.heartbeats,
         paths.logs,
         paths.metrics,
         paths.syncer_epochs,
-        paths.syncer_launch_claims,
         paths.registration_requests,
         paths.registration_history_v4,
         paths.registration_dispositions_v4,

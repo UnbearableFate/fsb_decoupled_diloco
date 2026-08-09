@@ -36,6 +36,29 @@ BOUNDARY_COUNT_KEYS = (
     "torch_baseline_tests",
 )
 P1_BASELINE_COMPOSITION_MIGRATION = "fs_diloco/baselines/train.py"
+FROZEN_FULL_COMMIT = "a00a3d64a50f10a2478c3f4fe795e658d1b3b52f"
+P5_REMOVED_SOURCE = (
+    "fs_diloco/observability/metrics.py",
+    "fs_diloco/protocol/admission_v4.py",
+    "fs_diloco/protocol/control_v4.py",
+    "fs_diloco/protocol/control_epoch.py",
+    "fs_diloco/protocol/dynamic_terminal.py",
+    "fs_diloco/protocol/fragment_codec.py",
+    "fs_diloco/protocol/fragment_index.py",
+    "fs_diloco/protocol/fragment_scheduler.py",
+    "fs_diloco/protocol/liveness.py",
+    "fs_diloco/protocol/membership.py",
+    "fs_diloco/runtime/failure_sim.py",
+    "fs_diloco/runtime/launch_outbox.py",
+    "fs_diloco/runtime/learner.py",
+    "fs_diloco/runtime/syncer.py",
+    "fs_diloco/runtime/syncer_ha.py",
+    "fs_diloco/storage/fenced_store.py",
+    "fs_diloco/storage/maintenance.py",
+    "fs_diloco/storage/schema.sql",
+    "fs_diloco/storage/schema_bootstrap.py",
+    "fs_diloco/storage/sqlite_store.py",
+)
 
 # This retained P3 runtime result predates source-cleanliness fields. Its exact
 # path is frozen and separately bound to the reviewed clean target; every newly
@@ -60,10 +83,14 @@ def _git(root: Path, *args: str) -> str:
 
 def _tracked(root: Path, prefix: str, *, source_ref: str | None = None) -> list[str]:
     if source_ref is None:
-        output = _git(root, "ls-files", prefix)
+        output = _git(root, "ls-files", "--cached", "--others", "--exclude-standard", prefix)
     else:
         output = _git(root, "ls-tree", "-r", "--name-only", source_ref, "--", prefix)
-    return sorted(line for line in output.splitlines() if line)
+    return sorted(
+        line
+        for line in output.splitlines()
+        if line and (source_ref is not None or (root / line).exists())
+    )
 
 
 def _sha256(path: Path) -> str:
@@ -118,6 +145,8 @@ def _literal_string_set(node: ast.expr) -> set[str] | None:
 
 def _bound_mutators(root: Path, *, source_ref: str | None = None) -> list[str]:
     path = "fs_diloco/storage/fenced_store.py"
+    if source_ref is None and not (root / path).is_file():
+        return []
     tree = ast.parse(_read_text(root, path, source_ref=source_ref), filename=path)
     for node in tree.body:
         targets: list[ast.expr]
@@ -184,7 +213,7 @@ def inventory(root: Path, *, source_ref: str | None = None) -> dict[str, Any]:
     historical_config = "configs/fs_diloco_gpt2_wikitext2_8l_no_fragment_50x10.yaml"
     historical_pbs = "scripts/miyabi/run_9node_no_fragment_gpt2_wikitext2_50x10.pbs"
     recursive_anchor = "configs/5000/fs_diloco_gpt2_wikitext2_8l_200x25steps.yaml"
-    if historical_config not in configs or historical_pbs not in pbs:
+    if source_ref is not None and (historical_config not in configs or historical_pbs not in pbs):
         raise RuntimeError("historical full-control inventory boundary is missing")
     if recursive_anchor not in configs:
         raise RuntimeError("recursive config inventory anchor is missing")
@@ -416,6 +445,152 @@ def verify_boundaries(actual: dict[str, Any], expected: dict[str, Any]) -> list[
     for label, actual_value, expected_value in comparisons:
         if actual_value != expected_value:
             differences.append(label)
+    return differences
+
+
+def _imported_modules(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            modules.add(("." * node.level) + (node.module or ""))
+    return modules
+
+
+def verify_p5_contracts(root: Path, frozen: dict[str, Any]) -> list[str]:
+    """Verify the exact P5 removal, compatibility, and dependency boundary."""
+
+    differences: list[str] = []
+    boundaries = frozen["migration_boundaries"]
+    fragment_configs = tuple(boundaries["fragment_enabled_configs_delete_in_p5"])
+    fragment_pbs = tuple(boundaries["fragment_pbs_delete_in_p5"])
+    historical = boundaries["historical_full_control_archive_separately"]
+    if len(fragment_configs) != 8:
+        differences.append("deletion.fragment-config-frozen-count")
+    if len(fragment_pbs) != 5:
+        differences.append("deletion.fragment-pbs-frozen-count")
+    for relative in (
+        *P5_REMOVED_SOURCE,
+        *fragment_configs,
+        *fragment_pbs,
+        historical["config"],
+        historical["pbs"],
+    ):
+        if (root / relative).exists():
+            differences.append(f"deletion.still-present:{relative}")
+
+    for relative in (
+        "fs_diloco/syncer.py",
+        "fs_diloco/learner.py",
+        "fs_diloco/analysis.py",
+        "fs_diloco/eval_lm_harness.py",
+        "fs_diloco/legacy/config_v1_v3.py",
+        "fs_diloco/legacy/reader.py",
+        "fs_diloco/legacy/fragment_v0.py",
+        "fs_diloco/storage/admission.py",
+        "fs_diloco/storage/control.py",
+    ):
+        if not (root / relative).is_file():
+            differences.append(f"retained.missing:{relative}")
+
+    for tag in ARCHIVE_TAGS:
+        try:
+            target = _git(root, "rev-parse", f"{tag}^{{commit}}")
+        except subprocess.CalledProcessError:
+            target = None
+        if target != FROZEN_FULL_COMMIT:
+            differences.append(f"archive-tag.target:{tag}")
+
+    for path in sorted((root / "configs").rglob("*.yaml")):
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(payload, dict):
+            differences.append(f"config.not-mapping:{path.relative_to(root)}")
+            continue
+        for key in ("init", "fragments", "failure_sim"):
+            if key in payload:
+                differences.append(f"config.removed-key:{path.relative_to(root)}:{key}")
+        coordination = payload.get("coordination", {})
+        if not isinstance(coordination, dict):
+            differences.append(f"config.coordination-not-mapping:{path.relative_to(root)}")
+        elif set(coordination) - {"leader"}:
+            differences.append(f"config.removed-coordination:{path.relative_to(root)}")
+        sync = payload.get("sync", {})
+        if isinstance(sync, dict):
+            if "stop_after_global_tokens" in sync:
+                differences.append(f"config.ambiguous-token-stop:{path.relative_to(root)}")
+            if "capture_terminal_predecessor_for_eval" in sync:
+                differences.append(f"config.classic-terminal-capture:{path.relative_to(root)}")
+
+    boundary_roots = {
+        "protocol": root / "fs_diloco/protocol",
+        "runtime": root / "fs_diloco/runtime",
+        "baselines": root / "fs_diloco/baselines",
+    }
+    for area, base in boundary_roots.items():
+        for path in sorted(base.glob("*.py")):
+            modules = _imported_modules(path)
+            relative = path.relative_to(root).as_posix()
+            if area == "protocol" and any(
+                module.startswith(("..runtime", "..storage", "pathlib")) for module in modules
+            ):
+                differences.append(f"imports.protocol-adapter:{relative}")
+            if area == "runtime" and any("legacy" in module for module in modules):
+                differences.append(f"imports.runtime-legacy:{relative}")
+            if area == "baselines" and any("runtime" in module for module in modules):
+                differences.append(f"imports.baseline-runtime:{relative}")
+
+    for path in sorted((root / "fs_diloco/runtime").glob("*entrypoint.py")):
+        source = path.read_text(encoding="utf-8").lower()
+        relative = path.relative_to(root).as_posix()
+        if "sqlite3" in _imported_modules(path):
+            differences.append(f"entrypoint.sqlite:{relative}")
+        if any(command in source for command in ("qsub", "qstat")):
+            differences.append(f"entrypoint.scheduler-command:{relative}")
+        if any(statement in source for statement in ("select ", "insert ", "update ", "delete ")):
+            differences.append(f"entrypoint.sql:{relative}")
+
+    for area in ("runtime", "storage", "protocol", "baselines"):
+        for path in sorted((root / "fs_diloco" / area).glob("*.py")):
+            if "fragment" in path.read_text(encoding="utf-8").lower():
+                differences.append(f"writer.fragment-symbol:{path.relative_to(root)}")
+
+    ddl = "\n".join(
+        (root / relative).read_text(encoding="utf-8").lower()
+        for relative in (
+            "fs_diloco/storage/schema_v4.sql",
+            "fs_diloco/storage/schema_v4_dynamic.sql",
+        )
+    )
+    for table in (
+        "fragment_proposal_frontiers",
+        "fragments",
+        "fragment_versions",
+        "fragment_updates",
+    ):
+        if f"create table {table}" in ddl:
+            differences.append(f"ddl.fragment-table:{table}")
+
+    legacy_reader = (root / "fs_diloco/legacy/reader.py").read_text(encoding="utf-8")
+    normalized_reader = legacy_reader.lower().replace(" ", "")
+    if "mode=ro" not in normalized_reader or "query_only=on" not in normalized_reader:
+        differences.append("legacy.reader-not-query-only")
+    for table in (
+        "fragment_proposal_frontiers",
+        "fragments",
+        "fragment_versions",
+        "fragment_updates",
+    ):
+        if table not in legacy_reader:
+            differences.append(f"legacy.reader-missing-table:{table}")
+    for relative in (
+        "fs_diloco/tools/eval_lm_harness.py",
+        "fs_diloco/tools/validation_eval.py",
+        "fs_diloco/tools/publish_quality_gate.py",
+    ):
+        if "load_query_config_snapshot" not in (root / relative).read_text(encoding="utf-8"):
+            differences.append(f"legacy.query-config-not-used:{relative}")
     return differences
 
 
@@ -721,6 +896,11 @@ def main() -> None:
         action="store_true",
         help="verify reviewed P3 cross-file contracts without requiring retained phase evidence",
     )
+    parser.add_argument(
+        "--verify-p5-contracts",
+        action="store_true",
+        help="verify the current classic/fragment removal and legacy-reader boundary",
+    )
     args = parser.parse_args()
     root = args.root.resolve()
     try:
@@ -740,6 +920,10 @@ def main() -> None:
                     "differences": list(differences),
                 }
             }
+            if args.verify_p5_contracts:
+                p5_differences = verify_p5_contracts(root, expected)
+                checks["p5_contracts"] = {"differences": p5_differences}
+                differences.extend(f"p5_contracts.{item}" for item in p5_differences)
             if args.verify_boundaries:
                 current = inventory(root, source_ref=args.source_ref)
                 boundary_differences = verify_boundaries(current, expected)

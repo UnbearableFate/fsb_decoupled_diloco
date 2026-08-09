@@ -56,7 +56,7 @@ config["sync"].update(
     stop_after_outer_steps=20,
 )
 config["training"]["completion_mode"] = "global_only"
-assert config["coordination"]["recovery_submission"]["enabled"] is False
+assert "recovery_submission" not in config["coordination"]
 target.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
 PY
 
@@ -176,7 +176,7 @@ root = Path(sys.argv[1])
 resolved = yaml.safe_load(
     (root / "control/run_config.resolved.yaml").read_text(encoding="utf-8")
 )
-assert resolved["coordination"]["recovery_submission"]["enabled"] is False
+assert "recovery_submission" not in resolved["coordination"]
 connection = sqlite3.connect(root / "control/syncer_metadata.sqlite3")
 connection.row_factory = sqlite3.Row
 try:

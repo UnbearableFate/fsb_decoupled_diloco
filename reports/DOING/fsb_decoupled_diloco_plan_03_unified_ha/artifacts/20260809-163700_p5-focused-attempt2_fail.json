@@ -1,0 +1,31 @@
+{
+  "artifact_version": 1,
+  "phase": "P5-delete-classic-refactor",
+  "status": "FAIL",
+  "source_commit": "77e047cc5e291153736f9abbffb8986e6b912330",
+  "source_identity": {
+    "git_dirty": true
+  },
+  "pbs": {
+    "job_id": "2510803.opbs",
+    "compute_host": "mg0035",
+    "queue": "debug-g",
+    "nodes": 1,
+    "walltime_requested": "00:10:00",
+    "walltime_used": "00:00:01"
+  },
+  "gate": "p5-focused",
+  "failure_stage": "ruff-format-check",
+  "failure": {
+    "files": [
+      "fs_diloco/legacy/fragment_v0.py",
+      "tests/legacy/test_legacy_v1_v3_reader.py"
+    ],
+    "message": "2 files would be reformatted; pytest was not reached"
+  },
+  "modules": [
+    "nvidia/25.9",
+    "nv-hpcx/25.9"
+  ],
+  "raw_log": "fsdiloco_plan03_p5.o2510803"
+}

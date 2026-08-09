@@ -77,11 +77,6 @@ learner:
   global_adoption_strategy: replace
   post_publish_latest_wait_seconds: 2.5
   post_publish_latest_poll_seconds: 0.2
-failure_sim:
-  enabled: false
-  sleep_jitter_seconds: 0.0
-  upload_skip_probability: 0.0
-  crash_probability: 0.0
 wandb:
   enabled: true
   mode: offline

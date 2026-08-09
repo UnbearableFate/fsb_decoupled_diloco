@@ -127,7 +127,6 @@ def build_artifact_policy() -> dict[str, Any]:
                 "control/registration_dispositions_v4/**",
                 "control/static_replacement_requests/**",
                 "control/syncer_epochs/**",
-                "control/syncer_launch_claims/**",
                 "updates/receipts/**",
                 "updates/proposals/**",
                 "metrics/attestations/**",

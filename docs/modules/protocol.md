@@ -1,87 +1,15 @@
-# 模块参考:`fs_diloco/protocol`
+# 模块参考：protocol
 
-合并选择与加权、存活规则、HA epoch 权威控制、分片索引/编解码/调度。`merge.py` 和 `fragment_scheduler.py` 是纯函数模块;`liveness.py` 会读心跳/写 DB,control/fragment index/codec 也包含文件或 SQLite I/O。
+该包只包含纯对象和算法，不执行 Path/filesystem、SQLite、runtime 或 PBS I/O。
 
----
+- `proposal.py`：`FullUpdateProposalV2` strict JSON round-trip、path/size/digest/cursor/fence validation。
+- `cycle_receipt.py`：`CycleReceiptV1`、canonical receipt ID/path、hash chain 和 token/cursor invariants。
+- `contributor.py`：static/dynamic fence 与 membership scope；stable contributor key 在两种 topology 下统一选择语义。
+- `data_cursor.py`：`ContributorResumeState` 和 deterministic indexed block cursor。
+- `token_accounting.py`：`TrainingSegmentAccumulator`、segment snapshot 和 cycle accounting。
+- `selection.py`：persistent fair selector；committed service count、last served version、stable key 构成 deterministic order。
+- `merge.py`：typed staleness/token weight 与 stable reduction order。
+- `authority.py`：command/read result value objects，如 publication intent、selection batch、terminal/token summary、typed conflict。
+- `scheduler.py`：operator action/request 与 expected-state digest。
 
-## protocol/control_epoch.py — HA 权威控制
-
-- `_publish_immutable_json()` 以 temp + fsync + hardlink 实现 publish-once;目标已存在时只接受字节完全相同的幂等重试,冲突 fail closed。
-- `EpochControlPublisher` 只接受一个 `LeaderToken`:发布 epoch 心跳;把 DB committed version 重建为不可变 version pointer 和 epoch head;在隔离 DB 事务登记 `control_publications`;最后尽力更新 fixed latest/stop/summary cache。权威载荷的 `published_at` 来自稳定 DB row,以便同 epoch repair 字节幂等。
-- 正常终态采用两阶段世代:先发布不带 summary 的 early stop 让 learner 排空;maintenance 成功后 DB 世代递增,再成对发布最终 stop/summary。后继者修复不完整终态时也递增世代,因此世代表示一次不可变终态发布尝试,而不是用户 stop 决策计数。
-- `EpochControlReader` 不打开 SQLite;它扫描有界 epoch 目录,要求目录名、run/epoch/owner、自校验心跳或权威头部一致,以最高合法 epoch 作为 current。低于最高合法 epoch 的 torn 目录可视为 maintenance 并发删除而跳过,同级或更高损坏 fail closed;短 TTL 缓存避免同一 inner-step 反复递归扫描,并累计 scan/cache-hit/wall/CPU 遥测。head 精确绑定不可变 pointer 相对路径和 SHA,权威 stop 带排除自身字段计算的 `payload_sha256` 并在采用前重算;最高 epoch 尚无 head 时返回未就绪而不回退。返回 latest 时把相对 checkpoint 路径解析到 run root;fixed cache 和目录 mtime 都不参与选择。
-
-## protocol/membership.py — dynamic 身份与准入产物
-
-- `new_learner_instance_id()` 生成严格 UUIDv4 格式的 `learner_li_<uuid>`;`validate_learner_instance_id()`、`placement_id()` 分别约束化身和 `hostname:CUDA identity`。instance、placement 与 stream 不可互换。
-- `bootstrap_request_id()` 把 run、slot 和 descriptor/config fingerprint 哈希成确定性 logical request;`write_bootstrap_scheduler_jobs()` 在每次 qsub 后原子发布 slot→request→PBS job 绑定,`read_bootstrap_scheduler_jobs()` 复算 identity、自摘要、唯一 slot/request 和 job ID 语法。
-- 注册请求绑定 run/source/config、instance 拥有的路径、launch request、placement、PBS job、进程 identity、TTL 和内容 hash。reader 对重放返回冻结结果,对同 instance 内容冲突 fail closed;leader 对尚未获得 launch row 精确 scheduler 回执绑定的请求返回持久 pending 并保留文件,绑定后再重试准入。
-- `Admission` 解析并复算 leader 发布产物的 SHA;内容包括 placement/stream epoch、admission generation/token、launch request 与 restart 标记。`MembershipPublisher` 在 leader epoch 目录发布 bootstrap-ready 与每 instance admission/rejection,并把相对 path/SHA 登记为 control publication。
-
-## protocol/dynamic_terminal.py — manual close 与排空
-
-- `write_dynamic_close_request()` 用 descriptor 的 run/source/config identity 发布幂等、自摘要 operator 请求;已存在的 identity 冲突拒绝,避免手写 stop 文件绕过 controller。
-- `DynamicTerminalPublisher.publish_drain()` 把 DB 中冻结的 close generation/reason/requested time/max terminal version 发布到 current epoch terminal 目录并登记 control publication。
-- `read_current_drain()` 只接受目录 epoch/owner、run、format 和 payload SHA 全部一致的产物,并按 `(epoch, generation)` 选择最高者;learner 不会采用 lower-epoch 或损坏排空。
-
----
-
-## protocol/merge.py — 合并选择与 token/陈旧度加权
-
-- **`staleness(current_version, base_global_version) -> int`** — `max(0, current − base)`;纯函数本身把 future base 截为 0,不负责拒绝,runtime/SQLite eligible 查询必须先执行 `base≤current` 准入。
-- **`raw_update_weight(tokens, staleness_versions, staleness_lambda) -> float`** — `tokens / (1 + λ·staleness)`。
-- **`normalized_update_weights(updates, *, current_version, staleness_lambda) -> dict[update_id, float]`** — 对选中集合计算原始权重并归一化(和为 1);总权重非正时抛 `ValueError`(如全部 tokens=0)。
-- full proposal 的加权仍假设整个上传区间基于行内单一 `base_global_version`;replace + 中途轮询的混合 base 由 `mid_cycle_adoption_count/base_switched_at_step` 标注为可观测近似,不改变本模块计算。
-- **`normalized_fragment_update_weights(updates, *, current_fragment_version, staleness_lambda)`** — 同上,陈旧度以 `base_fragment_version` 计。
-- **`select_one_per_learner(updates, *, policy, quorum_max) -> list`** — 每 learner 至多留一份:
-  - `most_recent_per_learner`:取 `(local_step_end, committed_at)` 最大者,结果按 `(learner_id, local_step_end)` 排序;
-  - `oldest_pending`:取 committed_at 最早者,结果按 `(committed_at, learner_id)` 排序(可配置的备选策略;末端排空与常规合并共用 `sync.selection_policy`,不做末端切换);
-  - 最后截断到 `quorum_max`。
-- **`stale_update_ids(updates, *, current_version, max_staleness_versions)`** / **`stale_fragment_update_ids(...)`** — 挑出过窗更新的 id(供测试/工具;运行时用 SQL 版 `drop_obsolete_*`)。
-- **`weighted_average_tensors(tensors, weights)`** — `Σ wᵢ·tᵢ`;先做 `tensors[0].mul(w0)`,再逐项用返回新 tensor 的 `result.add(tensor, alpha=w)` 累加。它不 stack 全部 update,也不就地改写输入 tensor;空列表或长度不匹配报错。
-
-## protocol/liveness.py — 心跳与存活分类
-
-- **`valid_learner_ids(num_learners) -> set[str]`** — 合法 id 集合 `{learner_000...}`。
-- **`validate_heartbeat(payload, *, run_id, num_learners) -> (bool, reason)`** — 校验 format_version / run_id / learner_id / timestamp;不合法返回失败原因字段名。
-- **`_read_heartbeat(path)`** — 一次读取原子发布文件的精确 bytes,JSON 必须是 object;同时返回 bytes 的 SHA256。OSError/JSON 损坏/非 object 返回 None。
-- **`capture_heartbeat_fences(...)`** — resume 前只为通过 run/format/learner 校验的 pointer 保存 `learner_id → exact-bytes SHA256`;不存在的目录得到空 dict。
-- **`ingest_heartbeats(store, heartbeat_dir, *, run_id, num_learners, heartbeat_fences)`** — 扫描 `heartbeats/learner_*.json`,跳过无效 JSON、identity 不符或与当前世代隔离栅栏完全相同的 bytes;其余 `upsert_learner` 入库(status 缺省 active,status_reason 优先显式 reason、否则 phase),返回实际 upsert 数。隔离栅栏不会因看到新内容而在内存中删除,但新 fingerprint 自然不匹配。
-- **`classify_liveness(*, now, last_seen, current_status, stale_after_seconds, dead_after_seconds) -> (status, reason)`** — 分类规则:
-  - `stopped` 粘性(learner 自报退出后不再重分类);
-  - 从未见过 → `dead("never_seen")`;
-  - 心跳年龄 ≤ stale_after → `active`;≤ dead_after → `stale`;否则 `dead`(reason 带年龄)。
-- **`update_liveness_statuses(store, *, stale_after_seconds, dead_after_seconds, now=None) -> dict[status, count]`** — 对库中每个 learner 重分类并写回,返回各状态计数。
-- **`no_progress_timed_out(last_progress_time, timeout_seconds, now=None) -> bool`** — 使用 `time.time()` 墙钟,严格 `now-last > timeout` 才为 true;与自适应宽限/learner 看门狗的单调时钟不同。
-
-## protocol/fragment_index.py — 分片索引
-
-fragment index JSON 结构:`{format_version, strategy, num_fragments, total_numel, source_param_index_path, fragments: [{fragment_id, numel, size_bytes_float32, slices: [{param_name, param_offset, param_numel, flat_start, flat_end, shape, dtype}]}]}`。当前两种策略都以**整张量**为切片单位(`param_offset` 恒 0、`param_numel` = 张量 numel)。
-
-- **`_slice_from_param(entry)`**(私有)— param index 条目 → 覆盖整个张量的 slice 描述。
-- **`_fragment_payload(fragment_id, slices)`**(私有)— slices 按 flat_start 排序、汇总 numel。
-- **`build_fragment_index(param_index, *, strategy, num_fragments, source_param_index_path) -> dict`** —
-  - `full`:全部张量进 0 号片(要求 num_fragments=1);
-  - `balanced_tensor`:张量按 numel 降序,贪心放入当前总量最小的桶(要求 num_fragments ≤ 张量数);
-  - 构建后立即 `validate_fragment_index` 自检。
-- **`validate_fragment_index(fragment_index, param_index=None)`** — 严格校验:format_version、fragments 非空、id 从 0 连续、每片非空且 numel 与 slices 一致、所有 slice 区间**无缝且不重叠地精确覆盖** `[0, total_numel)`、(可选)引用的参数名都在 param index 中。任何违例抛 `ValueError`。
-- **`fragment_by_id(fragment_index, fragment_id)`** — 查找,不存在抛 `KeyError`。
-- **`save_fragment_index(fragment_index, path)`** / **`load_fragment_index(path)`** — 原子写 / 读取+校验。
-- **`fragment_size_summary(fragment_index) -> {min,max,mean,imbalance_ratio}`** — 分片均衡度统计(分析工具用)。
-
-## protocol/fragment_codec.py — 分片张量操作与存取
-
-常量 `FRAGMENT_TENSOR_KEY = "fragment_params"`(分片 safetensors 的统一键)。
-
-- **`extract_fragment(flat, fragment_index, fragment_id) -> Tensor`** — 按 slices 从完整扁平向量中切出该片(拼接为连续向量)。
-- **`extract_fragment_from_model(model, fragment_index, fragment_id, *, dtype, device="cpu") -> Tensor`** — 根据 slices 的参数名/参数内 offset 直接读取目标参数并拼成连续 fragment;只搬运目标片,同时校验参数名、切片边界与总 numel。
-- **`scatter_fragment(flat, fragment_index, fragment_id, fragment_tensor) -> Tensor`** — 逆操作:把片写回完整向量的对应区间(在 clone 上操作,返回新张量);numel 不符报错。
-- **`load_fragment_into_model(model, fragment_tensor, param_index, fragment_index, fragment_id)`** — 扁平化当前模型 → scatter 该片 → `load_flat_into_model` 写回(`@torch.no_grad`)。
-- **`save_fragment_update(path, fragment_tensor, dtype)`** / **`load_fragment_update(path, device, dtype=float32)`** — learner 上传/ syncer 读取的分片更新(存盘与加载 dtype 分别可配)。
-- **`save_fragment_weight(path, fragment_tensor, dtype=None)`** / **`load_fragment_weight(path, device)`** — syncer 按可选 dtype 发布;加载函数无论落盘 dtype 如何都转换为 FP32,这与 `load_fragment_update(..., dtype)` 的可配 compute dtype 不同。
-- **`materialize_full_from_fragments(fragment_tensors, fragment_index, total_numel) -> Tensor`** — 非空时以第一片的 dtype/device 建完整 uninitialized flat,再逐片 scatter;缺片报错。输入 dict 为空时直接返回 CPU FP32 空 tensor,不检查 `total_numel`。
-
-## protocol/fragment_scheduler.py — 调度
-
-- **`select_fragment(index, num_fragments, *, schedule="round_robin_global") -> int`** — `index mod num_fragments`;syncer 传 `global_merge_event`,learner 传 `local_update_index`,两侧节奏天然对齐。
-- **`expected_fragment_versions_after_events(num_fragments, global_merge_events, *, schedule) -> dict[fragment_id, version]`** — 模拟 E 次事件后各片应达到的版本(分析断言用)。
+filesystem admission/control adapters 位于 `storage/`；这不是 protocol 层的例外。

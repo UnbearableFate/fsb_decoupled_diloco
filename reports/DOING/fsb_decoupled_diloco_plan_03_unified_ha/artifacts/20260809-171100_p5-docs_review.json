@@ -1,0 +1,35 @@
+{
+  "artifact_version": 1,
+  "phase": "P5-delete-classic-refactor",
+  "status": "PASS",
+  "updated": [
+    "README.md",
+    "docs/README.md",
+    "docs/00-glossary.md",
+    "docs/01-overview.md",
+    "docs/02-architecture.md",
+    "docs/03-runtime-flow.md",
+    "docs/04-data-flow.md",
+    "docs/05-code-structure.md",
+    "docs/06-configuration.md",
+    "docs/07-operations.md",
+    "docs/modules/core.md",
+    "docs/modules/modeling.md",
+    "docs/modules/observability.md",
+    "docs/modules/protocol.md",
+    "docs/modules/runtime-learner.md",
+    "docs/modules/runtime-syncer.md",
+    "docs/modules/scripts.md",
+    "docs/modules/storage.md",
+    "docs/modules/tools.md"
+  ],
+  "added": ["docs/08-compatibility-and-migration.md"],
+  "checks": {
+    "relative_markdown_links_exist": true,
+    "only_one_new_docs_chapter": true,
+    "archive_full_commit_recorded": "a00a3d64a50f10a2478c3f4fe795e658d1b3b52f",
+    "stable_docs_contain_job_ids_or_measured_results": false,
+    "classic_and_fragment_described_only_as_removed_or_query_only": true
+  },
+  "p6_followup": "After a qualifying greater-than-50x10 nine-node experiment, append only verified behavior/results required by repository documentation synchronization."
+}

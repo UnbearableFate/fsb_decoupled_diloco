@@ -13,11 +13,14 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-from ..protocol.fragment_index import fragment_size_summary, load_fragment_index
-from ..protocol.fragment_scheduler import expected_fragment_versions_after_events
+from ..legacy.fragment_v0 import (
+    expected_fragment_versions_after_events,
+    fragment_size_summary,
+    load_fragment_index,
+)
+from ..legacy.reader import open_query_only_database as open_readonly
 from ..storage.atomic_io import safe_read_json
 from ..storage.paths import RunPaths
-from ..storage.schema_bootstrap import open_readonly
 
 
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:

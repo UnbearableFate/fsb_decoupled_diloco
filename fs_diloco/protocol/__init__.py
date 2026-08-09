@@ -1,4 +1,4 @@
-"""Fragmenting, merge selection, liveness, and versioned protocol objects."""
+"""Pure Full Protocol v4 authority, accounting, selection, and merge objects."""
 
 from .authority import (
     ContributorProgress,

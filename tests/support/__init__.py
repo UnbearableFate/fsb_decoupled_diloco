@@ -5,11 +5,9 @@ from .fault_tape import FaultTape
 from .ids import DeterministicIds
 from .pbs import FakePBS
 from .performance import PairedPerformanceResult, paired_noninferiority
-from .tmp_authority import DynamicAuthorityHarness
 
 __all__ = [
     "DeterministicIds",
-    "DynamicAuthorityHarness",
     "FakePBS",
     "FaultTape",
     "PairedPerformanceResult",

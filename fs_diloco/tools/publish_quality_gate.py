@@ -10,7 +10,8 @@ import statistics
 from pathlib import Path
 from typing import Any
 
-from ..core.config import config_to_dict, load_resolved_config_snapshot
+from ..core.config import config_to_dict
+from ..legacy.config_v1_v3 import load_query_config_snapshot
 
 
 _T_CRITICAL_95 = {
@@ -51,18 +52,15 @@ def roundtrip_trend(values: list[float]) -> dict[str, Any]:
     x_mean = sum(x_values) / count
     y_mean = sum(finite) / count
     sxx = sum((value - x_mean) ** 2 for value in x_values)
-    slope = sum(
-        (x_value - x_mean) * (y_value - y_mean)
-        for x_value, y_value in zip(x_values, finite)
-    ) / sxx
+    slope = (
+        sum((x_value - x_mean) * (y_value - y_mean) for x_value, y_value in zip(x_values, finite))
+        / sxx
+    )
     intercept = y_mean - slope * x_mean
     residual_sum_squares = sum(
-        (y_value - (intercept + slope * x_value)) ** 2
-        for x_value, y_value in zip(x_values, finite)
+        (y_value - (intercept + slope * x_value)) ** 2 for x_value, y_value in zip(x_values, finite)
     )
-    slope_standard_error = math.sqrt(
-        max(0.0, residual_sum_squares / (count - 2) / sxx)
-    )
+    slope_standard_error = math.sqrt(max(0.0, residual_sum_squares / (count - 2) / sxx))
     margin = _t_critical(count - 2) * slope_standard_error
     ci_low = slope - margin
     ci_high = slope + margin
@@ -121,9 +119,7 @@ def evaluate_publish_quality_gate(
     fp32_values = [float(fp32_losses[seed]) for seed in matched]
     sigma_fp32 = statistics.stdev(fp32_values)
     epsilon = max(0.01, sigma_fp32)
-    degradations = {
-        seed: float(bf16_losses[seed]) - float(fp32_losses[seed]) for seed in matched
-    }
+    degradations = {seed: float(bf16_losses[seed]) - float(fp32_losses[seed]) for seed in matched}
     mean_degradation = sum(degradations.values()) / len(degradations)
     worst_degradation = max(degradations.values())
     loss_gate_pass = mean_degradation <= epsilon and all(
@@ -164,7 +160,7 @@ def _read_metric_values(path: Path, field: str) -> list[float]:
 
 
 def _normalized_pair_config(path: Path) -> tuple[dict[str, Any], str, int]:
-    config = load_resolved_config_snapshot(path)
+    config = load_query_config_snapshot(path)
     payload = config_to_dict(config)
     publish_dtype = str(payload["syncer"]["publish_dtype"])
     seed = int(payload["training"]["seed"])
@@ -213,14 +209,11 @@ def _parse_seed_roots(values: list[str]) -> dict[int, Path]:
 def evaluate_run_roots(fp32_roots: dict[int, Path], bf16_roots: dict[int, Path]) -> dict[str, Any]:
     fp32 = {seed: _run_evidence(root) for seed, root in fp32_roots.items()}
     bf16 = {seed: _run_evidence(root) for seed, root in bf16_roots.items()}
-    fingerprints = {
-        evidence["source_fingerprint"] for evidence in (*fp32.values(), *bf16.values())
-    }
+    fingerprints = {evidence["source_fingerprint"] for evidence in (*fp32.values(), *bf16.values())}
     if len(fingerprints) != 1:
         raise ValueError(f"source fingerprints differ: {sorted(fingerprints)}")
     protocols = {
-        evidence["validation_protocol_sha256"]
-        for evidence in (*fp32.values(), *bf16.values())
+        evidence["validation_protocol_sha256"] for evidence in (*fp32.values(), *bf16.values())
     }
     if len(protocols) != 1:
         raise ValueError(f"validation protocols differ: {sorted(protocols)}")

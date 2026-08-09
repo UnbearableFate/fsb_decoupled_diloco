@@ -168,19 +168,6 @@ class ConfigV4:
             raise ValueError("full_v4 profile cannot be used to validate a torch baseline config")
         self.leader.validate()
         self.maintenance.validate(self.leader)
-        if self.shared.init.resume:
-            raise ValueError("init.resume is removed from Full Protocol v4")
-        if self.shared.coordination.syncer_ha.enabled:
-            raise ValueError(
-                "coordination.syncer_ha is removed from Full Protocol v4; leader is mandatory"
-            )
-        if self.shared.fragments.enabled:
-            raise ValueError("fragments are not supported by Full Protocol v4")
-        if self.shared.sync.stop_after_global_tokens is not None:
-            raise ValueError(
-                "sync.stop_after_global_tokens is ambiguous and removed; use "
-                "sync.stop_after_direct_weight_tokens_applied"
-            )
         if self.shared.data.streaming:
             raise ValueError(
                 "data.streaming=true is not resumable in v4; use indexed/materialized data"
@@ -194,10 +181,13 @@ class ConfigV4:
 
 
 _REMOVED_V4_PATHS = (
-    ("init", "resume"),
+    ("init",),
     ("fragments",),
+    ("failure_sim",),
     ("coordination", "syncer_ha"),
+    ("coordination", "recovery_submission"),
     ("sync", "stop_after_global_tokens"),
+    ("sync", "capture_terminal_predecessor_for_eval"),
 )
 
 
@@ -221,9 +211,6 @@ def load_config_v4(path: str | Path, *, profile: ConfigProfile | str) -> ConfigV
         raise ValueError("coordination must be a mapping")
     coordination_payload = dict(coordination)
     leader_payload = coordination_payload.pop("leader", {})
-    payload["coordination"] = {
-        "recovery_submission": coordination_payload.pop("recovery_submission", {})
-    }
     if coordination_payload:
         raise ValueError("unknown coordination keys: " + ", ".join(sorted(coordination_payload)))
     maintenance_payload = payload.pop("maintenance", {})
@@ -253,19 +240,12 @@ def config_v4_to_dict(config: ConfigV4) -> dict[str, Any]:
 
     config.validate(ConfigProfile.FULL_V4)
     payload = config_to_dict(config.shared)
-    payload.pop("init", None)
-    payload.pop("fragments", None)
-    coordination = payload.get("coordination")
-    if not isinstance(coordination, dict):
-        raise RuntimeError("internal coordination serialization is invalid")
-    coordination.pop("syncer_ha", None)
-    coordination["leader"] = dataclasses.asdict(config.leader)
+    payload["coordination"] = {"leader": dataclasses.asdict(config.leader)}
     payload["config_schema_version"] = config.config_schema_version
     payload["maintenance"] = dataclasses.asdict(config.maintenance)
     sync = payload.get("sync")
     if not isinstance(sync, dict):
         raise RuntimeError("internal sync serialization is invalid")
-    sync.pop("stop_after_global_tokens", None)
     if config.stop_after_direct_weight_tokens_applied is not None:
         sync["stop_after_direct_weight_tokens_applied"] = (
             config.stop_after_direct_weight_tokens_applied
@@ -355,6 +335,7 @@ def migrate_v3_payload_to_v4(payload: Any) -> tuple[dict[str, Any], list[dict[st
 
     remove(("init",), reason="classic resume authority is removed")
     remove(("fragments",), reason="fragment runtime is not expressible in v4")
+    remove(("failure_sim",), reason="classic learner failure injection is removed")
     sync = migrated.setdefault("sync", {})
     if not isinstance(sync, dict):
         raise ValueError("sync must be a mapping")
@@ -371,6 +352,10 @@ def migrate_v3_payload_to_v4(payload: Any) -> tuple[dict[str, Any], list[dict[st
     coordination = migrated.setdefault("coordination", {})
     if not isinstance(coordination, dict):
         raise ValueError("coordination must be a mapping")
+    remove(
+        ("coordination", "recovery_submission"),
+        reason="legacy recovery-submission proxy is removed",
+    )
     legacy_ha = coordination.pop("syncer_ha", None)
     if legacy_ha is not None:
         if not isinstance(legacy_ha, dict):
@@ -445,7 +430,6 @@ def _config_v4_from_payload(loaded: Any) -> ConfigV4:
     if not isinstance(coordination, dict):
         raise ValueError("coordination must be a mapping")
     leader_payload = coordination.pop("leader", {})
-    payload["coordination"] = {"recovery_submission": coordination.pop("recovery_submission", {})}
     if coordination:
         raise ValueError("unknown coordination keys: " + ", ".join(sorted(coordination)))
     maintenance_payload = payload.pop("maintenance", {})

@@ -19,6 +19,12 @@ from .versions import CONFIG_SCHEMA_VERSION
 T = TypeVar("T")
 
 REMOVED_CONFIG_KEYS: dict[str, str | None] = {
+    "init": None,
+    "fragments": None,
+    "failure_sim": None,
+    "coordination": None,
+    "sync.stop_after_global_tokens": "sync.stop_after_direct_weight_tokens_applied",
+    "sync.capture_terminal_predecessor_for_eval": None,
     "sync.upload_mode": None,
     "liveness.quorum_policy": None,
     "inner_optimizer.reset_on_global_update": None,
@@ -116,11 +122,6 @@ class RunSection(ConfigSection):
 
 
 @dataclass
-class InitSection(ConfigSection):
-    resume: bool = False
-
-
-@dataclass
 class ModelSection(ConfigSection):
     name_or_path: str = "gpt2"
     revision: str | None = None
@@ -165,10 +166,8 @@ class SyncSection(ConfigSection):
     selection_policy: str = "most_recent_per_learner"
     scan_interval_seconds: float = 2.0
     ingest_during_publish: bool = False
-    capture_terminal_predecessor_for_eval: bool = False
     grace_window: GraceWindowSection = field(default_factory=GraceWindowSection)
     stop_after_outer_steps: int | None = 20
-    stop_after_global_tokens: int | None = None
     stop_file_poll_seconds: float = 5.0
 
 
@@ -178,46 +177,6 @@ class SyncerSection(ConfigSection):
     compute_dtype: str = "float32"
     publish_dtype: str = "float32"
     parallel_checkpoint_writes: bool = True
-
-
-@dataclass
-class SyncerHASection(ConfigSection):
-    enabled: bool = False
-    lease_duration_seconds: float = 90.0
-    renew_interval_seconds: float = 10.0
-    max_clock_skew_seconds: float = 2.0
-    heartbeat_interval_seconds: float = 5.0
-    heartbeat_stale_after_seconds: float = 30.0
-    lease_busy_timeout_ms: int = 5000
-    business_busy_timeout_ms: int = 60_000
-    candidate_acquire_poll_seconds: float = 5.0
-    candidate_wait_seconds: float = 180.0
-    learner_recovery_wait_seconds: float = 1800.0
-    canonical_repair_wait_seconds: float = 120.0
-    max_retained_epoch_dirs: int = 32
-
-
-@dataclass
-class RecoverySubmissionSection(ConfigSection):
-    enabled: bool = False
-    claim_timeout_seconds: float = 120.0
-    reconciliation_interval_seconds: float = 60.0
-    uncertainty_timeout_seconds: float = 300.0
-    backoff_initial_seconds: float = 60.0
-    backoff_max_seconds: float = 900.0
-    max_attempts_per_observation: int = 3
-    max_outstanding_candidates: int = 1
-    claim_retention_seconds: float = 3600.0
-    candidate_pbs_script: str = "scripts/miyabi/run_syncer_candidate.pbs"
-    candidate_walltime: str | None = None
-
-
-@dataclass
-class CoordinationSection(ConfigSection):
-    syncer_ha: SyncerHASection = field(default_factory=SyncerHASection)
-    recovery_submission: RecoverySubmissionSection = field(
-        default_factory=RecoverySubmissionSection
-    )
 
 
 @dataclass
@@ -344,25 +303,6 @@ class LearnerSection(ConfigSection):
 
 
 @dataclass
-class FragmentSection(ConfigSection):
-    enabled: bool = False
-    strategy: str = "full"
-    num_fragments: int = 1
-    schedule: str = "round_robin_global"
-    fragments_per_update: int = 1
-    reset_inner_optimizer_on_fragment_adopt: bool = True
-    materialize_full_every_events: int | None = None
-
-
-@dataclass
-class FailureSimSection(ConfigSection):
-    enabled: bool = False
-    sleep_jitter_seconds: float = 0.0
-    upload_skip_probability: float = 0.0
-    crash_probability: float = 0.0
-
-
-@dataclass
 class WandbSection(ConfigSection):
     enabled: bool = True
     mode: str | None = "offline"
@@ -382,12 +322,10 @@ class TorchBaselineSection(ConfigSection):
 class Config(ConfigSection):
     config_schema_version: int = CONFIG_SCHEMA_VERSION
     run: RunSection = field(default_factory=RunSection)
-    init: InitSection = field(default_factory=InitSection)
     model: ModelSection = field(default_factory=ModelSection)
     data: DataSection = field(default_factory=DataSection)
     sync: SyncSection = field(default_factory=SyncSection)
     syncer: SyncerSection = field(default_factory=SyncerSection)
-    coordination: CoordinationSection = field(default_factory=CoordinationSection)
     membership: MembershipSection = field(default_factory=MembershipSection)
     scaling: ScalingSection = field(default_factory=ScalingSection)
     terminal: TerminalSection = field(default_factory=TerminalSection)
@@ -397,13 +335,11 @@ class Config(ConfigSection):
     outer_optimizer: OuterOptimizerSection = field(default_factory=OuterOptimizerSection)
     io: IOSection = field(default_factory=IOSection)
     learner: LearnerSection = field(default_factory=LearnerSection)
-    fragments: FragmentSection = field(default_factory=FragmentSection)
-    failure_sim: FailureSimSection = field(default_factory=FailureSimSection)
     wandb: WandbSection = field(default_factory=WandbSection)
     torch_baseline: TorchBaselineSection = field(default_factory=TorchBaselineSection)
 
-    def validate(self, *, profile: str = "legacy_oracle", path: str | None = None) -> None:
-        if profile not in {"legacy_oracle", "full_v4_shared", "torch_baseline"}:
+    def validate(self, *, profile: str = "full_v4_shared", path: str | None = None) -> None:
+        if profile not in {"full_v4_shared", "torch_baseline"}:
             raise ValueError(f"unknown config validation profile: {profile}")
         for field_info in dataclasses.fields(self):
             section = getattr(self, field_info.name)
@@ -477,6 +413,13 @@ def config_to_dict(config: Config) -> dict[str, Any]:
 
 
 def load_config(path: str | Path | None = None) -> Config:
+    """Load shared v4/baseline settings without exposing removed runtime modes.
+
+    Repository full-runtime configs are parsed through the complete v4 envelope.
+    Partial mappings remain useful for shared modeling tests and baseline tooling,
+    but the ``Config`` schema itself has no classic, fragment, or legacy-HA fields.
+    """
+
     data: dict[str, Any] = {}
     if path:
         with Path(path).open("r", encoding="utf-8") as handle:
@@ -486,62 +429,19 @@ def load_config(path: str | Path | None = None) -> Config:
         data = loaded
         coordination = data.get("coordination")
         if "maintenance" in data or (isinstance(coordination, dict) and "leader" in coordination):
-            # P4 keeps the classic implementation only as a temporary regression oracle.
-            # Formal configs are already strict v4, so validate the complete envelope before
-            # projecting its shared fields for those tests. Production entrypoints never use
-            # this compatibility path and P5 removes it with the classic writer.
             from .config_v4 import ConfigProfile, load_config_v4
 
             loaded_v4 = load_config_v4(path, profile=ConfigProfile.FULL_V4)
-            config = loaded_v4.shared
-            if config.membership.mode == "dynamic" or "_ha_" in config.run.name:
-                config.coordination.syncer_ha = SyncerHASection(
-                    enabled=True,
-                    **dataclasses.asdict(loaded_v4.leader),
-                )
-            config.validate(profile="legacy_oracle")
-            return config
+            return loaded_v4.shared
     config = _from_dict(Config, data)
-    config.validate(profile="torch_baseline" if config.torch_baseline.enabled else "legacy_oracle")
+    config.validate(profile="torch_baseline" if config.torch_baseline.enabled else "full_v4_shared")
     return config
 
 
 def load_resolved_config_snapshot(path: str | Path) -> Config:
-    """Load a historical resolved snapshot while migrating only known removed keys."""
-    with Path(path).open("r", encoding="utf-8") as handle:
-        loaded = yaml.safe_load(handle) or {}
-    if not isinstance(loaded, dict):
-        raise ValueError(f"config {path} must contain a mapping")
+    """Load a current strict snapshot; old run roots use ``legacy.reader`` instead."""
 
-    def pop_dotted(payload: dict[str, Any], dotted: str) -> tuple[bool, Any]:
-        parts = dotted.split(".")
-        current: Any = payload
-        for part in parts[:-1]:
-            if not isinstance(current, dict) or part not in current:
-                return False, None
-            current = current[part]
-        if not isinstance(current, dict) or parts[-1] not in current:
-            return False, None
-        return True, current.pop(parts[-1])
-
-    def set_dotted_if_missing(payload: dict[str, Any], dotted: str, value: Any) -> None:
-        parts = dotted.split(".")
-        current = payload
-        for part in parts[:-1]:
-            child = current.get(part)
-            if not isinstance(child, dict):
-                child = {}
-                current[part] = child
-            current = child
-        current.setdefault(parts[-1], value)
-
-    for removed, replacement in REMOVED_CONFIG_KEYS.items():
-        present, value = pop_dotted(loaded, removed)
-        if present and replacement is not None:
-            set_dotted_if_missing(loaded, replacement, value)
-    config = _from_dict(Config, loaded)
-    config.validate(profile="torch_baseline" if config.torch_baseline.enabled else "legacy_oracle")
-    return config
+    return load_config(path)
 
 
 def _default_run_id(name: str) -> str:
@@ -560,6 +460,29 @@ def _environment_flag(name: str, *, default: bool = False) -> bool:
     raise ValueError(f"{name} must be a boolean flag")
 
 
+def _validate_global_adoption_config(config: Config) -> None:
+    strategy = config.learner.global_adoption_strategy
+    if strategy == "replace":
+        return
+    if strategy not in {"rebase_post_publish_delta", "predict_post_publish_global"}:
+        raise ValueError(f"unsupported learner.global_adoption_strategy: {strategy}")
+    if (
+        not config.learner.adopt_global_after_upload
+        or not config.learner.poll_latest_during_inner_steps
+    ):
+        raise ValueError(
+            f"{strategy} requires adopt_global_after_upload=true and "
+            "poll_latest_during_inner_steps=true"
+        )
+    if strategy == "predict_post_publish_global":
+        if config.outer_optimizer.name.lower() != "nesterov":
+            raise ValueError("predict_post_publish_global currently requires outer nesterov")
+        if config.outer_optimizer.weight_decay != 0.0:
+            raise ValueError("predict_post_publish_global currently requires outer weight_decay=0")
+        if config.learner.prediction.reconcile_timeout_seconds <= 0.0:
+            raise ValueError("learner.prediction.reconcile_timeout_seconds must be > 0")
+
+
 def resolve_config(
     path: str | Path | None = None,
     *,
@@ -574,10 +497,8 @@ def resolve_config(
     staleness_lambda: float | None = None,
     max_staleness_versions: int | None = None,
     global_adoption_strategy: str | None = None,
-    capture_terminal_predecessor_for_eval: bool | None = None,
     completion_mode: str | None = None,
     parallel_checkpoint_writes: bool | None = None,
-    materialize_full_every_events: int | None = None,
     project_root: str | Path | None = None,
     profile: str | None = None,
 ) -> Config:
@@ -628,16 +549,10 @@ def resolve_config(
         config.sync.max_staleness_versions = int(max_staleness_versions)
     if global_adoption_strategy is not None:
         config.learner.global_adoption_strategy = str(global_adoption_strategy)
-    if capture_terminal_predecessor_for_eval is not None:
-        config.sync.capture_terminal_predecessor_for_eval = bool(
-            capture_terminal_predecessor_for_eval
-        )
     if completion_mode is not None:
         config.training.completion_mode = str(completion_mode)
     if parallel_checkpoint_writes is not None:
         config.syncer.parallel_checkpoint_writes = bool(parallel_checkpoint_writes)
-    if materialize_full_every_events is not None:
-        config.fragments.materialize_full_every_events = int(materialize_full_every_events)
     if config.sync.scan_interval_seconds <= 0.0:
         raise ValueError("sync.scan_interval_seconds must be > 0")
     if config.sync.staleness_lambda < 0.0:
@@ -666,12 +581,6 @@ def resolve_config(
             raise ValueError(f"sync.grace_window.{field_name} must be >= 0")
     if config.training.completion_mode not in {"local_or_global", "global_only"}:
         raise ValueError(f"unsupported training.completion_mode: {config.training.completion_mode}")
-    if config.training.completion_mode == "global_only" and (
-        config.sync.stop_after_outer_steps is None and config.sync.stop_after_global_tokens is None
-    ):
-        raise ValueError(
-            "training.completion_mode=global_only requires a configured global stop target"
-        )
     if (
         config.liveness.syncer_unresponsive_timeout_seconds is not None
         and config.liveness.syncer_unresponsive_timeout_seconds <= 0.0
@@ -702,8 +611,6 @@ def resolve_config(
             )
     elif scheduler_total_steps is not None and int(scheduler_total_steps) <= 0:
         raise ValueError("inner_optimizer.scheduler_total_steps must be > 0 when set")
-    ha = config.coordination.syncer_ha
-    recovery = config.coordination.recovery_submission
     membership = config.membership
     scaling = config.scaling
     terminal = config.terminal
@@ -711,14 +618,8 @@ def resolve_config(
     if membership.mode not in {"static", "dynamic"}:
         raise ValueError("membership.mode must be one of: static, dynamic")
     dynamic = membership.mode == "dynamic"
-    if dynamic and (not ha.enabled or config.fragments.enabled):
-        raise ValueError("dynamic membership requires full mode with syncer HA enabled")
     if scaling.enabled and not dynamic:
         raise ValueError("scaling.enabled requires membership.mode=dynamic")
-    if ha.enabled and config.fragments.enabled:
-        raise ValueError("coordination.syncer_ha is not supported with fragments")
-    if recovery.enabled and not ha.enabled:
-        raise ValueError("coordination.recovery_submission requires coordination.syncer_ha.enabled")
     if membership.stream_pool_size < membership.bootstrap_instances:
         raise ValueError("membership.stream_pool_size must be >= bootstrap_instances")
     if membership.bootstrap_instances < 0:
@@ -832,10 +733,7 @@ def resolve_config(
         and terminal.deadline_seconds is None
     ):
         raise ValueError("terminal.deadline_seconds is required for deadline close policy")
-    has_global_target = (
-        config.sync.stop_after_outer_steps is not None
-        or config.sync.stop_after_global_tokens is not None
-    )
+    has_global_target = config.sync.stop_after_outer_steps is not None
     if dynamic and terminal.admission_close_policy == "global_target" and not has_global_target:
         raise ValueError("global_target close policy requires a configured global target")
     if (
@@ -855,116 +753,6 @@ def resolve_config(
     ):
         if float(getattr(terminal, field_name)) <= 0.0:
             raise ValueError(f"terminal.{field_name} must be > 0")
-    if config.fragments.enabled:
-        if config.fragments.num_fragments < 1:
-            raise ValueError("fragments.num_fragments must be >= 1")
-        if config.fragments.fragments_per_update != 1:
-            raise ValueError("only fragments.fragments_per_update=1 is supported")
-        if config.fragments.schedule != "round_robin_global":
-            raise ValueError(f"unsupported fragments.schedule: {config.fragments.schedule}")
-        if config.fragments.strategy not in {"full", "balanced_tensor"}:
-            raise ValueError(f"unsupported fragments.strategy: {config.fragments.strategy}")
-        if (
-            config.fragments.materialize_full_every_events is None
-            or int(config.fragments.materialize_full_every_events) <= 0
-        ):
-            raise ValueError("fragments.materialize_full_every_events must be a positive integer")
-        if config.learner.global_adoption_strategy != "replace":
-            raise ValueError(
-                "learner.global_adoption_strategy is only supported by the full learner"
-            )
-    if ha.renew_interval_seconds <= 0.0:
-        raise ValueError("coordination.syncer_ha.renew_interval_seconds must be > 0")
-    if ha.lease_duration_seconds < 5.0 * ha.renew_interval_seconds:
-        raise ValueError(
-            "coordination.syncer_ha.lease_duration_seconds must be at least "
-            "5 * renew_interval_seconds"
-        )
-    if ha.max_clock_skew_seconds < 0.0:
-        raise ValueError("coordination.syncer_ha.max_clock_skew_seconds must be >= 0")
-    if not 0.0 < ha.heartbeat_interval_seconds <= ha.renew_interval_seconds:
-        raise ValueError(
-            "coordination.syncer_ha.heartbeat_interval_seconds must be > 0 and "
-            "<= renew_interval_seconds"
-        )
-    if ha.heartbeat_stale_after_seconds < 3.0 * ha.heartbeat_interval_seconds:
-        raise ValueError(
-            "coordination.syncer_ha.heartbeat_stale_after_seconds must be at least "
-            "3 * heartbeat_interval_seconds"
-        )
-    if ha.lease_duration_seconds < (
-        ha.heartbeat_stale_after_seconds + 2.0 * ha.max_clock_skew_seconds
-    ):
-        raise ValueError(
-            "coordination.syncer_ha.lease_duration_seconds must cover "
-            "heartbeat_stale_after_seconds + 2 * max_clock_skew_seconds"
-        )
-    if not 0 < ha.lease_busy_timeout_ms <= ha.renew_interval_seconds * 1000.0:
-        raise ValueError(
-            "coordination.syncer_ha.lease_busy_timeout_ms must be > 0 and <= "
-            "renew_interval_seconds * 1000"
-        )
-    if ha.business_busy_timeout_ms <= 0:
-        raise ValueError("coordination.syncer_ha.business_busy_timeout_ms must be > 0")
-    if not 0.0 < ha.candidate_acquire_poll_seconds <= ha.renew_interval_seconds:
-        raise ValueError(
-            "coordination.syncer_ha.candidate_acquire_poll_seconds must be > 0 "
-            "and <= renew_interval_seconds"
-        )
-    if ha.candidate_wait_seconds < (ha.lease_duration_seconds + ha.max_clock_skew_seconds):
-        raise ValueError(
-            "coordination.syncer_ha.candidate_wait_seconds must cover "
-            "lease_duration_seconds + max_clock_skew_seconds"
-        )
-    if ha.learner_recovery_wait_seconds < ha.candidate_wait_seconds:
-        raise ValueError(
-            "coordination.syncer_ha.learner_recovery_wait_seconds must be >= candidate_wait_seconds"
-        )
-    if ha.canonical_repair_wait_seconds < 2.0 * ha.heartbeat_interval_seconds:
-        raise ValueError(
-            "coordination.syncer_ha.canonical_repair_wait_seconds must be at "
-            "least 2 * heartbeat_interval_seconds"
-        )
-    if ha.max_retained_epoch_dirs < 1:
-        raise ValueError("coordination.syncer_ha.max_retained_epoch_dirs must be >= 1")
-    for field_name in (
-        "claim_timeout_seconds",
-        "reconciliation_interval_seconds",
-        "uncertainty_timeout_seconds",
-        "backoff_initial_seconds",
-        "backoff_max_seconds",
-        "claim_retention_seconds",
-    ):
-        if float(getattr(recovery, field_name)) <= 0.0:
-            raise ValueError(f"coordination.recovery_submission.{field_name} must be > 0")
-    if recovery.backoff_max_seconds < recovery.backoff_initial_seconds:
-        raise ValueError(
-            "coordination.recovery_submission.backoff_max_seconds must be >= "
-            "backoff_initial_seconds"
-        )
-    if recovery.max_attempts_per_observation < 1:
-        raise ValueError(
-            "coordination.recovery_submission.max_attempts_per_observation must be >= 1"
-        )
-    if recovery.max_outstanding_candidates < 1:
-        raise ValueError("coordination.recovery_submission.max_outstanding_candidates must be >= 1")
-    if recovery.enabled:
-        candidate_walltime = recovery.candidate_walltime
-        parts = [] if candidate_walltime is None else candidate_walltime.split(":")
-        if (
-            len(parts) != 3
-            or not all(part.isdigit() for part in parts)
-            or len(parts[0]) < 2
-            or len(parts[1]) != 2
-            or len(parts[2]) != 2
-            or int(parts[1]) >= 60
-            or int(parts[2]) >= 60
-            or all(int(part) == 0 for part in parts)
-        ):
-            raise ValueError(
-                "coordination.recovery_submission.candidate_walltime must be an "
-                "explicit estimated HH:MM:SS value when recovery submission is enabled"
-            )
     if config.io.checkpoint_digest_mode is False:
         # PyYAML 1.1 treats an unquoted ``off`` scalar as boolean false.
         config.io.checkpoint_digest_mode = "off"
@@ -973,9 +761,7 @@ def resolve_config(
     config.io.checkpoint_digest_mode = config.io.checkpoint_digest_mode.lower()
     if config.io.checkpoint_digest_mode not in {"off", "checker", "always"}:
         raise ValueError("io.checkpoint_digest_mode must be one of: off, checker, always")
-    from ..runtime.adoption import validate_global_adoption_strategy
-
-    validate_global_adoption_strategy(config)
+    _validate_global_adoption_config(config)
     if config.learner.post_publish_latest_wait_seconds < 0.0:
         raise ValueError("learner.post_publish_latest_wait_seconds must be >= 0")
     if config.learner.post_publish_latest_poll_seconds <= 0.0:
@@ -994,7 +780,7 @@ def resolve_config(
             raise ValueError("torch baseline training.inner_steps must be > 0")
     config.training.block_size = config.data.block_size
     selected_profile = profile or (
-        "torch_baseline" if config.torch_baseline.enabled else "legacy_oracle"
+        "torch_baseline" if config.torch_baseline.enabled else "full_v4_shared"
     )
     config.validate(profile=selected_profile)
     return config

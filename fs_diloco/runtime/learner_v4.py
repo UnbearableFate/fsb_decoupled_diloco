@@ -25,8 +25,8 @@ from ..modeling.param_index import (
 )
 from ..modeling.training import build_inner_optimizer_and_scheduler
 from ..observability.logging_utils import ActorTelemetryWriter
-from ..protocol.admission_v4 import AdmissionContext
-from ..protocol.control_v4 import (
+from ..storage.admission import AdmissionContext
+from ..storage.control import (
     current_latest_if_newer,
     publish_terminal_ack,
     read_current_control,

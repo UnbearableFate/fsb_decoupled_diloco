@@ -84,11 +84,6 @@ syncer:
   device: cuda
   compute_dtype: bfloat16
   publish_dtype: bfloat16
-failure_sim:
-  enabled: false
-  sleep_jitter_seconds: 0.0
-  upload_skip_probability: 0.0
-  crash_probability: 0.0
 wandb:
   enabled: true
   mode: offline

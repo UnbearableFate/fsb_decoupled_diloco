@@ -76,11 +76,6 @@ learner:
   poll_latest_during_inner_steps: true
   adopt_global_after_upload: true
   global_adoption_strategy: rebase_post_publish_delta
-failure_sim:
-  enabled: false
-  sleep_jitter_seconds: 0.0
-  upload_skip_probability: 0.0
-  crash_probability: 0.0
 wandb:
   enabled: false
   mode: offline

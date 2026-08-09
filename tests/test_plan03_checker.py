@@ -8,15 +8,14 @@ import subprocess
 import sys
 
 import pytest
-import yaml
 
 from scripts.miyabi.check_plan03 import (
     inventory,
     verify_boundaries,
     verify_inventory,
+    verify_p5_contracts,
     verify_phase_requirements,
     verify_p4_migration_contracts,
-    verify_p3_operational_contracts,
     verify_tracked_evidence,
 )
 
@@ -124,40 +123,16 @@ def test_plan03_boundary_allows_p3_store_implementation_but_not_mutator_surface_
     assert verify_boundaries(mutator_drift, expected) == ["inventory.bound_mutators"]
 
 
-def test_plan03_p4_semantic_migration_allows_only_the_frozen_transform(
-    tmp_path: Path,
-) -> None:
+def test_plan03_p4_semantic_migration_still_detects_post_p4_config_changes() -> None:
     expected = _expected()
     frozen = str(expected["source_identity"]["commit"])
-    assert verify_p4_migration_contracts(ROOT, frozen) == []
-
-    clone = tmp_path / "clone"
-    subprocess.run(
-        ["git", "clone", "--quiet", "--no-hardlinks", str(ROOT), str(clone)],
-        check=True,
-    )
-    baseline = clone / "configs/torch_baseline_tiny_2rank.yaml"
-    payload = json.loads(json.dumps(yaml.safe_load(baseline.read_text())))
-    payload["training"]["inner_steps"] += 1
-    baseline.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
-    differences = verify_p4_migration_contracts(clone, frozen)
-    assert "config-migration.baseline-semantic:configs/torch_baseline_tiny_2rank.yaml" in (
-        differences
-    )
-
-    baseline.write_bytes((ROOT / "configs/torch_baseline_tiny_2rank.yaml").read_bytes())
-    full = clone / "configs/5000/fs_diloco_gpt2_wikitext2_8l_200x25steps.yaml"
-    payload = yaml.safe_load(full.read_text(encoding="utf-8"))
-    payload["training"]["inner_steps"] += 1
-    full.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
-    differences = verify_p4_migration_contracts(clone, frozen)
-    assert (
-        "config-migration.full-semantic:configs/5000/fs_diloco_gpt2_wikitext2_8l_200x25steps.yaml"
-    ) in differences
+    differences = verify_p4_migration_contracts(ROOT, frozen)
+    assert "config-migration.fragment-path-inventory" in differences
+    assert "config-migration.historical-path-inventory" in differences
 
 
-def test_plan03_checker_guards_reviewed_cross_file_operational_contracts() -> None:
-    assert verify_p3_operational_contracts(ROOT) == []
+def test_plan03_checker_guards_p5_removal_and_compatibility_contracts() -> None:
+    assert verify_p5_contracts(ROOT, _expected()) == []
 
 
 def test_plan03_completed_candidate_evidence_is_tracked_and_matches_contract() -> None:

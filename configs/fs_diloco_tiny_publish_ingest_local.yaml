@@ -75,11 +75,6 @@ io:
 learner:
   poll_latest_during_inner_steps: false
   adopt_global_after_upload: true
-failure_sim:
-  enabled: false
-  sleep_jitter_seconds: 0.0
-  upload_skip_probability: 0.0
-  crash_probability: 0.0
 coordination:
   leader: {}
 config_schema_version: 1

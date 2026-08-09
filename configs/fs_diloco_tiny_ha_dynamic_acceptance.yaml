@@ -34,8 +34,6 @@ sync:
   stop_after_outer_steps: 120
   stop_file_poll_seconds: 0.2
 coordination:
-  recovery_submission:
-    enabled: false
   leader:
     lease_duration_seconds: 15.0
     renew_interval_seconds: 0.1
@@ -134,11 +132,6 @@ io:
 learner:
   poll_latest_during_inner_steps: false
   adopt_global_after_upload: true
-failure_sim:
-  enabled: false
-  sleep_jitter_seconds: 0.0
-  upload_skip_probability: 0.0
-  crash_probability: 0.0
 wandb:
   enabled: false
   mode: offline

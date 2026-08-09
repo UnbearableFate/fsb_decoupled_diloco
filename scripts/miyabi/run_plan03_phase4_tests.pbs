@@ -48,8 +48,8 @@ export FS_DILOCO_REQUIRE_SOURCE_IDENTITY=1
   fs_diloco/core/config_v4.py \
   fs_diloco/core/run_descriptor.py \
   fs_diloco/modeling/hf_data.py \
-  fs_diloco/protocol/admission_v4.py \
-  fs_diloco/protocol/control_v4.py \
+  fs_diloco/storage/admission.py \
+  fs_diloco/storage/control.py \
   fs_diloco/protocol/cycle_receipt.py \
   fs_diloco/runtime/learner_entrypoint.py \
   fs_diloco/runtime/learner_v4.py \

@@ -701,3 +701,86 @@
 - Job `2510568.opbs` on `mg0017` passed Ruff, format and boundary Checker, then stopped at `85 passed, 1 failed in 7.04s` in the focused suite. Full tests and pipelines were not reached.
 - The failure reproduces Codex M1 exactly: corrupting only the committed static command's `result_json` caused `JSONDecodeError` to escape the replay wrapper and be caught as an expected request `ValueError`; `_admit_requests()` did not raise `AuthoritySchemaError`.
 - Remediation: move `_command_replay()` into the replay API's schema translation block, validate that its decoded result is a mapping, and preserve `CommandConflictError` outside that translation. Evidence: `artifacts/20260809-154700_p4-final-incremental-review-red_fail.json`. This is attempt 1.
+
+## 2026-08-09 16:06 JST — p5-removal-red attempt 1（预期 RED）
+
+- 连续失败次数：1；PBS job `2510689.opbs`，compute host `mg0020`，walltime `00:10:00`。
+- 命令：`qsub -l walltime=00:10:00 -v PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,TEST_TARGET='tests/architecture/test_p5_removed_runtime.py tests/legacy/test_legacy_v1_v3_reader.py tests/tools/test_authorize_static_replacement.py',RUN_FULL_SUITE=0 scripts/miyabi/run_plan03_phase5_tests.pbs`。
+- 预期：P5 删除、query-only legacy reader 与 operator authorization collision 合同在实现前为 RED。
+- 实际：pytest collection 在 `tests/legacy/test_legacy_v1_v3_reader.py` 失败，`ModuleNotFoundError: No module named 'fs_diloco.legacy.reader'`；未收集测试。
+- 已确认原因：P5 的 legacy reader 边界尚不存在，且计划删除的 classic/fragment production surface 仍在当前树中。这是预期的前置 RED，不是环境故障。
+- 下一修改：实现 legacy query-only reader 和 collision 诊断；迁移 legacy fragment 纯读取函数；按冻结清单删除 writer/config/PBS 与 dead entrypoints，再以相同 focused contract 证伪。
+- 证据：`artifacts/20260809-160600_p5-removal-red-attempt1_fail.json`；原始 PBS 日志 `fsdiloco_plan03_p5.o2510689`。
+
+## 2026-08-09 16:28 JST — P5 登录节点 Ruff 命令不可用
+
+- `python -m compileall -q fs_diloco tests scripts/miyabi`、`git diff --check` 与全部 PBS/shell `bash -n` 均通过；随后登录节点静态门禁中的裸 `ruff check ...` 以 exit 127 失败：`ruff: command not found`。
+- 原因：当前登录 shell 的 PATH 未包含项目运行环境中的 Ruff；这不是源码 lint 失败。
+- 下一步：从仓库已使用的虚拟环境/uv 环境定位 Ruff，以相同参数重跑；若环境中同样缺失，再将其作为依赖环境缺口处理。未运行登录节点 pytest。
+
+## 2026-08-09 16:29 JST — P5 修改文件需要 Ruff 格式化
+
+- 使用已定位的 `.venv/bin/ruff` 后 lint 全部通过；对本计划修改/新增 Python 文件执行 `ruff format --check`，报告 20 个文件中 6 个需要格式化：`baselines/protocol.py`、`core/config.py`、`storage/leader_lease.py`、`storage/paths.py`、`tests/test_config.py`、`tests/test_inner_scheduler.py`。
+- 这是机械格式差异，没有语义诊断。下一步仅对这些已修改文件运行 Ruff formatter，然后重跑完整登录节点静态门禁。
+
+## 2026-08-09 16:34 JST — P5 Checker 首次静态运行发现协议适配器边界
+
+- 冻结 P0 inventory 校验通过；新增 P5 contract 返回 BLOCKED：`protocol/admission_v4.py` 与 `protocol/control_v4.py` 仍 import `pathlib`，违反 protocol 不依赖 Path/文件系统 adapter 的门禁。
+- `legacy.reader-not-query-only` 是 Checker 大小写归一化缺陷：实现已以 SQLite URI `mode=ro` 打开并执行/回读 `PRAGMA query_only=ON`，但 Checker 对源码字符串未先转小写。
+- 下一步：把两个 protocol 模块的 Path/文件读取移到 storage/runtime 的窄适配器，protocol 只接收已解码数据；修正 Checker 归一化后以相同命令重跑。证据暂存于 `/tmp/plan03-p5-check.json`，不作为 PASS artifact。
+
+## 2026-08-09 16:38 JST — P5 Checker 测试重写遗留未使用 import
+
+- `git diff --check`、compileall 与全部 shell/PBS `bash -n` 通过；Ruff 唯一失败为 `tests/test_plan03_checker.py:11` 的未使用 `yaml` import。
+- 原因：P4 config-migration clone 测试收敛为 P5 contract 后不再需要 YAML 解析。下一步删除该 import，并重跑相同静态门禁；未运行登录节点 pytest。
+
+## 2026-08-09 16:39 JST — P5 Checker 需要机械格式化
+
+- 删除未使用 import 后 Ruff lint 全部通过；修改文件 format gate 仅报告 `scripts/miyabi/check_plan03.py` 需要格式化，其余 25 个文件通过。
+- 下一步仅格式化该 Checker，再重跑静态门禁。没有语义失败，也未运行登录节点 pytest。
+
+## 2026-08-09 16:37 JST — P5 focused attempt 2 在 compute 格式门禁停止
+
+- 连续同阶段失败计数：2（含 16:06 的前置 RED）；PBS job `2510803.opbs` 在 `mg0035` 使用 1 节点，申请 `00:10:00`、实际 `00:00:01`。
+- Ruff lint 通过；format gate 报告 `fs_diloco/legacy/fragment_v0.py` 与 `tests/legacy/test_legacy_v1_v3_reader.py` 需要格式化，Checker/pytest 均未到达。
+- 原因：登录节点的修改文件集合由 `git diff --name-only` 生成，未包含尚未 tracked 的新增 Python 文件；P5 PBS 显式全清单正确捕获了它们。
+- 下一步：仅格式化这两个新增文件，在登录节点用 tracked+untracked 合集重跑静态门禁，再提交相同 focused gate。证据：`artifacts/20260809-163700_p5-focused-attempt2_fail.json`。
+
+## 2026-08-09 16:39 JST — P5 focused attempt 3 暴露测试自身集合运算错误
+
+- 连续同阶段失败计数：3；按计划在第 4 次提交前强制进行一次完整 Codex review。PBS job `2510805.opbs` 在 `mg0015` 使用 1 节点，申请 `00:10:00`、实际约 `00:00:16`。
+- Ruff lint/format 与 P5 Checker 均通过；focused pytest 为 `383 passed, 1 failed in 21.60s`。
+- 唯一失败是新测试将集合直接与 `config_to_dict(config)` 返回的 dict 做 `&`，触发 `TypeError`；实现已经在前置断言中正确加载无旧模式的共享 config。
+- 下一步：先完成并保存三连败强制 Codex current-state review，再按 review 结论把测试改为与 `payload.keys()` 比较，并处理 review 中所有高/中严重度发现后才允许第 4 次提交。证据：`artifacts/20260809-163900_p5-focused-attempt3_fail.json`。
+
+## 2026-08-09 16:51 JST — P5 review remediation 需要 Ruff 格式化
+
+- 三连败全面审查已经先保存到 `code_review.md`；其 High/Medium 修订首次静态检查中 Ruff lint、compileall 和 `git diff --check` 通过，但显式 format gate 报告 4 个修改文件需要格式化：`tools/eval_lm_harness.py`、`tools/publish_quality_gate.py`、`tools/validation_eval.py`、`tests/test_config.py`。
+- 这是 import/断言换行的机械格式差异。下一步只格式化这些文件，并把所有本轮新增/修改文件加入 PBS 显式 format scope 后重跑完整静态门禁；未运行登录节点 pytest。
+
+## 2026-08-09 17:03 JST — P5 测试删除记账生成器需要 Ruff 格式化
+
+- 新增的可复现记账生成器通过 Ruff lint 和 `py_compile`，但单文件 format gate 报告需要机械格式化。
+- 下一步只格式化该生成器，再生成逐 test-function 的分类/count artifact；未运行登录节点 pytest。
+
+## 2026-08-09 17:04 JST — P5 测试删除记账 replacement reference 组装错误
+
+- 生成器格式化后首次执行 fail closed：`replacement test does not exist: tests/storage/test_visibility_v4.py::tests/storage/test_proposal_adjudication_v4.py`，没有生成 pending artifact。
+- 原因是 `_refs(path, *tests)` 的一个调用把第二个文件路径误作为同一文件内的 test name。下一步把所有跨文件 replacement 组合拆成独立 `_refs(...)` tuple 后重跑；生产代码与测试未执行。
+
+## 2026-08-09 17:04 JST — classic terminal-capture 清理 patch 锚点错误
+
+- current-state audit 发现 `sync.capture_terminal_predecessor_for_eval` 的 writer 已随 classic syncer 删除，但 config key 和一份正式 config 仍会表达无实现的 no-op 行为；决定把它作为 classic-only switch 删除，同时保留已有 capture 的 query-only evaluation。
+- 首次组合 `apply_patch` 因 `REMOVED_CONFIG_KEYS` hunk 的源码顺序与假设不一致而原子失败，未修改任何目标文件。下一步读取精确锚点后拆分 patch；这不是 runtime/test failure。
+
+## 2026-08-09 17:05 JST — P5 focused attempt 4 的 strict-rejection 文案断言过窄
+
+- 三连败全面审查和其中全部 High/Medium 修订已在提交前完成；PBS job `2510888.opbs` 在 `mg0028` 通过 Ruff、显式 format scope 和 P5 Checker，focused pytest 为 `381 passed, 1 failed in 21.34s`，full suite 未到达。
+- 新 legacy evaluation 反例正确证明 strict loader 拒绝旧 `coordination/fragments/failure_sim`，但测试只接受 v4-envelope 的英文 `removed v4 config key`，实际 shared loader 在看到整段旧 coordination 时返回更具体的 `config key ... 字段已移除`。这是预期拒绝的文案分支，不是 compatibility projection 或 production defect。
+- 下一步把断言收敛为共同且稳定的 `移除|removed` 拒绝语义，同时继续要求同一文件由 explicit legacy query projection 成功读取。证据：`artifacts/20260809-170600_p5-focused-attempt4_fail.json`。
+
+## 2026-08-09 17:08 JST — P5 attempt 5 发现 DMB-05 requirement owner 未迁移
+
+- PBS job `2510910.opbs` 在 `mg0028` 通过 Ruff、format、P5 Checker和 focused `382 passed in 20.92s`；full suite 为 `572 passed, 1 failed in 52.41s`。
+- 唯一失败是 P3 requirement checker 返回 `requirements.DMB-05.tests`：删除 classic/fragment 测试时，逐用例 artifact 已把共享 bounded-state 断言映射到 v4 tests，但 source-level `PLAN03_REQUIREMENTS` owner 没有同步绑定到 retained replacement。
+- 下一步读取 DMB-05 matrix contract和删除前 owner，把 literal requirement marker放到实际覆盖该 invariant 的 current v4 test module；不得通过放宽 checker 或修改历史 P3 evidence 规避。证据：`artifacts/20260809-170800_p5-full-attempt5_fail.json`。

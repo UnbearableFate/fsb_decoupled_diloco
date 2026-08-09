@@ -4,7 +4,10 @@ import pytest
 import torch
 
 from fs_diloco.core.config import Config, resolve_config
-from fs_diloco.runtime import learner as learner_runtime
+from fs_diloco.modeling.training import (
+    build_inner_optimizer_and_scheduler,
+    inner_lr_multiplier,
+)
 
 
 def _cosine_config(*, completion_mode: str = "local_or_global") -> Config:
@@ -30,9 +33,7 @@ def _cosine_config(*, completion_mode: str = "local_or_global") -> Config:
     ],
 )
 def test_inner_lr_multiplier_matches_golden_curve(completed_steps, expected):
-    assert learner_runtime.inner_lr_multiplier(
-        _cosine_config(), completed_steps
-    ) == pytest.approx(expected)
+    assert inner_lr_multiplier(_cosine_config(), completed_steps) == pytest.approx(expected)
 
 
 def _advance_one_step(optimizer, scheduler):
@@ -46,15 +47,11 @@ def test_rebuilding_inner_state_restores_cumulative_scheduler_phase():
     baseline_model = torch.nn.Linear(1, 1)
     rebuilt_model = torch.nn.Linear(1, 1)
     config = _cosine_config()
-    baseline_optimizer, baseline_scheduler = (
-        learner_runtime.build_inner_optimizer_and_scheduler(
-            baseline_model, config, completed_local_steps=0
-        )
+    baseline_optimizer, baseline_scheduler = build_inner_optimizer_and_scheduler(
+        baseline_model, config, completed_local_steps=0
     )
-    rebuilt_optimizer, rebuilt_scheduler = (
-        learner_runtime.build_inner_optimizer_and_scheduler(
-            rebuilt_model, config, completed_local_steps=0
-        )
+    rebuilt_optimizer, rebuilt_scheduler = build_inner_optimizer_and_scheduler(
+        rebuilt_model, config, completed_local_steps=0
     )
 
     baseline_lrs = []
@@ -63,12 +60,10 @@ def test_rebuilding_inner_state_restores_cumulative_scheduler_phase():
         baseline_lrs.append(_advance_one_step(baseline_optimizer, baseline_scheduler))
         rebuilt_lrs.append(_advance_one_step(rebuilt_optimizer, rebuilt_scheduler))
         if completed_steps + 1 in {1, 2, 5}:
-            rebuilt_optimizer, rebuilt_scheduler = (
-                learner_runtime.build_inner_optimizer_and_scheduler(
-                    rebuilt_model,
-                    config,
-                    completed_local_steps=completed_steps + 1,
-                )
+            rebuilt_optimizer, rebuilt_scheduler = build_inner_optimizer_and_scheduler(
+                rebuilt_model,
+                config,
+                completed_local_steps=completed_steps + 1,
             )
 
     assert rebuilt_lrs == pytest.approx(baseline_lrs)
@@ -89,8 +84,8 @@ def test_rebuilding_inner_state_restores_cumulative_scheduler_phase():
 def test_completion_mode_does_not_change_scheduler_curve():
     local = _cosine_config(completion_mode="local_or_global")
     global_only = _cosine_config(completion_mode="global_only")
-    assert [learner_runtime.inner_lr_multiplier(local, step) for step in range(9)] == [
-        learner_runtime.inner_lr_multiplier(global_only, step) for step in range(9)
+    assert [inner_lr_multiplier(local, step) for step in range(9)] == [
+        inner_lr_multiplier(global_only, step) for step in range(9)
     ]
 
 

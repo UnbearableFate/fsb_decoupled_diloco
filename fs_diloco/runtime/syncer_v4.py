@@ -17,7 +17,7 @@ from ..modeling.hf_model import load_causal_lm_and_tokenizer
 from ..modeling.outer_optim import init_outer_state, outer_optimizer_step
 from ..modeling.param_index import build_param_index, flatten_trainable_params
 from ..observability.logging_utils import ActorTelemetryWriter
-from ..protocol.admission_v4 import (
+from ..storage.admission import (
     ADMISSION_RESPONSE_FORMAT_VERSION,
     AdmissionAuthorizationError,
     AdmissionRequestObservation,
@@ -33,7 +33,7 @@ from ..protocol.admission_v4 import (
     read_static_replacement_authorization,
 )
 from ..protocol.authority import MergeFenceConflict
-from ..protocol.control_v4 import V4ControlPublisher, iter_terminal_acks
+from ..storage.control import V4ControlPublisher, iter_terminal_acks
 from ..protocol.contributor import (
     ContributorFence,
     StaticContributorFence,

@@ -9,6 +9,13 @@ import torch
 from ..core.config import Config
 
 
+def maybe_autocast(device: torch.device, precision: str) -> torch.autocast:
+    """Return the configured training autocast context without a runtime dependency."""
+
+    enabled = device.type == "cuda" and precision.lower() in {"bf16", "bfloat16"}
+    return torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=enabled)
+
+
 def build_inner_optimizer_and_scheduler(
     model: torch.nn.Module,
     config: Config,

@@ -278,3 +278,75 @@ SQLite remains the only writer authority. Filesystem controls are immutable fact
 ## Review conclusion
 
 No unexplained failure remains. The revised API makes both identity distinctions explicit and preserves fail-closed authority semantics without allowing one filesystem entry to kill a candidate. A fourth validation run is authorized only after formatting, static compilation/lint, repository-wide `bash -n`, and confirmation that all reader call sites supply the stable contributor key.
+
+# 2026-08-09 P5 deletion/migration gate three-failure comprehensive review
+
+Review trigger: three consecutive attempts of the P5 classic/fragment deletion validation failed (`2510689`, `2510803`, `2510805`). No fourth compute attempt is permitted until this review is recorded and its High/Medium findings are covered by tests and remediation.
+
+## Failure chain and common pattern
+
+1. `2510689` was the intentional RED run taken before the legacy query-only reader existed. It failed on the expected missing import and established that the deleted fragment runtime was not being silently retained.
+2. `2510803` passed the deletion/architecture Checker but failed Ruff formatting for two newly created, untracked files. The login-node format command had derived its scope from tracked files, while the PBS script's explicit file list correctly included the new files.
+3. `2510805` passed lint, format, architecture/deletion Checker, and 383 focused tests. Its sole failure was the test expression `set & dict` in `test_config.py`; production config parsing had already completed successfully.
+
+The shared pattern is gate lifecycle and test-harness construction, not three manifestations of one production defect. The differences matter: attempt 1 was a deliberate behavioral RED, attempt 2 was an incomplete local validation scope, and attempt 3 was an invalid assertion operand. Nevertheless, the consecutive-failure rule applies to the complete P5 objective, so this review rechecks the whole data path rather than authorizing only the one-line test correction.
+
+## End-to-end data, control, and persistence flow
+
+1. A new run enters through strict `ConfigV4` parsing and migration, descriptor construction, immutable initializer publication, and v4 SQLite schema/bootstrap. Leader acquisition and all subsequent mutations remain fenced by epoch/owner identity and SQLite transactions.
+2. Runtime admission/control now lives under `storage`, because it reads and publishes filesystem state. Typed protocol modules contain no `Path`, filesystem I/O, SQLite access, or process launch. Learner receipts/proposals flow through immutable filesystem publication into fenced authority transactions, global publication, acknowledgements, and terminal accounting.
+3. Classic full-update/fragment configuration keys and runtime writers are absent. New configs cannot express those modes, fragment DDL cannot be created, and no runtime module imports `legacy`.
+4. An old full-update or fragment run is a query-only input: the legacy SQLite reader opens the database read-only/query-only, and the fragment decoder is a pure function over already-read rows/bytes. Analysis, export, and evaluation may consume that projection, but cannot initialize, resume, repair, compact, or mutate the old run.
+5. Fresh-v4 identity and byte-stability guarantees apply only to fresh attempts. An old in-progress root is never resumed or upgraded in place; an authorization collision requires a fresh attempt ID rather than mutable overwrite.
+6. Test/PBS lifecycle is `lint -> explicit format scope -> architecture/deletion/config Checker -> focused pytest -> full pytest -> evidence summary`. A failed precondition emits a retained raw log and structured failure before any source change. Successful phase evidence is generated only after the complete compute gate passes.
+
+## Invariants and transaction/recovery audit
+
+- Immutable run publication, leader fencing, authority transactions, token accounting, terminal drain, audit dependency closure, and GC reference rules remain v4 responsibilities. P5 deletion must not weaken them merely because classic tests are removed.
+- The four legacy fragment tables are recognizable only by the legacy reader. No current schema, migration, bootstrap, writer, recovery path, or garbage collector may create or mutate them.
+- Query-only compatibility must be an explicit dependency of tools, never an implicit fallback in production config/runtime loading. A strict loader must continue rejecting removed keys.
+- Shared SQLite/GC/terminal tests deleted with classic files must be mapped to retained v4 tests or recreated. Deleting a test because its fixture used fragments is not evidence that the underlying transaction, reference, or cleanup invariant became obsolete.
+- Filesystem publication remains create-no-replace with immutable identities. Deletion of classic fragment directories must not broaden cleanup to unknown files or historical roots.
+
+## Findings
+
+### High — legacy export/evaluation config loading is currently broken
+
+`eval_lm_harness.py` loads a manifest config with strict `load_config`, while `validation_eval.py` and `publish_quality_gate.py` use the now-strict resolved-snapshot loader. Old v1-v3 snapshots contain removed `init`, `fragments`, `failure_sim`, or coordination keys, so those query-only tools reject exactly the historical full/fragment roots that P5 promises to retain for analysis/export/evaluation. The analysis reader alone is insufficient.
+
+Required remediation: add an explicitly named legacy query-config projection under `fs_diloco.legacy`. It may discard known runtime-only legacy sections and construct only the current model/data/run fields needed for read-only analysis/evaluation. It must not add removed fields back to `Config`, perform migration writes, or be imported from runtime. Tool call sites must opt into this loader, and a test must prove the strict loader rejects the same old snapshot that the legacy tool projection can read.
+
+### Medium — shared `resolve_config` owns a v4-only stop-target rule it cannot evaluate
+
+After removal of `stop_after_global_tokens`, shared `Config` no longer contains `stop_after_direct_weight_tokens_applied`. Its `global_only` check therefore rejects a valid v4 envelope that specifies only the direct-token target. Stop-target completeness belongs in `ConfigV4`, where both current targets are visible. Keeping the check in the lossy shared projection creates inconsistent acceptance between strict parsing and later resolution.
+
+Required remediation: remove the incomplete target check from the shared helper, retain/strengthen it in `ConfigV4`, and test both a direct-token-only valid envelope and an envelope with no stop target.
+
+### Medium — deletion classification must prove shared invariant migration
+
+Several deleted fragment-oriented tests also exercised generic storage, retention, or long-cycle behavior. Before phase acceptance, the classification artifact must map every deleted test to `migrate-to-unified`, `retain-legacy-reader`, or `delete-obsolete`, name the retained replacement assertion, and explain parameterized count deltas. Any unmapped shared GC/SQLite/terminal invariant requires a new v4 test rather than a prose-only disposition.
+
+### Low — format discovery differed between local and compute gates
+
+Tracked-only discovery omitted new files. Static validation must use the same explicit P5 file set as PBS, or include cached plus untracked nonignored paths. This is a gate reproducibility issue; the compute gate already caught it fail-closed.
+
+### Low — the Checker contains some lexical SQL/entrypoint checks
+
+The lexical checks are useful deletion tripwires but are not semantic proof. They remain supplemental to import tests, strict config tests, legacy query-only tests, and the real v4 pipelines required in P6.
+
+## Alternatives considered
+
+- Keeping classic writers/schema behind feature flags would reduce deletion work but violates the explicit source/config/DDL absence gates and leaves two authorities. Rejected.
+- Teaching the production loader to silently accept and discard old keys would make tools work, but would also make old modes appear resumable and weaken typo detection. Rejected.
+- A separate strict v4 path plus an explicitly imported legacy query-only projection is chosen. It preserves a narrow compatibility surface and makes runtime-import checks enforceable.
+- Recreating a mutable legacy ORM/store would simplify some tests but would reintroduce repair/write capability. Rejected; the reader and fragment decoder remain read-only/pure.
+- Requiring every projection of `Config` to validate envelope-only stop semantics duplicates incomplete state. The v4 envelope is the single correct validation boundary; shared projection helpers remain structural.
+
+## Revised implementation and falsification sequence
+
+1. Correct the invalid set/dict test expression only after this review is saved.
+2. Add a legacy query-config projection and route analysis/export/evaluation/quality-gate consumers through it. Add a counterexample containing removed old keys: strict current load must fail, query-only projection must preserve the evaluation-relevant fields.
+3. Move the global-only stop-target completeness assertion to the `ConfigV4` boundary and add direct-token-only/no-target cases.
+4. Audit every deleted test function against retained v4 storage/GC/terminal coverage and publish the exact classification/count artifact; add any missing shared-invariant tests.
+5. Rerun Ruff, explicit format checks including untracked files, compileall, deletion/architecture Checker, `git diff --check`, and repository-wide `bash -n` before submission.
+6. Attempt 4 passes only if all static/Checker gates pass, focused pytest has zero failures and no unexpected xfail, full pytest has zero failures, and the emitted evidence binds the exact source tree and test counts. A further failure must be recorded and re-audited before another change.

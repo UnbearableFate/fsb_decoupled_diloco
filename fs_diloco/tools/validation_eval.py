@@ -14,7 +14,7 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 
-from ..core.config import load_resolved_config_snapshot
+from ..legacy.config_v1_v3 import load_query_config_snapshot
 from ..modeling.hf_data import load_text_split, text_rows_to_blocks
 from ..modeling.hf_model import load_causal_lm_and_tokenizer
 from ..modeling.param_index import build_param_index, load_param_index, validate_compatible_index
@@ -28,7 +28,9 @@ def causal_cross_entropy_sum(
     input_ids: torch.Tensor,
 ) -> tuple[torch.Tensor, int]:
     if logits.ndim != 3 or input_ids.ndim != 2:
-        raise ValueError("causal validation expects logits [batch, seq, vocab] and ids [batch, seq]")
+        raise ValueError(
+            "causal validation expects logits [batch, seq, vocab] and ids [batch, seq]"
+        )
     if logits.shape[:2] != input_ids.shape or input_ids.shape[1] < 2:
         raise ValueError("logit/input shape mismatch or sequence too short for causal shift")
     shift_logits = logits[:, :-1, :].contiguous().float()
@@ -80,7 +82,9 @@ def validate_checkpoint_identity(
         if not latest_weight:
             raise ValueError("latest.json does not define weight_path")
         if checkpoint != Path(str(latest_weight)).expanduser().resolve():
-            raise ValueError(f"checkpoint {checkpoint} does not match latest weight {latest_weight}")
+            raise ValueError(
+                f"checkpoint {checkpoint} does not match latest weight {latest_weight}"
+            )
     return {
         "checkpoint_path": str(checkpoint),
         "checkpoint_size_bytes": checkpoint.stat().st_size,
@@ -234,8 +238,8 @@ def run_validation(args: argparse.Namespace) -> dict[str, Any]:
     terminal_predecessor_capture: dict[str, Any] | None = None
     checkpoint_argument = args.checkpoint
     if args.terminal_predecessor:
-        checkpoint_argument, terminal_predecessor_capture = (
-            resolve_terminal_predecessor_checkpoint(args.run_root)
+        checkpoint_argument, terminal_predecessor_capture = resolve_terminal_predecessor_checkpoint(
+            args.run_root
         )
     manifest = resolve_checkpoint(
         project_root=project_root,
@@ -255,7 +259,7 @@ def run_validation(args: argparse.Namespace) -> dict[str, Any]:
         allow_missing=args.allow_missing_source_identity,
     )
 
-    config = load_resolved_config_snapshot(manifest["config_path"])
+    config = load_query_config_snapshot(manifest["config_path"])
     training_identity = source_identity.get("training") or {}
     configured_fingerprint = config.run.source_fingerprint
     captured_fingerprint = training_identity.get("source_fingerprint")
@@ -272,8 +276,8 @@ def run_validation(args: argparse.Namespace) -> dict[str, Any]:
         blocks = blocks[: int(args.max_blocks)]
 
     device_name = (
-        "cuda" if torch.cuda.is_available() else "cpu"
-    ) if args.device == "auto" else args.device
+        ("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device
+    )
     device = torch.device(device_name)
     eval_dtype = dtype_from_name(args.dtype)
     model.to(device=device, dtype=eval_dtype)

@@ -1,0 +1,28 @@
+{
+  "artifact_version": 1,
+  "phase": "P5-delete-classic-refactor",
+  "status": "FAIL",
+  "source_commit": "77e047cc5e291153736f9abbffb8986e6b912330",
+  "source_identity": {"git_dirty": true},
+  "pbs": {
+    "job_id": "2510888.opbs",
+    "compute_host": "mg0028",
+    "queue": "debug-g",
+    "nodes": 1,
+    "walltime_requested": "00:10:00"
+  },
+  "gate": "p5-focused-after-three-failure-review",
+  "checks": {
+    "ruff_lint": "PASS",
+    "ruff_format": "PASS",
+    "p5_checker": "PASS",
+    "pytest": {"passed": 381, "failed": 1, "duration_seconds": 21.34}
+  },
+  "failure": {
+    "test": "tests/test_validation_eval.py::test_query_config_projection_supports_old_fragment_eval_without_runtime_modes",
+    "type": "AssertionError",
+    "message": "strict loader rejected the legacy keys as required, but the test over-specified the error wording from the v4-envelope branch"
+  },
+  "modules": ["nvidia/25.9", "nv-hpcx/25.9"],
+  "raw_log": "fsdiloco_plan03_p5.o2510888"
+}

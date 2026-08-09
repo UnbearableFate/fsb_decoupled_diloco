@@ -1,91 +1,53 @@
-# FS DiLoCo Miyabi
+# Filesystem Decoupled DiLoCo
 
-Filesystem-backed Decoupled DiLoCo research prototype for Miyabi-G.
+这是一个基于共享文件系统的 Decoupled DiLoCo 原型。当前生产路径只有 **Full Protocol v4**：learner 独立训练并发布不可变的完整参数 proposal，syncer candidate 通过 SQLite leader lease 竞争唯一写权限，在事务内完成摄取、选择、合并、发布和终态记账。
 
-Milestone 1 uses independent learners (one CUDA device each when available, with a CPU fallback used by local synthetic runs) and one configurable CPU/GPU syncer process. Learners train GPT-style causal language models locally and publish immutable `safetensors` payloads behind atomically replaced proposal pointers (one per learner in full mode, one per learner/fragment pair in fragment mode). The syncer records authoritative state in a persistent SQLite database in the shared run directory, applies token/staleness-weighted merging with quorum and grace-window behavior on its configured device and dtype, steps an explicit flat-vector outer optimizer, optionally logs syncer-side training telemetry to W&B, and publishes global weights in the configured publication dtype. Full mode optionally enables independently scheduled syncer high availability: a one-time initializer freezes the run descriptor, SQLite issues monotonic leader epochs, every business mutation is fenced in its transaction, and learners adopt epoch-scoped canonical controls instead of trusting the fixed `control/latest.json` cache. That HA path supports either the original static learner set or dynamic membership with UUID process incarnations, a fixed virtual stream pool, fenced registration/admission, hysteretic scale-out, and generation-scoped terminal drain acknowledgements.
+系统支持两种成员拓扑：
 
-The implementation intentionally does not use `torch.distributed`, NCCL, RPC, Ray, DeepSpeed, FSDP, or PCCL for milestone 1 communication.
+- static：descriptor 冻结固定 learner ID；每个新进程 attempt 都需通过 admission fence。
+- dynamic：descriptor 冻结 stream pool；每个进程使用新的 instance ID，通过 bootstrap slot 或明确的 launch request 取得 stream fence。
 
-Plan 02 Phases 1 and 2 have passed their technical Miyabi gates. Phase 1 verified independent-job Syncer HA. Phase 2 verified full-mode dynamic membership through global version 120 with eight bootstrap learners, one permanent learner loss and scheduler-provided replacement, duplicate-job rejection, stream reuse with an incremented stream epoch, bounded active state, and dynamic drain closure. The reviewed protocol additionally commits each merge/starvation capacity observation atomically with the state transition that allocates its sequence, keeps scheduler-bearing registration pending until the durable launch receipt binds the exact PBS job, and converts dynamic token/no-progress stops into persisted close-and-drain. The remediated completed Checker and matched static/dynamic performance gates returned `PASS`; the latter measured no positive dynamic control-path overhead under the frozen 5% formula. The formal Phase 2 workload used 51 local steps per cycle and 120 global versions, exceeding the 50-local-step × 10-global-step documentation baseline. These are recovery, membership, and control-plane results, not training-quality claims; exact jobs and retained artifacts are listed in [Operations](docs/07-operations.md#4-miyabi-pbs-%E6%89%B9%E4%BD%9C%E4%B8%9A).
+两种拓扑都使用同一 v4 proposal、token ledger、publication 和 terminal authority。多个 syncer candidate 可以同时排队或运行，但任一时刻只有持有当前 `(epoch, owner)` lease 的 candidate 能提交业务事务。
 
-## Layout
+## 目录
 
-- `fs_diloco/core/`: configuration and shared identifiers.
-- `fs_diloco/modeling/`: models, datasets, parameter indexing, and outer optimizers.
-- `fs_diloco/protocol/`: fragment scheduling/codecs, merge selection, and liveness rules.
-- `fs_diloco/storage/`: atomic filesystem I/O, safetensors, persistent SQLite, paths, archival, and reference-driven garbage collection.
-- `fs_diloco/observability/`: JSONL logging, CSV metrics, and W&B telemetry.
-- `fs_diloco/runtime/`: learner and syncer process implementations.
-- `fs_diloco/tools/`: run inspection and LM Evaluation Harness utilities.
-- `fs_diloco/{learner,syncer,analysis,eval_lm_harness}.py`: stable `python -m` compatibility entry points.
-- `configs/`: GPT-2/WikiText-2 and tiny synthetic smoke configs.
-- `scripts/miyabi/`: PBS launch and inspection scripts.
-- `scripts/local/`: synthetic CPU smoke helpers.
-- `tests/`: focused unit and integration tests.
-- `docs/`: wiki-style system documentation (architecture, runtime flow, data flow, configuration, operations, and per-module function reference).
-- `reports/`: run analysis results, implementation records, and retained validation evidence.
+- `fs_diloco/core/`：严格 v4 配置、版本和不可变 run descriptor。
+- `fs_diloco/protocol/`：不做 I/O 的 typed proposal、receipt、fence、selection 和 accounting 对象。
+- `fs_diloco/storage/`：SQLite authority、leader lease、文件发布、admission/control adapter 和 initializer。
+- `fs_diloco/runtime/`：learner/syncer v4 composition 与训练循环。
+- `fs_diloco/modeling/`：模型、数据、参数索引和优化器帮助函数。
+- `fs_diloco/observability/`：每 actor/attempt 单写者 JSONL telemetry 与资源观测。
+- `fs_diloco/legacy/`：已完成 v1-v3/full 与 Fragment V0 run 的 query-only reader/decoder。
+- `fs_diloco/baselines/`：独立 torch DDP/periodic-average baseline；不依赖 runtime learner。
+- `fs_diloco/tools/`：初始化、启动、分析、评估、迁移、清理和 operator 工具。
 
-## Documentation
+## 快速入口
 
-Start at the [documentation index](docs/README.md). Highlights:
-
-- [Overview](docs/01-overview.md): what the system is, design goals, full vs fragment modes, terminology.
-- [Architecture](docs/02-architecture.md): process roles, runtime contract, merge protocol, liveness, fault tolerance.
-- [Runtime flow](docs/03-runtime-flow.md): initialization, learner/syncer main loops, shutdown and resume.
-- [Data flow](docs/04-data-flow.md): shared-directory layout, file formats, update state machine, SQLite schema.
-- [Code structure](docs/05-code-structure.md) and [module reference](docs/modules/): per-function documentation for every package.
-- [Configuration reference](docs/06-configuration.md): every YAML section and field.
-- [Operations](docs/07-operations.md): launch commands, PBS scripts, checkpoint evaluation, troubleshooting.
-- [Run analysis report](reports/run_analysis.md): analysis commands and recorded experiment results.
-
-## Quick Commands
-
-Static checks on a Miyabi login node:
+正式运行先由 initializer 创建 run，再独立提交 syncer candidate 和 learner：
 
 ```bash
-bash -n scripts/miyabi/*.pbs scripts/miyabi/*.sh scripts/local/*.sh
-python -m compileall -q fs_diloco
+python -m fs_diloco.tools.launch_independent_run \
+  --config configs/fs_diloco_tiny_ha_static.yaml \
+  --syncer-walltime 00:10:00 \
+  --learner-walltime 00:10:00
 ```
 
-Runtime checks must run inside PBS compute/debug nodes, not on login nodes.
+Miyabi 上通常从 PBS 脚本调用相同入口；提交前按仓库 `AGENTS.md` 运行 `bash -n`、确认字面 group ID，并根据 workload 选择最短实用 walltime。不要在 login node 运行 torch/pytest/GPU workload。
 
-Local synthetic smoke on a safe runtime node:
+旧的 classic full writer、Fragment V0 writer、旧 schema/bootstrap 和动态 proxy mutator 已从当前分支删除。它们只保存在不可变归档 tag：
 
-```bash
-scripts/local/run_tiny_2proc_smoke.sh
-```
+- `archive/classic-full-v1-final`
+- `archive/fragment-v0-final`
+- 两个 tag 的完整 commit：`a00a3d64a50f10a2478c3f4fe795e658d1b3b52f`
 
-Miyabi 1-node debug batch:
+旧 run 只能分析/导出/评估，不能在当前代码上恢复训练。详见 [兼容与迁移](docs/08-compatibility-and-migration.md)。
 
-```bash
-# First run bash -n on every PBS script and verify literal group IDs.
-# Replace HH:MM:SS with the shortest evidence-based estimate that still
-# includes sufficient startup, runtime, and teardown margin.
-qsub -l walltime=HH:MM:SS scripts/miyabi/run_1node_debug.pbs
-```
+## 文档
 
-Inspect a completed run:
-
-```bash
-python -m fs_diloco.analysis runs/fs_diloco/<RUN_ID>
-```
-
-## Runtime Contract
-
-- Large tensors are stored as `safetensors`.
-- `updates/latest/learner_XXX.json` is each full-mode learner's bounded proposal surface; it points to an immutable payload.
-- Fragment mode uses one fixed `updates/latest/learner_XXX_fNNN.json` pointer per learner/fragment pair.
-- Heartbeat JSON files are liveness hints.
-- With HA disabled, `control/latest.json` is the global pointer learners poll. With full-mode HA enabled, learners select the highest valid filesystem epoch and verify its canonical head/pointer checksum without opening SQLite; fixed `latest.json`/`stop.json`/`summary.json` files are repairable convenience caches only.
-- `control/syncer_metadata.sqlite3` is the authoritative commit record and is opened directly from the shared filesystem with rollback journaling and `synchronous=FULL`.
-- Recovery is DB-first: `latest.json` is a rebuildable learner-facing cache, not a recovery authority.
-- HA checkpoints and controls use epoch-unique paths. A stale leader may finish writes only in its old epoch namespace; after a successor epoch commits, its token cannot mutate business state.
-- Dynamic membership requires full mode plus Syncer HA. Each process creates a fresh `learner_li_<uuid4>` identity, receives an admitted placement/stream generation, and must present that membership fence again at final merge commit.
-- Dynamic data sharding uses the immutable `membership.stream_pool_size`, not the current active-process count. A replacement may reuse a stream only with a strictly newer `stream_epoch`.
-- Scale-out is an auditable launch outbox: distinct capacity observations drive hysteresis, PBS jobs remain reserved while queued/running, scheduler-bearing registration waits for an exact durable receipt binding, and one logical launch request can admit at most one process.
-- Dynamic close freezes admission and the terminal merge bound, publishes a generation-scoped drain directive, and waits for healthy acknowledgements or fenced timeout revocation before declaring input closed; token and no-progress limits enter this same persisted close path.
-- The bounded tensor surface retains current checkpoints, fixed proposal pointers, payloads referenced by active DB rows, and short-lived `gc_pending` payloads awaiting deletion; terminal metadata history is archived in append-only JSONL files.
-- Full-mode adoption is strategy-dependent: `replace` overwrites the model and resets AdamW moments, while rebase/prediction reconciliation preserves unpublished local progress and optimizer state. Fragment adoption only replaces changed fragments and resets the optimizer only when configured.
-- Outer optimizers are explicit flat-vector SGD, momentum/Nesterov, and AdamW-style implementations.
-
-See [docs/07-operations.md](docs/07-operations.md) before launching on Miyabi.
+- [文档索引](docs/README.md)
+- [总体设计](docs/01-overview.md)
+- [架构与故障模型](docs/02-architecture.md)
+- [运行流程](docs/03-runtime-flow.md)
+- [数据与持久化](docs/04-data-flow.md)
+- [配置](docs/06-configuration.md)
+- [运维](docs/07-operations.md)
