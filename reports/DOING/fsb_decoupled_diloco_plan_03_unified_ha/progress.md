@@ -579,3 +579,9 @@
 - All seven run roots had contiguous terminal versions, acknowledged fences, zero hard-crash gap, zero pending/selected updates and SQLite integrity `ok`. Aggregate: `artifacts/20260809-153800_p4-third-remediation-target-runtime_pass.json`; source-bound component records are `artifacts/20260809-153600_p4-third-remediation-target-*_pass.json`.
 - Evidence-bound cleanup dry-runs matched deletion for all seven roots. Manifests `artifacts/20260809-153700_p4-third-remediation-target-*_cleanup.json` record 29 deleted terminal objects from the main/smoke runs and 90 from the four specialty/takeover runs, while retaining authority, configuration, control and audit state.
 - The P4 requirement matrix was rebound to the clean target. Boundary, migration and all nine P4 requirement rows passed with explicit clean runtime evidence. Generated Checker artifact: `artifacts/20260809-154000_p4-third-remediation-target-requirements_pass.json` (SHA-256 `4575120ff1ff3ed778ce4488f05ba4aaffa9b4af281a96c9a530dc8271c1a213`). A tracked-evidence rerun remains required after commit.
+
+# 2026-08-09 15:43 JST — P4 third remediation tracked-evidence gate PASS
+
+- After evidence commit `c85d18a`, the full phase-final Checker passed with frozen/current boundary verification, all nine P4 requirement rows, `--require-tracked-evidence`, and clean source target `ba2922dce091cd63b7c2bfcedc20be0aa9ff6bcf`.
+- Every evidence path is tracked and the evidence-only descendant contains no relevant source-tree drift. Compact record: `artifacts/20260809-154300_p4-third-remediation-tracked-evidence-gate_pass.json`.
+- Because the third remediation changed the public admission replay/recovery boundary, one final incremental Codex review of `e565ad8..latest evidence target` remains mandatory before P4 closure. Claude remains non-blocking under the explicit session-limit exception already recorded for this review cycle.
