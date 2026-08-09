@@ -591,3 +591,10 @@
 - Codex independently reviewed `e565ad8f9a71af128c6df7c1dfb4e42a9e520388..cb9e4645b4126f46bfa1b73ce302d67e47b0a044` and saved its report before the Claude invocation. Verdict: `CHANGES_REQUIRED` for one Medium error-classification regression.
 - The fresh Claude invocation ended immediately on the explicit account session limit and is recorded as non-blocking `skipped-session-limit`; it produced no report and is not retried.
 - Required remediation is narrow: malformed committed replay JSON must remain an `AuthoritySchemaError`, not be caught as learner `ValueError`. A RED test and the complete P4 gate are required before phase closure.
+
+# 2026-08-09 15:50 JST — Final P4 review remediation precommit PASS
+
+- `replay_committed_static_binding()` now translates malformed JSON and non-object/type-invalid committed results to `AuthoritySchemaError` while leaving exact request conflicts as `CommandConflictError`. The RED regression also requires the hot request to remain and no rejection/disposition to be published.
+- Job `2510571.opbs` on `mg0017` passed Ruff/format/boundary Checker, all `86` focused tests, all `909` repository tests, and real static/dynamic pipelines. Both pipelines finalized with acknowledged fences, zero hard-crash gap, zero pending/selected updates and SQLite integrity `ok`.
+- Evidence: `artifacts/20260809-155000_p4-final-review-remediation-precommit_pass.json`; stdout SHA-256 `3cb2bc580403962a283a1ffac4d84dee5e4dd4779997daed46d4d68ab04c9042`. A clean frozen-target rerun remains required.
+- Evidence-bound cleanup removed the inventoried terminal objects only after matching dry-runs. Manifests: `artifacts/20260809-155100_p4-final-review-remediation-precommit-{static,dynamic}_cleanup.json`; authority/control/audit state remains retained.

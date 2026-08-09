@@ -695,3 +695,9 @@
 
 - Fresh session `493e2c1b-4bab-4d3d-8584-67c74b874df3` requested `claude-opus-5` for `e565ad8..cb9e464`. The API returned status 429 and `You've hit your session limit · resets 5:20pm (Asia/Tokyo)` before consuming tokens or reporting `modelUsage`; no review report was created.
 - This is the exact user-authorized, non-blocking `skipped-session-limit` case. No actual model is claimed because inference did not begin, and this target will not be retried. Invocation and skip records are retained beside the already saved mandatory Codex report.
+
+# 2026-08-09 15:47 JST — Final P4 review remediation RED gate failed as designed
+
+- Job `2510568.opbs` on `mg0017` passed Ruff, format and boundary Checker, then stopped at `85 passed, 1 failed in 7.04s` in the focused suite. Full tests and pipelines were not reached.
+- The failure reproduces Codex M1 exactly: corrupting only the committed static command's `result_json` caused `JSONDecodeError` to escape the replay wrapper and be caught as an expected request `ValueError`; `_admit_requests()` did not raise `AuthoritySchemaError`.
+- Remediation: move `_command_replay()` into the replay API's schema translation block, validate that its decoded result is a mapping, and preserve `CommandConflictError` outside that translation. Evidence: `artifacts/20260809-154700_p4-final-incremental-review-red_fail.json`. This is attempt 1.

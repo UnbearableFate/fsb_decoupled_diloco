@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -56,6 +57,7 @@ from fs_diloco.protocol.cycle_receipt import (
 )
 from fs_diloco.storage.atomic_io import atomic_write_json, sha256_file
 from fs_diloco.storage.authority import (
+    AuthoritySchemaError,
     AuthorityIdentity,
     CommittedVersion,
     LeaderAuthority,
@@ -1969,6 +1971,59 @@ def test_static_replay_requires_exact_committed_command_request(tmp_path: Path) 
         assert rejection.is_file()
         assert json.loads(rejection.read_bytes())["error_type"] == "CommandConflictError"
         assert not duplicate_path.exists()
+    finally:
+        authority.close()
+
+
+def test_static_replay_keeps_malformed_committed_result_as_authority_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    original_disposition = syncer_runtime.publish_admission_disposition
+    request_path = publish_static_request(
+        paths,
+        run_id="run-v4",
+        descriptor_sha256="d" * 64,
+        learner_id="learner_000",
+        logical_launch_id="logical-1",
+        attempt_id="attempt-1",
+        expected_generation=None,
+    )
+    request = json.loads(request_path.read_bytes())
+
+    def fail_disposition(*_args: object, **_kwargs: object) -> Path:
+        raise OSError("injected post-command disposition failure")
+
+    monkeypatch.setattr(syncer_runtime, "publish_admission_disposition", fail_disposition)
+    try:
+        _admit_requests(loaded, authority, leader, telemetry)
+        assert authority.read.static_binding("learner_000") is not None
+        assert request_path.is_file()
+        request_sha = admission_request_sha256(request)
+        with sqlite3.connect(paths.sqlite_db) as connection:
+            connection.execute(
+                "UPDATE command_records SET result_json='{' WHERE command_id=?",
+                (f"admit-{request_sha}",),
+            )
+        monkeypatch.setattr(
+            syncer_runtime,
+            "publish_admission_disposition",
+            original_disposition,
+        )
+
+        with pytest.raises(AuthoritySchemaError, match="committed static binding result"):
+            _admit_requests(loaded, authority, leader, telemetry)
+
+        assert request_path.is_file()
+        assert not paths.registration_disposition_path(request_sha).exists()
+        rejection_root = (
+            paths.epoch_membership_dir(leader.token.epoch, leader.token.owner_id)
+            / "admissions_v4"
+            / "rejections"
+        )
+        assert not tuple(rejection_root.rglob("*.json"))
     finally:
         authority.close()
 

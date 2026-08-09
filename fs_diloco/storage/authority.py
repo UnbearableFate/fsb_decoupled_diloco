@@ -945,16 +945,18 @@ class LeaderSession:
             allow_logical_replacement=allow_logical_replacement,
             replacement_reason=replacement_reason,
         )
-        payload = self._command_replay(
-            command_id,
-            "bind_or_replace_static_attempt",
-            request,
-        )
-        if payload is None:
-            return None
         try:
+            payload = self._command_replay(
+                command_id,
+                "bind_or_replace_static_attempt",
+                request,
+            )
+            if payload is None:
+                return None
+            if not isinstance(payload, Mapping):
+                raise TypeError("committed static binding result is not an object")
             return _decode_static_binding(payload)
-        except (KeyError, TypeError, ValueError) as exc:
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
             raise AuthoritySchemaError("committed static binding result is invalid") from exc
 
     def bind_or_replace_static_attempt(
