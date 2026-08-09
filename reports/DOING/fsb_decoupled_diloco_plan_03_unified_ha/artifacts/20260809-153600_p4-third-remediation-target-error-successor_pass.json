@@ -1,0 +1,12 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-third-remediation-target-error-successor",
+  "recorded_at": "2026-08-09T15:36:00+09:00",
+  "status": "PASS",
+  "errors": [],
+  "source_commit": "ba2922dce091cd63b7c2bfcedc20be0aa9ff6bcf",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_error_successor_2510486",
+  "identity": {"run_id": "plan03_p4_error_successor_2510486", "git_dirty": false, "source_fingerprint": "sha256:d22a236b4177e997d5831a5daf5cfdbdfed467ba5bc4e2008024ffe1c48573d2", "descriptor_sha256": "9ba604edcfe499e71a2a5b7b15331656120723466ee87bc905dae6223f25b976"},
+  "pbs": {"job_id": "2510486.opbs", "host": "mg0027", "queue": "debug-g", "requested_walltime": "00:10:00", "exit_status": 0, "stdout_sha256": "400da586cfcfb5392dcfc234ed15d0db703d6d0e09004bc0780ba6b1dbce395d"},
+  "authority": {"database_sha256_before_cleanup": "66c66dab6a196bf952f04f9dda5546a80a1c2a0948ea5e3a884cdab24803ef54", "final_version": 20, "direct_weight_tokens_applied": 1280, "acked_terminal_fences": 1, "hard_crash_gap_tokens_upper_bound": 0, "pending_or_selected_updates": 0, "integrity_check": "ok", "epoch_states": ["error", "released"]}
+}

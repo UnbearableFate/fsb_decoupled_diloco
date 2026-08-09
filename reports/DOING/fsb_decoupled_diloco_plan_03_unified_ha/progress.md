@@ -571,3 +571,11 @@
 
 - Codex H1, M1 and M2 are all fixed with dedicated RED/GREEN coverage. The exact disposition record is `artifacts/20260809-153200_p4-third-incremental-review-finding-dispositions_review.json`.
 - Claude's fresh invocation is retained as the user-authorized `skipped-session-limit` case and does not block the already completed Codex review/remediation gate. No review finding remains deferred from this increment.
+
+# 2026-08-09 15:40 JST — P4 third remediation clean-target matrix PASS
+
+- Frozen target `ba2922dce091cd63b7c2bfcedc20be0aa9ff6bcf` was validated from a clean detached worktree (`git_dirty=false`, source fingerprint `sha256:d22a236b4177e997d5831a5daf5cfdbdfed467ba5bc4e2008024ffe1c48573d2`). Static shell/group checks passed before submission and all six jobs used the evidence-based repository minimum `00:10:00` walltime.
+- Jobs `2510483`, `2510484`, `2510485`, `2510486`, `2510487` and `2510489` passed. The matrix covered 85 focused tests, 908 full tests, real static/dynamic pipelines, exact-command replay, repeated-takeover durable rejection, same-logical static replacement, dynamic incarnation replacement, candidate-error successor, two-host expired-lease takeover and Plan01 strict-v4 regression.
+- All seven run roots had contiguous terminal versions, acknowledged fences, zero hard-crash gap, zero pending/selected updates and SQLite integrity `ok`. Aggregate: `artifacts/20260809-153800_p4-third-remediation-target-runtime_pass.json`; source-bound component records are `artifacts/20260809-153600_p4-third-remediation-target-*_pass.json`.
+- Evidence-bound cleanup dry-runs matched deletion for all seven roots. Manifests `artifacts/20260809-153700_p4-third-remediation-target-*_cleanup.json` record 29 deleted terminal objects from the main/smoke runs and 90 from the four specialty/takeover runs, while retaining authority, configuration, control and audit state.
+- The P4 requirement matrix was rebound to the clean target. Boundary, migration and all nine P4 requirement rows passed with explicit clean runtime evidence. Generated Checker artifact: `artifacts/20260809-154000_p4-third-remediation-target-requirements_pass.json` (SHA-256 `4575120ff1ff3ed778ce4488f05ba4aaffa9b4af281a96c9a530dc8271c1a213`). A tracked-evidence rerun remains required after commit.

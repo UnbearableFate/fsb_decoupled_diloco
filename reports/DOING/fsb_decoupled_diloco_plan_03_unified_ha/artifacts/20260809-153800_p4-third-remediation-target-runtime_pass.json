@@ -1,0 +1,37 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-third-remediation-target-runtime",
+  "recorded_at": "2026-08-09T15:38:00+09:00",
+  "status": "PASS",
+  "errors": [],
+  "source_commit": "ba2922dce091cd63b7c2bfcedc20be0aa9ff6bcf",
+  "source_identity": {
+    "git_dirty": false,
+    "source_fingerprint": "sha256:d22a236b4177e997d5831a5daf5cfdbdfed467ba5bc4e2008024ffe1c48573d2",
+    "review_target_worktree": "/work/xg24i002/x10041/fsb_decoupled_diloco_p4_ba2922d"
+  },
+  "requirements_covered": ["AUTH-02", "AUTH-03", "AUTH-04", "AUTH-05", "AUTH-07", "AUTH-09", "AUTH-10", "MODE-02", "P4-MIGRATE"],
+  "static_validation": {
+    "status": "PASS",
+    "commands": ["bash -n scripts/miyabi/*.pbs", "literal #PBS -W group_list=xg24i002 per-file scan", "ruff check fs_diloco tests scripts/miyabi", "ruff format --check 20-file P4 scope", "python -m py_compile affected modules/tests", "git diff --check", "Plan03 frozen/current boundary Checker"],
+    "walltime_basis": "prior and current jobs completed in under two minutes; all submissions used the repository minimum 00:10:00"
+  },
+  "evidence": {
+    "main": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-153600_p4-third-remediation-target-main_pass.json",
+    "static_rerun": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-153600_p4-third-remediation-target-static-rerun_pass.json",
+    "dynamic_replacement": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-153600_p4-third-remediation-target-dynamic-replacement_pass.json",
+    "error_successor": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-153600_p4-third-remediation-target-error-successor_pass.json",
+    "two_host_takeover": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-153600_p4-third-remediation-target-two-host-takeover_pass.json",
+    "plan01_regression": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-153600_p4-third-remediation-target-plan01-regression_pass.json",
+    "migration_baseline": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-095600_p4-config-migration-matrix_pass.json",
+    "migration_delta": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-121500_p4-remediation-migration-delta_pass.json"
+  },
+  "compute_jobs": [
+    {"job_id": "2510483.opbs", "hosts": ["mg0005"], "nodes": 1, "purpose": "lint/format/Checker, focused and full tests, real static and dynamic pipelines", "result": {"focused_tests": 85, "full_tests": 908, "static_final_version": 2, "dynamic_final_version": 12, "acked_terminal_fences": 3, "hard_crash_gap_tokens_upper_bound": 0, "integrity_check": "ok"}},
+    {"job_id": "2510484.opbs", "hosts": ["mg0022"], "nodes": 1, "purpose": "unauthorized static duplicate plus operator-authorized same-launch replacement after post-revalidation pause", "result": {"unauthorized_duplicate_exit_status": 1, "old_post_boundary_commits": 0, "final_version": 20, "integrity_check": "ok"}},
+    {"job_id": "2510485.opbs", "hosts": ["mg0024"], "nodes": 1, "purpose": "dynamic replacement and stale-incarnation fencing", "result": {"old_instance_status": "revoked", "replacement_instance_status": "stopped", "old_post_boundary_commits": 0, "final_version": 20, "integrity_check": "ok"}},
+    {"job_id": "2510486.opbs", "hosts": ["mg0027"], "nodes": 1, "purpose": "candidate error, polluted fixed cache, explicit successor", "result": {"epoch_states": ["error", "released"], "final_version": 20, "integrity_check": "ok"}},
+    {"job_id": "2510487.opbs", "hosts": ["mg0396", "mg0417"], "nodes": 2, "purpose": "two-host candidate death and lease-expiry takeover", "result": {"epoch_states": ["expired", "released"], "duplicate_versions": 0, "final_version": 20, "integrity_check": "ok"}},
+    {"job_id": "2510489.opbs", "hosts": ["mg0044"], "nodes": 1, "purpose": "Plan01 full-suite and strict-v4 compatibility regression", "result": {"full_tests": 908, "final_version": 2, "actor_attestations": 3, "jsonl_telemetry_streams": 3, "legacy_csv_files": 0, "integrity_check": "ok"}}
+  ]
+}

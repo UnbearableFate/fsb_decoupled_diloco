@@ -685,3 +685,8 @@
 - After correcting the identity object name, the repeated static `clean_run` dry-run refused with `completion evidence descriptor identity does not match`; no deletion occurred and later commands were not attempted.
 - Cause: the root-specific sections recorded both descriptor hashes, but the cleaner's established evidence contract reads `static_descriptor_sha256` and `dynamic_descriptor_sha256` from the shared `identity` object.
 - Correction: copy the already attested descriptor hashes into those two identity fields and repeat both dry-run validations before deletion.
+
+# 2026-08-09 15:38 JST — P4 final aggregate/matrix patch used a partial CSV-line hunk
+
+- The combined `apply_patch` attempted to replace only the evidence-path suffix of quoted CSV rows. Patch verification failed because unified-diff hunks match complete physical lines; the aggregate artifact addition was also rolled back atomically.
+- Correction: add the aggregate artifact in its own patch, then perform the two exact path substitutions as a verified bulk mechanical rewrite and assert the expected nine runtime plus nine requirement-path replacements.
