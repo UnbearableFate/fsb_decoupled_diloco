@@ -1,0 +1,60 @@
+{
+  "completed": 1,
+  "scenarios": [
+    {
+      "epochs": [
+        {
+          "acquired_at": 1786287022.1816154,
+          "config_sha256": "5db71bf81d7952873673db1edf80015753f703c3506a01757abe09510f3c8d20",
+          "epoch": 1,
+          "final_at": 1786287027.8212507,
+          "final_state": "released",
+          "hostname": "mg0003",
+          "last_renewed_at": 1786287027.8212507,
+          "owner_id": "syncer-20451982-c230-4419-a8aa-f1b21779b665",
+          "pbs_job_id": "2512722.opbs",
+          "pid": 747869,
+          "source_fingerprint": "sha256:5ea99b6cbb2e820b73cc0646d7d17d69ff4e002f0af84dd4e8a2b3acb9ec44b1",
+          "superseded_by_epoch": null
+        }
+      ],
+      "final_version": 2,
+      "name": "static-1-learner-1-candidate-none",
+      "process_statuses": {
+        "learner_000": 0,
+        "syncer": 0
+      },
+      "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p6_g5_static-1-learner-1-candidate-none_2512722",
+      "summary": {
+        "all_learners_stopped": true,
+        "authority": "full_protocol_v4",
+        "direct_weight_tokens_applied": 128,
+        "final_version": 2,
+        "finalized_at": 1786287027.563947,
+        "finalized_by_epoch": 1,
+        "finalized_by_owner_id": "syncer-20451982-c230-4419-a8aa-f1b21779b665",
+        "format_version": 2,
+        "run_id": "plan03_p6_g5_static-1-learner-1-candidate-none_2512722",
+        "stop_reason": "configured_target",
+        "terminal_generation": 1
+      },
+      "terminal_fences": [
+        {
+          "acknowledged_at": 1786287027.4775221,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 4,
+          "close_last_cycle_seq": 2,
+          "fence_json": "{\"attempt_id\":\"attempt-8eb437e4-5b6d-41f6-962f-f203564aff3a\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"static-82ac73266c0e767e6e03e7e3e4b6ff1f\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 2,
+          "final_update_id": "4eb6f180-b9a1-4dac-ab18-dd337f8aa3ff",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_000",
+          "state": "acked"
+        }
+      ],
+      "token_balance": 0
+    }
+  ]
+}

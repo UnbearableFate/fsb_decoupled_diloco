@@ -269,7 +269,7 @@ CREATE TABLE cycle_receipts (
 CREATE TABLE contributor_progress (
     stable_contributor_key TEXT PRIMARY KEY,
     last_cycle_seq INTEGER NOT NULL CHECK (last_cycle_seq >= 0),
-    last_receipt_id TEXT REFERENCES cycle_receipts(receipt_id),
+    last_receipt_id TEXT,
     last_receipt_sha256 TEXT,
     data_cursor INTEGER NOT NULL CHECK (data_cursor >= 0),
     updated_by_epoch INTEGER NOT NULL CHECK (updated_by_epoch >= 1),

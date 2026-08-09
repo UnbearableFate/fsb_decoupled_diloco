@@ -5688,12 +5688,6 @@ def _audit_history_records(
         """
         SELECT b.* FROM selection_batches AS b
         WHERE b.target_version<=? AND b.state IN ('committed', 'abandoned')
-          AND NOT EXISTS (
-            SELECT 1 FROM selection_batch_updates AS bu
-            JOIN updates AS u ON u.update_id=bu.update_id
-            JOIN contributor_progress AS p ON p.last_receipt_id=u.cycle_receipt_id
-            WHERE bu.batch_id=b.batch_id
-          )
         ORDER BY b.batch_id
         """,
         (safe_cutoff,),
@@ -5724,9 +5718,7 @@ def _audit_history_records(
     update_rows = connection.execute(
         """
         SELECT u.* FROM updates AS u
-        LEFT JOIN contributor_progress AS p ON p.last_receipt_id=u.cycle_receipt_id
-        WHERE p.stable_contributor_key IS NULL
-          AND u.status IN ('applied', 'dropped')
+        WHERE u.status IN ('applied', 'dropped')
         ORDER BY u.update_id
         """
     ).fetchall()

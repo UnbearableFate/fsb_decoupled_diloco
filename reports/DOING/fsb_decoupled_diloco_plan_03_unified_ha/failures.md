@@ -932,3 +932,9 @@
 - Experiment ID `P6-G3-generated-attempt2`，该正式门禁目标连续失败次数 2。PBS job `2512718.opbs` 的pure profile再次通过；SQLite Hypothesis以deterministic counterexample发现第二次ingest时proposal与其cycle receipt的 `retained_tokens_since_base` 不同，G4仍按fail-fast未启动。
 - Adapter先由共享fixture生成随cycle累计的receipt retention，随后又把proposal字段硬改成常数6；authority正确拒绝这组不可能的immutable pair。修复为删除该错误override，让proposal保留fixture中与receipt完全相同的值；不改变production validation。
 - Counterexample和解释保留在state-machine log；下一次仍完整运行pure+SQLite而非只跑失败输入。若第三次同一G3目标仍失败，按三连失败规则先做Codex+GPT全面审查并重写方案，不能直接第四次提交。
+
+## 2026-08-09 23:52 JST — P6 G5 attempt 1 retained a predecessor for a lagging contributor
+
+- Experiment ID `P6-G5-tiny-attempt1`，该正式门禁目标连续失败次数 1。PBS job `2512722.opbs` 完成并验证第一个1-learner static场景；第二个2-learner static场景所有进程clean exit、terminal finalized、token balance和SQLite integrity均正常，但 `_validate` 发现hot `global_versions` 有2行而非current-only 1行，随后fail-fast。
+- 现场DB显示latest v3，learner_001最后receipt属于已应用到v2的batch。`_audit_history_records()` 为满足 `contributor_progress.last_receipt_id` 的hot FK，排除任何包含某contributor最后receipt的batch，因此v2 update/batch/publication/version整组无法archive。单learner场景最后receipt恰在current version所以未暴露。
+- 该行为违反P6 terminal/current-only authority门禁，也说明active contributor每人保留1行虽有界，却能让最多M个旧version依赖留在recovery hot set。修复应让 `contributor_progress` 只持久保存last receipt ID/hash/cursor值而不以FK强制receipt留hot，并允许已裁决、非current version的最后receipt/update依赖闭包archive；ingest连续性仍由progress中的exact ID/hash校验。不得仅放宽G5 validator。
