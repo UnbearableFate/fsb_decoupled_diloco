@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import os
 import sys
 import time
@@ -13,11 +12,10 @@ from pathlib import Path
 
 from ..core.run_descriptor import load_run_descriptor
 from ..protocol.admission_v4 import (
-    admission_request_sha256,
     highest_static_generation,
     new_attempt_id,
-    publish_dynamic_request,
-    publish_static_request,
+    publish_dynamic_request_with_sha256,
+    publish_static_request_with_sha256,
     read_admission_response,
     static_logical_launch_id,
 )
@@ -73,7 +71,7 @@ def main(argv: list[str] | None = None) -> None:
         actor_id = f"learner_li_{uuid.uuid4()}"
         token_sha = hashlib.sha256(os.urandom(32)).hexdigest()
         prepare_learner_instance_dir(loaded.paths, str(stream_id))
-        request_path = publish_dynamic_request(
+        _request_path, request_sha256 = publish_dynamic_request_with_sha256(
             loaded.paths,
             run_id=str(descriptor["run_id"]),
             descriptor_sha256=str(descriptor["descriptor_sha256"]),
@@ -99,7 +97,7 @@ def main(argv: list[str] | None = None) -> None:
             learner_id=actor_id,
         )
         observed_generation = highest_static_generation(loaded.paths, actor_id)
-        request_path = publish_static_request(
+        _request_path, request_sha256 = publish_static_request_with_sha256(
             loaded.paths,
             run_id=str(descriptor["run_id"]),
             descriptor_sha256=str(descriptor["descriptor_sha256"]),
@@ -110,8 +108,6 @@ def main(argv: list[str] | None = None) -> None:
         )
         response_attempt_id = attempt_id
         response_stable_key = actor_id
-    request_payload = json.loads(request_path.read_bytes())
-    request_sha256 = admission_request_sha256(request_payload)
     timeout = (
         shared.membership.initial_membership_deadline_seconds
         if dynamic and args.bootstrap_slot is not None

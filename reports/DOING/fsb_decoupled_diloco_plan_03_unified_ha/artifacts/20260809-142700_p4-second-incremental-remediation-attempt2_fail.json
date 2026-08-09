@@ -1,0 +1,15 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-second-incremental-remediation-attempt2",
+  "recorded_at": "2026-08-09T14:27:00+09:00",
+  "status": "FAIL",
+  "source_commit": "034c18f",
+  "source_state": "dirty remediation tree; plans/AGENTS.md excluded",
+  "pbs": {"job_id": "2510113.opbs", "host": "mg0029", "queue": "debug-g", "requested_walltime": "00:10:00", "exit_status": "nonzero"},
+  "result": {"focused": "82 passed, 1 failed in 7.10s", "full_suite": "not reached", "real_pipelines": "not reached"},
+  "remaining_failure": {
+    "test": "tests/runtime/test_p4_mandatory_runtime.py::test_cross_epoch_rejected_disposition_is_visible_to_waiting_learner",
+    "cause": "The test acquired the successor authority lease but did not publish the successor epoch heartbeat/current control. The public reader therefore correctly had no current epoch from which to resolve the repaired rejection and returned pending."
+  },
+  "stdout": "fsdiloco_plan03_p4.o2510113"
+}

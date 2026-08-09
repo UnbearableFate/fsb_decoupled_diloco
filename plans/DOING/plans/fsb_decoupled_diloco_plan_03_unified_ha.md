@@ -930,7 +930,7 @@ learner 无论static/dynamic都先加载descriptor/source gate、使用epoch con
 - default dry-run；
 - initializer 完成后提交 syncer candidate；
 - static 提交 rerunnable array；dynamic 每个 bootstrap slot独立 qsub并逐项保存 receipt；
-- static array receipt按index生成stable logical launch ID；每次process start生成attempt ID，learner在leader发布current attempt/generation binding前等待；PBS rerun复用logical ID但必须取得新generation，新logical job走显式replacement；
+- static array receipt按index生成stable logical launch ID；每次process start生成attempt ID，learner在leader发布current attempt/generation binding前等待；PBS rerun复用logical ID但必须取得新generation。若旧attempt已由authority依据确定性terminal evidence终结，新attempt可按expected generation重绑；若旧attempt仍是active（包括仅heartbeat超时、scheduler状态不确定或可能SIGSTOP的进程），同logical rerun也必须由operator request精确绑定old/new fence后才能replacement，不能以超时自动授权。新logical job始终走同样的显式replacement；
 - 任一 partial submission 非零退出、保留 accepted job ID、不自动 qdel；
 - 所有 walltime 必须由调用者显式给出并符合仓库最短实用 walltime规则，且不得短于 10 分钟。
 
@@ -989,7 +989,7 @@ classic resume authority        = 0
 行为：
 
 - 1 candidate static；
-- static learner同logical launch rerun恢复，以及旧generation恢复后的successful commit=0；
+- static learner同logical launch rerun恢复：旧attempt已authority-terminal时按generation重绑；旧attempt仍active时必须先有精确operator authorization；两种路径均要求旧generation恢复后的successful commit=0；
 - 2 candidate takeover；
 - dynamic replacement；
 - error terminal + successor；

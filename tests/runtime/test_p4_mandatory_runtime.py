@@ -26,6 +26,7 @@ from fs_diloco.modeling.hf_data import build_indexed_batch_iterator
 from fs_diloco.protocol._validation import identity as validate_identity
 from fs_diloco.protocol.admission_v4 import (
     AdmissionAuthorizationError,
+    AdmissionRejectedError,
     admission_request_sha256,
     archive_disposed_admission_request,
     dynamic_placement_id,
@@ -37,6 +38,7 @@ from fs_diloco.protocol.admission_v4 import (
     read_admission_response,
     read_static_replacement_authorization,
 )
+from fs_diloco.protocol import admission_v4 as admission_protocol
 from fs_diloco.protocol.contributor import (
     DynamicContributorFence,
     StaticContributorFence,
@@ -59,7 +61,11 @@ from fs_diloco.storage.authority import (
     LeaderAuthority,
     initialize_authority_v4,
 )
-from fs_diloco.storage.leader_lease import CommittedLeaderLease, LeaderToken
+from fs_diloco.storage.leader_lease import (
+    CommittedLeaderLease,
+    LeaderToken,
+    StaleLeaderTokenError,
+)
 from fs_diloco.storage.paths import RunPaths
 from fs_diloco.tools import launch_independent_run
 from fs_diloco.tools.init_run import initialize_run
@@ -1865,3 +1871,207 @@ else:
     )
     assert completed.returncode == 0, completed.stderr
     assert "TORCH_IMPORTED=False" in completed.stdout
+
+
+def test_fresh_request_cannot_reuse_the_current_static_attempt_id(tmp_path: Path) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    try:
+        publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-1",
+            expected_generation=None,
+        )
+        _admit_requests(loaded, authority, leader, telemetry)
+        first = authority.read.static_binding("learner_000")
+        assert first is not None and first.binding_generation == 1
+
+        duplicate_path = publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-1",
+            expected_generation=1,
+        )
+        duplicate = json.loads(duplicate_path.read_bytes())
+        _admit_requests(loaded, authority, leader, telemetry)
+
+        current = authority.read.static_binding("learner_000")
+        assert current == first
+        rejection = paths.epoch_admission_rejection_path(
+            leader.token.epoch,
+            leader.token.owner_id,
+            "learner_000",
+            "attempt-1",
+            admission_request_sha256(duplicate),
+        )
+        assert rejection.is_file()
+        assert json.loads(rejection.read_bytes())["error_type"] == "MembershipFenceError"
+        assert not duplicate_path.exists()
+    finally:
+        authority.close()
+
+
+def test_stale_leader_cannot_use_exact_binding_shortcut_to_remove_hot_request(
+    tmp_path: Path,
+) -> None:
+    paths, authority, first_leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    try:
+        publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-1",
+            expected_generation=None,
+        )
+        _admit_requests(loaded, authority, first_leader, telemetry)
+        hot = publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-1",
+            expected_generation=1,
+        )
+        authority.fail_leader(first_leader.token)
+        authority.acquire_leader(owner_id="owner-2", hostname="host", pid=2)
+
+        with pytest.raises(StaleLeaderTokenError):
+            _admit_requests(loaded, authority, first_leader, telemetry)
+        assert hot.is_file()
+    finally:
+        authority.close()
+
+
+def test_identical_invalid_request_replay_is_byte_idempotent_across_epochs(
+    tmp_path: Path,
+) -> None:
+    paths, authority, first_leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    poison = paths.registration_requests / "static" / "learner_000" / "poison.json"
+    poison.parent.mkdir(parents=True, exist_ok=True)
+    raw = b'{"format_version":"\xff"}'
+    try:
+        poison.write_bytes(raw)
+        _admit_requests(loaded, authority, first_leader, telemetry)
+        digest = hashlib.sha256(raw).hexdigest()
+        history = paths.registration_history_path(digest)
+        disposition = paths.registration_disposition_path(digest)
+        before = (history.read_bytes(), disposition.read_bytes())
+
+        authority.fail_leader(first_leader.token)
+        successor = authority.open_leader(
+            authority.acquire_leader(owner_id="owner-2", hostname="host", pid=2)
+        )
+        poison.write_bytes(raw)
+        publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-valid",
+            expected_generation=None,
+        )
+        _admit_requests(loaded, authority, successor, telemetry)
+
+        assert not poison.exists()
+        assert (history.read_bytes(), disposition.read_bytes()) == before
+        binding = authority.read.static_binding("learner_000")
+        assert binding is not None and binding.attempt_id == "attempt-valid"
+    finally:
+        authority.close()
+
+
+def test_cross_epoch_rejected_disposition_is_visible_to_waiting_learner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths, authority, first_leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    original_archive = syncer_runtime.archive_disposed_admission_request
+    try:
+        publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-1",
+            expected_generation=None,
+        )
+        _admit_requests(loaded, authority, first_leader, telemetry)
+        rejected_path = publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-2",
+            expected_generation=1,
+        )
+        rejected = json.loads(rejected_path.read_bytes())
+
+        def fail_archive(*_args: object, **_kwargs: object) -> Path:
+            raise OSError("injected crash after rejected disposition")
+
+        monkeypatch.setattr(syncer_runtime, "archive_disposed_admission_request", fail_archive)
+        _admit_requests(loaded, authority, first_leader, telemetry)
+        assert rejected_path.is_file()
+
+        authority.fail_leader(first_leader.token)
+        successor = authority.open_leader(
+            authority.acquire_leader(owner_id="owner-2", hostname="host", pid=2)
+        )
+        _publish_synthetic_heartbeat(V4ControlPublisher(paths, successor.token))
+        monkeypatch.setattr(
+            syncer_runtime,
+            "archive_disposed_admission_request",
+            original_archive,
+        )
+        _admit_requests(loaded, authority, successor, telemetry)
+
+        with pytest.raises(AdmissionRejectedError, match="active static replacement"):
+            read_admission_response(
+                paths,
+                run_id="run-v4",
+                descriptor_sha256="d" * 64,
+                actor_id="learner_000",
+                attempt_id="attempt-2",
+                stable_contributor_key="learner_000",
+                request_sha256=admission_request_sha256(rejected),
+                max_clock_skew_seconds=0.0,
+            )
+        assert not rejected_path.exists()
+    finally:
+        authority.close()
+
+
+def test_request_publish_api_returns_digest_without_hot_file_reread(tmp_path: Path) -> None:
+    publisher = getattr(admission_protocol, "publish_static_request_with_sha256", None)
+    assert callable(publisher), "learner request publication must return its in-memory digest"
+    paths = RunPaths(tmp_path)
+    request_path, request_sha = publisher(
+        paths,
+        run_id="run-v4",
+        descriptor_sha256="d" * 64,
+        learner_id="learner_000",
+        logical_launch_id="logical-1",
+        attempt_id="attempt-1",
+        expected_generation=None,
+    )
+    payload = json.loads(request_path.read_bytes())
+    request_path.unlink()
+    assert request_sha == admission_request_sha256(payload)
+    entrypoint_source = Path("fs_diloco/runtime/learner_entrypoint.py").read_text(encoding="utf-8")
+    assert "request_path.read_bytes()" not in entrypoint_source

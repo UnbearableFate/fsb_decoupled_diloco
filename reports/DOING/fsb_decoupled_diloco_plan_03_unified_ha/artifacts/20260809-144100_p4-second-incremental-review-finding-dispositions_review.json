@@ -1,0 +1,95 @@
+{
+  "artifact_schema_version": 1,
+  "recorded_at": "2026-08-09T14:41:00+09:00",
+  "status": "REVIEW",
+  "review_base": "d18fae055b5beec1887f38c3f2070f0bf6ec901b",
+  "review_target": "19d40b5173eb1a16227013a451fced0e3eb13ace",
+  "reviewers": [
+    {
+      "reviewer": "Codex",
+      "actual_model": "gpt-5.6-sol",
+      "verdict": "CHANGES_REQUIRED",
+      "report": "reports/DOING/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P4-mandatory-fenced-runtime/gpt-5.6-sol_19d40b5173eb1a16227013a451fced0e3eb13ace.md"
+    },
+    {
+      "reviewer": "Claude Code",
+      "actual_model": "claude-opus-5",
+      "session_id": "175cc4fb-6814-4917-b567-1d712b8a6bcf",
+      "verdict": "CHANGES_REQUIRED",
+      "report": "reports/DOING/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P4-mandatory-fenced-runtime/claude-opus-5_19d40b5173eb1a16227013a451fced0e3eb13ace.md"
+    }
+  ],
+  "dispositions": [
+    {
+      "finding": "Codex H1 / Claude M5: fresh or stale same-attempt request bypasses the static generation fence",
+      "status": "fixed",
+      "resolution": "The exact-current path now requires a token-validated, typed command record for the exact content-addressed command ID and an exact result/current-binding match. Otherwise the normal fenced command rejects the request. RED tests cover both fresh same-attempt reuse and a stale leader."
+    },
+    {
+      "finding": "Codex M1: identical malformed bytes collide when replayed under a later epoch",
+      "status": "fixed",
+      "resolution": "The first-observer invalid disposition remains immutable. Replay validates the retained raw-byte history, digest, rejection and classification, then removes only the identical hot entry. A cross-epoch RED test verifies byte-for-byte stability and neighboring request progress."
+    },
+    {
+      "finding": "Claude H1: same-logical static rerun behavior was ambiguous and no production terminal-evidence producer exists",
+      "status": "rejected-with-evidence",
+      "resolution": "The safe supported contract is now explicit in plan section 9.2/9.4 and MODE-02: deterministic authority-terminal evidence permits expected-generation rebinding; an active, paused, heartbeat-expired or scheduler-uncertain attempt never self-authorizes and requires an exact operator old/new-fence authorization. P4 does not add an unsafe timeout-based terminal inference."
+    },
+    {
+      "finding": "Claude M1: learner rereads a removable hot request to derive its digest",
+      "status": "fixed",
+      "resolution": "Static and dynamic publication APIs return the digest derived from the exact in-memory canonical payload. The learner no longer rereads the hot path; a RED test removes the published file before digest consumption."
+    },
+    {
+      "finding": "Claude M2: broad deferral swallows stale-token, schema and internal admission invariant errors",
+      "status": "fixed",
+      "resolution": "StaleLeaderTokenError, AuthoritySchemaError and AdmissionInvariantError now propagate ahead of the retryable OSError/RuntimeError boundary; the exact-current replay also verifies the token before and after its read."
+    },
+    {
+      "finding": "Claude M4: a rejected disposition from an old epoch is invisible to a waiting learner",
+      "status": "fixed",
+      "resolution": "A successor validates the retained disposition and old rejection, republishes an equivalent request-specific rejection in its current epoch, then archives the hot request. The public learner reader test observes the rejection after takeover."
+    },
+    {
+      "finding": "Claude L3: Checker source fallback, dirty evidence acceptance and omitted root main.py",
+      "status": "fixed",
+      "resolution": "Runtime evidence source fallback uses only checks.requirements_source_commit, explicit dirty or malformed cleanliness markers fail, and source-equivalence includes main.py. Three Checker regressions cover all cases."
+    },
+    {
+      "finding": "Claude L2: MODE-02 named a CUDA allocation counter without direct counter evidence",
+      "status": "rejected-with-evidence",
+      "resolution": "The matrix and plan now name the actual proof: the production pre-torch import sentinel fires before torch import, model load or device allocation, so a rejected/waiting process cannot reach any production torch/CUDA allocation path."
+    },
+    {
+      "finding": "Claude L5: ContributorResumeState does not type-validate decoded fields",
+      "status": "rejected-with-evidence",
+      "resolution": "ContributorResumeState.__post_init__ already applies strict_int to cursor, next_cycle_seq and optional stream_epoch, and validates receipt identity/digest coupling. Decoders instantiate this type and translate its ValueError into protocol failure."
+    },
+    {
+      "finding": "Codex L1 / Claude M3: persistent unreadable hot-entry telemetry is unbounded",
+      "status": "deferred-with-justification",
+      "owner": "P6 G6 boundedness",
+      "resolution": "P6 must add per-path observation fingerprints, bounded repeat diagnostics/backoff and changed/recovered events, then verify bounded event/fsync behavior across repeated scans."
+    },
+    {
+      "finding": "Claude L1: admission request reads have no byte-size limit",
+      "status": "deferred-with-justification",
+      "owner": "P6 G6 boundedness",
+      "resolution": "P6 must apply a pre-read regular-file size bound plus bounded read enforcement and exact boundary/oversize tests before the 10,000-cycle gate."
+    },
+    {
+      "finding": "Claude L4: current admission repair performs O(N) immutable publication work every poll",
+      "status": "deferred-with-justification",
+      "owner": "P6 G6 boundedness",
+      "resolution": "P6 must make repair event-driven or cache the current-epoch fence set, and measure that steady-state metadata work does not grow with contributor history or poll count."
+    },
+    {
+      "finding": "Claude L6: admission request SHA/command identity is incompatible with an in-progress old run root",
+      "status": "deferred-with-justification",
+      "owner": "P5 compatibility documentation",
+      "resolution": "P5 must document that the v4 cutover is fresh-run-only and that in-flight roots produced before newline canonicalization/stable command identity are query-only, not resumable."
+    }
+  ],
+  "red_gate": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-142300_p4-second-incremental-review-red_fail.json",
+  "green_gate": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-143900_p4-second-incremental-remediation-final-precommit_pass.json"
+}

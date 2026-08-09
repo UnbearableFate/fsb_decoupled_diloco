@@ -586,3 +586,30 @@
 - Expected: a new static duplicate/replacement or dynamic replacement waits while the old actor's current pointer is still authoritative, then consumes its own exact rejection/response after the leader processes the request. Actual: `read_admission_response` treated the old pointer's actor/attempt mismatch as immediate `AdmissionSupersededError`, so both new processes exited before their admission signal.
 - Confirmed common cause: pointer mismatch has two meanings—an already-admitted stale actor and an ordinary new request that has not yet been processed. The initial polling reader had no evidence distinguishing them. Because test admission signals now occur only after the second validation, a process that already captured admission no longer uses this polling path after replacement; its captured contributor fence remains the write boundary.
 - Remediation: return pending for a nonmatching current pointer during initial polling, while retaining request-specific rejection validation, exact matching-pointer/response validation, and tombstone rejection. Add a direct regression proving a pending replacement is not mislabeled, then rerun both specialty gates. Evidence: `artifacts/20260809-133552_p4-remediation-target-{static-rerun,dynamic-replacement}-attempt1_fail.json`; failed roots/logs remain retained until GREEN.
+# 2026-08-09 14:19 JST — P4 review evidence inspection command failed
+
+- Failure: a read-only Python inspection attempted to pass `dict_keys` directly to `json.dumps`, which raised `TypeError: Object of type dict_keys is not JSON serializable` before printing the Checker subsection.
+- Cause: inspection-command serialization error; no repository code, evidence, test, or runtime was exercised or modified.
+- Correction: materialize the keys as a list (or print them directly) and rerun the same read-only inspection before any remediation edit.
+
+# 2026-08-09 14:23 JST — P4 second incremental review RED gate failed as designed
+
+- Job `2510080.opbs` on `mg0018` passed static setup and reached the focused runtime suite, which produced `78 passed, 5 failed in 7.10s` before the full suite and pipelines.
+- The five failures precisely reproduce the accepted admission boundary findings: a fresh same-attempt request bypasses generation fencing; a stale leader uses the same shortcut without token validation; identical invalid bytes collide across epochs; an old rejected disposition is not made visible in the successor epoch; and the learner publication API cannot supply its digest without rereading the removable hot file.
+- Evidence: `artifacts/20260809-142300_p4-second-incremental-review-red_fail.json`; stdout `fsdiloco_plan03_p4.o2510080`. This is attempt 1 for the combined remediation work unit.
+
+# 2026-08-09 14:23 JST — PBS history inspection command used an unsupported option
+
+- A read-only follow-up used `qstat -x -f`, but this PBS installation accepts `-x` only with `--rsc`; it printed usage and did not inspect the completed job. The joined stdout already contained the exact test result and host, so no experiment evidence was lost.
+- Correction: use `qstat -f` while a job is retained, and rely on the persisted PBS stdout plus generated evidence after it leaves the live queue.
+
+# 2026-08-09 14:27 JST — P4 second incremental remediation attempt 2 narrowed to a test-fixture defect
+
+- Job `2510113.opbs` on `mg0029` passed Ruff, format and Checker, then produced `82 passed, 1 failed in 7.10s` in the focused suite.
+- All five RED product behaviors were corrected. The remaining rejected-replay test acquired epoch 2 in SQLite but omitted publication of epoch 2 heartbeat/current control; the public reader consequently had no current epoch and correctly returned pending instead of inspecting the repaired rejection.
+- Correction: publish a synthetic successor heartbeat in the test before invoking the public reader, without changing product behavior. Evidence: `artifacts/20260809-142700_p4-second-incremental-remediation-attempt2_fail.json`. This is the first occurrence of this fixture-specific cause.
+
+# 2026-08-09 14:31 JST — P4 remediation cleanup dry-run rejected incomplete evidence summary
+
+- `clean_run` correctly refused the static `2510137` root with `matched evidence run summary does not match` because the newly persisted PASS artifact summary omitted the exact `run_id` field required for evidence-to-root binding.
+- No deletion occurred. Correction: add the already attested static/dynamic run IDs to their respective summaries, revalidate the JSON, and repeat dry-run before any delete request.

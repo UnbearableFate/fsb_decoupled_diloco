@@ -454,3 +454,120 @@ def test_plan03_triage_finding_ids_are_all_bound_to_matrix_requirements() -> Non
             for token in references.split(",")
         )
         assert directly_referenced or range_referenced, finding_id
+
+
+def _requirement_evidence_repo(tmp_path: Path) -> tuple[Path, Path, str]:
+    (tmp_path / "fs_diloco").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "fs_diloco" / "owner.py").write_text(
+        'PLAN03_REQUIREMENTS = {"REQ-1"}\n', encoding="utf-8"
+    )
+    (tmp_path / "tests" / "test_owner.py").write_text(
+        'PLAN03_REQUIREMENTS = {"REQ-1"}\n', encoding="utf-8"
+    )
+    matrix = tmp_path / "matrix.csv"
+    matrix.write_text(
+        "invariant_id,phase,artifact_contract,status,evidence_path\n"
+        'REQ-1,P4,"checker requirements.REQ-1",complete,evidence.json\n',
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "init", "--quiet"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "plan03@example.invalid"], cwd=tmp_path, check=True
+    )
+    subprocess.run(["git", "config", "user.name", "Plan 03 Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "--quiet", "-m", "source"], cwd=tmp_path, check=True)
+    source = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    return tmp_path, matrix, source
+
+
+def test_plan03_requirement_checker_rejects_dirty_runtime_evidence(tmp_path: Path) -> None:
+    root, matrix, source = _requirement_evidence_repo(tmp_path)
+    (root / "evidence.json").write_text(
+        json.dumps(
+            {
+                "status": "PASS",
+                "source_commit": source,
+                "source_identity": {"git_dirty": True},
+                "requirements_covered": ["REQ-1"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _checks, differences = verify_phase_requirements(
+        root,
+        matrix,
+        "P4",
+        expected_source_commit=source,
+    )
+
+    assert differences == ["requirements.REQ-1.structured-checker-evidence"]
+
+
+def test_plan03_evidence_source_equivalence_covers_root_entrypoint(tmp_path: Path) -> None:
+    root, matrix, source = _requirement_evidence_repo(tmp_path)
+    (root / "evidence.json").write_text(
+        json.dumps(
+            {
+                "status": "PASS",
+                "source_commit": source,
+                "source_identity": {"git_dirty": False},
+                "requirements_covered": ["REQ-1"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "main.py").write_text("print('changed')\n", encoding="utf-8")
+    subprocess.run(["git", "add", "main.py"], cwd=root, check=True)
+    subprocess.run(["git", "commit", "--quiet", "-m", "entrypoint drift"], cwd=root, check=True)
+    target = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    _checks, differences = verify_phase_requirements(
+        root,
+        matrix,
+        "P4",
+        expected_source_commit=target,
+    )
+
+    assert differences == ["requirements.REQ-1.structured-checker-evidence"]
+
+
+def test_plan03_requirement_evidence_does_not_treat_frozen_boundary_as_source(
+    tmp_path: Path,
+) -> None:
+    root, matrix, source = _requirement_evidence_repo(tmp_path)
+    (root / "evidence.json").write_text(
+        json.dumps(
+            {
+                "status": "PASS",
+                "checks": {
+                    "current_migration_boundaries": {"source_commit": source},
+                    "requirements": {"REQ-1": {"status": "PASS"}},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _checks, differences = verify_phase_requirements(
+        root,
+        matrix,
+        "P4",
+        expected_source_commit=source,
+    )
+
+    assert differences == ["requirements.REQ-1.structured-checker-evidence"]

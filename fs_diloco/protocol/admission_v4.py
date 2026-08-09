@@ -94,6 +94,28 @@ def publish_static_request(
     attempt_id: str,
     expected_generation: int | None,
 ) -> Path:
+    path, _request_sha256 = publish_static_request_with_sha256(
+        paths,
+        run_id=run_id,
+        descriptor_sha256=descriptor_sha256,
+        learner_id=learner_id,
+        logical_launch_id=logical_launch_id,
+        attempt_id=attempt_id,
+        expected_generation=expected_generation,
+    )
+    return path
+
+
+def publish_static_request_with_sha256(
+    paths: RunPaths,
+    *,
+    run_id: str,
+    descriptor_sha256: str,
+    learner_id: str,
+    logical_launch_id: str,
+    attempt_id: str,
+    expected_generation: int | None,
+) -> tuple[Path, str]:
     payload = {
         "format_version": ADMISSION_REQUEST_FORMAT_VERSION,
         "mode": "static",
@@ -110,7 +132,7 @@ def publish_static_request(
     }
     target = paths.registration_requests / "static" / learner_id / f"{attempt_id}.json"
     _publish_json(target, payload)
-    return target
+    return target, admission_request_sha256(payload)
 
 
 def publish_dynamic_request(
@@ -124,6 +146,30 @@ def publish_dynamic_request(
     launch_request_id: str | None = None,
     replace_instance_id: str | None = None,
 ) -> Path:
+    path, _request_sha256 = publish_dynamic_request_with_sha256(
+        paths,
+        run_id=run_id,
+        descriptor_sha256=descriptor_sha256,
+        instance_id=instance_id,
+        stream_id=stream_id,
+        admission_token_sha256=admission_token_sha256,
+        launch_request_id=launch_request_id,
+        replace_instance_id=replace_instance_id,
+    )
+    return path
+
+
+def publish_dynamic_request_with_sha256(
+    paths: RunPaths,
+    *,
+    run_id: str,
+    descriptor_sha256: str,
+    instance_id: str,
+    stream_id: int,
+    admission_token_sha256: str,
+    launch_request_id: str | None = None,
+    replace_instance_id: str | None = None,
+) -> tuple[Path, str]:
     hostname = socket.gethostname()
     accelerator = os.environ.get("CUDA_VISIBLE_DEVICES") or "cpu"
     payload = {
@@ -147,7 +193,7 @@ def publish_dynamic_request(
     }
     target = paths.registration_requests / "dynamic" / f"{instance_id}.json"
     _publish_json(target, payload)
-    return target
+    return target, admission_request_sha256(payload)
 
 
 def iter_admission_requests(paths: RunPaths) -> tuple[AdmissionRequestObservation, ...]:
@@ -664,7 +710,7 @@ def dispose_invalid_admission_request(
     }
     history = paths.registration_history_path(request_sha)
     _publish_json(history, history_payload)
-    disposition = {
+    disposition_payload = {
         "format_version": ADMISSION_DISPOSITION_FORMAT_VERSION,
         "request_sha256": request_sha,
         "run_id": run_id,
@@ -678,9 +724,77 @@ def dispose_invalid_admission_request(
         "message": message,
     }
     target = paths.registration_disposition_path(request_sha)
-    _publish_json(target, disposition)
+    existing = safe_read_json(target)
+    if existing is None:
+        if target.exists():
+            raise RuntimeError("invalid admission disposition is unreadable")
+        _publish_json(target, disposition_payload)
+    else:
+        _validate_invalid_admission_disposition(
+            paths,
+            original=original,
+            history_payload=history_payload,
+            disposition=existing,
+            run_id=run_id,
+            descriptor_sha256=descriptor_sha256,
+            expected_error_type=error_type,
+            expected_message=message,
+        )
     _remove_hot_request(request_path, identity=identity)
     return target
+
+
+def _validate_invalid_admission_disposition(
+    paths: RunPaths,
+    *,
+    original: bytes,
+    history_payload: dict[str, Any],
+    disposition: Any,
+    run_id: str,
+    descriptor_sha256: str,
+    expected_error_type: str,
+    expected_message: str,
+) -> None:
+    request_sha = hashlib.sha256(original).hexdigest()
+    history = paths.registration_history_path(request_sha)
+    if safe_read_json(history) != history_payload:
+        raise RuntimeError("invalid admission history does not match the raw request")
+    expected_fields = {
+        "format_version",
+        "request_sha256",
+        "run_id",
+        "descriptor_sha256",
+        "leader_epoch",
+        "leader_owner_id",
+        "outcome",
+        "control_path",
+        "fence",
+        "error_type",
+        "message",
+    }
+    if (
+        not isinstance(disposition, dict)
+        or set(disposition) != expected_fields
+        or disposition.get("format_version") != ADMISSION_DISPOSITION_FORMAT_VERSION
+        or disposition.get("request_sha256") != request_sha
+    ):
+        raise RuntimeError("invalid admission disposition fields are invalid")
+    epoch = disposition.get("leader_epoch")
+    if (
+        disposition.get("run_id") != run_id
+        or disposition.get("descriptor_sha256") != descriptor_sha256
+        or isinstance(epoch, bool)
+        or not isinstance(epoch, int)
+        or epoch < 1
+        or not isinstance(disposition.get("leader_owner_id"), str)
+        or not disposition["leader_owner_id"]
+        or disposition.get("outcome") != "rejected"
+        or disposition.get("control_path") != paths.relative(history)
+        or disposition.get("fence") is not None
+        or disposition.get("error_type") != expected_error_type
+        or disposition.get("message") != expected_message
+    ):
+        raise RuntimeError("invalid admission disposition identity is invalid")
 
 
 def _validate_admission_disposition(
@@ -801,6 +915,48 @@ def _validate_admission_disposition(
         raise RuntimeError("rejected disposition control is invalid") from exc
     if disposition["error_type"] != control["error_type"]:
         raise RuntimeError("rejected disposition control is invalid")
+
+
+def repair_rejected_admission_control(
+    paths: RunPaths,
+    *,
+    request: dict[str, Any],
+    disposition: Any,
+    epoch: int,
+    owner_id: str,
+) -> Path | None:
+    """Republish an already validated rejection into the current leader epoch."""
+
+    _validate_admission_disposition(paths, request=request, disposition=disposition)
+    if disposition["outcome"] != "rejected":
+        return None
+    actor_id, attempt_id = _request_actor_attempt(request)
+    source = paths.epoch_admission_rejection_path(
+        int(disposition["leader_epoch"]),
+        str(disposition["leader_owner_id"]),
+        actor_id,
+        attempt_id,
+        admission_request_sha256(request),
+    )
+    payload = safe_read_json(source)
+    _validate_rejection_control(
+        payload,
+        path=source,
+        run_id=str(request["run_id"]),
+        descriptor_sha256=str(request["descriptor_sha256"]),
+        actor_id=actor_id,
+        attempt_id=attempt_id,
+        epoch=int(disposition["leader_epoch"]),
+        owner_id=str(disposition["leader_owner_id"]),
+    )
+    return publish_admission_rejection(
+        paths,
+        epoch=epoch,
+        owner_id=owner_id,
+        request=request,
+        error_type=str(payload["error_type"]),
+        message=str(payload["message"]),
+    )
 
 
 def publish_static_replacement_authorization(

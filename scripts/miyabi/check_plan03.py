@@ -462,6 +462,7 @@ def _evidence_source_matches_target(root: Path, source: Any, target: str | None)
         "configs",
         "pyproject.toml",
         "uv.lock",
+        "main.py",
     )
     difference = subprocess.run(
         ["git", "diff", "--quiet", source, target, "--", *relevant_tree],
@@ -541,9 +542,7 @@ def verify_phase_requirements(
             )
             source_commit = payload.get("source_commit")
             if source_commit is None and isinstance(payload.get("checks"), dict):
-                source_commit = (
-                    payload["checks"].get("current_migration_boundaries", {}).get("source_commit")
-                )
+                source_commit = payload["checks"].get("requirements_source_commit")
             cache_key = source_commit if isinstance(source_commit, str) else None
             if cache_key not in source_match_cache:
                 source_match_cache[cache_key] = _evidence_source_matches_target(
@@ -551,10 +550,27 @@ def verify_phase_requirements(
                 )
             source_matches = source_match_cache[cache_key]
             covered_requirements = payload.get("requirements_covered", [])
+            dirty_markers = [
+                marker
+                for marker in (
+                    payload.get("git_dirty"),
+                    payload.get("source_identity", {}).get("git_dirty")
+                    if isinstance(payload.get("source_identity"), dict)
+                    else None,
+                    payload.get("identity", {}).get("git_dirty")
+                    if isinstance(payload.get("identity"), dict)
+                    else None,
+                )
+                if marker is not None
+            ]
+            runtime_source_is_clean = not dirty_markers or all(
+                marker is False for marker in dirty_markers
+            )
             runtime_evidence_pass = (
                 payload.get("status") == "PASS"
                 and isinstance(covered_requirements, list)
                 and requirement in covered_requirements
+                and runtime_source_is_clean
             )
             if source_matches and (
                 runtime_evidence_pass

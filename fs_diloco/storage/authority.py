@@ -905,6 +905,26 @@ class LeaderSession:
         self._authority = authority
         self.token = token
 
+    def replay_committed_static_binding(self, *, command_id: str) -> StaticBinding | None:
+        """Return the exact committed binding result for a content-addressed command."""
+
+        validate_identity(command_id, name="command_id")
+        self._authority._verify_token(self.token)
+        row = self._authority._fetchone(
+            "SELECT command_kind, result_json FROM command_records WHERE command_id=?",
+            (command_id,),
+        )
+        self._authority._verify_token(self.token)
+        if row is None:
+            return None
+        if row["command_kind"] != "bind_or_replace_static_attempt":
+            raise CommandConflictError("command ID belongs to another command kind")
+        try:
+            payload = json.loads(str(row["result_json"]))
+            return _decode_static_binding(payload)
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise AuthoritySchemaError("committed static binding result is invalid") from exc
+
     def bind_or_replace_static_attempt(
         self,
         *,

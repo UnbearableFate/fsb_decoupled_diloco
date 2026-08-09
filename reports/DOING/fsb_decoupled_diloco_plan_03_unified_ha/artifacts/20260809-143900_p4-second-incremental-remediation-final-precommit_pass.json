@@ -1,0 +1,62 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-second-incremental-remediation-final-precommit",
+  "recorded_at": "2026-08-09T14:39:00+09:00",
+  "status": "PASS",
+  "errors": [],
+  "source_commit": "034c18fe20c07ae6f2d8529e184307f1af6d0099",
+  "identity": {
+    "git_dirty": true,
+    "source_fingerprint": "sha256:4fb0ed350e83bee45e3fae1033e5e42fd456e86bafc6b12bb339bf895021ab3e",
+    "static_descriptor_sha256": "449deec4988c8f94cdda19dc31f66b75890da5bd206afb723feefb24255a341c",
+    "dynamic_descriptor_sha256": "4c2abf51f1974f34071732397a63b7e49d5c2bb255e75c56fa7410d30db9a041"
+  },
+  "pbs": {
+    "job_id": "2510204.opbs",
+    "host": "mg0019",
+    "nodes": 1,
+    "queue": "debug-g",
+    "group_id": "xg24i002",
+    "requested_walltime": "00:10:00",
+    "exit_status": 0,
+    "stdout_sha256": "03d89c5fa639431cc4cb333681301bf54d15b1f17a6ad811194df05f2f90004a"
+  },
+  "checks": {
+    "ruff": "PASS",
+    "format_files": 20,
+    "boundary_checker": "PASS",
+    "focused_tests": "83 passed in 6.82s",
+    "full_tests": "904 passed in 69.42s"
+  },
+  "static": {
+    "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_static_2510204",
+    "authority_database_sha256_before_cleanup": "3cee5477d935f18d5fe5fcd0f91978e75b6ce3032938e228be205a21a243976e",
+    "summary": {
+      "run_id": "plan03_p4_static_2510204",
+      "final_version": 2,
+      "direct_weight_tokens_applied": 192,
+      "acked_terminal_fences": 2,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "pending_or_selected_updates": 0,
+      "integrity_check": "ok"
+    }
+  },
+  "dynamic": {
+    "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_dynamic_2510204",
+    "authority_database_sha256_before_cleanup": "a006545e4062c2e061cd71ab039b6780660f0fe6bfb315b795185aec9d9e6528",
+    "summary": {
+      "run_id": "plan03_p4_dynamic_2510204",
+      "final_version": 12,
+      "direct_weight_tokens_applied": 3840,
+      "acked_terminal_fences": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "pending_or_selected_updates": 0,
+      "integrity_check": "ok"
+    }
+  },
+  "checks_added_after_prior_pass": [
+    "dirty runtime evidence rejection",
+    "root main.py source-equivalence coverage",
+    "frozen migration-boundary source cannot substitute for runtime evidence source"
+  ]
+}

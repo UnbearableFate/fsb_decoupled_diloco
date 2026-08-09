@@ -29,6 +29,7 @@ from ..protocol.admission_v4 import (
     publish_admission_response,
     publish_admission_disposition,
     publish_admission_rejection,
+    repair_rejected_admission_control,
     read_static_replacement_authorization,
 )
 from ..protocol.authority import MergeFenceConflict
@@ -49,11 +50,13 @@ from ..protocol.merge import normalized_update_weights, weighted_average_tensors
 from ..protocol.proposal import FullUpdateProposalV2
 from ..storage.atomic_io import atomic_write_json, publish_immutable_bytes, safe_read_json
 from ..storage.authority import (
+    AuthoritySchemaError,
     CommandConflictError,
     LeaderAuthority,
     LeaderSession,
     MembershipFenceError,
 )
+from ..storage.leader_lease import StaleLeaderTokenError
 from ..storage.tensor_codec import (
     dtype_from_name,
     load_outer_state,
@@ -76,6 +79,10 @@ PLAN03_REQUIREMENTS = frozenset(
         "P4-MIGRATE",
     }
 )
+
+
+class AdmissionInvariantError(RuntimeError):
+    """An internal admission invariant failed and must terminate this candidate."""
 
 
 def _raise_injected_candidate_failure(version: int) -> None:
@@ -357,6 +364,7 @@ def _admit_requests(
     leader: LeaderSession,
     telemetry: ActorTelemetryWriter,
 ) -> None:
+    authority.committed_leader_lease(leader.token)
     _repair_current_admission_controls(loaded, authority, leader)
     for observation in iter_admission_requests(loaded.paths):
         if observation.original is None:
@@ -367,8 +375,11 @@ def _admit_requests(
                 error_errno=observation.read_errno,
             )
             continue
+        authority.committed_leader_lease(leader.token)
         try:
             _admit_observations_unprotected(loaded, authority, leader, telemetry, (observation,))
+        except (AdmissionInvariantError, AuthoritySchemaError, StaleLeaderTokenError):
+            raise
         except (OSError, RuntimeError) as exc:
             telemetry.event(
                 "admission_request_deferred",
@@ -426,6 +437,14 @@ def _admit_observations_unprotected(
         request_sha = admission_request_sha256(request)
         disposition_path = loaded.paths.registration_disposition_path(request_sha)
         if disposition_path.is_file():
+            disposition = safe_read_json(disposition_path)
+            repair_rejected_admission_control(
+                loaded.paths,
+                request=request,
+                disposition=disposition,
+                epoch=leader.token.epoch,
+                owner_id=leader.token.owner_id,
+            )
             archive_disposed_admission_request(
                 loaded.paths,
                 request_path=path,
@@ -444,7 +463,11 @@ def _admit_observations_unprotected(
                     and prior.logical_launch_id == str(request["logical_launch_id"])
                     and prior.attempt_id == str(request["attempt_id"])
                 ):
-                    binding = prior
+                    binding = leader.replay_committed_static_binding(command_id=command_id)
+                    if binding is None or binding != prior:
+                        raise MembershipFenceError(
+                            "active static attempt ID belongs to another admission request"
+                        )
                 else:
                     authorization = None
                     if prior is not None:
@@ -521,6 +544,7 @@ def _admit_observations_unprotected(
             MembershipFenceError,
             ValueError,
         ) as exc:
+            authority.committed_leader_lease(leader.token)
             rejection = publish_admission_rejection(
                 loaded.paths,
                 epoch=leader.token.epoch,
@@ -553,7 +577,10 @@ def _admit_observations_unprotected(
             )
             continue
         if fence not in authority.read.current_contributor_fences():
-            raise RuntimeError("admission command returned a fence that is no longer current")
+            raise AdmissionInvariantError(
+                "admission command returned a fence that is no longer current"
+            )
+        authority.committed_leader_lease(leader.token)
         actor_id = fence.learner_id if fence.kind == "static" else fence.instance_id
         attempt_id = fence.attempt_id if fence.kind == "static" else fence.instance_id
         persisted_resume = _existing_admission_resume(
