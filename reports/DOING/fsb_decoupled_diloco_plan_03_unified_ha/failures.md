@@ -976,3 +976,9 @@
 - Experiment ID `P6-G6-boundedness-attempt1`。PBS job `2513249.opbs`在单个`debug-g`节点以30分钟walltime启动，约45秒内exit 1；formal 10k workload未开始，calibration也在authority构造前失败，因此没有可误判为结果的G6 artifact。
 - `plan03_p6_boundedness.py`仍向`LeaderAuthority(...)`传递已不存在的`publication_orphan_grace_seconds`关键字，Python精确报 `TypeError: LeaderAuthority.__init__() got an unexpected keyword argument 'publication_orphan_grace_seconds'`。当前authority将该grace值作为maintenance/GC command的显式参数，而非constructor状态；同仓库current tests也按这一接口调用。
 - 下一次只移除G6 harness中的过时constructor参数，保留后续维护调用显式使用冻结config的grace值。先跑完整静态门禁和受影响G2 compute suite，再重新提交calibration+formal G6；不得改production接口或跳过200-cycle calibration。
+
+## 2026-08-10 01:30 JST — P6 G10 attempt 1 lost the locked PyTorch index during export/sync
+
+- Experiment ID `P6-G10-performance-attempt1`。PBS job `2513331.opbs`在单个`debug-g`节点以30分钟walltime启动；current隔离venv的frozen sync和classic detached worktree创建成功，但classic依赖安装在任何paired arm运行前exit 1，因此没有G10 comparison artifact、没有可解释为性能结果的样本。
+- Runner用`uv export --no-emit-project`生成requirements后再调用裸`uv pip sync`。导出文件保留`torch==2.13.0+cu132`及hash，却没有携带`pyproject.toml`中explicit `pytorch-cu132` index；resolver只查默认index并精确报“no version of torch==2.13.0+cu132”。这是隔离环境构造错误，不是lockfile不可解或性能门禁失败。
+- 下一次让classic环境直接从current frozen project/lock以独立`UV_PROJECT_ENVIRONMENT`同步依赖，再以`--no-deps -e`安装classic source；这样两臂仍是不同venv/worktree/run root，同时复用lock中的source/index/hash契约。先做shell/静态检查，并在compute上验证两个解释器路径不同且torch/依赖版本一致，再重新开始固定20 pairs；不得删除PyTorch或放宽workload equivalence/non-inferiority门禁。

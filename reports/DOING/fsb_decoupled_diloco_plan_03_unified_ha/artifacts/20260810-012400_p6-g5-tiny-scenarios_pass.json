@@ -1,0 +1,508 @@
+{
+  "artifact_version": 1,
+  "environment": {
+    "pbs_job_id": "2513306.opbs"
+  },
+  "errors": [],
+  "gate": "G5-six-real-tiny-pipelines",
+  "phase_id": "P6-acceptance-final-review",
+  "plan_id": "fsb_decoupled_diloco_plan_03_unified_ha",
+  "requirements_covered": [
+    "P6-ACCEPTANCE"
+  ],
+  "scenario_count": 6,
+  "scenarios": [
+    {
+      "epochs": [
+        {
+          "acquired_at": 1786292673.5734806,
+          "config_sha256": "4cbf7f6432d908d5f04f1878dbf456f2a9c3ec067203fd4a2b2f8db59a4fc11e",
+          "epoch": 1,
+          "final_at": 1786292679.2647622,
+          "final_state": "released",
+          "hostname": "mg0004",
+          "last_renewed_at": 1786292679.2647622,
+          "owner_id": "syncer-5ee535d0-65e6-45f0-9507-a1823885cfd7",
+          "pbs_job_id": "2513306.opbs",
+          "pid": 2610427,
+          "source_fingerprint": "sha256:302ecab2978c480a8cbacfbd179ffc6daf15c84451aabeb213a0ef7b1ae1ac7f",
+          "superseded_by_epoch": null
+        }
+      ],
+      "final_version": 1,
+      "name": "static-1-learner-1-candidate-none",
+      "process_statuses": {
+        "learner_000": 0,
+        "syncer": 0
+      },
+      "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p6_g5_static-1-learner-1-candidate-none_2513306",
+      "summary": {
+        "all_learners_stopped": true,
+        "authority": "full_protocol_v4",
+        "direct_weight_tokens_applied": 64,
+        "final_version": 1,
+        "finalized_at": 1786292678.9995847,
+        "finalized_by_epoch": 1,
+        "finalized_by_owner_id": "syncer-5ee535d0-65e6-45f0-9507-a1823885cfd7",
+        "format_version": 2,
+        "run_id": "plan03_p6_g5_static-1-learner-1-candidate-none_2513306",
+        "stop_reason": "configured_target",
+        "terminal_generation": 1
+      },
+      "terminal_fences": [
+        {
+          "acknowledged_at": 1786292678.9553604,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 2,
+          "close_last_cycle_seq": 1,
+          "fence_json": "{\"attempt_id\":\"attempt-09780980-aa36-461d-83fc-d6bd1073babf\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"static-d1796a4d9abcf487c0053162c6afcf81\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 1,
+          "final_update_id": "e72de9de-2a28-4a1a-9ed4-fa92415a99eb",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_000",
+          "state": "acked"
+        }
+      ],
+      "token_balance": 0
+    },
+    {
+      "epochs": [
+        {
+          "acquired_at": 1786292682.9394283,
+          "config_sha256": "cd472decce5265a8f9b5e67efffeab0ae9d639b86a5401bdddddc35331344534",
+          "epoch": 1,
+          "final_at": 1786292687.5863729,
+          "final_state": "released",
+          "hostname": "mg0004",
+          "last_renewed_at": 1786292687.5863729,
+          "owner_id": "syncer-082d96d7-074a-471c-8c8a-300a57cec3a5",
+          "pbs_job_id": "2513306.opbs",
+          "pid": 2610632,
+          "source_fingerprint": "sha256:302ecab2978c480a8cbacfbd179ffc6daf15c84451aabeb213a0ef7b1ae1ac7f",
+          "superseded_by_epoch": null
+        }
+      ],
+      "final_version": 3,
+      "name": "static-2-learners-1-candidate-none",
+      "process_statuses": {
+        "learner_000": 0,
+        "learner_001": 0,
+        "syncer": 0
+      },
+      "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p6_g5_static-2-learners-1-candidate-none_2513306",
+      "summary": {
+        "all_learners_stopped": true,
+        "authority": "full_protocol_v4",
+        "direct_weight_tokens_applied": 320,
+        "final_version": 3,
+        "finalized_at": 1786292687.2190402,
+        "finalized_by_epoch": 1,
+        "finalized_by_owner_id": "syncer-082d96d7-074a-471c-8c8a-300a57cec3a5",
+        "format_version": 2,
+        "run_id": "plan03_p6_g5_static-2-learners-1-candidate-none_2513306",
+        "stop_reason": "configured_target",
+        "terminal_generation": 1
+      },
+      "terminal_fences": [
+        {
+          "acknowledged_at": 1786292687.0901337,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 6,
+          "close_last_cycle_seq": 3,
+          "fence_json": "{\"attempt_id\":\"attempt-488e8f40-f5e6-4308-a560-a3586c0f3f5e\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"static-6873551d7ab3a01e15628e48f3c518df\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 4,
+          "final_update_id": "3931f768-2aa4-4f5b-b5cb-6fd4b1dd128a",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_000",
+          "state": "acked"
+        },
+        {
+          "acknowledged_at": 1786292687.0979958,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 6,
+          "close_last_cycle_seq": 3,
+          "fence_json": "{\"attempt_id\":\"attempt-7642bf72-6e86-4d41-935f-274c7986fe4e\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_001\",\"logical_launch_id\":\"static-0bd4b8083213b0ffa95840b997323f2b\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 3,
+          "final_update_id": "f4ff13d5-13a3-494f-8224-8ef9496f70e1",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_001",
+          "state": "acked"
+        }
+      ],
+      "token_balance": 0
+    },
+    {
+      "epochs": [
+        {
+          "acquired_at": 1786292691.160692,
+          "config_sha256": "9cc9ff0217b330517a985de302b229e7c4d93b5c054018474530260def51c1fc",
+          "epoch": 1,
+          "final_at": 1786292702.532175,
+          "final_state": "released",
+          "hostname": "mg0004",
+          "last_renewed_at": 1786292702.532175,
+          "owner_id": "syncer-d82aea13-e67a-4762-ad58-d2f5c6869a50",
+          "pbs_job_id": "2513306.opbs",
+          "pid": 2610974,
+          "source_fingerprint": "sha256:302ecab2978c480a8cbacfbd179ffc6daf15c84451aabeb213a0ef7b1ae1ac7f",
+          "superseded_by_epoch": null
+        }
+      ],
+      "final_version": 11,
+      "name": "static-2-learners-loss-rerun-old-resume",
+      "process_statuses": {
+        "new": 0,
+        "old": 0,
+        "other": 0,
+        "syncer": 0
+      },
+      "replacement_evidence": {
+        "current_attempt_id": "attempt-p6-tiny-new",
+        "current_binding_generation": 2,
+        "old_final_status": "replaced",
+        "old_generation_authority_updates": 0
+      },
+      "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p6_g5_static-2-learners-loss-rerun-old-resume_2513306",
+      "summary": {
+        "all_learners_stopped": true,
+        "authority": "full_protocol_v4",
+        "direct_weight_tokens_applied": 512,
+        "final_version": 11,
+        "finalized_at": 1786292702.3046353,
+        "finalized_by_epoch": 1,
+        "finalized_by_owner_id": "syncer-d82aea13-e67a-4762-ad58-d2f5c6869a50",
+        "format_version": 2,
+        "run_id": "plan03_p6_g5_static-2-learners-loss-rerun-old-resume_2513306",
+        "stop_reason": "configured_target",
+        "terminal_generation": 1
+      },
+      "terminal_fences": [
+        {
+          "acknowledged_at": 1786292701.992408,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 24,
+          "close_last_cycle_seq": 12,
+          "fence_json": "{\"attempt_id\":\"attempt-p6-tiny-new\",\"binding_generation\":2,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"p6-tiny-static-rerun\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 13,
+          "final_update_id": "8ea195d0-4a43-4632-a2ca-b55074cc0375",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_000",
+          "state": "acked"
+        },
+        {
+          "acknowledged_at": 1786292702.0056274,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 46,
+          "close_last_cycle_seq": 23,
+          "fence_json": "{\"attempt_id\":\"attempt-5094c913-17b4-4e2c-a839-c729489bae8d\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_001\",\"logical_launch_id\":\"static-a10cdf05c294da443c21a8314aefe4e7\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 24,
+          "final_update_id": "5f53d85d-93be-4d83-b564-ac30f90ef4d4",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_001",
+          "state": "acked"
+        }
+      ],
+      "token_balance": 0
+    },
+    {
+      "epochs": [
+        {
+          "acquired_at": 1786292706.4982412,
+          "config_sha256": "6fda22fa1a7155f984c6877b56699f300ec6f7ee02d7a39c108b9ab90b141955",
+          "epoch": 1,
+          "final_at": 1786292710.5205262,
+          "final_state": "error",
+          "hostname": "mg0004",
+          "last_renewed_at": 1786292710.5205262,
+          "owner_id": "syncer-a7014dd5-1c9b-4ef3-bc03-f65568c76df8",
+          "pbs_job_id": "2513306.opbs",
+          "pid": 2611401,
+          "source_fingerprint": "sha256:302ecab2978c480a8cbacfbd179ffc6daf15c84451aabeb213a0ef7b1ae1ac7f",
+          "superseded_by_epoch": 2
+        },
+        {
+          "acquired_at": 1786292711.123065,
+          "config_sha256": "6fda22fa1a7155f984c6877b56699f300ec6f7ee02d7a39c108b9ab90b141955",
+          "epoch": 2,
+          "final_at": 1786292715.4513745,
+          "final_state": "released",
+          "hostname": "mg0004",
+          "last_renewed_at": 1786292715.4513745,
+          "owner_id": "syncer-fc80a0ad-8d3e-44e4-aff0-880899f4791f",
+          "pbs_job_id": "2513306.opbs",
+          "pid": 2611470,
+          "source_fingerprint": "sha256:302ecab2978c480a8cbacfbd179ffc6daf15c84451aabeb213a0ef7b1ae1ac7f",
+          "superseded_by_epoch": null
+        }
+      ],
+      "final_version": 11,
+      "name": "static-2-learners-2-candidates-active-crash",
+      "process_statuses": {
+        "first_candidate": 1,
+        "learner_0": 0,
+        "learner_1": 0,
+        "successor": 0
+      },
+      "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p6_g5_static-2-learners-2-candidates-active-crash_2513306",
+      "summary": {
+        "all_learners_stopped": true,
+        "authority": "full_protocol_v4",
+        "direct_weight_tokens_applied": 256,
+        "final_version": 11,
+        "finalized_at": 1786292715.2726965,
+        "finalized_by_epoch": 2,
+        "finalized_by_owner_id": "syncer-fc80a0ad-8d3e-44e4-aff0-880899f4791f",
+        "format_version": 2,
+        "run_id": "plan03_p6_g5_static-2-learners-2-candidates-active-crash_2513306",
+        "stop_reason": "configured_target",
+        "terminal_generation": 1
+      },
+      "terminal_fences": [
+        {
+          "acknowledged_at": 1786292715.01108,
+          "acknowledged_by_epoch": 2,
+          "close_data_cursor": 26,
+          "close_last_cycle_seq": 13,
+          "fence_json": "{\"attempt_id\":\"attempt-560da3ca-9e66-45d6-a77a-3b17c2398139\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"static-2a01f0c1845e17464ac3c28eea283408\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 14,
+          "final_update_id": "0890e930-d758-41b8-8d71-e422d9a4b645",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_000",
+          "state": "acked"
+        },
+        {
+          "acknowledged_at": 1786292715.0216615,
+          "acknowledged_by_epoch": 2,
+          "close_data_cursor": 26,
+          "close_last_cycle_seq": 13,
+          "fence_json": "{\"attempt_id\":\"attempt-4fcb38b9-01db-47ea-80a1-e96d79f367ec\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_001\",\"logical_launch_id\":\"static-f3992c77a8ffe0ca6cee3ee08be554ee\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 14,
+          "final_update_id": "c7241447-ead0-43b6-af42-bf6534098cfd",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_001",
+          "state": "acked"
+        }
+      ],
+      "token_balance": 0
+    },
+    {
+      "epochs": [
+        {
+          "acquired_at": 1786292719.219976,
+          "config_sha256": "1e6145013d2f9f823f9f9bce52601f6b326737e8a8171dfd8f6a8c3a0ac1864c",
+          "epoch": 1,
+          "final_at": 1786292744.4184332,
+          "final_state": "released",
+          "hostname": "mg0004",
+          "last_renewed_at": 1786292744.4184332,
+          "owner_id": "syncer-c2eb4220-a140-4c95-94d1-8028fd043624",
+          "pbs_job_id": "2513306.opbs",
+          "pid": 2611810,
+          "source_fingerprint": "sha256:302ecab2978c480a8cbacfbd179ffc6daf15c84451aabeb213a0ef7b1ae1ac7f",
+          "superseded_by_epoch": null
+        }
+      ],
+      "final_version": 11,
+      "name": "dynamic-2-learners-replacement",
+      "process_statuses": {
+        "survivor": 0,
+        "syncer": 0
+      },
+      "replacement_evidence": {
+        "new_stream_epoch": 2,
+        "old_final_status": "expired",
+        "old_max_applied_version": null,
+        "old_stream_epoch": 1,
+        "replacement_boundary_version": 0,
+        "replacement_final_status": "stopped",
+        "stream_id": 0
+      },
+      "replacement_launches": 1,
+      "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p6_g5_dynamic-2-learners-replacement_2513306",
+      "scheduler_jobs": {
+        "lost": {
+          "historical": "finished",
+          "job_id": "2513312.opbs",
+          "live": "no_record"
+        },
+        "maximum_live_allocations": 2,
+        "replacement": {
+          "historical": "finished",
+          "job_id": "2513313",
+          "live": "no_record"
+        }
+      },
+      "summary": {
+        "all_learners_stopped": true,
+        "authority": "full_protocol_v4",
+        "direct_weight_tokens_applied": 1408,
+        "final_version": 11,
+        "finalized_at": 1786292743.9043276,
+        "finalized_by_epoch": 1,
+        "finalized_by_owner_id": "syncer-c2eb4220-a140-4c95-94d1-8028fd043624",
+        "format_version": 2,
+        "run_id": "plan03_p6_g5_dynamic-2-learners-replacement_2513306",
+        "stop_reason": "configured_target",
+        "terminal_generation": 1
+      },
+      "terminal_fences": [
+        {
+          "acknowledged_at": 1786292743.4916363,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 22,
+          "close_last_cycle_seq": 11,
+          "fence_json": "{\"admission_generation\":2,\"admission_token_sha256\":\"9f6c9623dcb3649be6e7864b71ac54474c9265d1fb2bce196d69670a2d02af72\",\"instance_id\":\"learner_li_4bf2ff66-4edc-4ed5-9339-4aabdbfe1b6d\",\"kind\":\"dynamic\",\"placement_epoch\":2,\"placement_id\":\"placement-6112b3bf0993828d5ddb4c7b27edb38a\",\"stream_epoch\":2,\"stream_id\":0}",
+          "fence_kind": "dynamic",
+          "final_cycle_seq": 12,
+          "final_update_id": "412d4d0b-1fb3-47dc-bb75-4599f4cae27b",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "0",
+          "state": "acked"
+        },
+        {
+          "acknowledged_at": 1786292743.4995937,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 96,
+          "close_last_cycle_seq": 48,
+          "fence_json": "{\"admission_generation\":1,\"admission_token_sha256\":\"0b4cba7366bb8ce0e10af891f9b688218f0cc21326c641d04df86664cb3d3349\",\"instance_id\":\"learner_li_fe56deaa-1976-4cc6-b09b-6f6a6044959b\",\"kind\":\"dynamic\",\"placement_epoch\":1,\"placement_id\":\"placement-865bfbaf3f4609ca3ca7d2a63498238a\",\"stream_epoch\":1,\"stream_id\":1}",
+          "fence_kind": "dynamic",
+          "final_cycle_seq": 49,
+          "final_update_id": "26e016c9-6f5c-4006-8a74-2b5aba0d413c",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "1",
+          "state": "acked"
+        }
+      ],
+      "token_balance": 0
+    },
+    {
+      "epochs": [
+        {
+          "acquired_at": 1786292755.9573762,
+          "config_sha256": "5effef6d5428cfb6fd8e0f9e7a5dd646e60eb2420278fd594ced76be6879ad90",
+          "epoch": 1,
+          "final_at": 1786292766.355245,
+          "final_state": "error",
+          "hostname": "mg0004",
+          "last_renewed_at": 1786292766.355245,
+          "owner_id": "syncer-e498c667-418e-430b-b95d-a9013b3e0b98",
+          "pbs_job_id": "2513306.opbs",
+          "pid": 2612297,
+          "source_fingerprint": "sha256:302ecab2978c480a8cbacfbd179ffc6daf15c84451aabeb213a0ef7b1ae1ac7f",
+          "superseded_by_epoch": 2
+        },
+        {
+          "acquired_at": 1786292766.385502,
+          "config_sha256": "5effef6d5428cfb6fd8e0f9e7a5dd646e60eb2420278fd594ced76be6879ad90",
+          "epoch": 2,
+          "final_at": 1786292790.548544,
+          "final_state": "released",
+          "hostname": "mg0004",
+          "last_renewed_at": 1786292790.548544,
+          "owner_id": "syncer-45b23a67-dba5-4219-a2bc-936dcc67ae1f",
+          "pbs_job_id": "2513306.opbs",
+          "pid": 2612503,
+          "source_fingerprint": "sha256:302ecab2978c480a8cbacfbd179ffc6daf15c84451aabeb213a0ef7b1ae1ac7f",
+          "superseded_by_epoch": null
+        }
+      ],
+      "final_version": 11,
+      "name": "dynamic-2-learners-2-candidates-syncer-and-learner-failure",
+      "process_statuses": {
+        "first_candidate": 1,
+        "successor": 0,
+        "survivor": 0
+      },
+      "replacement_evidence": {
+        "new_stream_epoch": 2,
+        "old_final_status": "expired",
+        "old_max_applied_version": 4,
+        "old_stream_epoch": 1,
+        "replacement_boundary_version": 4,
+        "replacement_final_status": "stopped",
+        "stream_id": 0
+      },
+      "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p6_g5_dynamic-2-learners-2-candidates-syncer-and-learner-failure_2513306",
+      "scheduler_jobs": {
+        "lost": {
+          "historical": "finished",
+          "job_id": "2513316.opbs",
+          "live": "no_record"
+        },
+        "maximum_live_allocations": 2,
+        "replacement": {
+          "historical": "finished",
+          "job_id": "2513322",
+          "live": "no_record"
+        }
+      },
+      "summary": {
+        "all_learners_stopped": true,
+        "authority": "full_protocol_v4",
+        "direct_weight_tokens_applied": 896,
+        "final_version": 11,
+        "finalized_at": 1786292790.2427325,
+        "finalized_by_epoch": 2,
+        "finalized_by_owner_id": "syncer-45b23a67-dba5-4219-a2bc-936dcc67ae1f",
+        "format_version": 2,
+        "run_id": "plan03_p6_g5_dynamic-2-learners-2-candidates-syncer-and-learner-failure_2513306",
+        "stop_reason": "configured_target",
+        "terminal_generation": 1
+      },
+      "terminal_fences": [
+        {
+          "acknowledged_at": 1786292789.7157464,
+          "acknowledged_by_epoch": 2,
+          "close_data_cursor": 22,
+          "close_last_cycle_seq": 11,
+          "fence_json": "{\"admission_generation\":1,\"admission_token_sha256\":\"e4992fb33ff09b4a0907ab314140ecd27d92e7895661cfe3e60df8882f93fbe1\",\"instance_id\":\"learner_li_b6e9c806-7a36-4ce5-8d86-6f0b0ca09456\",\"kind\":\"dynamic\",\"placement_epoch\":1,\"placement_id\":\"placement-f218b74e066150b5b20bece1aa9c4fb9\",\"stream_epoch\":2,\"stream_id\":0}",
+          "fence_kind": "dynamic",
+          "final_cycle_seq": 12,
+          "final_update_id": "0e4f7ceb-2223-429f-9d31-07e84607bd58",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "0",
+          "state": "acked"
+        },
+        {
+          "acknowledged_at": 1786292789.7250595,
+          "acknowledged_by_epoch": 2,
+          "close_data_cursor": 122,
+          "close_last_cycle_seq": 61,
+          "fence_json": "{\"admission_generation\":1,\"admission_token_sha256\":\"779307f7bf71cb0569b3a17c6577b3bb7ed56fade5ad600917de84b0484bf2b4\",\"instance_id\":\"learner_li_32782583-b9fc-4c9a-8e35-15974ec8ccaa\",\"kind\":\"dynamic\",\"placement_epoch\":1,\"placement_id\":\"placement-865bfbaf3f4609ca3ca7d2a63498238a\",\"stream_epoch\":1,\"stream_id\":1}",
+          "fence_kind": "dynamic",
+          "final_cycle_seq": 62,
+          "final_update_id": "64ffd3f3-1f9e-477d-bf19-154d2a6c0dd4",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "1",
+          "state": "acked"
+        }
+      ],
+      "token_balance": 0
+    }
+  ],
+  "source_commit": "7ea33aa2706c6d4c29c525c3ba0ac8e2c45ae410",
+  "source_identity": {
+    "git_commit": "7ea33aa2706c6d4c29c525c3ba0ac8e2c45ae410",
+    "git_dirty": false,
+    "source_fingerprint": "sha256:302ecab2978c480a8cbacfbd179ffc6daf15c84451aabeb213a0ef7b1ae1ac7f"
+  },
+  "status": "PASS"
+}

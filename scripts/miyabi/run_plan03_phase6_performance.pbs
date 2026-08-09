@@ -21,7 +21,6 @@ UV_BIN="${UV_BIN:-$(command -v uv)}"
 CLASSIC_ROOT="$TMPDIR/plan03-classic-worktree"
 CURRENT_VENV="$TMPDIR/plan03-current-venv"
 CLASSIC_VENV="$TMPDIR/plan03-classic-venv"
-REQUIREMENTS="$TMPDIR/plan03-g10-requirements.txt"
 SHARED_PARENT="${SHARED_PARENT:-$PROJECT_ROOT/runs/fs_diloco}"
 
 cleanup() {
@@ -35,12 +34,18 @@ cd "$PROJECT_ROOT"
 git worktree add --detach "$CLASSIC_ROOT" archive/classic-full-v1-final
 UV_PROJECT_ENVIRONMENT="$CURRENT_VENV" "$UV_BIN" sync \
   --project "$PROJECT_ROOT" --frozen --no-dev
-"$UV_BIN" export --project "$PROJECT_ROOT" --frozen --no-dev \
-  --no-emit-project --output-file "$REQUIREMENTS"
-"$UV_BIN" venv "$CLASSIC_VENV"
-"$UV_BIN" pip sync --python "$CLASSIC_VENV/bin/python" "$REQUIREMENTS"
-"$UV_BIN" pip install --python "$CLASSIC_VENV/bin/python" --no-deps -e "$CLASSIC_ROOT"
+UV_PROJECT_ENVIRONMENT="$CLASSIC_VENV" "$UV_BIN" sync \
+  --project "$PROJECT_ROOT" --frozen --no-dev
+"$UV_BIN" pip install --python "$CLASSIC_VENV/bin/python" \
+  --no-deps --reinstall -e "$CLASSIC_ROOT"
 test "$CURRENT_VENV/bin/python" != "$CLASSIC_VENV/bin/python"
+CURRENT_PACKAGE="$("$CURRENT_VENV/bin/python" -c 'from pathlib import Path; import fs_diloco; print(Path(fs_diloco.__file__).resolve())')"
+CLASSIC_PACKAGE="$("$CLASSIC_VENV/bin/python" -c 'from pathlib import Path; import fs_diloco; print(Path(fs_diloco.__file__).resolve())')"
+test "$CURRENT_PACKAGE" = "$PROJECT_ROOT/fs_diloco/__init__.py"
+test "$CLASSIC_PACKAGE" = "$CLASSIC_ROOT/fs_diloco/__init__.py"
+CURRENT_TORCH="$("$CURRENT_VENV/bin/python" -c 'import torch; print(torch.__version__)')"
+CLASSIC_TORCH="$("$CLASSIC_VENV/bin/python" -c 'import torch; print(torch.__version__)')"
+test "$CURRENT_TORCH" = "$CLASSIC_TORCH"
 
 "$CURRENT_VENV/bin/python" scripts/miyabi/plan03_p6_performance.py \
   --comparison classic \
