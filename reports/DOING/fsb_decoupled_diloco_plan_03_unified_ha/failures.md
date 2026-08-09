@@ -902,3 +902,9 @@
 - Experiment ID `P6-G1-static-attempt1`，该静态门禁目标连续失败次数 1。登录节点并行执行 `git diff --check`、`compileall`、Ruff lint、显式 P6 format scope、P6 PBS `bash -n` 和 P3/P4/P5 boundary Checker；除 Ruff lint 外均通过，未运行 pytest、Torch 或 runtime workload。
 - Ruff 精确报告三个机械问题：`runtime/services/maintenance.py` 遗留未使用的 `Path`，`plan03_p6_test_gate.py` 的常量 `"G0-G1"` 带无效 f-string 前缀，`plan03_p6_two_node_sqlite.py` 遗留未使用的 `sys`。这些均不涉及运行语义。
 - 下一步只删除这两个未使用 import 和一个多余 f-string 前缀，然后从完整 G1 静态门禁重跑；不修改对应 maintenance、test-gate 或 two-node 协议逻辑。
+
+## 2026-08-09 23:28 JST — P6 G0/G1 formal static attempt 1 blocked by harness errors
+
+- Experiment ID `P6-G0-G1-formal-attempt1`，该正式门禁目标连续失败次数 1。Artifact `artifacts/20260809-232800_p6-g0-g1-freeze-static_pass.json` 保留原始 `BLOCKED` 结果；lint、format、compile、shell syntax 和 literal group scan均通过。
+- Harness错误一：对 `.venv/bin/python` 调用 `Path.resolve()` 解引用到uv基础解释器，丢失venv site-packages，Checker因此以 `ModuleNotFoundError: yaml` 退出。错误二：冻结matrix断言遗漏同属P6的既有 `AUTH-11` 行，把完整八行误判为缺行集合不相等。
+- 修复限定为保持传入venv executable路径（不解引用symlink）并把 `AUTH-11` 加入G0精确集合；不改变Checker逻辑、requirement matrix或任何runtime行为。随后从完整正式G0/G1门禁重跑。

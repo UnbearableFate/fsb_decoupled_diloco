@@ -195,6 +195,7 @@ def run_static(project_root: Path, python: Path, ruff: Path, log_root: Path) -> 
             if row["phase"] == "P6-acceptance-final-review"
         }
     expected_requirements = {
+        "AUTH-11",
         "P6-ACCEPTANCE",
         "P6-STATIC-9N",
         "P6-DYNAMIC-9N",
@@ -323,14 +324,14 @@ def main() -> None:
         result = (
             run_static(
                 project_root,
-                args.python.resolve(),
-                (args.ruff or project_root / ".venv/bin/ruff").resolve(),
+                args.python.absolute(),
+                (args.ruff or project_root / ".venv/bin/ruff").absolute(),
                 args.log_root.resolve(),
             )
             if args.mode == "static"
             else run_compute(
                 project_root,
-                args.python.resolve(),
+                args.python.absolute(),
                 args.log_root.resolve(),
             )
         )
