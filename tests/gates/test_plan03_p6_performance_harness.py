@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
+import sqlite3
 import subprocess
 
 import yaml
@@ -52,3 +54,85 @@ def test_frozen_classic_ref_records_tag_object_and_peeled_commit() -> None:
         text=True,
     ).stdout.strip()
     assert object_type == "commit"
+
+
+def test_classic_summary_joins_archived_history_with_hot_authority(tmp_path: Path) -> None:
+    module = _load_harness()
+    control = tmp_path / "control"
+    metrics = tmp_path / "metrics"
+    control.mkdir()
+    metrics.mkdir()
+    connection = sqlite3.connect(control / "syncer_metadata.sqlite3")
+    connection.executescript(
+        """
+        CREATE TABLE global_versions (
+            version INTEGER PRIMARY KEY,
+            created_at REAL NOT NULL,
+            num_updates INTEGER NOT NULL,
+            total_update_tokens INTEGER NOT NULL,
+            total_seen_tokens INTEGER NOT NULL,
+            status TEXT NOT NULL
+        );
+        CREATE TABLE updates (
+            update_id TEXT PRIMARY KEY,
+            learner_id TEXT NOT NULL,
+            local_step_end INTEGER NOT NULL,
+            tokens_this_update INTEGER NOT NULL,
+            applied_version INTEGER,
+            status TEXT NOT NULL
+        );
+        INSERT INTO global_versions VALUES (2, 3.0, 2, 128, 256, 'committed');
+        """
+    )
+    connection.commit()
+    connection.close()
+    archived_versions = [
+        {
+            "version": 0,
+            "created_at": 1.0,
+            "num_updates": 0,
+            "total_update_tokens": 0,
+            "total_seen_tokens": 0,
+            "status": "committed",
+            "archived_at": 4.0,
+        },
+        {
+            "version": 1,
+            "created_at": 2.0,
+            "num_updates": 2,
+            "total_update_tokens": 128,
+            "total_seen_tokens": 128,
+            "status": "committed",
+            "archived_at": 4.0,
+        },
+    ]
+    archived_updates = [
+        {
+            "update_id": f"u{version}-{learner}",
+            "learner_id": f"learner_{learner:03d}",
+            "local_step_end": version * 2,
+            "tokens_this_update": 64,
+            "applied_version": version,
+            "status": "applied",
+            "archived_at": 4.0,
+        }
+        for version in (1, 2)
+        for learner in range(2)
+    ]
+    (metrics / "global_version_history.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in archived_versions), encoding="utf-8"
+    )
+    (metrics / "update_history.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in archived_updates), encoding="utf-8"
+    )
+
+    summary = module._classic_summary(tmp_path)
+
+    assert summary == {
+        "final_version": 2,
+        "processed_tokens": 256,
+        "direct_weight_tokens": 256,
+        "selected_count": 4,
+        "cursor_identity": [4, 4],
+        "active_protocol_seconds": 2.0,
+    }

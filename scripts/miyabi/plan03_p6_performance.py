@@ -202,19 +202,66 @@ def _classic_summary(run_root: Path) -> dict[str, Any]:
     try:
         if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise RuntimeError("classic authority integrity check failed")
-        versions = connection.execute(
-            "SELECT * FROM global_versions WHERE status='committed' ORDER BY version"
-        ).fetchall()
-        updates = connection.execute(
-            "SELECT * FROM updates WHERE status='applied' ORDER BY learner_id, applied_version"
-        ).fetchall()
+        hot_versions = [
+            dict(row)
+            for row in connection.execute(
+                "SELECT * FROM global_versions WHERE status='committed' ORDER BY version"
+            ).fetchall()
+        ]
+        hot_updates = [
+            dict(row)
+            for row in connection.execute(
+                "SELECT * FROM updates WHERE status='applied' ORDER BY update_id"
+            ).fetchall()
+        ]
     finally:
         connection.close()
-    if not versions or int(versions[-1]["version"]) != 2:
+
+    versions = sorted(
+        (
+            row
+            for row in _deduplicate_classic_rows(
+                [
+                    *_read_classic_jsonl(run_root / "metrics/global_version_history.jsonl"),
+                    *hot_versions,
+                ],
+                key="version",
+            )
+            if row["status"] == "committed"
+        ),
+        key=lambda row: int(row["version"]),
+    )
+    updates = sorted(
+        (
+            row
+            for row in _deduplicate_classic_rows(
+                [
+                    *_read_classic_jsonl(run_root / "metrics/update_history.jsonl"),
+                    *hot_updates,
+                ],
+                key="update_id",
+            )
+            if row["status"] == "applied"
+        ),
+        key=lambda row: (str(row["learner_id"]), int(row["applied_version"])),
+    )
+    if [int(row["version"]) for row in versions] != [0, 1, 2]:
         raise RuntimeError("classic arm did not finish the two-version workload")
+    selected_count = sum(int(row["num_updates"]) for row in versions)
+    if selected_count != len(updates):
+        raise RuntimeError("classic version/update count projection disagrees")
+    for version in versions:
+        applied = [row for row in updates if int(row["applied_version"]) == int(version["version"])]
+        if len(applied) != int(version["num_updates"]) or sum(
+            int(row["tokens_this_update"]) for row in applied
+        ) != int(version["total_update_tokens"]):
+            raise RuntimeError("classic per-version update projection disagrees")
     processed = sum(int(row["tokens_this_update"]) for row in updates)
     direct = processed
-    if processed != int(versions[-1]["total_seen_tokens"]):
+    if (
+        processed != int(versions[-1]["total_seen_tokens"])
+        or sum(int(row["total_update_tokens"]) for row in versions) != processed
+    ):
         raise RuntimeError("classic applied-update projection disagrees with global token total")
     cursor_by_contributor: dict[str, int] = {}
     for row in updates:
@@ -226,12 +273,40 @@ def _classic_summary(run_root: Path) -> dict[str, Any]:
         "final_version": int(versions[-1]["version"]),
         "processed_tokens": processed,
         "direct_weight_tokens": direct,
-        "selected_count": len(updates),
+        "selected_count": selected_count,
         "cursor_identity": [cursor_by_contributor[key] for key in sorted(cursor_by_contributor)],
         "active_protocol_seconds": (
             float(versions[-1]["created_at"]) - float(versions[0]["created_at"])
         ),
     }
+
+
+def _read_classic_jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        payload = json.loads(line)
+        if not isinstance(payload, dict):
+            raise RuntimeError(f"classic history row is not an object: {path}:{line_number}")
+        rows.append(payload)
+    return rows
+
+
+def _deduplicate_classic_rows(rows: list[dict[str, Any]], *, key: str) -> list[dict[str, Any]]:
+    deduplicated: dict[str, dict[str, Any]] = {}
+    for payload in rows:
+        row = dict(payload)
+        row.pop("archived_at", None)
+        if key not in row:
+            raise RuntimeError(f"classic history row is missing {key}")
+        identity = str(row[key])
+        if identity in deduplicated and deduplicated[identity] != row:
+            raise RuntimeError(f"conflicting classic history row for {key}={identity}")
+        deduplicated[identity] = row
+    return list(deduplicated.values())
 
 
 def _audit_table_rows(run_root: Path, table: str) -> list[dict[str, Any]]:
