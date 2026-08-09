@@ -17,6 +17,8 @@ from typing import Any
 
 import yaml
 
+from fs_diloco.runtime.pbs_scheduler import normalize_job_id
+
 
 PLAN_ID = "fsb_decoupled_diloco_plan_03_unified_ha"
 
@@ -253,18 +255,20 @@ def _qsub_dynamic_bootstrap(
 
 def _wait_dynamic_admission(database: Path, job_id: str, *, timeout: float) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
+    normalized_job_id = normalize_job_id(job_id)
     while True:
         connection = sqlite3.connect(f"file:{database.resolve()}?mode=ro", uri=True)
         connection.row_factory = sqlite3.Row
         try:
-            row = connection.execute(
-                "SELECT * FROM learner_instances WHERE pbs_job_id=? AND status='admitted'",
-                (job_id,),
-            ).fetchone()
+            rows = connection.execute(
+                "SELECT * FROM learner_instances "
+                "WHERE pbs_job_id IS NOT NULL AND status IN ('admitted','draining','stopped')"
+            ).fetchall()
         finally:
             connection.close()
-        if row is not None:
-            return dict(row)
+        for row in rows:
+            if normalize_job_id(str(row["pbs_job_id"])) == normalized_job_id:
+                return dict(row)
         if time.monotonic() >= deadline:
             raise TimeoutError(f"dynamic child {job_id} was not admitted")
         time.sleep(0.2)

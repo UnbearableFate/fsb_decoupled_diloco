@@ -1,0 +1,292 @@
+{
+  "completed": 4,
+  "scenarios": [
+    {
+      "epochs": [
+        {
+          "acquired_at": 1786290091.1592436,
+          "config_sha256": "79eb07657bd54f3d9823d6e789292341b4f86fe3ebbcc3386de1c31d976aa465",
+          "epoch": 1,
+          "final_at": 1786290096.6612813,
+          "final_state": "released",
+          "hostname": "mg0006",
+          "last_renewed_at": 1786290096.6612813,
+          "owner_id": "syncer-654933b9-7137-482e-98a2-6074ab3017b1",
+          "pbs_job_id": "2513024.opbs",
+          "pid": 1482454,
+          "source_fingerprint": "sha256:2ac87a0b3f07cab1a93103b40a46d5fd4bcfc9fe7ce3aca0ac060c9dfffd7293",
+          "superseded_by_epoch": null
+        }
+      ],
+      "final_version": 1,
+      "name": "static-1-learner-1-candidate-none",
+      "process_statuses": {
+        "learner_000": 0,
+        "syncer": 0
+      },
+      "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p6_g5_static-1-learner-1-candidate-none_2513024",
+      "summary": {
+        "all_learners_stopped": true,
+        "authority": "full_protocol_v4",
+        "direct_weight_tokens_applied": 64,
+        "final_version": 1,
+        "finalized_at": 1786290096.391658,
+        "finalized_by_epoch": 1,
+        "finalized_by_owner_id": "syncer-654933b9-7137-482e-98a2-6074ab3017b1",
+        "format_version": 2,
+        "run_id": "plan03_p6_g5_static-1-learner-1-candidate-none_2513024",
+        "stop_reason": "configured_target",
+        "terminal_generation": 1
+      },
+      "terminal_fences": [
+        {
+          "acknowledged_at": 1786290096.3388088,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 2,
+          "close_last_cycle_seq": 1,
+          "fence_json": "{\"attempt_id\":\"attempt-1b34e6a1-2efa-4228-b83a-bc7c76ab76cc\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"static-344d490b3a36d135d3919af5c0f960b0\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 1,
+          "final_update_id": "33cdd210-b9a1-483f-bc8b-f564dacbb985",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_000",
+          "state": "acked"
+        }
+      ],
+      "token_balance": 0
+    },
+    {
+      "epochs": [
+        {
+          "acquired_at": 1786290100.2328155,
+          "config_sha256": "18b3dfff31e8d812ad178e1b0c0fd9d775d2781bdb4adee20a73cf121d96611d",
+          "epoch": 1,
+          "final_at": 1786290105.042866,
+          "final_state": "released",
+          "hostname": "mg0006",
+          "last_renewed_at": 1786290105.042866,
+          "owner_id": "syncer-ddc330d6-4979-4511-88f4-a851c189cd12",
+          "pbs_job_id": "2513024.opbs",
+          "pid": 1482660,
+          "source_fingerprint": "sha256:2ac87a0b3f07cab1a93103b40a46d5fd4bcfc9fe7ce3aca0ac060c9dfffd7293",
+          "superseded_by_epoch": null
+        }
+      ],
+      "final_version": 3,
+      "name": "static-2-learners-1-candidate-none",
+      "process_statuses": {
+        "learner_000": 0,
+        "learner_001": 0,
+        "syncer": 0
+      },
+      "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p6_g5_static-2-learners-1-candidate-none_2513024",
+      "summary": {
+        "all_learners_stopped": true,
+        "authority": "full_protocol_v4",
+        "direct_weight_tokens_applied": 384,
+        "final_version": 3,
+        "finalized_at": 1786290104.6623242,
+        "finalized_by_epoch": 1,
+        "finalized_by_owner_id": "syncer-ddc330d6-4979-4511-88f4-a851c189cd12",
+        "format_version": 2,
+        "run_id": "plan03_p6_g5_static-2-learners-1-candidate-none_2513024",
+        "stop_reason": "configured_target",
+        "terminal_generation": 1
+      },
+      "terminal_fences": [
+        {
+          "acknowledged_at": 1786290104.4757483,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 6,
+          "close_last_cycle_seq": 3,
+          "fence_json": "{\"attempt_id\":\"attempt-187e8ed1-7909-4f4d-906d-0a199e36f999\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"static-86d1e3a7437999748ec20ad707c591f3\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 3,
+          "final_update_id": "f1dfe575-1553-4d00-af4a-ffed84648e4a",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_000",
+          "state": "acked"
+        },
+        {
+          "acknowledged_at": 1786290104.4842236,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 6,
+          "close_last_cycle_seq": 3,
+          "fence_json": "{\"attempt_id\":\"attempt-b1f3c8b5-39d2-44d3-bb07-c29247a25ac8\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_001\",\"logical_launch_id\":\"static-104b89deef50f1c0fe706bd66a4ee5e9\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 4,
+          "final_update_id": "780b3612-dd04-412d-a48b-c4c7216f9584",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_001",
+          "state": "acked"
+        }
+      ],
+      "token_balance": 0
+    },
+    {
+      "epochs": [
+        {
+          "acquired_at": 1786290108.5717437,
+          "config_sha256": "0bced2d08ee72cce72e2f0d12f7cd1b73bad3959c5ff90425d09b581d0a097c8",
+          "epoch": 1,
+          "final_at": 1786290119.8430974,
+          "final_state": "released",
+          "hostname": "mg0006",
+          "last_renewed_at": 1786290119.8430974,
+          "owner_id": "syncer-6d453197-f58a-4ee0-95c0-3e0f4a070563",
+          "pbs_job_id": "2513024.opbs",
+          "pid": 1483002,
+          "source_fingerprint": "sha256:2ac87a0b3f07cab1a93103b40a46d5fd4bcfc9fe7ce3aca0ac060c9dfffd7293",
+          "superseded_by_epoch": null
+        }
+      ],
+      "final_version": 11,
+      "name": "static-2-learners-loss-rerun-old-resume",
+      "process_statuses": {
+        "new": 0,
+        "old": 0,
+        "other": 0,
+        "syncer": 0
+      },
+      "replacement_evidence": {
+        "current_attempt_id": "attempt-p6-tiny-new",
+        "current_binding_generation": 2,
+        "old_final_status": "replaced",
+        "old_generation_authority_updates": 0
+      },
+      "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p6_g5_static-2-learners-loss-rerun-old-resume_2513024",
+      "summary": {
+        "all_learners_stopped": true,
+        "authority": "full_protocol_v4",
+        "direct_weight_tokens_applied": 640,
+        "final_version": 11,
+        "finalized_at": 1786290119.576017,
+        "finalized_by_epoch": 1,
+        "finalized_by_owner_id": "syncer-6d453197-f58a-4ee0-95c0-3e0f4a070563",
+        "format_version": 2,
+        "run_id": "plan03_p6_g5_static-2-learners-loss-rerun-old-resume_2513024",
+        "stop_reason": "configured_target",
+        "terminal_generation": 1
+      },
+      "terminal_fences": [
+        {
+          "acknowledged_at": 1786290119.2818522,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 28,
+          "close_last_cycle_seq": 14,
+          "fence_json": "{\"attempt_id\":\"attempt-p6-tiny-new\",\"binding_generation\":2,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"p6-tiny-static-rerun\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 15,
+          "final_update_id": "df5ee22b-30f6-459c-8c1f-257e8ffcfdad",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_000",
+          "state": "acked"
+        },
+        {
+          "acknowledged_at": 1786290118.9586418,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 46,
+          "close_last_cycle_seq": 23,
+          "fence_json": "{\"attempt_id\":\"attempt-0f982996-6bfb-4eab-b7af-b9b30556bb91\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_001\",\"logical_launch_id\":\"static-7067b24e8d40671df0741112f39bc5ca\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 24,
+          "final_update_id": "ef5f0ec2-0835-44f9-9358-2c4acf6d57c1",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_001",
+          "state": "acked"
+        }
+      ],
+      "token_balance": 0
+    },
+    {
+      "epochs": [
+        {
+          "acquired_at": 1786290123.5887702,
+          "config_sha256": "9c331e09217be37e8114e9dc8d2d1ecab75c5d75712d2b057de21e58fd6ad1d0",
+          "epoch": 1,
+          "final_at": 1786290127.7294834,
+          "final_state": "error",
+          "hostname": "mg0006",
+          "last_renewed_at": 1786290127.7294834,
+          "owner_id": "syncer-16636a73-5aec-466e-8e29-b0afbd95a0f8",
+          "pbs_job_id": "2513024.opbs",
+          "pid": 1483434,
+          "source_fingerprint": "sha256:2ac87a0b3f07cab1a93103b40a46d5fd4bcfc9fe7ce3aca0ac060c9dfffd7293",
+          "superseded_by_epoch": 2
+        },
+        {
+          "acquired_at": 1786290128.1503246,
+          "config_sha256": "9c331e09217be37e8114e9dc8d2d1ecab75c5d75712d2b057de21e58fd6ad1d0",
+          "epoch": 2,
+          "final_at": 1786290132.1659858,
+          "final_state": "released",
+          "hostname": "mg0006",
+          "last_renewed_at": 1786290132.1659858,
+          "owner_id": "syncer-0692b1d2-50ab-4bd4-9ab3-52c4fc7f82ce",
+          "pbs_job_id": "2513024.opbs",
+          "pid": 1483503,
+          "source_fingerprint": "sha256:2ac87a0b3f07cab1a93103b40a46d5fd4bcfc9fe7ce3aca0ac060c9dfffd7293",
+          "superseded_by_epoch": null
+        }
+      ],
+      "final_version": 11,
+      "name": "static-2-learners-2-candidates-active-crash",
+      "process_statuses": {
+        "first_candidate": 1,
+        "learner_0": 0,
+        "learner_1": 0,
+        "successor": 0
+      },
+      "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p6_g5_static-2-learners-2-candidates-active-crash_2513024",
+      "summary": {
+        "all_learners_stopped": true,
+        "authority": "full_protocol_v4",
+        "direct_weight_tokens_applied": 256,
+        "final_version": 11,
+        "finalized_at": 1786290132.020635,
+        "finalized_by_epoch": 2,
+        "finalized_by_owner_id": "syncer-0692b1d2-50ab-4bd4-9ab3-52c4fc7f82ce",
+        "format_version": 2,
+        "run_id": "plan03_p6_g5_static-2-learners-2-candidates-active-crash_2513024",
+        "stop_reason": "configured_target",
+        "terminal_generation": 1
+      },
+      "terminal_fences": [
+        {
+          "acknowledged_at": 1786290131.7559104,
+          "acknowledged_by_epoch": 2,
+          "close_data_cursor": 26,
+          "close_last_cycle_seq": 13,
+          "fence_json": "{\"attempt_id\":\"attempt-bcd1a4ce-89fe-49e1-b97a-69a12b7772d3\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"static-457672130b60d3bb5a0fa44f6d2e81c5\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 14,
+          "final_update_id": "8f3881df-d32b-4520-8a01-9b61429cd3a9",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_000",
+          "state": "acked"
+        },
+        {
+          "acknowledged_at": 1786290131.7643352,
+          "acknowledged_by_epoch": 2,
+          "close_data_cursor": 26,
+          "close_last_cycle_seq": 13,
+          "fence_json": "{\"attempt_id\":\"attempt-22c06922-283b-442b-9847-1ee5c1e850fa\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_001\",\"logical_launch_id\":\"static-ae9d9dd3f7ba5c90e4b65bcbf4c45d4e\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 14,
+          "final_update_id": "9bb7846a-3077-4d6f-ac6e-efbfc14eda31",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_001",
+          "state": "acked"
+        }
+      ],
+      "token_balance": 0
+    }
+  ]
+}

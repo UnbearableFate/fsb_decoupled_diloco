@@ -710,3 +710,9 @@
 - Clean target `488209ca8865388c90c5fd597769625023281cdd` passed the complete G0/G1 static gate with source scope `git_dirty=false`; the artifact freezes config/schema/lock hashes and records successful diff, compile, Ruff lint/format, shell syntax, literal group and Checker/matrix checks: `artifacts/20260810-001500_p6-g0-g1-freeze-static_pass.json`.
 - PBS job `2512851.opbs` on one `debug-g` compute node then passed `612` focused tests in `42.57s` and the full suite as `720 passed, 2 skipped` in `75.43s`; both JUnit documents have zero failure/error and the only skips remain the formal G3 profiles. Artifact: `artifacts/20260810-002000_p6-g2-tests_pass.json`.
 - This associated group validates the scheduler-identity RED regression and the source preceding G5 attempt 4. The subsequent real G5 run exposed new bootstrap/admission/telemetry defects and is recorded separately as failed; therefore this is not evidence for those uncommitted repairs or for G5 completion.
+
+## 2026-08-10 00:41 JST — P6 replacement-startup remediation G0/G1 and G2 PASS
+
+- Clean target `7aff2552b254b70274877929563b3d53eb7661f9` passed the full G0/G1 gate with exact config/schema/lock identities and all static/Checker/matrix checks: `artifacts/20260810-003700_p6-g0-g1-freeze-static_pass.json`.
+- PBS job `2513007.opbs` passed `616` focused tests in `41.17s` and the full suite as `724 passed, 2 skipped` in `58.86s`; JUnit failure/error counts are zero. The four newly collected tests cover bootstrap deadline suppression, post-admission liveness anchoring, pre-capture tombstone polling versus post-capture fencing, and collision-free terminal ack telemetry. Artifact: `artifacts/20260810-003900_p6-g2-tests_pass.json`.
+- This associated test group proves the attempt-4 production repairs but not the G5 runner's normalized PBS identity handling exposed immediately afterward. G5 remains failed until all six real scenarios complete on a subsequent clean target.
