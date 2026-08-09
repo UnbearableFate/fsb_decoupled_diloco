@@ -396,6 +396,7 @@ def test_dynamic_replacement_returns_full_contiguous_resume_state(tmp_path: Path
             admission_token_sha256="2" * 64,
             hostname="host",
             pid=2,
+            launch_request_id="replacement-launch-2",
             replace_instance_id="instance-1",
             replacement_reason="authorized replacement",
         )

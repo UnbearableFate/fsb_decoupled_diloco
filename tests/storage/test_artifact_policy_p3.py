@@ -18,6 +18,11 @@ def test_artifact_policy_classifies_protocol_domains_and_fails_unknown_closed() 
     assert policy.classify("metrics/learner/learner-0/attempt.jsonl") is ArtifactClass.TELEMETRY
     assert policy.classify("heartbeats/learner-0.json") is ArtifactClass.CACHE
     assert policy.classify("updates/payloads/learner-0/update.bin") is ArtifactClass.PAYLOAD
+    assert (
+        policy.classify("updates/receipts/learner-0/static-fence/receipt-learner-0-1.json")
+        is ArtifactClass.AUTHORITY
+    )
+    assert policy.classify("updates/proposals/learner-0/update.json") is ArtifactClass.AUTHORITY
     assert policy.classify("weights/.tmp-checkpoint") is ArtifactClass.TEMPORARY
     assert policy.classify("foreign/object.bin") is ArtifactClass.UNKNOWN
     assert not policy.allows_generic_cleanup("control/syncer_metadata.sqlite3")

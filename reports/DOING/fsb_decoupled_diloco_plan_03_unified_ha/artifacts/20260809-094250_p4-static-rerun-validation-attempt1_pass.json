@@ -1,0 +1,79 @@
+{
+  "artifact_schema_version": 1,
+  "command": "qsub -l walltime=00:10:00 scripts/miyabi/run_plan03_phase4_static_rerun.pbs",
+  "errors": [],
+  "experiment_id": "p4-static-rerun-validation",
+  "identity": {
+    "descriptor_sha256": "8d572dbb88ea0b70d2aa953d86cdae8bcc9245d89096113a645df1c4eb202f7b",
+    "git_commit": "f849214be19c66166a3b57962de86f4265e80e68",
+    "git_dirty": true,
+    "run_id": "plan03_p4_static_rerun_2509256",
+    "source_fingerprint": "sha256:d7cf422ec9ec4b71da0fa2d7a8a1194ea7e0b210ad552fbd645f0694a4e6b16a"
+  },
+  "pbs": {
+    "actual_walltime": "00:00:20",
+    "compute_host": "mg0001",
+    "exit_status": 0,
+    "group_id": "xg24i002",
+    "job_id": "2509256.opbs",
+    "queue": "debug-g",
+    "requested_walltime": "00:10:00",
+    "stdout_sha256": "791ec53a3f7ce7c292d78acedc4c9ab39f6d756bdc6ef5763b0e1cf8a8079dfc"
+  },
+  "recorded_at": "2026-08-09T09:42:50+09:00",
+  "run_root": "runs/fs_diloco/plan03_p4_static_rerun_2509256",
+  "sha256": {
+    "authority_database_before_cleanup": "70cb373c860cabc10444b9f684e2a84f458feef078e56fcf1b2cc5ab272da260"
+  },
+  "status": "PASS",
+  "terminal": {
+    "direct_weight_tokens_applied": 1280,
+    "final_version": 20,
+    "state": "finalized"
+  },
+  "verified": {
+    "all_learners_stopped": true,
+    "authority_database_integrity": "ok",
+    "binding_history": [
+      {
+        "attempt_id": "attempt-old-2509256",
+        "binding_generation": 1,
+        "final_status": "replaced"
+      }
+    ],
+    "current_binding": {
+      "attempt_id": "attempt-new-2509256",
+      "binding_generation": 2,
+      "logical_launch_id": "static-rerun-2509256",
+      "status": "terminal"
+    },
+    "new_generation_applied_versions": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "old_generation_successful_commits_after_replacement": 0,
+    "stale_process_exit_status": 0,
+    "terminal_fence_state": "acked",
+    "terminal_hard_crash_gap_tokens": 0,
+    "token_ledger_balance": 0,
+    "version_at_replacement": 0
+  }
+}

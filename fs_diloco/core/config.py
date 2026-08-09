@@ -14,6 +14,7 @@ from typing import Any, TypeVar, Union, get_args, get_origin, get_type_hints
 import yaml
 
 from .constants import DEFAULT_RUNS_DIR
+from .versions import CONFIG_SCHEMA_VERSION
 
 T = TypeVar("T")
 
@@ -379,6 +380,7 @@ class TorchBaselineSection(ConfigSection):
 
 @dataclass
 class Config(ConfigSection):
+    config_schema_version: int = CONFIG_SCHEMA_VERSION
     run: RunSection = field(default_factory=RunSection)
     init: InitSection = field(default_factory=InitSection)
     model: ModelSection = field(default_factory=ModelSection)
@@ -407,6 +409,8 @@ class Config(ConfigSection):
             section = getattr(self, field_info.name)
             if isinstance(section, ConfigSection):
                 section.validate(path=field_info.name)
+        if self.config_schema_version != CONFIG_SCHEMA_VERSION:
+            raise ValueError(f"config_schema_version must be exactly {CONFIG_SCHEMA_VERSION}")
         if profile == "torch_baseline" and not self.torch_baseline.enabled:
             raise ValueError("torch_baseline profile requires torch_baseline.enabled=true")
         if profile != "torch_baseline" and self.torch_baseline.enabled:
@@ -480,6 +484,23 @@ def load_config(path: str | Path | None = None) -> Config:
         if not isinstance(loaded, dict):
             raise ValueError(f"config {path} must contain a mapping")
         data = loaded
+        coordination = data.get("coordination")
+        if "maintenance" in data or (isinstance(coordination, dict) and "leader" in coordination):
+            # P4 keeps the classic implementation only as a temporary regression oracle.
+            # Formal configs are already strict v4, so validate the complete envelope before
+            # projecting its shared fields for those tests. Production entrypoints never use
+            # this compatibility path and P5 removes it with the classic writer.
+            from .config_v4 import ConfigProfile, load_config_v4
+
+            loaded_v4 = load_config_v4(path, profile=ConfigProfile.FULL_V4)
+            config = loaded_v4.shared
+            if config.membership.mode == "dynamic" or "_ha_" in config.run.name:
+                config.coordination.syncer_ha = SyncerHASection(
+                    enabled=True,
+                    **dataclasses.asdict(loaded_v4.leader),
+                )
+            config.validate(profile="legacy_oracle")
+            return config
     config = _from_dict(Config, data)
     config.validate(profile="torch_baseline" if config.torch_baseline.enabled else "legacy_oracle")
     return config

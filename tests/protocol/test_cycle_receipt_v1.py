@@ -6,7 +6,10 @@ from dataclasses import replace
 import pytest
 
 from fs_diloco.protocol.contributor import StaticContributorFence
-from fs_diloco.protocol.cycle_receipt import CycleReceiptV1
+from fs_diloco.protocol.cycle_receipt import (
+    CycleReceiptV1,
+    canonical_receipt_relative_path,
+)
 from tests.support.v4_protocol import receipt_payload
 
 
@@ -15,6 +18,19 @@ def test_cycle_receipt_v1_strict_round_trip() -> None:
 
     assert CycleReceiptV1.from_json(receipt.canonical_bytes()) == receipt
     assert len(receipt.immutable_sha256()) == 64
+
+
+def test_receipt_path_is_namespaced_by_complete_contributor_fence() -> None:
+    first = StaticContributorFence("static", "learner-0", "launch-0", "attempt-1", 1)
+    replacement = StaticContributorFence("static", "learner-0", "launch-0", "attempt-2", 2)
+
+    first_path = canonical_receipt_relative_path(first, 1)
+    replacement_path = canonical_receipt_relative_path(replacement, 1)
+
+    assert first_path != replacement_path
+    assert first_path.endswith("/receipt-learner-0-1.json")
+    assert replacement_path.endswith("/receipt-learner-0-1.json")
+    assert ".." not in first_path and ".." not in replacement_path
 
 
 def test_zero_effective_cycle_is_valid_only_without_a_proposal() -> None:
@@ -75,6 +91,11 @@ def test_cycle_receipt_rejects_unknown_field_and_version() -> None:
     version["cycle_receipt_format_version"] = 2
     with pytest.raises(ValueError, match="unsupported cycle_receipt_format_version"):
         CycleReceiptV1.from_dict(version)
+
+    wrong_identity = receipt_payload()
+    wrong_identity["receipt_id"] = "receipt-learner-0-999"
+    with pytest.raises(ValueError, match="receipt_id does not match"):
+        CycleReceiptV1.from_dict(wrong_identity)
 
 
 def test_direct_receipt_and_fence_construction_cannot_bypass_validation() -> None:

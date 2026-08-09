@@ -43,6 +43,7 @@ from ..protocol.contributor import (
     DynamicMembershipScope,
     StaticContributorFence,
     StaticMembershipScope,
+    decode_contributor_fence,
 )
 from ..protocol.cycle_receipt import CycleReceiptV1
 from ..protocol.data_cursor import ContributorResumeState
@@ -71,6 +72,11 @@ PLAN03_REQUIREMENTS = frozenset(
     {
         "AUDIT-02",
         "AUDIT-04",
+        "AUTH-02",
+        "AUTH-03",
+        "AUTH-05",
+        "AUTH-09",
+        "AUTH-10",
         "DATA-02",
         "DATA-03",
         "DMB-05",
@@ -491,6 +497,59 @@ class AuthorityReadModel:
         )
         return None if row is None else _decode_progress(row)
 
+    def controller_status(self) -> dict[str, Any]:
+        row = self._authority._fetchone("SELECT * FROM controller_state WHERE singleton = 1")
+        if row is None:
+            raise AuthoritySchemaError("controller state is missing")
+        return dict(row)
+
+    def terminal_record(self) -> dict[str, Any] | None:
+        row = self._authority._fetchone("SELECT * FROM terminal_state WHERE singleton = 1")
+        return None if row is None else dict(row)
+
+    def terminal_contributor_fences(self) -> tuple[dict[str, Any], ...]:
+        controller = self._authority._fetchone(
+            "SELECT generation FROM controller_state WHERE singleton = 1"
+        )
+        if controller is None:
+            raise AuthoritySchemaError("controller state is missing")
+        rows = self._authority._fetchall(
+            """
+            SELECT * FROM terminal_contributor_fences
+            WHERE generation=? ORDER BY stable_contributor_key
+            """,
+            (int(controller["generation"]),),
+        )
+        return tuple(dict(row) for row in rows)
+
+    def current_contributor_fences(
+        self,
+    ) -> tuple[StaticContributorFence | DynamicContributorFence, ...]:
+        if isinstance(self._authority._scope, StaticMembershipScope):
+            rows = self._authority._fetchall(
+                """
+                SELECT * FROM static_contributor_bindings
+                WHERE status='active' ORDER BY learner_id
+                """
+            )
+            return tuple(
+                StaticContributorFence(
+                    kind="static",
+                    learner_id=str(row["learner_id"]),
+                    logical_launch_id=str(row["logical_launch_id"]),
+                    attempt_id=str(row["attempt_id"]),
+                    binding_generation=int(row["binding_generation"]),
+                )
+                for row in rows
+            )
+        rows = self._authority._fetchall(
+            """
+            SELECT * FROM learner_instances
+            WHERE status IN ('admitted', 'draining') ORDER BY stream_id
+            """
+        )
+        return tuple(LeaderSession._dynamic_fence_from_instance(row) for row in rows)
+
     def token_ledger_summary(self) -> TokenLedgerSummary:
         row = self._authority._fetchone("SELECT * FROM token_rollups WHERE singleton=1")
         gap = self._authority._fetchone(
@@ -532,6 +591,10 @@ class AuthorityReadModel:
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
         )
         return tuple(str(row[0]) for row in rows)
+
+    def syncer_epochs(self) -> tuple[dict[str, Any], ...]:
+        rows = self._authority._fetchall("SELECT * FROM syncer_epochs ORDER BY epoch")
+        return tuple(dict(row) for row in rows)
 
     def audit_history_records(self, *, cutoff_version: int) -> tuple[dict[str, Any], ...]:
         if isinstance(cutoff_version, bool) or not isinstance(cutoff_version, int):
@@ -751,6 +814,32 @@ class LeaderAuthority:
             self._connection.execute(
                 """
                 UPDATE syncer_epochs SET final_state='released', final_at=?, last_renewed_at=?
+                WHERE epoch=? AND owner_id=?
+                """,
+                (now, now, token.epoch, token.owner_id),
+            )
+            self._connection.commit()
+        except Exception:
+            self._connection.rollback()
+            raise
+
+    def fail_leader(self, token: LeaderToken) -> None:
+        """Fence a candidate that exited through its error boundary."""
+
+        self._connection.execute("BEGIN IMMEDIATE")
+        try:
+            now = float(self._wall_clock())
+            self._verify_token(token)
+            self._connection.execute(
+                """
+                UPDATE syncer_leader SET state='released', renewed_at=?, lease_expires_at=?
+                WHERE singleton=1 AND epoch=? AND owner_id=? AND state='active'
+                """,
+                (now, now, token.epoch, token.owner_id),
+            )
+            self._connection.execute(
+                """
+                UPDATE syncer_epochs SET final_state='error', final_at=?, last_renewed_at=?
                 WHERE epoch=? AND owner_id=?
                 """,
                 (now, now, token.epoch, token.owner_id),
@@ -2079,6 +2168,8 @@ class LeaderSession:
             raise ValueError("admission_token_sha256 must be a lowercase SHA-256 digest")
         if replacement_reason is not None and not replacement_reason:
             raise ValueError("replacement_reason must not be empty")
+        if replace_instance_id is not None and launch_request_id is None:
+            raise ValueError("dynamic replacement requires an explicit launch request ID")
         request = {
             "instance_id": instance_id,
             "placement_id": placement_id,
@@ -3546,6 +3637,28 @@ class LeaderSession:
                         or update["fence_json"] != _canonical_json(fence.as_dict())
                     ):
                         raise MembershipFenceError("final update does not match the frozen cycle")
+                if isinstance(fence, DynamicContributorFence):
+                    if final_update_id is not None:
+                        self._retire_dynamic_in_transaction(
+                            connection,
+                            fence=fence,
+                            reason="terminal_graceful_ack",
+                            final_status="draining",
+                            final_update_id=final_update_id,
+                        )
+                    else:
+                        self._terminalize_fenced_updates(
+                            connection,
+                            fence_json=_canonical_json(fence.as_dict()),
+                            reason="terminal_graceful_ack",
+                        )
+                else:
+                    self._terminalize_fenced_updates(
+                        connection,
+                        fence_json=_canonical_json(fence.as_dict()),
+                        reason="terminal_graceful_ack",
+                        preserve_update_id=final_update_id,
+                    )
                 state = "acked"
             connection.execute(
                 """
@@ -3588,6 +3701,51 @@ class LeaderSession:
         request = {"reason": reason, "error": error}
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            controller = connection.execute(
+                "SELECT * FROM controller_state WHERE singleton=1"
+            ).fetchone()
+            assert controller is not None
+            if controller["state"] not in {"closing", "draining"}:
+                raise RuntimeError("terminal close must be started before finalization")
+            frozen = connection.execute(
+                """
+                SELECT * FROM terminal_contributor_fences
+                WHERE generation=? AND state='acked' ORDER BY stable_contributor_key
+                """,
+                (int(controller["generation"]),),
+            ).fetchall()
+            now = float(self._authority._wall_clock())
+            for row in frozen:
+                fence = decode_contributor_fence(json.loads(str(row["fence_json"])))
+                self._terminalize_fenced_updates(
+                    connection,
+                    fence_json=str(row["fence_json"]),
+                    reason="terminal_final_update_not_selected",
+                )
+                if isinstance(fence, DynamicContributorFence):
+                    self._retire_dynamic_in_transaction(
+                        connection,
+                        fence=fence,
+                        reason="terminal_graceful_ack",
+                        final_status="stopped",
+                        final_update_id=row["final_update_id"],
+                    )
+                else:
+                    connection.execute(
+                        """
+                        UPDATE static_contributor_bindings
+                        SET status='terminal', terminal_at=?
+                        WHERE learner_id=? AND logical_launch_id=? AND attempt_id=?
+                            AND binding_generation=? AND status='active'
+                        """,
+                        (
+                            now,
+                            fence.learner_id,
+                            fence.logical_launch_id,
+                            fence.attempt_id,
+                            fence.binding_generation,
+                        ),
+                    )
             outstanding = connection.execute(
                 """
                 SELECT COUNT(*) FROM updates WHERE status IN ('pending', 'selected')
@@ -3598,12 +3756,6 @@ class LeaderSession:
             ).fetchone()[0]
             if outstanding or prepared:
                 raise RuntimeError("terminal finalization requires no outstanding work")
-            controller = connection.execute(
-                "SELECT * FROM controller_state WHERE singleton=1"
-            ).fetchone()
-            assert controller is not None
-            if controller["state"] not in {"closing", "draining"}:
-                raise RuntimeError("terminal close must be started before finalization")
             awaiting = connection.execute(
                 """
                 SELECT COUNT(*) FROM terminal_contributor_fences
@@ -3624,7 +3776,6 @@ class LeaderSession:
             ).fetchone()[0]
             state = "error" if error else "finalized"
             generation = max(1, int(controller["generation"]))
-            now = float(self._authority._wall_clock())
             connection.execute(
                 """
                 INSERT INTO terminal_state(
@@ -4245,12 +4396,19 @@ class LeaderSession:
             preserve_update_id=final_update_id,
         )
         stopped_at = None if final_status == "draining" else now
+        persisted_final_update_id = final_update_id if final_status == "draining" else None
         connection.execute(
             """
             UPDATE learner_instances SET status=?, stopped_at=?, status_reason=?,
                 final_update_id=? WHERE instance_id=?
             """,
-            (final_status, stopped_at, reason, final_update_id, fence.instance_id),
+            (
+                final_status,
+                stopped_at,
+                reason,
+                persisted_final_update_id,
+                fence.instance_id,
+            ),
         )
         if final_status == "draining":
             connection.execute(

@@ -1,4 +1,5 @@
 #!/bin/bash
+#PBS -N fsdiloco_gpt2_9n
 #PBS -q regular-g
 #PBS -W group_list=xg24i002
 #PBS -l select=9:mpiprocs=1
@@ -7,94 +8,22 @@
 #PBS -m ae
 
 set -eEuo pipefail
-trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+module list 2>&1 | cat
 
 PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
 PRIMARY_WORKTREE_ROOT="${PRIMARY_WORKTREE_ROOT:-/work/xg24i002/x10041/fsb_decoupled_diloco}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 CONFIG="${CONFIG:-$PROJECT_ROOT/configs/fs_diloco_gpt2_wikitext2_8l.yaml}"
-RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_fs_diloco_gpt2_wikitext2_8l}"
+RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_fs_diloco_gpt2_8l}"
 SHARED_ROOT="${SHARED_ROOT:-$PRIMARY_WORKTREE_ROOT/runs/fs_diloco/$RUN_ID}"
+EXPECTED_NODES=9
+NUM_LEARNERS=8
+COLOCATE_SYNCER=0
 SYNCER_CUDA_VISIBLE_DEVICES="${SYNCER_CUDA_VISIBLE_DEVICES:-0}"
 LEARNER_CUDA_VISIBLE_DEVICES="${LEARNER_CUDA_VISIBLE_DEVICES:-0}"
 
-: "${PBS_NODEFILE:?PBS_NODEFILE is not set}"
-cd "$PROJECT_ROOT"
-
-mapfile -t HOSTS < <(sort -u "$PBS_NODEFILE")
-NNODES="${#HOSTS[@]}"
-if [[ "$NNODES" -ne 9 ]]; then
-  echo "Expected 9 unique nodes, got $NNODES" >&2
-  printf '%s\n' "${HOSTS[@]}" >&2
-  exit 2
-fi
-
-mkdir -p "$SHARED_ROOT" "$PRIMARY_WORKTREE_ROOT/logs"
-LOG_ROOT="$PRIMARY_WORKTREE_ROOT/logs/qsub_${RUN_ID}"
-mkdir -p "$LOG_ROOT"
-SOURCE_IDENTITY_JSON="$SHARED_ROOT/control/source_identity.json"
-SOURCE_IDENTITY_ENV="$SHARED_ROOT/control/source_identity.env"
-"$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/capture_source_identity.py" \
-  --project-root "$PROJECT_ROOT" \
-  --output-json "$SOURCE_IDENTITY_JSON" \
-  --output-env "$SOURCE_IDENTITY_ENV" | tee "$LOG_ROOT/source_identity.log"
-source "$SOURCE_IDENTITY_ENV"
-
-MPI_ENV_ARGS=(
-  "FS_DILOCO_GIT_COMMIT=$FS_DILOCO_GIT_COMMIT"
-  "FS_DILOCO_GIT_DIRTY=$FS_DILOCO_GIT_DIRTY"
-  "FS_DILOCO_SOURCE_FINGERPRINT=$FS_DILOCO_SOURCE_FINGERPRINT"
-  "FS_DILOCO_REQUIRE_SOURCE_IDENTITY=$FS_DILOCO_REQUIRE_SOURCE_IDENTITY"
-  "PROJECT_ROOT=$PROJECT_ROOT"
-  "PRIMARY_WORKTREE_ROOT=$PRIMARY_WORKTREE_ROOT"
-  "PYTHON_BIN=$PYTHON_BIN"
-  "CONFIG=$CONFIG"
-  "RUN_ID=$RUN_ID"
-  "SHARED_ROOT=$SHARED_ROOT"
-  "SYNCER_CUDA_VISIBLE_DEVICES=$SYNCER_CUDA_VISIBLE_DEVICES"
-  "LEARNER_CUDA_VISIBLE_DEVICES=$LEARNER_CUDA_VISIBLE_DEVICES"
-  "NUM_LEARNERS=8"
-)
-
-echo "RUN_ID=$RUN_ID"
-echo "SOURCE_FINGERPRINT=$FS_DILOCO_SOURCE_FINGERPRINT"
-echo "PROJECT_ROOT=$PROJECT_ROOT"
-echo "CONFIG=$CONFIG"
-echo "SHARED_ROOT=$SHARED_ROOT"
-echo "SQLITE_DB=$SHARED_ROOT/control/syncer_metadata.sqlite3"
-echo "SYNCER_CUDA_VISIBLE_DEVICES=$SYNCER_CUDA_VISIBLE_DEVICES"
-echo "LEARNER_CUDA_VISIBLE_DEVICES=$LEARNER_CUDA_VISIBLE_DEVICES"
-echo "NNODES=$NNODES"
-printf 'HOST %s\n' "${HOSTS[@]}"
-
-mpirun \
-  --mca mpi_abort_print_stack 1 \
-  --report-bindings \
-  --bind-to core \
-  -np "$NNODES" \
-  /usr/bin/env "${MPI_ENV_ARGS[@]}" \
-  bash -lc '
-    set -eEuo pipefail
-    rank="${OMPI_COMM_WORLD_RANK:?missing OMPI_COMM_WORLD_RANK}"
-    host="$(hostname)"
-    echo "[launcher] rank=${rank} host=${host}"
-    if [[ "$rank" -eq 0 ]]; then
-      export CUDA_VISIBLE_DEVICES="$SYNCER_CUDA_VISIBLE_DEVICES"
-      exec "$PYTHON_BIN" -m fs_diloco.syncer \
-        --config "$CONFIG" \
-        --run-id "$RUN_ID" \
-        --shared-root "$SHARED_ROOT" \
-        2>&1 | tee "$PRIMARY_WORKTREE_ROOT/logs/qsub_${RUN_ID}/syncer.log"
-    else
-      learner_num=$((rank - 1))
-      learner_id=$(printf "learner_%03d" "$learner_num")
-      export CUDA_VISIBLE_DEVICES="$LEARNER_CUDA_VISIBLE_DEVICES"
-      exec "$PYTHON_BIN" -m fs_diloco.learner \
-        --config "$CONFIG" \
-        --run-id "$RUN_ID" \
-        --shared-root "$SHARED_ROOT" \
-        --learner-id "$learner_id" \
-        --num-learners "$NUM_LEARNERS" \
-        2>&1 | tee "$PRIMARY_WORKTREE_ROOT/logs/qsub_${RUN_ID}/${learner_id}.log"
-    fi
-  '
+export PROJECT_ROOT PRIMARY_WORKTREE_ROOT PYTHON_BIN CONFIG RUN_ID SHARED_ROOT
+export EXPECTED_NODES NUM_LEARNERS COLOCATE_SYNCER
+export SYNCER_CUDA_VISIBLE_DEVICES LEARNER_CUDA_VISIBLE_DEVICES
+exec bash "$PROJECT_ROOT/scripts/miyabi/run_v4_allocation.sh"

@@ -1,0 +1,69 @@
+{
+  "command": "qsub -l walltime=00:10:00 scripts/miyabi/run_plan03_phase4_dynamic_replacement.pbs",
+  "environment": {
+    "compute_host": "mg0005",
+    "group_list": "xg24i002",
+    "nodes": 1,
+    "queue": "debug-g"
+  },
+  "experiment_id": "p4-dynamic-replacement-validation",
+  "errors": [],
+  "identity": {
+    "descriptor_sha256": "9f2a1cfe1f3163ff7489876aa27a806e7cb4690b872feb7b35bda15e00bfcca2",
+    "run_id": "plan03_p4_dynamic_replace_2509215",
+    "source_fingerprint": "sha256:e1f6ae56d72e2e617d42f751ce38fba462ada3ffa1c7b4e028658ba0523bf47e"
+  },
+  "job": {
+    "actual_walltime": "00:00:17",
+    "exit_status": 0,
+    "pbs_job_id": "2509215.opbs",
+    "requested_walltime": "00:10:00"
+  },
+  "result": "pass",
+  "run_root": "runs/fs_diloco/plan03_p4_dynamic_replace_2509215",
+  "status": "PASS",
+  "terminal": {
+    "final_version": 20,
+    "state": "finalized"
+  },
+  "run": {
+    "descriptor_sha256": "9f2a1cfe1f3163ff7489876aa27a806e7cb4690b872feb7b35bda15e00bfcca2",
+    "git_commit": "f849214be19c66166a3b57962de86f4265e80e68",
+    "git_dirty": true,
+    "run_id": "plan03_p4_dynamic_replace_2509215",
+    "run_root": "runs/fs_diloco/plan03_p4_dynamic_replace_2509215",
+    "source_fingerprint": "sha256:e1f6ae56d72e2e617d42f751ce38fba462ada3ffa1c7b4e028658ba0523bf47e"
+  },
+  "sha256": {
+    "authority_database_before_cleanup": "7ab73b65534ff74f715577089edd5c14b0d6b06cf907cfddc23a6cdb02992659",
+    "joined_stdout": "90f251170d676845cbe66581239d0d010fe423528a8611a5313409d6ead16f2d",
+    "replacement_boundary": "86fa84b61955dad3def0834f5c8c7842d618f2d144021c81fbefe033618ef872"
+  },
+  "verified": {
+    "all_learners_stopped": true,
+    "direct_weight_tokens_applied": 6400,
+    "final_version": 20,
+    "first_instance": {
+      "applied_update_count": 0,
+      "instance_id": "learner_li_bdf73948-732a-4183-9064-cfd53ad07374",
+      "status": "revoked",
+      "stream_epoch": 1
+    },
+    "receipt_namespace_count": 2,
+    "replacement_instance": {
+      "applied_update_count": 20,
+      "instance_id": "learner_li_020ac294-0f1f-49af-82fe-d26033a0affd",
+      "maximum_applied_version": 20,
+      "minimum_applied_version": 1,
+      "status": "stopped",
+      "stream_epoch": 2
+    },
+    "stale_learner_exit_status": 0,
+    "terminal_fence_states": [
+      "acked"
+    ],
+    "terminal_hard_crash_gap_tokens": 0,
+    "token_ledger_balance": 0,
+    "version_at_replacement": 0
+  }
+}

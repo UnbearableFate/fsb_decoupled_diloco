@@ -3,14 +3,12 @@ run:
   run_id: null
   shared_root: /work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/{run_id}
   log_level: INFO
-
 model:
   name_or_path: synthetic-tiny
   dtype: float32
   compile: false
   synthetic_vocab_size: 64
   synthetic_hidden_size: 16
-
 data:
   dataset_name: synthetic
   dataset_config_name: null
@@ -21,7 +19,6 @@ data:
   cache_dir: null
   streaming: false
   synthetic_num_batches: 64
-
 sync:
   num_learners: 1
   quorum_min: 1
@@ -35,15 +32,12 @@ sync:
     fixed_seconds: 0.02
     max_seconds: 0.02
   stop_after_outer_steps: 4
-  stop_after_global_tokens: null
   stop_file_poll_seconds: 0.02
-
 liveness:
   heartbeat_interval_seconds: 1.0
   stale_after_seconds: 5.0
   dead_after_seconds: 10.0
   no_progress_timeout_seconds: 30.0
-
 training:
   inner_steps: 16
   micro_batch_size: 2
@@ -55,41 +49,43 @@ training:
   seed: 1337
   log_every_steps: 1
   grad_clip: 1.0
-
 inner_optimizer:
   name: adamw
-  lr: 1.0e-3
-  betas: [0.9, 0.95]
-  eps: 1.0e-8
+  lr: 0.001
+  betas:
+  - 0.9
+  - 0.95
+  eps: 1.0e-08
   weight_decay: 0.0
   scheduler: none
   warmup_steps: 0
-
 outer_optimizer:
   name: nesterov
   lr: 0.5
   momentum: 0.9
   weight_decay: 0.0
-  betas: [0.9, 0.999]
-  eps: 1.0e-8
-
+  betas:
+  - 0.9
+  - 0.999
+  eps: 1.0e-08
 io:
   tensor_dtype: float32
   atomic_write: true
   compute_sha256: true
-
 learner:
   poll_latest_during_inner_steps: true
   adopt_global_after_upload: false
   global_adoption_strategy: replace
   post_publish_latest_wait_seconds: 0.0
   post_publish_latest_poll_seconds: 0.02
-
 failure_sim:
   enabled: false
   sleep_jitter_seconds: 0.0
   upload_skip_probability: 0.0
   crash_probability: 0.0
-
 wandb:
   enabled: false
+coordination:
+  leader: {}
+config_schema_version: 1
+maintenance: {}

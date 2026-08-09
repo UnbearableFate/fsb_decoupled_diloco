@@ -27,6 +27,34 @@ from .contributor import (
 )
 
 
+def canonical_receipt_id(stable_contributor_key: str, cycle_seq: int) -> str:
+    """Return the protocol identity shared by a receipt and its proposal reference."""
+
+    stable_key = identity(stable_contributor_key, name="stable_contributor_key")
+    sequence = strict_int(cycle_seq, name="cycle_seq", minimum=1)
+    return f"receipt-{stable_key}-{sequence}"
+
+
+def contributor_fence_namespace(fence: ContributorFence) -> str:
+    """Return a safe, deterministic namespace for one contributor incarnation."""
+
+    if not isinstance(fence, (StaticContributorFence, DynamicContributorFence)):
+        raise ValueError("fence must be a typed contributor fence")
+    canonical_fence = json.dumps(
+        fence.as_dict(), sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    return f"{fence.kind}-{hashlib.sha256(canonical_fence).hexdigest()}"
+
+
+def canonical_receipt_relative_path(fence: ContributorFence, cycle_seq: int) -> str:
+    """Derive an immutable receipt path that cannot collide across incarnations."""
+
+    stable_key = identity(fence.stable_contributor_key, name="stable_contributor_key")
+    receipt_id = canonical_receipt_id(stable_key, cycle_seq)
+    namespace = contributor_fence_namespace(fence)
+    return f"updates/receipts/{stable_key}/{namespace}/{receipt_id}.json"
+
+
 @dataclass(frozen=True)
 class CycleReceiptV1:
     cycle_receipt_format_version: int
@@ -61,7 +89,9 @@ class CycleReceiptV1:
         stable_key = identity(self.stable_contributor_key, name="stable_contributor_key")
         sequence = strict_int(self.cycle_seq, name="cycle_seq", minimum=1)
         uuid4_string(self.cycle_id, name="cycle_id")
-        identity(self.receipt_id, name="receipt_id")
+        receipt_id = identity(self.receipt_id, name="receipt_id")
+        if receipt_id != canonical_receipt_id(stable_key, sequence):
+            raise ValueError("receipt_id does not match stable contributor and cycle sequence")
         if sequence == 1:
             if self.previous_receipt_id is not None or self.previous_receipt_sha256 is not None:
                 raise ValueError("cycle 1 must not name a previous receipt")

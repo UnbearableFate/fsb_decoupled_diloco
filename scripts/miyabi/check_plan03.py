@@ -266,15 +266,19 @@ def verify_inventory(actual: dict[str, Any], expected: dict[str, Any]) -> list[s
 
 def _boundary_manifest(payload: dict[str, Any]) -> dict[str, str]:
     boundaries = payload["migration_boundaries"]
+    # Full configs and the shared-schema marker in torch-baseline configs are
+    # intentional P4 migration surfaces. Their semantics are checked against
+    # the frozen source by ``verify_p4_migration_contracts`` below; hashing
+    # them here would make the required migration impossible. Fragment,
+    # historical-control, baseline PBS/test/code and archive-tag boundaries
+    # remain byte-frozen until their owning phases.
     paths = {
         *boundaries["fragment_enabled_configs_delete_in_p5"],
         *boundaries["fragment_pbs_delete_in_p5"],
         boundaries["historical_full_control_archive_separately"]["config"],
         boundaries["historical_full_control_archive_separately"]["pbs"],
-        *boundaries["torch_baseline_retain"]["configs"],
         *boundaries["torch_baseline_retain"]["pbs"],
         *boundaries["torch_baseline_retain"]["tests"],
-        boundaries["recursive_config_anchor"],
     }
     baseline_package = str(boundaries["torch_baseline_retain"]["package"]).rstrip("/") + "/"
     paths.update(
@@ -283,6 +287,94 @@ def _boundary_manifest(payload: dict[str, Any]) -> dict[str, str]:
         if path.startswith(baseline_package) and path != P1_BASELINE_COMPOSITION_MIGRATION
     )
     return {path: payload["manifest_sha256"][path] for path in sorted(paths)}
+
+
+def verify_p4_migration_contracts(root: Path, frozen_source_ref: str) -> list[str]:
+    """Compare every retained config to its exact authorized P4 semantic migration."""
+
+    from fs_diloco.core.config_v4 import migrate_v3_bytes_to_v4
+
+    differences: list[str] = []
+    frozen_configs = [
+        path
+        for path in _tracked(root, "configs", source_ref=frozen_source_ref)
+        if path.endswith((".yaml", ".yml"))
+    ]
+    current_configs = [
+        path for path in _tracked(root, "configs") if path.endswith((".yaml", ".yml"))
+    ]
+
+    def classify(path: str, payload: Any) -> str:
+        if Path(path).name.startswith("torch_baseline_"):
+            return "baseline"
+        if path == "configs/fs_diloco_gpt2_wikitext2_8l_no_fragment_50x10.yaml":
+            return "historical"
+        if isinstance(payload, dict):
+            fragments = payload.get("fragments")
+            if isinstance(fragments, dict) and fragments.get("enabled") is True:
+                return "fragment"
+        return "full"
+
+    frozen_payloads = {
+        path: yaml.safe_load(_read_text(root, path, source_ref=frozen_source_ref)) or {}
+        for path in frozen_configs
+    }
+    current_payloads = {
+        path: yaml.safe_load(_read_text(root, path, source_ref=None)) or {}
+        for path in current_configs
+    }
+    frozen_classes = {path: classify(path, payload) for path, payload in frozen_payloads.items()}
+    current_classes = {path: classify(path, payload) for path, payload in current_payloads.items()}
+    for kind in ("full", "baseline", "fragment", "historical"):
+        expected_paths = sorted(path for path, value in frozen_classes.items() if value == kind)
+        actual_paths = sorted(path for path, value in current_classes.items() if value == kind)
+        if actual_paths != expected_paths:
+            differences.append(f"config-migration.{kind}-path-inventory")
+
+    for path, kind in sorted(frozen_classes.items()):
+        if path not in current_payloads:
+            continue
+        frozen_payload = frozen_payloads[path]
+        current_payload = current_payloads[path]
+        if kind == "full":
+            migrated_bytes, _report = migrate_v3_bytes_to_v4(
+                _read_text(root, path, source_ref=frozen_source_ref).encode("utf-8")
+            )
+            expected_payload = yaml.safe_load(migrated_bytes) or {}
+            if current_payload != expected_payload:
+                differences.append(f"config-migration.full-semantic:{path}")
+        elif kind == "baseline":
+            expected_payload = dict(frozen_payload)
+            expected_payload["config_schema_version"] = 1
+            if current_payload != expected_payload:
+                differences.append(f"config-migration.baseline-semantic:{path}")
+
+    retained_full_pbs = (
+        "scripts/miyabi/run_1node_debug.pbs",
+        "scripts/miyabi/run_2node_debug.pbs",
+        "scripts/miyabi/run_2node_resume_regression.pbs",
+        "scripts/miyabi/run_8node_colocated_gpt2_wikitext2_5000steps.pbs",
+        "scripts/miyabi/run_9node_gpt2_wikitext2.pbs",
+        "scripts/miyabi/run_9node_gpt2_wikitext2_5000steps.pbs",
+        "scripts/miyabi/run_plan01_regression.pbs",
+    )
+    for path in retained_full_pbs:
+        target = root / path
+        if not target.is_file():
+            differences.append(f"pbs-migration.missing:{path}")
+            continue
+        source = target.read_text(encoding="utf-8")
+        if "#PBS -W group_list=xg24i002" not in source:
+            differences.append(f"pbs-migration.literal-group:{path}")
+        if path.endswith("run_2node_resume_regression.pbs"):
+            if "fs_diloco.tools.init_run" not in source or "fs_diloco.syncer" not in source:
+                differences.append(f"pbs-migration.v4-runtime:{path}")
+        elif path.endswith("run_plan01_regression.pbs"):
+            if "run_tiny_2proc_smoke.sh" not in source:
+                differences.append(f"pbs-migration.v4-runtime:{path}")
+        elif "run_v4_allocation.sh" not in source:
+            differences.append(f"pbs-migration.v4-runtime:{path}")
+    return differences
 
 
 def verify_boundaries(actual: dict[str, Any], expected: dict[str, Any]) -> list[str]:
@@ -597,6 +689,16 @@ def main() -> None:
                 differences.extend(
                     f"current_migration_boundaries.{difference}"
                     for difference in boundary_differences
+                )
+                migration_differences = verify_p4_migration_contracts(
+                    root, str(expected["source_identity"]["commit"])
+                )
+                checks["p4_migration_contracts"] = {
+                    "frozen_source_ref": str(expected["source_identity"]["commit"]),
+                    "differences": migration_differences,
+                }
+                differences.extend(
+                    f"p4_migration_contracts.{difference}" for difference in migration_differences
                 )
             if args.require_tracked_evidence:
                 matrix_path = root / "plans/DOING/plans" / f"{PLAN_ID}-requirement-matrix.csv"

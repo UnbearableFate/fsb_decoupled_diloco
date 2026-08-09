@@ -1,0 +1,260 @@
+#!/bin/bash
+#PBS -N fsdiloco_p4_replace
+#PBS -q debug-g
+#PBS -W group_list=xg24i002
+#PBS -l select=1:mpiprocs=1
+#PBS -l walltime=00:10:00
+#PBS -j oe
+
+set -eEuo pipefail
+trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+export CUDA_VISIBLE_DEVICES=""
+module list 2>&1 | cat
+
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+RUNS_ROOT="${RUNS_ROOT:-$PROJECT_ROOT/runs/fs_diloco}"
+RUN_ID="${RUN_ID:-plan03_p4_dynamic_replace_${PBS_JOBID%%.*}}"
+RUN_ROOT="$RUNS_ROOT/$RUN_ID"
+LOG_ROOT="${LOG_ROOT:-$PROJECT_ROOT/logs/qsub_${RUN_ID}}"
+TMP_ROOT="${TMPDIR:?TMPDIR is required}"
+TEST_CONFIG="$TMP_ROOT/${RUN_ID}.yaml"
+FIRST_SIGNAL="$TMP_ROOT/${RUN_ID}_first_admission.json"
+SECOND_SIGNAL="$TMP_ROOT/${RUN_ID}_second_admission.json"
+mkdir -p "$LOG_ROOT"
+cd "$PROJECT_ROOT"
+
+readarray -t source_identity < <(
+  "$PYTHON_BIN" - "$PROJECT_ROOT" <<'PY'
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(sys.argv[1]) / "scripts/miyabi"))
+from capture_source_identity import capture
+
+value = capture(Path(sys.argv[1]))
+print(value["git_commit"])
+print(int(value["git_dirty"]))
+print(value["source_fingerprint"])
+PY
+)
+export FS_DILOCO_GIT_COMMIT="${source_identity[0]}"
+export FS_DILOCO_GIT_DIRTY="${source_identity[1]}"
+export FS_DILOCO_SOURCE_FINGERPRINT="${source_identity[2]}"
+export FS_DILOCO_REQUIRE_SOURCE_IDENTITY=1
+
+"$PYTHON_BIN" - \
+  configs/fs_diloco_tiny_ha_dynamic_2node.yaml "$TEST_CONFIG" <<'PY'
+from pathlib import Path
+import sys
+import yaml
+
+source, target = map(Path, sys.argv[1:])
+config = yaml.safe_load(source.read_text(encoding="utf-8"))
+config["sync"]["stop_after_outer_steps"] = 20
+config["training"]["completion_mode"] = "global_only"
+target.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+PY
+
+"$PYTHON_BIN" -m fs_diloco.tools.init_run \
+  --config "$TEST_CONFIG" \
+  --run-id "$RUN_ID" \
+  --shared-root "$RUN_ROOT" \
+  --project-root "$PROJECT_ROOT" \
+  --allow-dirty-snapshot \
+  > "$LOG_ROOT/init_run.json"
+readarray -t descriptor_fields < <(
+  "$PYTHON_BIN" - "$LOG_ROOT/init_run.json" <<'PY'
+import json
+import sys
+
+descriptor = json.load(open(sys.argv[1], encoding="utf-8"))["descriptor"]
+print(descriptor["resolved_config_path"])
+print(descriptor["descriptor_sha256"])
+PY
+)
+CONFIG="${descriptor_fields[0]}"
+export FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256="${descriptor_fields[1]}"
+export FS_DILOCO_EXPECTED_GIT_COMMIT="$FS_DILOCO_GIT_COMMIT"
+export FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT="$FS_DILOCO_SOURCE_FINGERPRINT"
+
+syncer_pid=""
+first_pid=""
+second_pid=""
+cleanup() {
+  kill -CONT "$first_pid" 2>/dev/null || true
+  kill "$syncer_pid" "$first_pid" "$second_pid" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+"$PYTHON_BIN" -m fs_diloco.syncer \
+  --config "$CONFIG" --shared-root "$RUN_ROOT" \
+  > "$LOG_ROOT/syncer.log" 2>&1 &
+syncer_pid=$!
+FS_DILOCO_TEST_ADMISSION_SIGNAL_PATH="$FIRST_SIGNAL" \
+  "$PYTHON_BIN" -m fs_diloco.learner \
+    --config "$CONFIG" --shared-root "$RUN_ROOT" --bootstrap-slot 0 \
+    > "$LOG_ROOT/learner_initial.log" 2>&1 &
+first_pid=$!
+
+first_ready=false
+for _ in $(seq 1 6000); do
+  if [[ -f "$FIRST_SIGNAL" ]]; then
+    first_ready=true
+    break
+  fi
+  if ! kill -0 "$first_pid" 2>/dev/null; then
+    set +e
+    wait "$first_pid"
+    first_status=$?
+    set -e
+    first_pid=""
+    tail -n 160 "$LOG_ROOT/learner_initial.log" >&2 || true
+    echo "Initial learner exited before admission signal: status=$first_status" >&2
+    exit 1
+  fi
+  sleep 0.01
+done
+if [[ "$first_ready" != true ]]; then
+  echo "Initial learner admission signal timed out" >&2
+  exit 1
+fi
+kill -STOP "$first_pid"
+FIRST_INSTANCE="$($PYTHON_BIN -c 'import json,sys; print(json.load(open(sys.argv[1]))["actor_id"])' "$FIRST_SIGNAL")"
+
+FS_DILOCO_TEST_ADMISSION_SIGNAL_PATH="$SECOND_SIGNAL" \
+  "$PYTHON_BIN" -m fs_diloco.learner \
+    --config "$CONFIG" --shared-root "$RUN_ROOT" \
+    --launch-request-id "manual-replacement-${PBS_JOBID%%.*}" \
+    --stream-id 0 \
+    --replace-instance-id "$FIRST_INSTANCE" \
+    > "$LOG_ROOT/learner_replacement.log" 2>&1 &
+second_pid=$!
+
+second_ready=false
+for _ in $(seq 1 6000); do
+  if [[ -f "$SECOND_SIGNAL" ]]; then
+    second_ready=true
+    break
+  fi
+  if ! kill -0 "$second_pid" 2>/dev/null; then
+    set +e
+    wait "$second_pid"
+    second_status=$?
+    set -e
+    second_pid=""
+    tail -n 160 "$LOG_ROOT/learner_replacement.log" >&2 || true
+    echo "Replacement learner exited before admission signal: status=$second_status" >&2
+    exit 1
+  fi
+  sleep 0.01
+done
+if [[ "$second_ready" != true ]]; then
+  echo "Replacement learner admission signal timed out" >&2
+  exit 1
+fi
+
+"$PYTHON_BIN" - "$SECOND_SIGNAL" "$RUN_ROOT/control/syncer_metadata.sqlite3" "$FIRST_INSTANCE" \
+  "$LOG_ROOT/replacement_boundary.json" <<'PY'
+import json
+from pathlib import Path
+import sqlite3
+import sys
+
+signal, database, first_instance, output = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4])
+connection = sqlite3.connect(database)
+connection.row_factory = sqlite3.Row
+try:
+    old = connection.execute(
+        "SELECT status, stream_epoch FROM learner_instances WHERE instance_id=?",
+        (first_instance,),
+    ).fetchone()
+    latest = connection.execute("SELECT MAX(version) FROM global_versions").fetchone()[0]
+    replacement = json.loads(signal.read_text(encoding="utf-8"))["actor_id"]
+    new = connection.execute(
+        "SELECT status, stream_epoch FROM learner_instances WHERE instance_id=?",
+        (replacement,),
+    ).fetchone()
+    assert old is not None and old["status"] == "revoked"
+    assert new is not None and new["status"] == "admitted"
+    assert new["stream_epoch"] > old["stream_epoch"]
+    output.write_text(
+        json.dumps(
+            {"first_instance": first_instance, "replacement_instance": replacement, "version_at_replacement": latest},
+            sort_keys=True,
+        ) + "\n",
+        encoding="utf-8",
+    )
+finally:
+    connection.close()
+PY
+kill -CONT "$first_pid"
+
+wait "$second_pid"
+second_pid=""
+set +e
+wait "$first_pid"
+stale_status=$?
+set -e
+first_pid=""
+if [[ "$stale_status" -ne 0 ]]; then
+  if ! rg -q 'immutable target collision|MembershipFenceError|stale fence' \
+    "$LOG_ROOT/learner_initial.log"; then
+    echo "Stale learner failed for an unexpected reason: status=$stale_status" >&2
+    tail -n 160 "$LOG_ROOT/learner_initial.log" >&2 || true
+    exit "$stale_status"
+  fi
+fi
+printf 'STALE_LEARNER_STATUS=%s\n' "$stale_status"
+wait "$syncer_pid"
+syncer_pid=""
+trap - EXIT INT TERM
+
+"$PYTHON_BIN" - "$RUN_ROOT" "$LOG_ROOT/replacement_boundary.json" <<'PY'
+import json
+from pathlib import Path
+import sqlite3
+import sys
+
+root, boundary_path = map(Path, sys.argv[1:])
+boundary = json.loads(boundary_path.read_text(encoding="utf-8"))
+connection = sqlite3.connect(root / "control/syncer_metadata.sqlite3")
+connection.row_factory = sqlite3.Row
+try:
+    assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    rows = connection.execute(
+        "SELECT instance_id, status, stream_epoch FROM learner_instances ORDER BY stream_epoch"
+    ).fetchall()
+    assert [row["status"] for row in rows] == ["revoked", "stopped"]
+    terminal = connection.execute("SELECT * FROM terminal_state").fetchone()
+    assert terminal is not None and terminal["state"] == "finalized"
+    applied_by_instance = {}
+    for update in connection.execute(
+        "SELECT applied_version, fence_json FROM updates WHERE applied_version IS NOT NULL"
+    ):
+        instance_id = json.loads(update["fence_json"]).get("instance_id")
+        applied_by_instance.setdefault(instance_id, []).append(update["applied_version"])
+    old_versions = applied_by_instance.get(boundary["first_instance"], [])
+    old_max = max(old_versions, default=None)
+    if old_max is not None:
+        assert old_max <= boundary["version_at_replacement"]
+    replacement_versions = applied_by_instance.get(boundary["replacement_instance"], [])
+    assert replacement_versions
+    assert max(replacement_versions) == terminal["final_version"]
+    assert set(applied_by_instance) <= {
+        boundary["first_instance"],
+        boundary["replacement_instance"],
+    }
+    fences = connection.execute(
+        "SELECT state, hard_crash_gap_tokens_upper_bound FROM terminal_contributor_fences"
+    ).fetchall()
+    assert [row["state"] for row in fences] == ["acked"]
+    assert sum(row["hard_crash_gap_tokens_upper_bound"] for row in fences) == 0
+finally:
+    connection.close()
+summary = json.loads((root / "control/summary.json").read_text(encoding="utf-8"))
+assert summary["all_learners_stopped"] is True
+print(json.dumps({"boundary": boundary, "instances": [dict(row) for row in rows], "summary": summary}, sort_keys=True))
+PY
+printf 'PLAN03_PHASE4_DYNAMIC_REPLACEMENT_COMPLETE=%s\n' "${PBS_JOBID:-unknown}"

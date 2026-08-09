@@ -116,3 +116,98 @@ The attempt-3 tests correctly detected two behavior/read-model defects and one o
 - 关闭source binding或重新允许checker self-proof会重引入Codex M2/Claude L4，拒绝。
 - 在unit test中验证matrix当前声明的独立runtime artifact、自带source commit并排除checker artifact；由已存在的synthetic test独立验证wrong-source和self-only均BLOCKED。采用该最小修订。
 - 正式顺序保持：pre-test operational checker → compute tests → target-bound runtime summary → matrix更新 → `--verify-phase-requirements ... --verification-target-ref HEAD` → tracked evidence gate。第四次只有这五层全部通过才归零。
+# P4 three-failure comprehensive review — 2026-08-09 08:22 JST
+
+Review trigger: `p4-accounting-terminal-runtime-validation` attempts 1–3 failed consecutively (`2509093`, `2509095`, `2509096`). The first two failures were test-loader fixture mistakes. Attempt 3 passed all focused tests and exposed a production terminal race, so no fourth compute attempt is allowed before this review and remediation.
+
+## Inputs and trust boundaries
+
+- Learners publish immutable cycle receipts and proposals under their contributor fence. These objects are untrusted until a current leader validates and commits them through `LeaderAuthority`.
+- Learners consume only current-epoch controls authenticated by a live, checksum-valid leader heartbeat. They must not read SQLite or treat fixed `latest.json`/`stop.json` as authority.
+- A terminal acknowledgement can name only the authority-frozen last cycle or one cycle that was already in flight when close began. This is what keeps the hard-crash uncertainty bounded by one configured cycle.
+
+## Control flow finding
+
+The v4 learner starts its next cycle immediately after publishing the preceding receipt/proposal. `on_after_publish` may observe a newer global version, but global publication is neither an acknowledgement of this contributor's receipt nor guaranteed to select it. Consequently there is no backpressure between learner publication and leader ingestion. In run `plan03_p4_static_2509096`, both learners had published through cycle 27 when close began, the leader's scan snapshot had ingested only through cycle 9, and the learners finished cycle 28 before observing drain. Their exact terminal acknowledgements were therefore correctly rejected.
+
+The terminal authority must not be weakened to accept arbitrary post-freeze backlog: doing so would allow an unbounded number of uncommitted cycles beyond the frozen accounting boundary and invalidate the one-cycle hard-crash upper bound.
+
+## Persistence and idempotency review
+
+The missing primitive is an immutable receipt-ingestion acknowledgement scoped to the current leader epoch/owner. Its identity must include run ID, epoch, owner, stable contributor key, cycle sequence, receipt ID, receipt digest, and contributor fence. It is published only after `ingest_cycle_receipt` succeeds (including exact replay), at a deterministic epoch path with byte-identical replay. The learner accepts it only through a live current-epoch heartbeat and only when every identity/digest field matches its exact receipt and fence.
+
+One receipt may be in flight when drain is published. The learner wait therefore multiplexes three outcomes: exact receipt acknowledgement permits the next cycle; drain publishes the exact terminal acknowledgement and stops training; finalized terminal exits. Stale-epoch acknowledgements, fixed caches, malformed JSON, or another contributor's acknowledgement are ignored.
+
+## Recovery and takeover review
+
+A successor re-ingests immutable receipts idempotently and republishes acknowledgements in its own epoch. A learner waiting on an old leader will follow the live highest epoch and can complete without SQLite access. If no leader is live, it waits without training additional cycles. If drain is already authoritative, it stops and acknowledges instead of waiting for a receipt acknowledgement. Candidate death after authority ingestion but before acknowledgement publication is safe because successor replay reconstructs the acknowledgement.
+
+## Output and accounting review
+
+At most one cycle per contributor can remain outside authority progress. `begin_terminal_close` can therefore continue freezing `close_last_cycle_seq` and accepting exactly that sequence or `+1`. Normal shutdown must leave every frozen row in `acked`, no pending/selected updates, and zero hard-crash gap. Malformed or premature terminal acknowledgements remain reject-and-telemetry events rather than candidate-fatal errors.
+
+## Revised implementation and falsification gates
+
+1. Add deterministic current-epoch receipt acknowledgements to the v4 control publisher/reader, with exact replay and full field validation.
+2. Publish the acknowledgement immediately after each successful receipt ingest, before proposal processing; publish it again safely during successor replay.
+3. After every receipt/proposal publication, block the learner from starting another cycle until exact receipt acknowledgement, drain, or terminal. Do not use global-version change as a substitute.
+4. Add focused tests for byte-idempotent acknowledgement, stale/wrong-identity rejection, and the one-cycle wait contract.
+5. Compute attempt 4 must pass both tiny pipelines and assert all terminal fences are `acked`, the total hard-crash gap is zero, and no contributor publishes more than one cycle beyond authority progress at close.
+
+# P4 dynamic-replacement three-failure comprehensive review — 2026-08-09 08:49 JST
+
+Review trigger: dynamic replacement attempts `2509115`, `2509141`, and `2509143` failed consecutively. The first exposed missing child-log evidence, the second exposed an actual pre-admission torch import through a type-only dependency, and the third completed the replacement but revealed a wrong wrapper exit expectation.
+
+## Inputs and admission boundary
+
+The bootstrap and replacement learners have distinct random instance/admission-token identities but intentionally share stable stream 0 and the same placement. A replacement request must name the exact current instance and a non-empty explicit launch request ID. Admission responses are accepted only from the highest live current epoch; stale epoch response files cannot open the torch/GPU gate. Type-only control imports must remain under `TYPE_CHECKING` so this validation path is torch-free.
+
+## Control flow and fencing
+
+The first process is paused immediately after authority admission. The replacement command atomically retires its current fence, terminalizes any active work, advances stream/placement epochs, and admits the new instance. Resuming the old process is an adversarial action. It may exit nonzero: no contract promises graceful behavior for a process whose authority fence was revoked while stopped. The contract is that no post-boundary receipt/proposal can be ingested or committed.
+
+## Persistence and collision semantics
+
+Cycle receipt identity is stable stream key plus cycle sequence. When the old process had not yet durably advanced stream progress, both processes can attempt cycle 1. Create-if-absent publication makes this a deterministic collision; the old process cannot overwrite the replacement's receipt. If the stale process wins filesystem publication first, authority fence validation rejects it and the replacement can retry only through its authoritative resume sequence. The gate must therefore accept either an immutable collision or a membership-fence rejection as the stale-process outcome, never silent overwrite or applied work.
+
+## Recovery and terminal behavior
+
+The replacement inherits the authority cursor/receipt chain, not process-local state. Terminal close freezes only the current epoch-2 stream fence; the revoked epoch-1 instance is not a terminal contributor. The replacement must acknowledge gracefully with zero hard-crash gap. The resumed stale process may observe terminal and exit zero or fail earlier; both are safe if its applied-version maximum is at or before the recorded replacement boundary.
+
+## Outputs and revised falsification gates
+
+1. Capture the stale process exit under `set +e`; require either zero after terminal observation or a retained collision/fence diagnostic.
+2. Do not let that expected stale exit skip final authority assertions.
+3. Require old status `revoked`, new status `stopped`, strictly advanced stream epoch, exactly one graceful terminal fence, zero hard-crash gap, and balanced terminal summary.
+4. Query old-instance updates and require `MAX(applied_version) <= version_at_replacement`; this is the authoritative successful-commit=0 assertion.
+5. Attempt 4 must close all assertions and retain the process logs as evidence.
+
+# P4 Plan01-v4 regression three-failure comprehensive review — 2026-08-09 09:27 JST
+
+Review trigger: `p4-plan01-v4-regression` jobs `2509229`, `2509238`, and `2509243` failed consecutively. The first two runs exposed shared migration/lifecycle omissions and reduced the suite from 199 failures to one. Attempt 3 passed 862 tests and stopped only on a stale singular launcher-result assertion, before the strict-v4 smoke. No production behavior is changed by the remaining remediation.
+
+## Config input and initialization boundary
+
+- The independent launcher validates both requested PBS walltimes before creating an immutable run, resolves only through `resolve_config_v4`, then passes the complete `ConfigV4` to `initialize_run`. Missing or sub-ten-minute walltime therefore cannot leave a bootstrapped but unsubmitted run. The migrated test now patches that actual strict-v4 loader and supplies the v4 wrapper; restoring a module-level legacy `resolve_config` dependency would reopen a removed production route.
+- Formal full configs are validated as v4 before any compatibility projection. The compatibility projection in classic `load_config` exists only so retained P1–P3 oracle tests can run until P5 deletion; Plan01 production entrypoints do not consume it. HA initializer tests now exercise mandatory v4 leader configuration rather than setting removed `coordination.syncer_ha`.
+
+## Launcher control flow and scheduler side effects
+
+- Submission order is syncer first, followed by one static learner-array command or independently submitted dynamic bootstrap learners. A syncer rejection returns `failed` immediately. Once the syncer has an accepted job ID, a learner rejection returns `partial`; it intentionally does not issue `qdel`, because implicit cancellation would destroy the operator's accepted-job receipt and create an unobservable scheduler race.
+- The attempt-3 fixture is static, so exactly one learner receipt is appended. Its mocked qsub results prove the accepted syncer ID survives and the learner failure is returned. Dynamic mode uses the same ordered list for multiple bootstrap slots; a singular learner field cannot represent that contract.
+
+## Receipt persistence and recovery contract
+
+- `syncer_submission` is a single receipt because there is exactly one initial candidate submission. `learner_submissions` is always an ordered list once learner submission begins, with `bootstrap_slot=None` for the static array and the exact slot for dynamic jobs. `accepted_learner_job_ids` records only successful learner submissions on a partial dynamic topology. This output is the recovery/operator boundary; no accepted ID may be discarded or synthesized.
+- The stale test's `learner_submission` key predates independent dynamic learners. Adding it back as an alias would create two authorities for the same receipt, force callers to guess which shape applies, and preserve code P5 is required to delete. Updating the assertion to list index 0 is the only contract-preserving remediation.
+
+## Terminal and strict-v4 smoke output
+
+- The PBS gate runs all pytest tests before creating the smoke run, so failed regression attempts leave no run root to clean. On success, `run_tiny_2proc_smoke.sh` initializes a strict-v4 local run and launches one candidate plus two learners. The post-run gate reads immutable summary/SQLite authority state and requires finalized terminal state, two graceful `acked` fences, zero hard-crash gap, three attestations, three JSONL telemetry streams, and no legacy CSV output.
+- Attempt 2's terminal CHECK failure confirmed the schema rule that `final_update_id` is transient state owned only by `draining`; retirement must clear it after final-update adjudication. Attempt 3 passed that authority test and all other terminal tests, providing a regression counterexample against weakening the CHECK or terminal fence logic.
+
+## Alternatives, remaining edit, and fourth-attempt gate
+
+- Reintroducing `learner_submission`, weakening the ten-minute scheduler minimum, accepting a legacy `Config` at `initialize_run`, or skipping pytest to reach the smoke are rejected because each hides rather than migrates a removed boundary.
+- A repository-wide search found the singular key only in the two adjacent stale assertions; the production launcher and P4 mandatory launcher tests consistently use `learner_submissions`. Replace both assertions with `result['learner_submissions'][0]`, preserving the failed status and exact stderr checks.
+- Before attempt 4, rerun Ruff/format/compile, `bash -n` over every Miyabi PBS/shell script, and `git diff --check`. Attempt 4 passes only if all repository tests pass, the strict-v4 smoke completes, SQLite integrity/terminal/accounting assertions pass, and the completion marker is emitted. If the fourth attempt fails, record the new evidence and re-audit the entire failing boundary rather than restoring compatibility aliases.

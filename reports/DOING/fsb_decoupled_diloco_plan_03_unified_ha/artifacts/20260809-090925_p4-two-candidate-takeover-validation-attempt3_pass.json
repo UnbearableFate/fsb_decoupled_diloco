@@ -1,0 +1,61 @@
+{
+  "artifact_schema_version": 1,
+  "command": "qsub -l walltime=00:10:00 scripts/miyabi/run_2node_resume_regression.pbs",
+  "errors": [],
+  "experiment_id": "p4-two-candidate-takeover-validation",
+  "identity": {
+    "descriptor_sha256": "c6c4fdcb157e50bbf841e5797479df4945c3376e5aae0f98aedad2d6a9cc3ce3",
+    "run_id": "20260809_090813_fs_diloco_2node_resume",
+    "source_fingerprint": "sha256:818a71dae188e349766cf80012a4ae4a59233f4092ed901479ea04696ab431c1"
+  },
+  "pbs": {
+    "actual_walltime": "00:00:22",
+    "compute_hosts": [
+      "mg0484",
+      "mg0488"
+    ],
+    "exit_status": 0,
+    "group_id": "xg24i002",
+    "job_id": "2509225.opbs",
+    "queue": "small-g",
+    "requested_walltime": "00:10:00"
+  },
+  "recorded_at": "2026-08-09T09:09:25+09:00",
+  "run_root": "runs/fs_diloco/20260809_090813_fs_diloco_2node_resume",
+  "sha256": {
+    "authority_database_before_cleanup": "485cc099b70d5cdb1525351110ab509587c6819f9746ef9084efc9eb8edd213b",
+    "joined_stdout": "e03e31168893f20c5a8106dedd23d81ace9f444ebb7ed097d838b83069390d14"
+  },
+  "status": "PASS",
+  "terminal": {
+    "direct_weight_tokens_applied": 1280,
+    "final_version": 20,
+    "state": "finalized"
+  },
+  "verified": {
+    "all_learners_stopped": true,
+    "epochs": [
+      {
+        "committed_version_count": 2,
+        "epoch": 1,
+        "final_state": "expired",
+        "hostname": "mg0484",
+        "maximum_committed_version": 1,
+        "minimum_committed_version": 0,
+        "superseded_by_epoch": 2
+      },
+      {
+        "committed_version_count": 19,
+        "epoch": 2,
+        "final_state": "released",
+        "hostname": "mg0488",
+        "maximum_committed_version": 20,
+        "minimum_committed_version": 2
+      }
+    ],
+    "global_versions_contiguous": true,
+    "terminal_fence_state": "acked",
+    "terminal_hard_crash_gap_tokens": 0,
+    "token_ledger_balance": 0
+  }
+}

@@ -1,0 +1,190 @@
+#!/bin/bash
+#PBS -N fsdiloco_plan03_p4
+#PBS -q debug-g
+#PBS -W group_list=xg24i002
+#PBS -l select=1:mpiprocs=1
+#PBS -l walltime=00:10:00
+#PBS -j oe
+
+set -eEuo pipefail
+trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
+
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+export PYTHONDONTWRITEBYTECODE=1
+export CUDA_VISIBLE_DEVICES=""
+module list 2>&1 | cat
+
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+RUFF_BIN="${RUFF_BIN:-$PROJECT_ROOT/.venv/bin/ruff}"
+RUNS_ROOT="${RUNS_ROOT:-$PROJECT_ROOT/runs/fs_diloco}"
+cd "$PROJECT_ROOT"
+
+hostname
+printf 'PBS_JOBID=%s\n' "${PBS_JOBID:-unknown}"
+
+readarray -t source_identity < <(
+  "$PYTHON_BIN" - "$PROJECT_ROOT" <<'PY'
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(sys.argv[1]) / "scripts/miyabi"))
+from capture_source_identity import capture
+
+value = capture(Path(sys.argv[1]))
+print(value["git_commit"])
+print(int(value["git_dirty"]))
+print(value["source_fingerprint"])
+PY
+)
+export FS_DILOCO_GIT_COMMIT="${source_identity[0]}"
+export FS_DILOCO_GIT_DIRTY="${source_identity[1]}"
+export FS_DILOCO_SOURCE_FINGERPRINT="${source_identity[2]}"
+export FS_DILOCO_REQUIRE_SOURCE_IDENTITY=1
+
+"$RUFF_BIN" check fs_diloco tests scripts/miyabi
+"$RUFF_BIN" format --check \
+  fs_diloco/core/config.py \
+  fs_diloco/core/config_v4.py \
+  fs_diloco/core/run_descriptor.py \
+  fs_diloco/modeling/hf_data.py \
+  fs_diloco/protocol/admission_v4.py \
+  fs_diloco/protocol/control_v4.py \
+  fs_diloco/protocol/cycle_receipt.py \
+  fs_diloco/runtime/learner_entrypoint.py \
+  fs_diloco/runtime/learner_v4.py \
+  fs_diloco/runtime/syncer_entrypoint.py \
+  fs_diloco/runtime/syncer_v4.py \
+  fs_diloco/storage/artifact_policy.py \
+  fs_diloco/storage/authority.py \
+  fs_diloco/storage/paths.py \
+  fs_diloco/tools/init_run.py \
+  fs_diloco/tools/launch_independent_run.py \
+  fs_diloco/tools/migrate_config_v3_to_v4.py \
+  scripts/miyabi/check_plan03.py \
+  tests/runtime/test_p4_mandatory_runtime.py \
+  tests/test_plan03_checker.py
+"$PYTHON_BIN" scripts/miyabi/check_plan03.py \
+  --root "$PROJECT_ROOT" \
+  --expect reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-003335_p0-current-boundary-check_review.json \
+  --verify-boundaries \
+  --inventory-output "${TMPDIR:?TMPDIR is required}/p4-current-boundary.json"
+"$PYTHON_BIN" -m pytest -q tests/runtime/test_p4_mandatory_runtime.py
+"$PYTHON_BIN" -m pytest -q
+
+run_pipeline() {
+  local mode="$1"
+  local source_config="$2"
+  local learners="$3"
+  local run_id="plan03_p4_${mode}_${PBS_JOBID%%.*}"
+  local run_root="$RUNS_ROOT/$run_id"
+  local init_json="${TMPDIR:?TMPDIR is required}/${run_id}_init.json"
+  local process_dir="$TMPDIR/${run_id}_processes"
+  mkdir -p "$process_dir"
+
+  "$PYTHON_BIN" -m fs_diloco.tools.init_run \
+    --config "$source_config" \
+    --run-id "$run_id" \
+    --shared-root "$run_root" \
+    --project-root "$PROJECT_ROOT" \
+    --allow-dirty-snapshot >"$init_json"
+
+  local resolved_config="$run_root/control/run_config.resolved.yaml"
+  local descriptor_sha
+  descriptor_sha="$($PYTHON_BIN -c 'import json,sys; print(json.load(open(sys.argv[1]))["descriptor"]["descriptor_sha256"])' "$init_json")"
+  export FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256="$descriptor_sha"
+  export FS_DILOCO_EXPECTED_GIT_COMMIT="$FS_DILOCO_GIT_COMMIT"
+  export FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT="$FS_DILOCO_SOURCE_FINGERPRINT"
+
+  timeout 180 "$PYTHON_BIN" -m fs_diloco.syncer \
+    --config "$resolved_config" --shared-root "$run_root" \
+    >"$process_dir/syncer.log" 2>&1 &
+  local syncer_pid=$!
+  local learner_pids=()
+  local index
+  for ((index = 0; index < learners; index++)); do
+    if [[ "$mode" == "static" ]]; then
+      printf -v learner_id 'learner_%03d' "$index"
+      timeout 180 "$PYTHON_BIN" -m fs_diloco.learner \
+        --config "$resolved_config" --shared-root "$run_root" \
+        --learner-id "$learner_id" \
+        >"$process_dir/learner_${index}.log" 2>&1 &
+    else
+      timeout 180 "$PYTHON_BIN" -m fs_diloco.learner \
+        --config "$resolved_config" --shared-root "$run_root" \
+        --bootstrap-slot "$index" \
+        >"$process_dir/learner_${index}.log" 2>&1 &
+    fi
+    learner_pids+=("$!")
+  done
+
+  local status=0
+  for learner_pid in "${learner_pids[@]}"; do
+    wait "$learner_pid" || status=$?
+  done
+  wait "$syncer_pid" || status=$?
+  if ((status != 0)); then
+    for path in "$process_dir"/*.log; do
+      echo "===== $path =====" >&2
+      tail -n 120 "$path" >&2
+    done
+    return "$status"
+  fi
+
+  "$PYTHON_BIN" - "$run_root" <<'PY'
+import json
+import sqlite3
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+connection = sqlite3.connect(root / "control/syncer_metadata.sqlite3")
+connection.row_factory = sqlite3.Row
+try:
+    assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    terminal = connection.execute("SELECT * FROM terminal_state").fetchone()
+    assert terminal is not None and terminal["state"] == "finalized"
+    summary = json.loads((root / "control/summary.json").read_text(encoding="utf-8"))
+    assert summary["run_id"] == root.name
+    assert summary["all_learners_stopped"] is True
+    assert summary["final_version"] == terminal["final_version"]
+    assert connection.execute(
+        "SELECT COUNT(*) FROM updates WHERE status IN ('pending', 'selected')"
+    ).fetchone()[0] == 0
+    terminal_fences = connection.execute(
+        "SELECT state, hard_crash_gap_tokens_upper_bound FROM terminal_contributor_fences"
+    ).fetchall()
+    assert terminal_fences
+    assert {row["state"] for row in terminal_fences} == {"acked"}
+    assert sum(row["hard_crash_gap_tokens_upper_bound"] for row in terminal_fences) == 0
+    terminal_bounds = connection.execute(
+        "SELECT close_last_cycle_seq, final_cycle_seq FROM terminal_contributor_fences"
+    ).fetchall()
+    assert all(
+        row["final_cycle_seq"] in {row["close_last_cycle_seq"], row["close_last_cycle_seq"] + 1}
+        for row in terminal_bounds
+    )
+    assert any(root.glob("control/syncer_epochs/e*_*/receipt_acks/*/*.json"))
+    rollup = connection.execute("SELECT * FROM token_rollups WHERE singleton=1").fetchone()
+    if rollup is not None:
+        balance = (
+            rollup["adjudicated_processed"]
+            - rollup["local_discarded"]
+            - rollup["direct_applied"]
+            - rollup["direct_dropped"]
+            - rollup["direct_quarantined_or_conflicted"]
+            - rollup["direct_reported_unpublished"]
+            - rollup["direct_outstanding"]
+        )
+        assert balance == 0
+    print(json.dumps(dict(terminal), sort_keys=True))
+finally:
+    connection.close()
+PY
+  printf 'PIPELINE_PASS mode=%s run_root=%s\n' "$mode" "$run_root"
+}
+
+run_pipeline static configs/fs_diloco_tiny_ha_static.yaml 2
+run_pipeline dynamic configs/fs_diloco_tiny_ha_dynamic_2node.yaml 1
+
+printf 'PLAN03_PHASE4_TESTS_COMPLETE=%s\n' "${PBS_JOBID:-unknown}"

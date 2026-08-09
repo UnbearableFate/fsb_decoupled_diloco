@@ -10,6 +10,8 @@ from typing import Any, Iterator
 
 import torch
 
+from ..protocol.data_cursor import IndexedBlockCursor
+
 
 @dataclass
 class Batch:
@@ -121,9 +123,7 @@ def _batched_blocks(
         raise ValueError("tokenized dataset produced zero blocks")
 
     if not shuffle:
-        block_indices: Iterator[int] = (
-            index % len(blocks) for index in itertools.count()
-        )
+        block_indices: Iterator[int] = (index % len(blocks) for index in itertools.count())
     else:
         base_seed = _splitmix64(int(seed) ^ _splitmix64(int(learner_index)))
 
@@ -215,3 +215,68 @@ def build_stream_batch_iterator(
         learner_index=stream_id,
         num_learners=stream_pool_size,
     )
+
+
+def build_indexed_batch_iterator(
+    config: Any,
+    tokenizer: Any,
+    *,
+    cursor: IndexedBlockCursor,
+) -> Iterator[Batch]:
+    """Build a random-access resumable stream from the explicit v4 cursor.
+
+    The authority cursor counts optimizer micro-batches.  Each batch expands
+    into ``micro_batch_size`` adjacent logical block positions before the
+    shared keyed permutation is applied, so shards cannot overlap before the
+    finite block set wraps.
+    """
+
+    if config.data.streaming:
+        raise ValueError("indexed v4 data does not support streaming datasets")
+    micro_batch_size = int(config.training.micro_batch_size)
+    block_size = int(config.training.block_size)
+    if config.data.dataset_name == "synthetic":
+        vocab_size = int(getattr(tokenizer, "vocab_size", config.model.synthetic_vocab_size))
+        dataset_blocks = 2**31 - 1
+        materialized_blocks: list[list[int]] | None = None
+    else:
+        dataset = load_text_split(config.data, config.data.train_split)
+        materialized_blocks = text_rows_to_blocks(dataset, tokenizer, block_size)
+        dataset_blocks = len(materialized_blocks)
+        if dataset_blocks < cursor.shard_count:
+            raise ValueError("tokenized dataset has fewer blocks than v4 data shards")
+
+    next_cursor = cursor
+    while True:
+        batch_blocks: list[list[int]] = []
+        for micro_index in range(micro_batch_size):
+            block_cursor = IndexedBlockCursor(
+                stable_contributor_key=next_cursor.stable_contributor_key,
+                dataset_identity_sha256=next_cursor.dataset_identity_sha256,
+                seed=next_cursor.seed,
+                block_index=next_cursor.block_index * micro_batch_size + micro_index,
+                shard_index=next_cursor.shard_index,
+                shard_count=next_cursor.shard_count,
+            )
+            sample_index = block_cursor.deterministic_sample_index(dataset_blocks=dataset_blocks)
+            if materialized_blocks is None:
+                generator = torch.Generator()
+                generator.manual_seed(_splitmix64(int(config.training.seed) ^ sample_index))
+                block = torch.randint(
+                    low=0,
+                    high=vocab_size,
+                    size=(block_size,),
+                    generator=generator,
+                    dtype=torch.long,
+                ).tolist()
+            else:
+                block = materialized_blocks[sample_index]
+            batch_blocks.append(block)
+        input_ids = torch.tensor(batch_blocks, dtype=torch.long)
+        yield Batch(
+            input_ids=input_ids,
+            labels=input_ids.clone(),
+            num_tokens=int(input_ids.numel()),
+            num_examples=micro_batch_size,
+        )
+        next_cursor = next_cursor.advance()

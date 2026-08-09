@@ -1,10 +1,10 @@
-"""Compatibility entry point for the syncer runtime."""
+"""Public entry point for the mandatory fenced syncer candidate runtime."""
 
 from __future__ import annotations
 
-from .runtime.syncer import initialize_run, main, resume_run, run_syncer
+from .runtime.syncer_entrypoint import main
 
-__all__ = ["initialize_run", "main", "resume_run", "run_syncer"]
+__all__ = ["main"]
 
 
 if __name__ == "__main__":

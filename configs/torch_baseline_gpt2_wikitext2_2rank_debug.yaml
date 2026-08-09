@@ -1,3 +1,4 @@
+config_schema_version: 1
 run:
   name: torch_baseline_gpt2_wikitext2_2rank_debug
   run_id: null

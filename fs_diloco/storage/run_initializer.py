@@ -234,6 +234,18 @@ def validate_completed_run(final_root: Path, *, strict_initial: bool = False) ->
         final_root,
         strict_initial=strict_initial,
         require_reservation=True,
+        validate_authority=True,
+    )
+
+
+def validate_completed_run_for_actor(final_root: Path) -> dict[str, Any]:
+    """Validate immutable publication identity without importing tensor/torch code."""
+
+    return _validate_completed_run(
+        final_root,
+        strict_initial=False,
+        require_reservation=True,
+        validate_authority=False,
     )
 
 
@@ -242,6 +254,7 @@ def _validate_completed_run(
     *,
     strict_initial: bool,
     require_reservation: bool,
+    validate_authority: bool,
 ) -> dict[str, Any]:
     if final_root.is_symlink():
         raise RuntimeError("run root must not be a symlink")
@@ -285,7 +298,7 @@ def _validate_completed_run(
         actual_files, actual_dirs = _scan_run_entries(final_root)
         if actual_files != expected_files or actual_dirs != expected_dirs:
             raise RuntimeError("initial run root contains entries outside the complete manifest")
-    _validate_completed_protocol_identity(final_root)
+    _validate_completed_protocol_identity(final_root, validate_authority=validate_authority)
     return manifest
 
 
@@ -300,6 +313,7 @@ def repair_identity_reservation(final_root: Path) -> Path:
         final_root,
         strict_initial=False,
         require_reservation=False,
+        validate_authority=True,
     )
     actual_files, actual_dirs = _scan_run_entries(final_root)
     expected_files = {".complete", ".identity"} | {
@@ -506,7 +520,7 @@ def _entry_exists(path: Path) -> bool:
     return True
 
 
-def _validate_completed_protocol_identity(final_root: Path) -> None:
+def _validate_completed_protocol_identity(final_root: Path, *, validate_authority: bool) -> None:
     """Reopen immutable identities and the mutable DB after marker publication."""
 
     paths = RunPaths(final_root)
@@ -562,22 +576,57 @@ def _validate_completed_protocol_identity(final_root: Path) -> None:
     if mismatches:
         raise RuntimeError(f"run identity does not match descriptor: {mismatches}")
     ArtifactPolicy.from_dict(read_json(paths.artifact_policy_json))
-    connection = open_existing(
-        paths.sqlite_db,
-        BootstrapIdentity(
-            run_id=str(descriptor.get("run_id", "")),
-            source_fingerprint=str(descriptor.get("source_fingerprint", "")),
-            config_sha256=str(descriptor.get("resolved_config_sha256", "")),
-            mode=bootstrap_mode,
-        ),
-        marker_path=paths.bootstrap_complete_json,
-    )
-    try:
-        integrity = tuple(str(row[0]) for row in connection.execute("PRAGMA integrity_check"))
-        if integrity != ("ok",):
-            raise RuntimeError(f"run authority integrity check failed: {integrity}")
-    finally:
-        connection.close()
+    if not validate_authority:
+        return
+    from ..core.versions import PROTOCOL_VERSION as V4_PROTOCOL_VERSION
+    from ..protocol.contributor import DynamicMembershipScope, StaticMembershipScope
+    from .authority import AuthorityIdentity, LeaderAuthority
+
+    if descriptor.get("protocol_version") == V4_PROTOCOL_VERSION:
+        if descriptor_mode == "full_ha_dynamic":
+            stream_pool_size = descriptor.get("stream_pool_size")
+            if isinstance(stream_pool_size, bool) or not isinstance(stream_pool_size, int):
+                raise RuntimeError("dynamic descriptor stream_pool_size is invalid")
+            scope = DynamicMembershipScope(stream_pool_size)
+        else:
+            learner_ids = descriptor.get("static_learner_ids")
+            if not isinstance(learner_ids, list) or not learner_ids:
+                raise RuntimeError("static descriptor learner IDs are invalid")
+            scope = StaticMembershipScope(tuple(str(item) for item in learner_ids))
+        authority = LeaderAuthority(
+            paths.sqlite_db,
+            AuthorityIdentity(
+                run_id=str(descriptor.get("run_id", "")),
+                source_fingerprint=str(descriptor.get("source_fingerprint", "")),
+                config_sha256=str(descriptor.get("resolved_config_sha256", "")),
+            ),
+            scope,
+            marker_path=paths.bootstrap_complete_json,
+            run_root=final_root,
+        )
+        try:
+            integrity = authority.read.integrity_check()
+            if integrity != ("ok",):
+                raise RuntimeError(f"run authority integrity check failed: {integrity}")
+        finally:
+            authority.close()
+    else:
+        connection = open_existing(
+            paths.sqlite_db,
+            BootstrapIdentity(
+                run_id=str(descriptor.get("run_id", "")),
+                source_fingerprint=str(descriptor.get("source_fingerprint", "")),
+                config_sha256=str(descriptor.get("resolved_config_sha256", "")),
+                mode=bootstrap_mode,
+            ),
+            marker_path=paths.bootstrap_complete_json,
+        )
+        try:
+            integrity = tuple(str(row[0]) for row in connection.execute("PRAGMA integrity_check"))
+            if integrity != ("ok",):
+                raise RuntimeError(f"run authority integrity check failed: {integrity}")
+        finally:
+            connection.close()
 
 
 def _link_exact(source: Path, target: Path) -> None:

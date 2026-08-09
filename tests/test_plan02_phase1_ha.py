@@ -14,6 +14,7 @@ import pytest
 import torch
 
 from fs_diloco.core.config import resolve_config
+from fs_diloco.core.config_v4 import ConfigV4
 from fs_diloco.core.run_descriptor import load_run_descriptor
 from fs_diloco.core.constants import (
     CONTROL_EPOCH_FORMAT_VERSION,
@@ -151,15 +152,17 @@ def test_ha_config_defaults_and_artifact_versions(tmp_path: Path) -> None:
     assert CONTROL_EPOCH_FORMAT_VERSION == 1
 
 
-def test_independent_launcher_requires_explicit_short_walltime_for_submit() -> None:
-    assert _walltime_resource("00:02:00", required=True) == [
+def test_independent_launcher_requires_explicit_minimum_walltime_for_submit() -> None:
+    assert _walltime_resource("00:10:00", required=True) == [
         "-l",
-        "walltime=00:02:00",
+        "walltime=00:10:00",
     ]
     with pytest.raises(ValueError, match="requires an estimated"):
         _walltime_resource(None, required=True)
     with pytest.raises(ValueError, match="invalid PBS walltime"):
         _walltime_resource("24 hours", required=True)
+    with pytest.raises(ValueError, match="at least 00:10:00"):
+        _walltime_resource("00:09:59", required=True)
 
 
 def test_independent_launcher_validates_walltime_before_creating_run(
@@ -184,7 +187,11 @@ def test_independent_launcher_preserves_syncer_receipt_when_learner_qsub_fails(
     config = resolve_config(project_root=tmp_path)
     config.sync.num_learners = 2
     shared_root = tmp_path / "run"
-    monkeypatch.setattr(independent_launcher, "resolve_config", lambda *args, **kwargs: config)
+    monkeypatch.setattr(
+        independent_launcher,
+        "resolve_config_v4",
+        lambda *args, **kwargs: ConfigV4(shared=config),
+    )
     monkeypatch.setattr(
         independent_launcher,
         "initialize_run",
@@ -214,15 +221,15 @@ def test_independent_launcher_preserves_syncer_receipt_when_learner_qsub_fails(
         project_root=tmp_path,
         submit=True,
         allow_dirty_snapshot=False,
-        syncer_walltime="00:00:20",
-        learner_walltime="00:00:45",
+        syncer_walltime="00:10:00",
+        learner_walltime="00:10:00",
     )
 
     assert result["submission_status"] == "partial"
     assert result["syncer_job_id"] == "12345.opbs"
     assert result["syncer_submission"]["status"] == "submitted"
-    assert result["learner_submission"]["status"] == "failed"
-    assert "learner array rejected" in result["learner_submission"]["stderr"]
+    assert result["learner_submissions"][0]["status"] == "failed"
+    assert "learner array rejected" in result["learner_submissions"][0]["stderr"]
 
 
 @pytest.mark.parametrize("fail_role", ["successor_syncer", "learner_array"])
@@ -259,9 +266,9 @@ def test_acceptance_launcher_persists_every_accepted_job_before_later_qsub_failu
         shared_root=tmp_path / "run",
         descriptor_sha256="descriptor",
         launcher_job_id="launcher.opbs",
-        crash_walltime="00:00:15",
-        successor_walltime="00:00:30",
-        learner_walltime="00:00:25",
+        crash_walltime="00:10:00",
+        successor_walltime="00:10:00",
+        learner_walltime="00:10:00",
         pending_artifact=pending,
         pass_artifact=passed,
         qsub_fn=qsub,
@@ -541,14 +548,14 @@ def test_ha_initializer_writes_identical_root_and_control_config(
         run_id="initialized-run",
         shared_root=str(shared_root),
     )
-    config.coordination.syncer_ha.enabled = True
     config.run.git_commit = "a" * 40
     config.run.git_dirty = False
     config.run.source_fingerprint = "sha256:source"
-    initialize_ha_run(config, project_root=tmp_path)
+    config_v4 = ConfigV4(shared=config)
+    initialize_ha_run(config_v4, project_root=tmp_path)
     paths = RunPaths(shared_root)
     assert paths.resolved_config_yaml.read_bytes() == paths.run_root_config_yaml.read_bytes()
-    replay = initialize_ha_run(config, project_root=tmp_path)
+    replay = initialize_ha_run(config_v4, project_root=tmp_path)
     assert replay["recovered"] is True
 
 
@@ -562,12 +569,12 @@ def test_run_descriptor_rejects_all_identity_tampering_without_lease_writes(
             run_id=name,
             shared_root=str(shared_root),
         )
-        config.coordination.syncer_ha.enabled = True
         config.run.git_commit = "a" * 40
         config.run.git_dirty = False
         config.run.source_fingerprint = "sha256:source"
-        initialize_ha_run(config, project_root=tmp_path)
-        return RunPaths(shared_root), config
+        config_v4 = ConfigV4(shared=config)
+        initialize_ha_run(config_v4, project_root=tmp_path)
+        return RunPaths(shared_root), config_v4
 
     def assert_no_leadership_rows(paths: RunPaths) -> None:
         conn = open_readonly(paths.sqlite_db)
@@ -581,10 +588,10 @@ def test_run_descriptor_rejects_all_identity_tampering_without_lease_writes(
     with pytest.raises(RuntimeError, match="identity mismatch"):
         load_run_descriptor(
             paths.shared_root,
-            expected_run_id=config.run.run_id,
-            expected_git_commit=config.run.git_commit,
+            expected_run_id=config.shared.run.run_id,
+            expected_git_commit=config.shared.run.git_commit,
             expected_git_dirty=True,
-            expected_source_fingerprint=config.run.source_fingerprint,
+            expected_source_fingerprint=config.shared.run.source_fingerprint,
         )
     assert_no_leadership_rows(paths)
 

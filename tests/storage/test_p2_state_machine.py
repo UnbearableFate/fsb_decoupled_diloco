@@ -190,6 +190,9 @@ def test_dynamic_membership_state_machine_has_one_current_incarnation(
                     ).hexdigest(),
                     hostname="host",
                     pid=generation + 1,
+                    launch_request_id=(
+                        None if current_instance is None else f"replacement-launch-{generation}"
+                    ),
                     replace_instance_id=current_instance,
                     replacement_reason=(
                         None if current_instance is None else "state_machine_replacement"

@@ -1,0 +1,70 @@
+{
+  "artifact_schema_version": 1,
+  "command": "qsub -l walltime=00:10:00 scripts/miyabi/run_plan01_regression.pbs",
+  "errors": [],
+  "experiment_id": "p4-plan01-v4-regression",
+  "identity": {
+    "descriptor_sha256": "51ce709087d72230713deaaf42abe919e464da0fdf7f512ea41e5585f6c85df0",
+    "git_commit": "f849214be19c66166a3b57962de86f4265e80e68",
+    "git_dirty": true,
+    "resolved_config_sha256": "99e141f105c51d9f75f4fd850d07237c0fb176c5fac9d7c0d2bad0435023bed4",
+    "run_id": "plan01_regression_2509248",
+    "source_fingerprint": "sha256:21882bf7894d26a846571b132642931a5c174aff17a70b07164e24f583ec3998"
+  },
+  "pbs": {
+    "actual_walltime": "00:01:14",
+    "compute_host": "mg0022",
+    "exit_status": 0,
+    "group_id": "xg24i002",
+    "job_id": "2509248.opbs",
+    "queue": "debug-g",
+    "requested_walltime": "00:10:00",
+    "stdout_sha256": "47c9f1e0062fa92e44a13c1b22678f6127b4b99a20723243d992bea0c26d1fb2"
+  },
+  "pytest": {
+    "duration_seconds": 63.49,
+    "failed": 0,
+    "passed": 863
+  },
+  "recorded_at": "2026-08-09T09:34:35+09:00",
+  "run_root": "runs/fs_diloco/plan01_regression_2509248",
+  "sha256": {
+    "authority_database_before_cleanup": "2f93f16ba44bd0477dc9d89c04d1f36a9fd4ab91595a4c4062ac8ad9c987cf00",
+    "run_descriptor": "dad2094e012d9de19f12e043416620e67be9a0a7dc58a35cb5de18f120797ea0"
+  },
+  "status": "PASS",
+  "terminal": {
+    "direct_weight_tokens_applied": 192,
+    "final_version": 2,
+    "state": "finalized"
+  },
+  "verified": {
+    "all_learners_stopped": true,
+    "attestation_count": 3,
+    "authority_database_integrity": "ok",
+    "global_versions": [
+      0,
+      1,
+      2
+    ],
+    "legacy_csv_count": 0,
+    "pending_or_selected_updates": 0,
+    "telemetry_file_count": 3,
+    "terminal_fences": [
+      {
+        "close_last_cycle_seq": 2,
+        "final_cycle_seq": 2,
+        "hard_crash_gap_tokens_upper_bound": 0,
+        "stable_contributor_key": "learner_000",
+        "state": "acked"
+      },
+      {
+        "close_last_cycle_seq": 2,
+        "final_cycle_seq": 2,
+        "hard_crash_gap_tokens_upper_bound": 0,
+        "stable_contributor_key": "learner_001",
+        "state": "acked"
+      }
+    ]
+  }
+}

@@ -12,8 +12,20 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from ..core.config import Config, resolve_config, resolved_config_bytes, write_resolved_config
-from ..core.constants import DYNAMIC_SCHEMA_VERSION, HA_SCHEMA_VERSION, PROTOCOL_VERSION
+from ..core.config_v4 import (
+    ConfigProfile,
+    ConfigV4,
+    resolve_config_v4,
+    resolved_config_v4_bytes,
+    write_resolved_config_v4,
+)
+from ..core.versions import (
+    AUTHORITY_SCHEMA_VERSION,
+    PROTOCOL_VERSION,
+    RUN_DESCRIPTOR_FORMAT_VERSION,
+    SOURCE_MANIFEST_FORMAT_VERSION,
+)
+from ..protocol.contributor import DynamicMembershipScope, StaticMembershipScope
 from ..storage.atomic_io import atomic_write_json, sha256_file
 from ..storage.artifact_policy import build_artifact_policy
 from ..storage.paths import RunPaths, prepare_authority_dirs
@@ -28,7 +40,7 @@ from ..storage.run_initializer import (
     write_complete_source,
     write_run_identity,
 )
-from ..storage.schema_bootstrap import BootstrapIdentity, initialize_new_run
+from ..storage.authority import AuthorityIdentity, initialize_authority_v4
 
 
 def _sha256_json(payload: dict[str, Any]) -> str:
@@ -37,30 +49,28 @@ def _sha256_json(payload: dict[str, Any]) -> str:
 
 
 def initialize_run(
-    config: Config,
+    config: ConfigV4,
     *,
     project_root: str | Path,
     allow_dirty_snapshot: bool = False,
     fault_hook: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
-    if not config.coordination.syncer_ha.enabled:
-        raise ValueError("init-run requires coordination.syncer_ha.enabled=true")
-    if config.fragments.enabled:
-        raise ValueError("fragment mode cannot use HA bootstrap")
-    if not config.run.run_id or not config.run.shared_root:
+    config.validate(ConfigProfile.FULL_V4)
+    shared = config.shared
+    if not shared.run.run_id or not shared.run.shared_root:
         raise ValueError("resolved run_id and shared_root are required")
-    if not config.run.git_commit:
+    if not shared.run.git_commit:
         raise ValueError("HA bootstrap requires run.git_commit")
-    if not config.run.source_fingerprint:
+    if not shared.run.source_fingerprint:
         raise ValueError("HA bootstrap requires run.source_fingerprint")
-    if config.run.git_dirty is not False and not allow_dirty_snapshot:
+    if shared.run.git_dirty is not False and not allow_dirty_snapshot:
         raise ValueError("formal HA bootstrap requires clean source or --allow-dirty-snapshot")
 
     project_root = Path(project_root).resolve()
-    final_root = Path(config.run.shared_root).resolve()
+    final_root = Path(shared.run.shared_root).resolve()
     final_paths = RunPaths(final_root)
-    expected_config_sha256 = hashlib.sha256(resolved_config_bytes(config)).hexdigest()
-    expected_mode = "full_dynamic" if config.membership.mode == "dynamic" else "full"
+    expected_config_sha256 = hashlib.sha256(resolved_config_v4_bytes(config)).hexdigest()
+    expected_mode = "full_dynamic" if shared.membership.mode == "dynamic" else "full"
     if final_paths.run_complete_file.is_file():
         validate_completed_run(final_root)
         completed_staging = find_reserved_staging(final_root, allow_missing_owner=True)
@@ -68,14 +78,14 @@ def initialize_run(
             remove_completed_staging(final_root=final_root, staging_root=completed_staging)
         descriptor = json.loads(final_paths.run_descriptor_json.read_text(encoding="utf-8"))
         expected_descriptor_identity = {
-            "run_id": config.run.run_id,
+            "run_id": shared.run.run_id,
             "shared_root": str(final_root),
             "resolved_config_sha256": expected_config_sha256,
-            "source_fingerprint": config.run.source_fingerprint,
-            "git_commit": config.run.git_commit,
-            "git_dirty": config.run.git_dirty,
+            "source_fingerprint": shared.run.source_fingerprint,
+            "git_commit": shared.run.git_commit,
+            "git_dirty": shared.run.git_dirty,
             "mode": (
-                "full_ha_dynamic" if config.membership.mode == "dynamic" else "full_ha_static"
+                "full_ha_dynamic" if shared.membership.mode == "dynamic" else "full_ha_static"
             ),
         }
         mismatches = {
@@ -110,8 +120,8 @@ def initialize_run(
     else:
         identity = json.loads((staging_root / ".identity").read_text(encoding="utf-8"))
         expected_identity = {
-            "run_id": config.run.run_id,
-            "source_fingerprint": config.run.source_fingerprint,
+            "run_id": shared.run.run_id,
+            "source_fingerprint": shared.run.source_fingerprint,
             "config_sha256": expected_config_sha256,
             "mode": expected_mode,
         }
@@ -136,23 +146,24 @@ def initialize_run(
 
 
 def _populate_staging(
-    config: Config,
+    config: ConfigV4,
     *,
     project_root: Path,
     staging_root: Path,
     logical_root: Path,
 ) -> None:
+    shared = config.shared
     paths = RunPaths(staging_root)
     prepare_authority_dirs(paths)
-    write_resolved_config(config, paths.resolved_config_yaml)
-    write_resolved_config(config, paths.run_root_config_yaml)
+    write_resolved_config_v4(config, paths.resolved_config_yaml)
+    write_resolved_config_v4(config, paths.run_root_config_yaml)
     config_sha256 = sha256_file(paths.resolved_config_yaml)
     lock_path = project_root / "uv.lock"
     source_manifest = {
-        "format_version": 1,
-        "git_commit": config.run.git_commit,
-        "git_dirty": config.run.git_dirty,
-        "source_fingerprint": config.run.source_fingerprint,
+        "format_version": SOURCE_MANIFEST_FORMAT_VERSION,
+        "git_commit": shared.run.git_commit,
+        "git_dirty": shared.run.git_dirty,
+        "source_fingerprint": shared.run.source_fingerprint,
         "project_root": str(project_root),
         "uv_lock_sha256": sha256_file(lock_path) if lock_path.is_file() else None,
         "python_entrypoint": "python -m fs_diloco.tools.init_run",
@@ -162,57 +173,69 @@ def _populate_staging(
     }
     source_manifest["manifest_sha256"] = _sha256_json(source_manifest)
     atomic_write_json(paths.run_source_manifest_json, source_manifest)
-    dynamic = config.membership.mode == "dynamic"
-    schema_version = DYNAMIC_SCHEMA_VERSION if dynamic else HA_SCHEMA_VERSION
+    dynamic = shared.membership.mode == "dynamic"
+    schema_version = AUTHORITY_SCHEMA_VERSION
     descriptor_mode = "full_ha_dynamic" if dynamic else "full_ha_static"
-    bootstrap_slots = config.membership.bootstrap_instances if dynamic else config.sync.num_learners
+    bootstrap_slots = shared.membership.bootstrap_instances if dynamic else shared.sync.num_learners
     descriptor = {
-        "format_version": 1,
-        "run_id": config.run.run_id,
+        "format_version": RUN_DESCRIPTOR_FORMAT_VERSION,
+        "run_id": shared.run.run_id,
         "shared_root": str(logical_root),
         "resolved_config_path": str(logical_root / "control/run_config.resolved.yaml"),
         "resolved_config_sha256": config_sha256,
         "source_manifest_path": str(logical_root / "control/run_source_manifest.json"),
         "source_manifest_sha256": sha256_file(paths.run_source_manifest_json),
-        "source_fingerprint": config.run.source_fingerprint,
-        "git_commit": config.run.git_commit,
-        "git_dirty": config.run.git_dirty,
+        "source_fingerprint": shared.run.source_fingerprint,
+        "git_commit": shared.run.git_commit,
+        "git_dirty": shared.run.git_dirty,
         "mode": descriptor_mode,
         "bootstrap_slots": int(bootstrap_slots),
-        "stream_pool_size": (int(config.membership.stream_pool_size) if dynamic else None),
+        "static_learner_ids": (
+            [f"learner_{index:03d}" for index in range(shared.sync.num_learners)]
+            if not dynamic
+            else None
+        ),
+        "stream_pool_size": (int(shared.membership.stream_pool_size) if dynamic else None),
         "protocol_version": PROTOCOL_VERSION,
         "schema_version": schema_version,
         "source_lock_sha256": source_manifest["uv_lock_sha256"],
         "model_identity": {
-            "name_or_path": config.model.name_or_path,
-            "revision": config.model.revision,
+            "name_or_path": shared.model.name_or_path,
+            "revision": shared.model.revision,
         },
         "tokenizer_identity": {
-            "name_or_path": config.model.name_or_path,
-            "revision": config.model.tokenizer_revision or config.model.revision,
+            "name_or_path": shared.model.name_or_path,
+            "revision": shared.model.tokenizer_revision or shared.model.revision,
         },
         "dataset_identity": {
-            "name": config.data.dataset_name,
-            "config_name": config.data.dataset_config_name,
-            "revision": config.data.revision,
-            "train_split": config.data.train_split,
-            "block_size": config.data.block_size,
+            "name": shared.data.dataset_name,
+            "config_name": shared.data.dataset_config_name,
+            "revision": shared.data.revision,
+            "train_split": shared.data.train_split,
+            "block_size": shared.data.block_size,
         },
         "created_at": time.time(),
     }
     descriptor["descriptor_sha256"] = _sha256_json(descriptor)
     atomic_write_json(paths.run_descriptor_json, descriptor)
-    identity = BootstrapIdentity(
-        run_id=config.run.run_id,
-        source_fingerprint=config.run.source_fingerprint,
+    identity = AuthorityIdentity(
+        run_id=shared.run.run_id,
+        source_fingerprint=shared.run.source_fingerprint,
         config_sha256=config_sha256,
-        mode="full_dynamic" if dynamic else "full",
     )
-    initialize_new_run(
+    membership_scope = (
+        DynamicMembershipScope(shared.membership.stream_pool_size)
+        if dynamic
+        else StaticMembershipScope(
+            tuple(f"learner_{index:03d}" for index in range(shared.sync.num_learners))
+        )
+    )
+    initialize_authority_v4(
         paths.sqlite_db,
         identity,
+        membership_scope,
         marker_path=paths.bootstrap_complete_json,
-        busy_timeout_ms=config.coordination.syncer_ha.lease_busy_timeout_ms,
+        busy_timeout_ms=config.leader.business_busy_timeout_ms,
     )
     artifact_policy = build_artifact_policy()
     atomic_write_json(paths.artifact_policy_json, artifact_policy)
@@ -220,10 +243,10 @@ def _populate_staging(
         staging_root,
         {
             "format_version": 1,
-            "run_id": config.run.run_id,
-            "source_fingerprint": config.run.source_fingerprint,
+            "run_id": shared.run.run_id,
+            "source_fingerprint": shared.run.source_fingerprint,
             "config_sha256": config_sha256,
-            "mode": identity.mode,
+            "mode": "full_dynamic" if dynamic else "full",
             "logical_root": str(logical_root),
         },
     )
@@ -246,7 +269,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
-    config = resolve_config(
+    config = resolve_config_v4(
         args.config,
         run_id=args.run_id,
         shared_root=args.shared_root,

@@ -8,303 +8,186 @@
 #PBS -m ae
 
 set -eEuo pipefail
-
+trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
 export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
 module list 2>&1 | cat
 
 PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
 PRIMARY_WORKTREE_ROOT="${PRIMARY_WORKTREE_ROOT:-/work/xg24i002/x10041/fsb_decoupled_diloco}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
-BASE_CONFIG="${BASE_CONFIG:-$PROJECT_ROOT/configs/fs_diloco_tiny_local.yaml}"
+BASE_CONFIG="${BASE_CONFIG:-$PROJECT_ROOT/configs/fs_diloco_tiny_ha_static.yaml}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_fs_diloco_2node_resume}"
 SHARED_ROOT="${SHARED_ROOT:-$PRIMARY_WORKTREE_ROOT/runs/fs_diloco/$RUN_ID}"
 LOG_ROOT="${LOG_ROOT:-$PRIMARY_WORKTREE_ROOT/logs/qsub_${RUN_ID}}"
-NUM_LEARNERS=1
-WANDB_MODE="${WANDB_MODE:-offline}"
-OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
-TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
+TEST_CONFIG="${TMPDIR:?TMPDIR is required}/${RUN_ID}.yaml"
+: "${PBS_NODEFILE:?PBS_NODEFILE is required}"
 
-: "${PBS_NODEFILE:?PBS_NODEFILE is not set}"
 cd "$PROJECT_ROOT"
-
-if [[ ! -x "$PYTHON_BIN" ]]; then
-  echo "Python executable not found or not executable: $PYTHON_BIN" >&2
-  exit 2
-fi
-
 mapfile -t HOSTS < <(sort -u "$PBS_NODEFILE")
-if [[ "${#HOSTS[@]}" -ne 2 ]]; then
-  echo "Expected 2 unique nodes, got ${#HOSTS[@]}" >&2
-  printf '%s\n' "${HOSTS[@]}" >&2
-  exit 2
-fi
-
-mkdir -p "$SHARED_ROOT" "$LOG_ROOT"
-PHASE_A_CONFIG="$SHARED_ROOT/resume_phase_a.yaml"
-PHASE_B_CONFIG="$SHARED_ROOT/resume_phase_b.yaml"
-DB_PATH="$SHARED_ROOT/control/syncer_metadata.sqlite3"
-PHASE_A_SYNCER_PID=""
-PHASE_A_LEARNER_PID=""
-
-cleanup() {
-  local pid
-  for pid in "$PHASE_A_LEARNER_PID" "$PHASE_A_SYNCER_PID"; do
-    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-      kill -TERM "$pid" 2>/dev/null || true
-    fi
-  done
-}
-trap cleanup EXIT
-trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
-
-echo "RUN_ID=$RUN_ID"
-echo "PROJECT_ROOT=$PROJECT_ROOT"
-echo "SHARED_ROOT=$SHARED_ROOT"
-echo "LOG_ROOT=$LOG_ROOT"
-echo "PBS_JOBID=${PBS_JOBID:-}"
-printf 'HOST %s\n' "${HOSTS[@]}"
-
+test "${#HOSTS[@]}" -eq 2
+mkdir -p "$LOG_ROOT"
 "$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/capture_source_identity.py" \
   --project-root "$PROJECT_ROOT" \
   --output-json "$LOG_ROOT/source_identity.json" \
   --output-env "$LOG_ROOT/source_identity.env" \
   > "$LOG_ROOT/source_identity.log"
+source "$LOG_ROOT/source_identity.env"
 
-"$PYTHON_BIN" - "$BASE_CONFIG" "$PHASE_A_CONFIG" "$PHASE_B_CONFIG" <<'PY'
+"$PYTHON_BIN" - "$BASE_CONFIG" "$TEST_CONFIG" <<'PY'
 from pathlib import Path
 import sys
 import yaml
 
-source, phase_a, phase_b = map(Path, sys.argv[1:])
+source, target = map(Path, sys.argv[1:])
 config = yaml.safe_load(source.read_text(encoding="utf-8"))
-config.setdefault("init", {})["resume"] = False
 config["sync"].update(
-    {
-        "num_learners": 1,
-        "quorum_min": 1,
-        "quorum_max": 1,
-        "stop_after_outer_steps": 10,
-    }
+    num_learners=1,
+    quorum_min=1,
+    quorum_max=1,
+    stop_after_outer_steps=20,
 )
-# Keep the phase-A syncer in terminal grace long enough to capture an old
-# stopped DB row and heartbeat without publishing stop.json.
-config["sync"]["grace_window"] = {
-    "mode": "fixed",
-    "fixed_seconds": 30.0,
-    "max_seconds": 30.0,
-}
-config["liveness"]["no_progress_timeout_seconds"] = 60.0
-config.setdefault("wandb", {})["enabled"] = False
-phase_a.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
-config["init"]["resume"] = True
-phase_b.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+config["training"]["completion_mode"] = "global_only"
+leader = config["coordination"]["leader"]
+leader.update(
+    lease_duration_seconds=5.0,
+    renew_interval_seconds=1.0,
+    max_clock_skew_seconds=0.2,
+    heartbeat_interval_seconds=0.5,
+    heartbeat_stale_after_seconds=2.0,
+    lease_busy_timeout_ms=500,
+    candidate_acquire_poll_seconds=0.2,
+    candidate_wait_seconds=10.0,
+    learner_recovery_wait_seconds=15.0,
+)
+target.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
 PY
 
-CUDA_VISIBLE_DEVICES=0 WANDB_MODE="$WANDB_MODE" \
-  "$PYTHON_BIN" -m fs_diloco.syncer \
-    --config "$PHASE_A_CONFIG" \
-    --run-id "$RUN_ID" \
-    --shared-root "$SHARED_ROOT" \
-    --num-learners "$NUM_LEARNERS" \
-    > "$LOG_ROOT/syncer_phase_a.log" 2>&1 &
-PHASE_A_SYNCER_PID=$!
+"$PYTHON_BIN" -m fs_diloco.tools.init_run \
+  --config "$TEST_CONFIG" \
+  --run-id "$RUN_ID" \
+  --shared-root "$SHARED_ROOT" \
+  --project-root "$PROJECT_ROOT" \
+  --allow-dirty-snapshot \
+  > "$LOG_ROOT/init_run.json"
+readarray -t descriptor_fields < <(
+  "$PYTHON_BIN" - "$LOG_ROOT/init_run.json" <<'PY'
+import json
+import sys
 
-sleep 1
-CUDA_VISIBLE_DEVICES=0 WANDB_MODE="$WANDB_MODE" \
-  "$PYTHON_BIN" -m fs_diloco.learner \
-    --config "$PHASE_A_CONFIG" \
-    --run-id "$RUN_ID" \
-    --shared-root "$SHARED_ROOT" \
-    --learner-id learner_000 \
-    --num-learners "$NUM_LEARNERS" \
-    > "$LOG_ROOT/learner_000_phase_a.log" 2>&1 &
-PHASE_A_LEARNER_PID=$!
-wait "$PHASE_A_LEARNER_PID"
-PHASE_A_LEARNER_PID=""
+descriptor = json.load(open(sys.argv[1], encoding="utf-8"))["descriptor"]
+print(descriptor["resolved_config_path"])
+print(descriptor["descriptor_sha256"])
+print(descriptor["git_commit"])
+print(descriptor["source_fingerprint"])
+print(int(bool(descriptor["git_dirty"])))
+PY
+)
+CONFIG="${descriptor_fields[0]}"
+export FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256="${descriptor_fields[1]}"
+export FS_DILOCO_EXPECTED_GIT_COMMIT="${descriptor_fields[2]}"
+export FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT="${descriptor_fields[3]}"
+export FS_DILOCO_GIT_COMMIT="${descriptor_fields[2]}"
+export FS_DILOCO_SOURCE_FINGERPRINT="${descriptor_fields[3]}"
+export FS_DILOCO_GIT_DIRTY="${descriptor_fields[4]}"
+export FS_DILOCO_REQUIRE_SOURCE_IDENTITY=1
 
-phase_a_ready=false
-for _attempt in $(seq 1 100); do
-  if "$PYTHON_BIN" - "$DB_PATH" <<'PY'
+first_pid=""
+successor_pid=""
+learner_pid=""
+cleanup() {
+  kill "$first_pid" "$successor_pid" "$learner_pid" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+CUDA_VISIBLE_DEVICES="" "$PYTHON_BIN" -m fs_diloco.syncer \
+  --config "$CONFIG" --shared-root "$SHARED_ROOT" \
+  > "$LOG_ROOT/syncer_initial.log" 2>&1 &
+first_pid=$!
+CUDA_VISIBLE_DEVICES="" "$PYTHON_BIN" -m fs_diloco.learner \
+  --config "$CONFIG" --shared-root "$SHARED_ROOT" \
+  --learner-id learner_000 \
+  --logical-launch-id "resume-${PBS_JOBID%%.*}-learner_000" \
+  > "$LOG_ROOT/learner_000.log" 2>&1 &
+learner_pid=$!
+
+ready=false
+for _ in $(seq 1 200); do
+  if "$PYTHON_BIN" - "$SHARED_ROOT/control/syncer_metadata.sqlite3" <<'PY'
 import sqlite3
 import sys
 
-conn = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True, timeout=5.0)
-version = conn.execute(
-    "SELECT MAX(version) FROM global_versions WHERE status = 'committed'"
-).fetchone()[0]
-statuses = [row[0] for row in conn.execute("SELECT status FROM learners")]
-raise SystemExit(0 if version is not None and int(version) >= 1 and statuses == ["stopped"] else 1)
+connection = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+version = connection.execute("SELECT MAX(version) FROM global_versions").fetchone()[0]
+raise SystemExit(0 if version is not None and int(version) >= 1 else 1)
 PY
   then
-    phase_a_ready=true
+    ready=true
     break
   fi
-  sleep 0.2
+  sleep 0.05
 done
-if [[ "$phase_a_ready" != true ]]; then
-  echo "Phase A never reached committed v1 with one stopped learner" >&2
-  exit 1
-fi
-if [[ -e "$SHARED_ROOT/control/stop.json" ]]; then
-  echo "Phase A published stop before the controlled syncer failure" >&2
+if [[ "$ready" != true ]]; then
+  echo "Initial candidate never committed v1" >&2
   exit 1
 fi
 
-kill -KILL "$PHASE_A_SYNCER_PID"
-trap - ERR
-set +e
-wait "$PHASE_A_SYNCER_PID" 2>/dev/null
-PHASE_A_STATUS=$?
-set -e
-trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
-PHASE_A_SYNCER_PID=""
-if [[ "$PHASE_A_STATUS" -ne 137 ]]; then
-  echo "Expected phase-A syncer status 137, got $PHASE_A_STATUS" >&2
-  exit 1
-fi
+kill -KILL "$first_pid"
+first_status=0
+wait "$first_pid" || first_status=$?
+first_pid=""
+test "$first_status" -eq 137
 
-"$PYTHON_BIN" - "$SHARED_ROOT" "$LOG_ROOT/resume_pre_state.json" <<'PY'
-from hashlib import sha256
+mpirun --bind-to none -np 1 --host "${HOSTS[1]}" \
+  /usr/bin/env \
+    "FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=$FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256" \
+    "FS_DILOCO_EXPECTED_GIT_COMMIT=$FS_DILOCO_EXPECTED_GIT_COMMIT" \
+    "FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT=$FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT" \
+    "FS_DILOCO_GIT_COMMIT=$FS_DILOCO_GIT_COMMIT" \
+    "FS_DILOCO_SOURCE_FINGERPRINT=$FS_DILOCO_SOURCE_FINGERPRINT" \
+    "FS_DILOCO_GIT_DIRTY=$FS_DILOCO_GIT_DIRTY" \
+    "FS_DILOCO_REQUIRE_SOURCE_IDENTITY=1" \
+    "CUDA_VISIBLE_DEVICES=" \
+    "$PYTHON_BIN" -m fs_diloco.syncer \
+      --config "$CONFIG" --shared-root "$SHARED_ROOT" \
+      > "$LOG_ROOT/syncer_successor.log" 2>&1 &
+successor_pid=$!
+wait "$learner_pid"
+learner_pid=""
+wait "$successor_pid"
+successor_pid=""
+trap - EXIT INT TERM
+
+"$PYTHON_BIN" - "$SHARED_ROOT" <<'PY'
 import json
-from pathlib import Path
 import sqlite3
 import sys
+from pathlib import Path
 
 root = Path(sys.argv[1])
-conn = sqlite3.connect(f"file:{root / 'control/syncer_metadata.sqlite3'}?mode=ro", uri=True)
-heartbeat_path = root / "heartbeats/learner_000.json"
-heartbeat_bytes = heartbeat_path.read_bytes()
-payload = {
-    "max_committed_version": conn.execute(
-        "SELECT MAX(version) FROM global_versions WHERE status = 'committed'"
-    ).fetchone()[0],
-    "learners": [
-        dict(zip(("learner_id", "status", "hostname", "pid", "last_heartbeat_path"), row))
-        for row in conn.execute(
-            "SELECT learner_id, status, hostname, pid, last_heartbeat_path FROM learners"
-        )
-    ],
-    "heartbeat_sha256": sha256(heartbeat_bytes).hexdigest(),
-    "heartbeat": json.loads(heartbeat_bytes),
-    "stop_exists": (root / "control/stop.json").exists(),
-}
-Path(sys.argv[2]).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+connection = sqlite3.connect(root / "control/syncer_metadata.sqlite3")
+connection.row_factory = sqlite3.Row
+try:
+    assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    epochs = connection.execute(
+        "SELECT epoch, owner_id, hostname, final_state FROM syncer_epochs ORDER BY epoch"
+    ).fetchall()
+    assert len(epochs) >= 2 and epochs[-1]["epoch"] > epochs[0]["epoch"]
+    assert epochs[0]["final_state"] == "expired"
+    assert epochs[-1]["final_state"] == "released"
+    terminal = connection.execute("SELECT * FROM terminal_state").fetchone()
+    assert terminal is not None and terminal["state"] == "finalized"
+    assert terminal["final_version"] == 20
+    versions = connection.execute(
+        "SELECT version, committed_by_epoch FROM global_versions ORDER BY version"
+    ).fetchall()
+    assert [row["version"] for row in versions] == list(range(21))
+    assert {row["committed_by_epoch"] for row in versions} >= {epochs[0]["epoch"], epochs[-1]["epoch"]}
+    fences = connection.execute("SELECT state FROM terminal_contributor_fences").fetchall()
+    assert [row["state"] for row in fences] == ["acked"]
+finally:
+    connection.close()
+summary = json.loads((root / "control/summary.json").read_text(encoding="utf-8"))
+assert summary["final_version"] == 20 and summary["all_learners_stopped"] is True
+print(json.dumps({"run_root": str(root), "epochs": [dict(row) for row in epochs], "summary": summary}, sort_keys=True))
 PY
-
-MPI_ENV_ARGS=(
-  "PROJECT_ROOT=$PROJECT_ROOT"
-  "PYTHON_BIN=$PYTHON_BIN"
-  "CONFIG=$PHASE_B_CONFIG"
-  "RUN_ID=$RUN_ID"
-  "SHARED_ROOT=$SHARED_ROOT"
-  "LOG_ROOT=$LOG_ROOT"
-  "NUM_LEARNERS=$NUM_LEARNERS"
-  "WANDB_MODE=$WANDB_MODE"
-  "OMP_NUM_THREADS=$OMP_NUM_THREADS"
-  "TOKENIZERS_PARALLELISM=$TOKENIZERS_PARALLELISM"
-)
-
-mpirun \
-  --mca mpi_abort_print_stack 1 \
-  --map-by ppr:1:node \
-  --bind-to core \
-  -np 2 \
-  /usr/bin/env "${MPI_ENV_ARGS[@]}" \
-  bash -lc '
-    set -eEuo pipefail
-    rank="${OMPI_COMM_WORLD_RANK:?missing OMPI_COMM_WORLD_RANK}"
-    if [[ "$rank" -eq 0 ]]; then
-      exec "$PYTHON_BIN" -m fs_diloco.syncer \
-        --config "$CONFIG" \
-        --run-id "$RUN_ID" \
-        --shared-root "$SHARED_ROOT" \
-        --num-learners "$NUM_LEARNERS" \
-        > "$LOG_ROOT/syncer_phase_b.log" 2>&1
-    fi
-    exec "$PYTHON_BIN" -m fs_diloco.learner \
-      --config "$CONFIG" \
-      --run-id "$RUN_ID" \
-      --shared-root "$SHARED_ROOT" \
-      --learner-id learner_000 \
-      --num-learners "$NUM_LEARNERS" \
-      > "$LOG_ROOT/learner_000_phase_b.log" 2>&1
-  '
-
-FINAL_VERSION="$($PYTHON_BIN - "$SHARED_ROOT/control/latest.json" <<'PY'
-import json
-from pathlib import Path
-import sys
-
-print(json.loads(Path(sys.argv[1]).read_text())["version"])
-PY
-)"
-
-"$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/check_plan01_invariants.py" \
-  --run-root "$SHARED_ROOT" \
-  --expected-learners 1 \
-  --expected-version "$FINAL_VERSION" \
-  --require-complete \
-  --require-resume-progress \
-  --resume-artifact "$LOG_ROOT/resume_checker_details.json" \
-  | tee "$LOG_ROOT/resume_checker_stdout.log"
-
-"$PYTHON_BIN" - \
-  "$SHARED_ROOT" \
-  "$LOG_ROOT" \
-  "${PBS_JOBID:-}" \
-  "${HOSTS[0]}" \
-  "${HOSTS[1]}" <<'PY'
-from hashlib import sha256
-import json
-from pathlib import Path
-import sqlite3
-import sys
-
-root = Path(sys.argv[1])
-log_root = Path(sys.argv[2])
-conn = sqlite3.connect(f"file:{root / 'control/syncer_metadata.sqlite3'}?mode=ro", uri=True)
-heartbeat_bytes = (root / "heartbeats/learner_000.json").read_bytes()
-events = [json.loads(line) for line in (root / "logs/syncer.jsonl").read_text().splitlines()]
-resume_index = max(index for index, event in enumerate(events) if event.get("event_type") == "run_resumed")
-progress_index = next(
-    index
-    for index in range(resume_index + 1, len(events))
-    if events[index].get("event_type") in {"outer_step_applied", "global_published"}
-    and int(events[index].get("version", -1)) > int(events[resume_index]["version"])
-)
-resume_generation = json.loads(
-    conn.execute("SELECT value FROM run_state WHERE key = 'resume_generation'").fetchone()[0]
-)
-payload = {
-    "run_id": root.name,
-    "pbs_job_id": sys.argv[3],
-    "hosts": [sys.argv[4], sys.argv[5]],
-    "source_identity": json.loads((log_root / "source_identity.json").read_text()),
-    "pre_resume": json.loads((log_root / "resume_pre_state.json").read_text()),
-    "resume_generation": resume_generation,
-    "event_slice_resume_through_progress": events[resume_index : progress_index + 1],
-    "post_resume_heartbeat_sha256": sha256(heartbeat_bytes).hexdigest(),
-    "post_resume_heartbeat": json.loads(heartbeat_bytes),
-    "learners": [
-        dict(zip(("learner_id", "status", "hostname", "pid", "last_heartbeat_path"), row))
-        for row in conn.execute(
-            "SELECT learner_id, status, hostname, pid, last_heartbeat_path FROM learners"
-        )
-    ],
-    "latest": json.loads((root / "control/latest.json").read_text()),
-    "stop": json.loads((root / "control/stop.json").read_text()),
-    "summary": json.loads((root / "control/summary.json").read_text()),
-    "checker": json.loads((log_root / "resume_checker_details.json").read_text()),
-}
-(log_root / "resume_evidence.json").write_text(
-    json.dumps(payload, indent=2, sort_keys=True) + "\n",
-    encoding="utf-8",
-)
-PY
-
-test -s "$LOG_ROOT/syncer_phase_a.log"
-test -s "$LOG_ROOT/learner_000_phase_a.log"
-test -s "$LOG_ROOT/syncer_phase_b.log"
-test -s "$LOG_ROOT/learner_000_phase_b.log"
-test -s "$LOG_ROOT/resume_evidence.json"
-cat "$LOG_ROOT/resume_checker_stdout.log"
+printf 'PLAN03_PHASE4_TWO_CANDIDATE_TAKEOVER_COMPLETE=%s\n' "${PBS_JOBID:-unknown}"

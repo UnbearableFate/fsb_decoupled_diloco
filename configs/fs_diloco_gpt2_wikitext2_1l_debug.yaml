@@ -3,13 +3,11 @@ run:
   run_id: null
   shared_root: /work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/{run_id}
   log_level: INFO
-
 model:
   name_or_path: gpt2
   trust_remote_code: false
   dtype: bfloat16
   compile: false
-
 data:
   dataset_name: wikitext
   dataset_config_name: wikitext-2-raw-v1
@@ -19,7 +17,6 @@ data:
   num_proc: 1
   cache_dir: null
   streaming: false
-
 sync:
   num_learners: 1
   quorum_min: 1
@@ -33,15 +30,12 @@ sync:
     fixed_seconds: 1.0
     max_seconds: 1.0
   stop_after_outer_steps: 1
-  stop_after_global_tokens: null
   stop_file_poll_seconds: 1.0
-
 liveness:
   heartbeat_interval_seconds: 5.0
   stale_after_seconds: 30.0
   dead_after_seconds: 120.0
   no_progress_timeout_seconds: 300.0
-
 training:
   inner_steps: 2
   micro_batch_size: 1
@@ -52,35 +46,38 @@ training:
   seed: 1337
   log_every_steps: 1
   grad_clip: 1.0
-
 inner_optimizer:
   name: adamw
-  lr: 5.0e-5
-  betas: [0.9, 0.95]
-  eps: 1.0e-8
+  lr: 5.0e-05
+  betas:
+  - 0.9
+  - 0.95
+  eps: 1.0e-08
   weight_decay: 0.1
   scheduler: none
   warmup_steps: 0
-
 outer_optimizer:
   name: nesterov
   lr: 0.7
   momentum: 0.9
   weight_decay: 0.0
-  betas: [0.9, 0.999]
-  eps: 1.0e-8
-
+  betas:
+  - 0.9
+  - 0.999
+  eps: 1.0e-08
 io:
   tensor_dtype: bfloat16
   atomic_write: true
   compute_sha256: false
-
 learner:
   poll_latest_during_inner_steps: false
   adopt_global_after_upload: true
-
 failure_sim:
   enabled: false
   sleep_jitter_seconds: 0.0
   upload_skip_probability: 0.0
   crash_probability: 0.0
+coordination:
+  leader: {}
+config_schema_version: 1
+maintenance: {}

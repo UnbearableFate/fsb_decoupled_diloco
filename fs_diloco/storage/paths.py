@@ -259,6 +259,20 @@ class RunPaths:
     def epoch_admission_path(self, epoch: int, owner_id: str, instance_id: str) -> Path:
         return self.epoch_membership_dir(epoch, owner_id) / "admissions" / f"{instance_id}.json"
 
+    def epoch_receipt_ack_path(
+        self,
+        epoch: int,
+        owner_id: str,
+        stable_contributor_key: str,
+        cycle_seq: int,
+    ) -> Path:
+        return (
+            self.syncer_epoch_dir(epoch, owner_id)
+            / "receipt_acks"
+            / stable_contributor_key
+            / f"c{int(cycle_seq):09d}.json"
+        )
+
     def epoch_drain_path(self, epoch: int, owner_id: str, generation: int) -> Path:
         return self.epoch_terminal_dir(epoch, owner_id) / f"drain_g{int(generation):06d}.json"
 

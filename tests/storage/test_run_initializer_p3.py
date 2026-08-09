@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from fs_diloco.core.config import resolve_config
+from fs_diloco.core.config_v4 import ConfigV4
 from fs_diloco.core.run_descriptor import load_run_descriptor, write_actor_attestation
 from fs_diloco.storage import run_initializer as initializer_module
 from fs_diloco.storage.atomic_io import read_json
@@ -34,19 +35,18 @@ class InjectedCrash(RuntimeError):
 
 def _config(tmp_path: Path, name: str = "run"):
     root = tmp_path / name
-    config = resolve_config(
+    shared = resolve_config(
         project_root=tmp_path,
         run_id=name,
         shared_root=str(root),
     )
-    config.coordination.syncer_ha.enabled = True
-    config.run.git_commit = "a" * 40
-    config.run.git_dirty = False
-    config.run.source_fingerprint = "sha256:source"
-    config.model.revision = "model-revision"
-    config.model.tokenizer_revision = "tokenizer-revision"
-    config.data.revision = "dataset-revision"
-    return config
+    shared.run.git_commit = "a" * 40
+    shared.run.git_dirty = False
+    shared.run.source_fingerprint = "sha256:source"
+    shared.model.revision = "model-revision"
+    shared.model.tokenizer_revision = "tokenizer-revision"
+    shared.data.revision = "dataset-revision"
+    return ConfigV4(shared=shared)
 
 
 @pytest.mark.parametrize(
@@ -71,15 +71,17 @@ def test_each_precomplete_crash_prefix_is_invisible_and_same_staging_retry_recov
     with pytest.raises(InjectedCrash, match=fault_point):
         initialize_run(config, project_root=tmp_path, fault_hook=fault)
     with pytest.raises((FileNotFoundError, RuntimeError)):
-        load_run_descriptor(config.run.shared_root)
+        load_run_descriptor(config.shared.run.shared_root)
 
     initialize_run(config, project_root=tmp_path)
-    loaded = load_run_descriptor(config.run.shared_root)
-    assert loaded.descriptor["shared_root"] == str(Path(config.run.shared_root).resolve())
+    loaded = load_run_descriptor(config.shared.run.shared_root)
+    assert loaded.descriptor["shared_root"] == str(Path(config.shared.run.shared_root).resolve())
     assert loaded.descriptor["model_identity"]["revision"] == "model-revision"
     assert loaded.descriptor["dataset_identity"]["revision"] == "dataset-revision"
     assert (
-        find_reserved_staging(Path(config.run.shared_root).resolve(), allow_missing_owner=True)
+        find_reserved_staging(
+            Path(config.shared.run.shared_root).resolve(), allow_missing_owner=True
+        )
         is None
     )
 
@@ -93,7 +95,7 @@ def test_crash_after_complete_is_visible_and_retry_removes_staging_alias(tmp_pat
 
     with pytest.raises(InjectedCrash, match="after_complete_marker"):
         initialize_run(config, project_root=tmp_path, fault_hook=fault)
-    final_root = Path(config.run.shared_root).resolve()
+    final_root = Path(config.shared.run.shared_root).resolve()
     load_run_descriptor(final_root)
     assert find_reserved_staging(final_root) is not None
 
@@ -118,13 +120,13 @@ def test_retry_and_completed_replay_bind_the_entire_resolved_config_identity(
 
     with pytest.raises(InjectedCrash):
         initialize_run(staged, project_root=tmp_path, fault_hook=crash)
-    staged.data.revision = "different-dataset-revision"
+    staged.shared.data.revision = "different-dataset-revision"
     with pytest.raises(FileExistsError, match="full config identity"):
         initialize_run(staged, project_root=tmp_path)
 
     completed = _config(tmp_path, "completed-config-identity")
     initialize_run(completed, project_root=tmp_path)
-    completed.training.inner_steps += 1
+    completed.shared.training.inner_steps += 1
     with pytest.raises(FileExistsError, match="full config identity"):
         initialize_run(completed, project_root=tmp_path)
 
@@ -134,7 +136,7 @@ def test_descriptor_validation_is_bounded_and_accepts_runtime_control_publicatio
 ) -> None:
     config = _config(tmp_path, "runtime-publications")
     initialize_run(config, project_root=tmp_path)
-    paths = RunPaths(Path(config.run.shared_root))
+    paths = RunPaths(Path(config.shared.run.shared_root))
     for path in (
         paths.latest_json,
         paths.param_index_json,
@@ -156,13 +158,13 @@ def test_descriptor_validation_is_bounded_and_accepts_runtime_control_publicatio
 
     monkeypatch.setattr(Path, "rglob", forbidden_rglob)
     loaded = load_run_descriptor(paths.shared_root)
-    assert loaded.descriptor["run_id"] == config.run.run_id
+    assert loaded.descriptor["run_id"] == config.shared.run.run_id
 
 
 def test_completed_descriptor_rejects_identity_mode_mismatch(tmp_path: Path) -> None:
     config = _config(tmp_path, "identity-mode-mismatch")
     initialize_run(config, project_root=tmp_path)
-    identity_path = RunPaths(Path(config.run.shared_root)).run_identity_file
+    identity_path = RunPaths(Path(config.shared.run.shared_root)).run_identity_file
     identity = read_json(identity_path)
     identity["mode"] = "full_dynamic"
     content = {key: value for key, value in identity.items() if key != "identity_sha256"}
@@ -172,7 +174,7 @@ def test_completed_descriptor_rejects_identity_mode_mismatch(tmp_path: Path) -> 
     identity_path.chmod(0o644)
     identity_path.write_text(json.dumps(identity, sort_keys=True) + "\n", encoding="utf-8")
     identity_path.chmod(0o444)
-    complete_path = RunPaths(Path(config.run.shared_root)).run_complete_file
+    complete_path = RunPaths(Path(config.shared.run.shared_root)).run_complete_file
     complete = read_json(complete_path)
     identity_entry = next(
         entry for entry in complete["objects"] if entry["relative_path"] == ".identity"
@@ -189,7 +191,7 @@ def test_completed_descriptor_rejects_identity_mode_mismatch(tmp_path: Path) -> 
     complete_path.chmod(0o444)
 
     with pytest.raises(RuntimeError, match="run identity does not match descriptor.*mode"):
-        load_run_descriptor(config.run.shared_root)
+        load_run_descriptor(config.shared.run.shared_root)
 
 
 def test_every_manifest_object_link_fault_is_invisible_and_retryable(tmp_path: Path) -> None:
@@ -210,9 +212,9 @@ def test_every_manifest_object_link_fault_is_invisible_and_retryable(tmp_path: P
         with pytest.raises(InjectedCrash, match=fault_point):
             initialize_run(config, project_root=tmp_path, fault_hook=fault)
         with pytest.raises((FileNotFoundError, RuntimeError)):
-            load_run_descriptor(config.run.shared_root)
+            load_run_descriptor(config.shared.run.shared_root)
         initialize_run(config, project_root=tmp_path)
-        load_run_descriptor(config.run.shared_root)
+        load_run_descriptor(config.shared.run.shared_root)
 
 
 def test_every_initializer_directory_fsync_failure_is_retryable(
@@ -246,7 +248,7 @@ def test_every_initializer_directory_fsync_failure_is_retryable(
             patcher.setattr(initializer_module, "fsync_directory", fail_once)
             with pytest.raises(InjectedCrash, match=f"fsync:{failure_index}"):
                 initialize_run(config, project_root=tmp_path)
-        final_root = Path(config.run.shared_root)
+        final_root = Path(config.shared.run.shared_root)
         if (final_root / ".complete").is_file():
             load_run_descriptor(final_root)
         else:
@@ -267,7 +269,7 @@ def test_different_inode_staging_cannot_take_an_existing_identity_reservation(
 
     with pytest.raises(InjectedCrash):
         initialize_run(config, project_root=tmp_path, fault_hook=crash_after_reservation)
-    final_root = Path(config.run.shared_root).resolve()
+    final_root = Path(config.shared.run.shared_root).resolve()
     owner = find_reserved_staging(final_root)
     assert owner is not None
     impostor = create_staging_root(final_root)
@@ -283,7 +285,7 @@ def test_completed_run_reservation_repair_requires_explicit_full_self_check(
 ) -> None:
     config = _config(tmp_path, "repair")
     initialize_run(config, project_root=tmp_path)
-    final_root = Path(config.run.shared_root).resolve()
+    final_root = Path(config.shared.run.shared_root).resolve()
     reservation = reservation_path(final_root)
     reservation.unlink()
 
@@ -297,7 +299,7 @@ def test_completed_run_reservation_repair_requires_explicit_full_self_check(
 def test_reservation_repair_rejects_protocol_external_entry(tmp_path: Path) -> None:
     config = _config(tmp_path, "repair-external")
     initialize_run(config, project_root=tmp_path)
-    final_root = Path(config.run.shared_root).resolve()
+    final_root = Path(config.shared.run.shared_root).resolve()
     reservation_path(final_root).unlink()
     (final_root / "foreign.txt").write_text("not protocol-owned", encoding="utf-8")
 
@@ -347,7 +349,7 @@ def test_retry_rejects_symlinked_manifest_directory_without_writing_outside(
 
     with pytest.raises(InjectedCrash):
         initialize_run(config, project_root=tmp_path, fault_hook=fault)
-    final_root = Path(config.run.shared_root).resolve()
+    final_root = Path(config.shared.run.shared_root).resolve()
     outside = tmp_path / "outside"
     outside.mkdir()
     (final_root / "audit").symlink_to(outside, target_is_directory=True)
@@ -367,7 +369,7 @@ def test_retry_rejects_changed_staging_object_before_complete(tmp_path: Path) ->
 
     with pytest.raises(InjectedCrash):
         initialize_run(config, project_root=tmp_path, fault_hook=fault)
-    final_root = Path(config.run.shared_root).resolve()
+    final_root = Path(config.shared.run.shared_root).resolve()
     staging = find_reserved_staging(final_root)
     assert staging is not None
     config_path = staging / "control/run_config.resolved.yaml"
@@ -387,7 +389,7 @@ def test_reservation_repair_reopens_and_integrity_checks_mutable_authority_db(
 ) -> None:
     config = _config(tmp_path, "repair-corrupt-db")
     initialize_run(config, project_root=tmp_path)
-    final_root = Path(config.run.shared_root).resolve()
+    final_root = Path(config.shared.run.shared_root).resolve()
     reservation_path(final_root).unlink()
     database = RunPaths(final_root).sqlite_db
     database.write_bytes(b"not a sqlite database")
@@ -402,7 +404,7 @@ def test_reservation_repair_reopens_and_integrity_checks_mutable_authority_db(
 def test_actor_attestation_is_immutable_and_attempt_scoped(tmp_path: Path) -> None:
     config = _config(tmp_path, "attestation")
     initialize_run(config, project_root=tmp_path)
-    loaded = load_run_descriptor(config.run.shared_root)
+    loaded = load_run_descriptor(config.shared.run.shared_root)
     path = write_actor_attestation(
         loaded,
         actor_kind="learner",
@@ -418,7 +420,7 @@ def test_actor_attestation_is_immutable_and_attempt_scoped(tmp_path: Path) -> No
         scheduler_job_id="123.opbs",
         observed_at=123.0,
     )
-    assert path == RunPaths(Path(config.run.shared_root)).actor_attestation_path(
+    assert path == RunPaths(Path(config.shared.run.shared_root)).actor_attestation_path(
         "learner", "learner-0", "attempt-1"
     )
     assert path.stat().st_mode & 0o222 == 0
@@ -448,7 +450,7 @@ def test_actor_attestation_is_immutable_and_attempt_scoped(tmp_path: Path) -> No
 def test_actor_attestation_requires_explicit_runtime_resource_evidence(tmp_path: Path) -> None:
     config = _config(tmp_path, "attestation-required")
     initialize_run(config, project_root=tmp_path)
-    loaded = load_run_descriptor(config.run.shared_root)
+    loaded = load_run_descriptor(config.shared.run.shared_root)
 
     with pytest.raises(ValueError, match="runtime_evidence fields"):
         write_actor_attestation(

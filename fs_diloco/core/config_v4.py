@@ -1,13 +1,11 @@
-"""Strict transitional configuration boundary for Full Protocol v4.
-
-The production entrypoints remain on the frozen v1-v3 ``Config`` until the P4
-cutover.  This module establishes the v4 schema/profile validator without
-silently teaching the old runtime to accept removed keys.
-"""
+"""Strict configuration boundary for mandatory Full Protocol v4 runtimes."""
 
 from __future__ import annotations
 
 import dataclasses
+import hashlib
+import os
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -15,7 +13,8 @@ from typing import Any
 
 import yaml
 
-from .config import Config, _from_dict
+from .config import Config, _from_dict, config_to_dict
+from .constants import DEFAULT_RUNS_DIR
 from .versions import CONFIG_SCHEMA_VERSION
 
 
@@ -243,6 +242,245 @@ def load_config_v4(path: str | Path, *, profile: ConfigProfile | str) -> ConfigV
     )
     config.validate(profile)
     return config
+
+
+def config_v4_to_dict(config: ConfigV4) -> dict[str, Any]:
+    """Return the flattened on-wire v4 representation.
+
+    ``ConfigV4.shared`` deliberately reuses the common model/training schema,
+    but removed v1-v3 runtime switches must never leak back onto the v4 wire.
+    """
+
+    config.validate(ConfigProfile.FULL_V4)
+    payload = config_to_dict(config.shared)
+    payload.pop("init", None)
+    payload.pop("fragments", None)
+    coordination = payload.get("coordination")
+    if not isinstance(coordination, dict):
+        raise RuntimeError("internal coordination serialization is invalid")
+    coordination.pop("syncer_ha", None)
+    coordination["leader"] = dataclasses.asdict(config.leader)
+    payload["config_schema_version"] = config.config_schema_version
+    payload["maintenance"] = dataclasses.asdict(config.maintenance)
+    sync = payload.get("sync")
+    if not isinstance(sync, dict):
+        raise RuntimeError("internal sync serialization is invalid")
+    sync.pop("stop_after_global_tokens", None)
+    if config.stop_after_direct_weight_tokens_applied is not None:
+        sync["stop_after_direct_weight_tokens_applied"] = (
+            config.stop_after_direct_weight_tokens_applied
+        )
+    return payload
+
+
+def resolved_config_v4_bytes(config: ConfigV4) -> bytes:
+    return yaml.safe_dump(
+        config_v4_to_dict(config),
+        sort_keys=False,
+        allow_unicode=True,
+    ).encode("utf-8")
+
+
+def write_resolved_config_v4(config: ConfigV4, path: str | Path) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(resolved_config_v4_bytes(config))
+
+
+def resolve_config_v4(
+    path: str | Path,
+    *,
+    run_id: str | None = None,
+    shared_root: str | None = None,
+    project_root: str | Path | None = None,
+) -> ConfigV4:
+    """Resolve mutable launch identity without accepting legacy runtime keys."""
+
+    config = load_config_v4(path, profile=ConfigProfile.FULL_V4)
+    shared = config.shared
+    git_commit = os.environ.get("FS_DILOCO_GIT_COMMIT")
+    source_fingerprint = os.environ.get("FS_DILOCO_SOURCE_FINGERPRINT")
+    if git_commit:
+        shared.run.git_commit = git_commit
+    if "FS_DILOCO_GIT_DIRTY" in os.environ:
+        shared.run.git_dirty = _environment_flag("FS_DILOCO_GIT_DIRTY")
+    if source_fingerprint:
+        shared.run.source_fingerprint = source_fingerprint
+    if _environment_flag("FS_DILOCO_REQUIRE_SOURCE_IDENTITY") and (
+        not shared.run.git_commit or not shared.run.source_fingerprint
+    ):
+        raise ValueError(
+            "formal run requires source identity: set FS_DILOCO_GIT_COMMIT and "
+            "FS_DILOCO_SOURCE_FINGERPRINT"
+        )
+    if run_id is not None:
+        shared.run.run_id = run_id
+    if shared.run.run_id is None:
+        shared.run.run_id = os.environ.get("RUN_ID") or (
+            time.strftime("%Y%m%d_%H%M%S") + f"_{shared.run.name}"
+        )
+    if shared_root is not None:
+        shared.run.shared_root = shared_root
+    if shared.run.shared_root is None:
+        root = Path(project_root or os.getcwd())
+        shared.run.shared_root = str(root / DEFAULT_RUNS_DIR / shared.run.run_id)
+    else:
+        shared.run.shared_root = shared.run.shared_root.replace("{run_id}", shared.run.run_id)
+    config.validate(ConfigProfile.FULL_V4)
+    return config
+
+
+def migrate_v3_payload_to_v4(payload: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Migrate one full v1-v3 mapping and return an auditable structured diff."""
+
+    if not isinstance(payload, dict):
+        raise ValueError("config must contain a mapping")
+    migrated = _deep_copy_mapping(payload)
+    fragments = migrated.get("fragments")
+    if isinstance(fragments, dict) and bool(fragments.get("enabled")):
+        raise ValueError("fragment config is unsupported by Full Protocol v4")
+    changes: list[dict[str, Any]] = []
+
+    def remove(path: tuple[str, ...], *, reason: str) -> Any:
+        current: Any = migrated
+        for part in path[:-1]:
+            if not isinstance(current, dict) or part not in current:
+                return None
+            current = current[part]
+        if not isinstance(current, dict) or path[-1] not in current:
+            return None
+        previous = current.pop(path[-1])
+        changes.append({"op": "remove", "path": ".".join(path), "old": previous, "reason": reason})
+        return previous
+
+    remove(("init",), reason="classic resume authority is removed")
+    remove(("fragments",), reason="fragment runtime is not expressible in v4")
+    sync = migrated.setdefault("sync", {})
+    if not isinstance(sync, dict):
+        raise ValueError("sync must be a mapping")
+    legacy_token_stop = sync.get("stop_after_global_tokens")
+    if legacy_token_stop is not None:
+        raise ValueError(
+            "sync.stop_after_global_tokens is ambiguous; choose "
+            "stop_after_direct_weight_tokens_applied explicitly"
+        )
+    remove(
+        ("sync", "stop_after_global_tokens"),
+        reason="null ambiguous legacy token stop has no semantic effect",
+    )
+    coordination = migrated.setdefault("coordination", {})
+    if not isinstance(coordination, dict):
+        raise ValueError("coordination must be a mapping")
+    legacy_ha = coordination.pop("syncer_ha", None)
+    if legacy_ha is not None:
+        if not isinstance(legacy_ha, dict):
+            raise ValueError("coordination.syncer_ha must be a mapping")
+        leader = {key: value for key, value in legacy_ha.items() if key != "enabled"}
+        coordination["leader"] = leader
+        changes.append(
+            {
+                "op": "replace",
+                "path": "coordination.syncer_ha",
+                "new_path": "coordination.leader",
+                "old": legacy_ha,
+                "new": leader,
+                "reason": "leader fencing is mandatory",
+            }
+        )
+    elif "leader" not in coordination:
+        coordination["leader"] = {}
+        changes.append(
+            {
+                "op": "add",
+                "path": "coordination.leader",
+                "new": coordination["leader"],
+                "reason": "materialize mandatory leader defaults",
+            }
+        )
+    migrated["config_schema_version"] = CONFIG_SCHEMA_VERSION
+    migrated.setdefault("maintenance", {})
+    changes.append(
+        {
+            "op": "add",
+            "path": "config_schema_version",
+            "new": CONFIG_SCHEMA_VERSION,
+            "reason": "select strict Full Protocol v4 schema",
+        }
+    )
+    # Parse once and keep the source-level payload concise. The immutable
+    # resolved snapshot materializes defaults through ``config_v4_to_dict``.
+    config = _config_v4_from_payload(migrated)
+    config.validate(ConfigProfile.FULL_V4)
+    return migrated, changes
+
+
+def migrate_v3_bytes_to_v4(data: bytes) -> tuple[bytes, dict[str, Any]]:
+    loaded = yaml.safe_load(data) or {}
+    migrated, changes = migrate_v3_payload_to_v4(loaded)
+    output = yaml.safe_dump(migrated, sort_keys=False, allow_unicode=True).encode("utf-8")
+    # A byte round trip is part of migration acceptance, not merely an in-memory check.
+    loaded_v4 = yaml.safe_load(output)
+    _config_v4_from_payload(loaded_v4).validate(ConfigProfile.FULL_V4)
+    return output, {
+        "input_sha256": hashlib.sha256(data).hexdigest(),
+        "output_sha256": hashlib.sha256(output).hexdigest(),
+        "changes": changes,
+    }
+
+
+def _config_v4_from_payload(loaded: Any) -> ConfigV4:
+    if not isinstance(loaded, dict):
+        raise ValueError("config must contain a mapping")
+    for dotted in _REMOVED_V4_PATHS:
+        current: Any = loaded
+        for part in dotted:
+            if not isinstance(current, dict) or part not in current:
+                break
+            current = current[part]
+        else:
+            raise ValueError(f"removed v4 config key is present: {'.'.join(dotted)}")
+    payload = _deep_copy_mapping(loaded)
+    schema_version = payload.pop("config_schema_version", None)
+    coordination = payload.pop("coordination", {})
+    if not isinstance(coordination, dict):
+        raise ValueError("coordination must be a mapping")
+    leader_payload = coordination.pop("leader", {})
+    payload["coordination"] = {"recovery_submission": coordination.pop("recovery_submission", {})}
+    if coordination:
+        raise ValueError("unknown coordination keys: " + ", ".join(sorted(coordination)))
+    maintenance_payload = payload.pop("maintenance", {})
+    sync_payload = payload.get("sync", {})
+    if not isinstance(sync_payload, dict):
+        raise ValueError("sync must be a mapping")
+    sync_payload = dict(sync_payload)
+    stop_tokens = sync_payload.pop("stop_after_direct_weight_tokens_applied", None)
+    payload["sync"] = sync_payload
+    return ConfigV4(
+        shared=_from_dict(Config, payload),
+        config_schema_version=schema_version,
+        leader=_strict_dataclass(LeaderSection, leader_payload, "coordination.leader"),
+        maintenance=_strict_dataclass(MaintenanceSection, maintenance_payload, "maintenance"),
+        stop_after_direct_weight_tokens_applied=stop_tokens,
+    )
+
+
+def _deep_copy_mapping(payload: dict[str, Any]) -> dict[str, Any]:
+    # YAML-compatible configuration values are JSON-compatible after safe_load.
+    import copy
+
+    return copy.deepcopy(payload)
+
+
+def _environment_flag(name: str) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return False
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean flag")
 
 
 def _strict_dataclass(cls: type[Any], payload: Any, path: str) -> Any:

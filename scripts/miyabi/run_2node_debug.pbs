@@ -1,4 +1,5 @@
 #!/bin/bash
+#PBS -N fsdiloco_2node_debug
 #PBS -q regular-g
 #PBS -W group_list=xg24i002
 #PBS -l select=2:mpiprocs=1
@@ -7,8 +8,6 @@
 #PBS -m ae
 
 set -eEuo pipefail
-trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
-
 export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
 module list 2>&1 | cat
 
@@ -18,92 +17,13 @@ PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 CONFIG="${CONFIG:-$PROJECT_ROOT/configs/fs_diloco_gpt2_wikitext2_1l_debug.yaml}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_fs_diloco_2node_debug}"
 SHARED_ROOT="${SHARED_ROOT:-$PRIMARY_WORKTREE_ROOT/runs/fs_diloco/$RUN_ID}"
-CACHE_ROOT="${CACHE_ROOT:-$PROJECT_ROOT/.cache/fs_diloco}"
-HF_HOME="${HF_HOME:-$CACHE_ROOT/huggingface}"
-HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-$HF_HOME/datasets}"
-HF_HUB_CACHE="${HF_HUB_CACHE:-$HF_HOME/hub}"
-HF_DATASETS_OFFLINE="${HF_DATASETS_OFFLINE:-0}"
-HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
-FS_DILOCO_HF_WIKITEXT_REPO="${FS_DILOCO_HF_WIKITEXT_REPO:-Salesforce/wikitext}"
+EXPECTED_NODES=2
+NUM_LEARNERS=1
+COLOCATE_SYNCER=0
 SYNCER_CUDA_VISIBLE_DEVICES="${SYNCER_CUDA_VISIBLE_DEVICES:-0}"
 LEARNER_CUDA_VISIBLE_DEVICES="${LEARNER_CUDA_VISIBLE_DEVICES:-0}"
-NUM_LEARNERS=1
 
-: "${PBS_NODEFILE:?PBS_NODEFILE is not set}"
-cd "$PROJECT_ROOT"
-
-mapfile -t HOSTS < <(sort -u "$PBS_NODEFILE")
-NNODES="${#HOSTS[@]}"
-if [[ "$NNODES" -ne 2 ]]; then
-  echo "Expected 2 unique nodes, got $NNODES" >&2
-  printf '%s\n' "${HOSTS[@]}" >&2
-  exit 2
-fi
-
-mkdir -p "$SHARED_ROOT" "$PRIMARY_WORKTREE_ROOT/logs" "$HF_DATASETS_CACHE" "$HF_HUB_CACHE"
-LOG_ROOT="$PRIMARY_WORKTREE_ROOT/logs/qsub_${RUN_ID}"
-mkdir -p "$LOG_ROOT"
-
-MPI_ENV_ARGS=(
-  "PROJECT_ROOT=$PROJECT_ROOT"
-  "PRIMARY_WORKTREE_ROOT=$PRIMARY_WORKTREE_ROOT"
-  "PYTHON_BIN=$PYTHON_BIN"
-  "CONFIG=$CONFIG"
-  "RUN_ID=$RUN_ID"
-  "SHARED_ROOT=$SHARED_ROOT"
-  "HF_HOME=$HF_HOME"
-  "HF_DATASETS_CACHE=$HF_DATASETS_CACHE"
-  "HF_HUB_CACHE=$HF_HUB_CACHE"
-  "HF_DATASETS_OFFLINE=$HF_DATASETS_OFFLINE"
-  "HF_HUB_OFFLINE=$HF_HUB_OFFLINE"
-  "FS_DILOCO_HF_WIKITEXT_REPO=$FS_DILOCO_HF_WIKITEXT_REPO"
-  "SYNCER_CUDA_VISIBLE_DEVICES=$SYNCER_CUDA_VISIBLE_DEVICES"
-  "LEARNER_CUDA_VISIBLE_DEVICES=$LEARNER_CUDA_VISIBLE_DEVICES"
-  "NUM_LEARNERS=$NUM_LEARNERS"
-)
-
-echo "RUN_ID=$RUN_ID"
-echo "PROJECT_ROOT=$PROJECT_ROOT"
-echo "CONFIG=$CONFIG"
-echo "SHARED_ROOT=$SHARED_ROOT"
-echo "SQLITE_DB=$SHARED_ROOT/control/syncer_metadata.sqlite3"
-echo "SYNCER_CUDA_VISIBLE_DEVICES=$SYNCER_CUDA_VISIBLE_DEVICES"
-echo "LEARNER_CUDA_VISIBLE_DEVICES=$LEARNER_CUDA_VISIBLE_DEVICES"
-echo "PBS_JOBID=${PBS_JOBID:-}"
-echo "PBS_NODEFILE=$PBS_NODEFILE"
-echo "NNODES=$NNODES"
-printf 'HOST %s\n' "${HOSTS[@]}"
-
-mpirun \
-  --mca mpi_abort_print_stack 1 \
-  --report-bindings \
-  --bind-to core \
-  -np "$NNODES" \
-  /usr/bin/env "${MPI_ENV_ARGS[@]}" \
-  bash -lc '
-    set -eEuo pipefail
-    rank="${OMPI_COMM_WORLD_RANK:?missing OMPI_COMM_WORLD_RANK}"
-    host="$(hostname)"
-    echo "[launcher] rank=${rank} host=${host}"
-    if [[ "$rank" -eq 0 ]]; then
-      export CUDA_VISIBLE_DEVICES="$SYNCER_CUDA_VISIBLE_DEVICES"
-      exec "$PYTHON_BIN" -m fs_diloco.syncer \
-        --config "$CONFIG" \
-        --run-id "$RUN_ID" \
-        --shared-root "$SHARED_ROOT" \
-        --num-learners "$NUM_LEARNERS" \
-        2>&1 | tee "$PRIMARY_WORKTREE_ROOT/logs/qsub_${RUN_ID}/syncer.log"
-    else
-      export CUDA_VISIBLE_DEVICES="$LEARNER_CUDA_VISIBLE_DEVICES"
-      exec "$PYTHON_BIN" -m fs_diloco.learner \
-        --config "$CONFIG" \
-        --run-id "$RUN_ID" \
-        --shared-root "$SHARED_ROOT" \
-        --learner-id learner_000 \
-        --num-learners "$NUM_LEARNERS" \
-        2>&1 | tee "$PRIMARY_WORKTREE_ROOT/logs/qsub_${RUN_ID}/learner_000.log"
-    fi
-  '
-
-"$PYTHON_BIN" -m fs_diloco.analysis "$SHARED_ROOT" --json > "$LOG_ROOT/summary.json"
-cat "$LOG_ROOT/summary.json"
+export PROJECT_ROOT PRIMARY_WORKTREE_ROOT PYTHON_BIN CONFIG RUN_ID SHARED_ROOT
+export EXPECTED_NODES NUM_LEARNERS COLOCATE_SYNCER
+export SYNCER_CUDA_VISIBLE_DEVICES LEARNER_CUDA_VISIBLE_DEVICES
+exec bash "$PROJECT_ROOT/scripts/miyabi/run_v4_allocation.sh"

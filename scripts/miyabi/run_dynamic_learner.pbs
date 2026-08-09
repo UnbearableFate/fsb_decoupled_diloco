@@ -60,7 +60,14 @@ export FS_DILOCO_REQUIRE_SOURCE_IDENTITY=1
 
 authorization=()
 if [[ -n "${FS_DILOCO_LAUNCH_REQUEST_ID:-}" ]]; then
-  authorization=(--launch-request-id "$FS_DILOCO_LAUNCH_REQUEST_ID")
+  : "${FS_DILOCO_STREAM_ID:?FS_DILOCO_STREAM_ID is required for a replacement launch}"
+  authorization=(
+    --launch-request-id "$FS_DILOCO_LAUNCH_REQUEST_ID"
+    --stream-id "$FS_DILOCO_STREAM_ID"
+  )
+  if [[ -n "${FS_DILOCO_REPLACE_INSTANCE_ID:-}" ]]; then
+    authorization+=(--replace-instance-id "$FS_DILOCO_REPLACE_INSTANCE_ID")
+  fi
 elif [[ -n "${PBS_ARRAY_INDEX:-}" ]]; then
   authorization=(--bootstrap-slot "$PBS_ARRAY_INDEX")
 elif [[ -n "${BOOTSTRAP_SLOT:-}" ]]; then

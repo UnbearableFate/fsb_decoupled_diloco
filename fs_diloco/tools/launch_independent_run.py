@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from ..core.config import resolve_config
+from ..core.config_v4 import resolve_config_v4
 from .init_run import initialize_run
 
 
@@ -27,6 +27,9 @@ def _walltime_resource(value: str | None, *, required: bool) -> list[str]:
         return []
     if _WALLTIME_RE.fullmatch(value) is None or value == "00:00:00":
         raise ValueError(f"invalid PBS walltime: {value!r}")
+    hours, minutes, seconds = (int(item) for item in value.split(":"))
+    if hours * 3600 + minutes * 60 + seconds < 600:
+        raise ValueError("PBS walltime must be at least 00:10:00")
     return ["-l", f"walltime={value}"]
 
 
@@ -82,7 +85,7 @@ def launch(
         learner_walltime,
         required=submit,
     )
-    config = resolve_config(
+    config = resolve_config_v4(
         config_path,
         run_id=run_id,
         shared_root=shared_root,
@@ -94,6 +97,7 @@ def launch(
         allow_dirty_snapshot=allow_dirty_snapshot,
     )
     descriptor = initialized["descriptor"]
+    shared = config.shared
     variables = ",".join(
         (
             f"FS_DILOCO_SHARED_ROOT={descriptor['shared_root']}",
@@ -108,21 +112,37 @@ def launch(
         variables,
         str(project_root / "scripts/miyabi/run_syncer_candidate.pbs"),
     ]
-    learner_command = [
-        "qsub",
-        *learner_walltime_resource,
-        "-r",
-        "y",
-        "-v",
-        variables,
-        "-J",
-        f"0-{int(config.sync.num_learners) - 1}",
-        str(project_root / "scripts/miyabi/run_static_learner.pbs"),
-    ]
+    dynamic = shared.membership.mode == "dynamic"
+    if dynamic:
+        learner_commands = [
+            [
+                "qsub",
+                *learner_walltime_resource,
+                "-v",
+                f"{variables},BOOTSTRAP_SLOT={slot}",
+                str(project_root / "scripts/miyabi/run_dynamic_learner.pbs"),
+            ]
+            for slot in range(shared.membership.bootstrap_instances)
+        ]
+    else:
+        learner_commands = [
+            [
+                "qsub",
+                *learner_walltime_resource,
+                "-r",
+                "y",
+                "-v",
+                (f"{variables},FS_DILOCO_STATIC_LAUNCH_PREFIX={descriptor['descriptor_sha256']}"),
+                "-J",
+                f"0-{int(shared.sync.num_learners) - 1}",
+                str(project_root / "scripts/miyabi/run_static_learner.pbs"),
+            ]
+        ]
     result: dict[str, Any] = {
         **initialized,
         "syncer_qsub": syncer_command,
-        "learner_qsub": learner_command,
+        "membership_mode": shared.membership.mode,
+        "learner_qsubs": learner_commands,
         "submitted": bool(submit),
     }
     if submit:
@@ -133,14 +153,26 @@ def launch(
             return result
         result["syncer_job_id"] = syncer_receipt["job_id"]
 
-        learner_receipt = _qsub(learner_command)
-        result["learner_submission"] = learner_receipt
-        if learner_receipt["status"] != "submitted":
-            # Do not cancel automatically.  Preserve the accepted syncer ID so
-            # an operator can inspect or terminate that exact scheduler job.
-            result["submission_status"] = "partial"
-            return result
-        result["learner_array_job_id"] = learner_receipt["job_id"]
+        learner_receipts: list[dict[str, Any]] = []
+        result["learner_submissions"] = learner_receipts
+        for slot, learner_command in enumerate(learner_commands):
+            learner_receipt = _qsub(learner_command)
+            learner_receipt["bootstrap_slot"] = slot if dynamic else None
+            learner_receipts.append(learner_receipt)
+            if learner_receipt["status"] != "submitted":
+                # Accepted IDs are the durable operator receipt.  Never qdel a
+                # partial topology implicitly.
+                result["accepted_learner_job_ids"] = [
+                    receipt["job_id"]
+                    for receipt in learner_receipts
+                    if receipt["status"] == "submitted"
+                ]
+                result["submission_status"] = "partial"
+                return result
+        if dynamic:
+            result["learner_job_ids"] = [receipt["job_id"] for receipt in learner_receipts]
+        else:
+            result["learner_array_job_id"] = learner_receipts[0]["job_id"]
         result["submission_status"] = "submitted"
     return result
 

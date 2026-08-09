@@ -15,6 +15,9 @@ PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 LEARNER_INDEX="${PBS_ARRAY_INDEX:-${LEARNER_INDEX:?PBS_ARRAY_INDEX or LEARNER_INDEX is required}}"
 printf -v LEARNER_ID 'learner_%03d' "$LEARNER_INDEX"
+STATIC_LAUNCH_PREFIX="${FS_DILOCO_STATIC_LAUNCH_PREFIX:-static}"
+STATIC_JOB_ID="${PBS_JOBID%%.*}"
+LOGICAL_LAUNCH_ID="${STATIC_LAUNCH_PREFIX}-${STATIC_JOB_ID}-${LEARNER_ID}"
 
 readarray -t descriptor_fields < <(
   "$PYTHON_BIN" - "$DESCRIPTOR" <<'PY'
@@ -61,4 +64,5 @@ export FS_DILOCO_REQUIRE_SOURCE_IDENTITY=1
 "$PYTHON_BIN" -m fs_diloco.learner \
   --config "$CONFIG" \
   --shared-root "$FS_DILOCO_SHARED_ROOT" \
-  --learner-id "$LEARNER_ID"
+  --learner-id "$LEARNER_ID" \
+  --logical-launch-id "$LOGICAL_LAUNCH_ID"

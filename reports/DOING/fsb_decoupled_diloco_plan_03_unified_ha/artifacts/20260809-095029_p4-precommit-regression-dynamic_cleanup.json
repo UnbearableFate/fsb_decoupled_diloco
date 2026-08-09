@@ -1,0 +1,122 @@
+{
+  "artifact_policy_sha256": "aabdd668a5804454152b1dc214164d1383313f78b814056cfdfa416cb26a1fc2",
+  "candidate_bytes": 99985,
+  "candidate_count": 13,
+  "candidates": [
+    {
+      "device": 743766374,
+      "inode": 270219125719075849,
+      "mtime_ns": 1786236596000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/0.json",
+      "size_bytes": 721
+    },
+    {
+      "device": 743766374,
+      "inode": 270219125719075630,
+      "mtime_ns": 1786236594000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/0/0c1d2897-1113-4674-a7ae-770f479d16a7.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219125719075819,
+      "mtime_ns": 1786236596000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/0/1f92e22f-9ea0-46f3-bb1a-7e9d55f6aef8.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219125719075725,
+      "mtime_ns": 1786236595000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/0/3128fb6a-cb9b-43c0-bc4b-81ff197726ef.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219125719075544,
+      "mtime_ns": 1786236593000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/0/3c3ccc81-d29a-40ea-963d-434314f2628a.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219125719075601,
+      "mtime_ns": 1786236593000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/0/8769140d-8d87-495a-bcb0-ed9039f8b912.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219125719075708,
+      "mtime_ns": 1786236594000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/0/8cec8af5-3aa4-47a6-99b1-7c707d257650.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219125719075761,
+      "mtime_ns": 1786236595000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/0/904b6fb8-c6f3-469f-bcfa-d99a2c3e006d.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219125719075569,
+      "mtime_ns": 1786236593000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/0/91ce9ba2-9039-4e45-ba98-06e66b6a6e7e.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219125719075845,
+      "mtime_ns": 1786236596000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/0/a520de34-06b7-4d39-9a98-aa1db8feb448.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219125719075786,
+      "mtime_ns": 1786236595000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/0/b5ebeff9-5c09-4248-9418-6f265254634f.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219125719075649,
+      "mtime_ns": 1786236594000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/0/bc21b8a3-40fc-4c79-9b20-10a054a45bbe.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219125719075681,
+      "mtime_ns": 1786236594000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/0/db4bf158-fe03-4d7d-8225-4e82688bd6f3.safetensors",
+      "size_bytes": 8272
+    }
+  ],
+  "completion_evidence": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-095029_p4-precommit-regression_pass.json",
+  "completion_evidence_sha256": "9f097dcd18f6f13668d4c3749664a63ee2cfe7e0600d99f2fad5a56048f3271a",
+  "deleted_bytes": 99985,
+  "deleted_count": 13,
+  "format_version": 1,
+  "legacy_policy_override": false,
+  "retained_representative_learner_log": null,
+  "run_id": "plan03_p4_dynamic_2509268",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_dynamic_2509268",
+  "status": "complete",
+  "tool": "fs_diloco.tools.clean_run"
+}

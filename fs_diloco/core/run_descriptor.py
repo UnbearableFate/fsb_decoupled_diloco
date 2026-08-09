@@ -13,12 +13,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .config import Config, load_resolved_config_snapshot
-from .constants import DYNAMIC_SCHEMA_VERSION, HA_SCHEMA_VERSION, PROTOCOL_VERSION
+from .config_v4 import ConfigProfile, ConfigV4, load_config_v4
+from .versions import AUTHORITY_SCHEMA_VERSION, PROTOCOL_VERSION
 from ..storage.atomic_io import publish_immutable_bytes, read_json, sha256_file
 from ..storage.paths import RunPaths
-from ..storage.run_initializer import validate_completed_run
-from ..storage.schema_bootstrap import BootstrapIdentity
+from ..storage.run_initializer import validate_completed_run_for_actor
 
 
 PLAN03_REQUIREMENTS = frozenset({"ENV-01"})
@@ -46,8 +45,22 @@ def _optional_environment_flag(name: str) -> bool | None:
 class LoadedRunDescriptor:
     paths: RunPaths
     descriptor: dict[str, Any]
-    config: Config
-    identity: BootstrapIdentity
+    config: ConfigV4
+    identity: "DescriptorAuthorityIdentity"
+
+
+@dataclass(frozen=True)
+class DescriptorAuthorityIdentity:
+    run_id: str
+    source_fingerprint: str
+    config_sha256: str
+
+    def as_dict(self) -> dict[str, str]:
+        return {
+            "run_id": self.run_id,
+            "source_fingerprint": self.source_fingerprint,
+            "config_sha256": self.config_sha256,
+        }
 
 
 def load_run_descriptor(
@@ -72,11 +85,9 @@ def load_run_descriptor(
         raise RuntimeError("run descriptor does not match the submitted job identity")
     descriptor_mode = str(descriptor.get("mode", ""))
     if descriptor_mode == "full_ha_static":
-        expected_schema_version = HA_SCHEMA_VERSION
-        identity_mode = "full"
+        expected_schema_version = AUTHORITY_SCHEMA_VERSION
     elif descriptor_mode == "full_ha_dynamic":
-        expected_schema_version = DYNAMIC_SCHEMA_VERSION
-        identity_mode = "full_dynamic"
+        expected_schema_version = AUTHORITY_SCHEMA_VERSION
     else:
         raise RuntimeError(f"unsupported run descriptor mode: {descriptor_mode!r}")
     checks = {
@@ -116,27 +127,27 @@ def load_run_descriptor(
     for key in ("git_commit", "git_dirty", "source_fingerprint"):
         if source.get(key) != descriptor.get(key):
             raise RuntimeError(f"source manifest {key} mismatch")
-    config = load_resolved_config_snapshot(config_path)
+    config = load_config_v4(config_path, profile=ConfigProfile.FULL_V4)
+    shared = config.shared
     expected_config_mode = "dynamic" if descriptor_mode == "full_ha_dynamic" else "static"
-    if config.membership.mode != expected_config_mode:
+    if shared.membership.mode != expected_config_mode:
         raise RuntimeError("resolved config membership mode does not match descriptor")
-    if config.run.run_id != descriptor.get("run_id"):
+    if shared.run.run_id != descriptor.get("run_id"):
         raise RuntimeError("resolved config run_id mismatch")
-    if Path(str(config.run.shared_root)).resolve() != paths.shared_root:
+    if Path(str(shared.run.shared_root)).resolve() != paths.shared_root:
         raise RuntimeError("resolved config shared_root mismatch")
-    if config.run.git_commit != descriptor.get("git_commit"):
+    if shared.run.git_commit != descriptor.get("git_commit"):
         raise RuntimeError("resolved config git_commit mismatch")
-    if config.run.git_dirty != descriptor.get("git_dirty"):
+    if shared.run.git_dirty != descriptor.get("git_dirty"):
         raise RuntimeError("resolved config git_dirty mismatch")
-    if config.run.source_fingerprint != descriptor.get("source_fingerprint"):
+    if shared.run.source_fingerprint != descriptor.get("source_fingerprint"):
         raise RuntimeError("resolved config source fingerprint mismatch")
-    identity = BootstrapIdentity(
+    identity = DescriptorAuthorityIdentity(
         run_id=str(descriptor["run_id"]),
         source_fingerprint=str(descriptor["source_fingerprint"]),
         config_sha256=str(descriptor["resolved_config_sha256"]),
-        mode=identity_mode,
     )
-    validate_completed_run(paths.shared_root)
+    validate_completed_run_for_actor(paths.shared_root)
     return LoadedRunDescriptor(paths, descriptor, config, identity)
 
 

@@ -52,6 +52,7 @@ def admit(leader, *, index: int, replace: str | None = None) -> DynamicContribut
         admission_token_sha256=hashlib.sha256(f"token-{index}".encode()).hexdigest(),
         hostname="host",
         pid=index + 1,
+        launch_request_id=(f"replacement-launch-{index}" if replace is not None else None),
         replace_instance_id=replace,
         replacement_reason="authorized_replacement" if replace is not None else None,
     )
