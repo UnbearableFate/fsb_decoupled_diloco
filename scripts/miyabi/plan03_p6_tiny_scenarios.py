@@ -38,6 +38,32 @@ def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
+def _audit_rows(run_root: Path, table: str) -> list[dict[str, Any]]:
+    records: dict[str, dict[str, Any]] = {}
+    for root in (
+        run_root / "audit/batches/authority_history",
+        run_root / "audit/partitions/authority_history",
+    ):
+        if not root.is_dir():
+            continue
+        for path in sorted(root.glob("*.json")):
+            if path.name.endswith(".manifest.json"):
+                continue
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            for record in payload.get("records", []):
+                if not isinstance(record, dict) or record.get("table") != table:
+                    continue
+                primary_key = str(record.get("primary_key", ""))
+                row = record.get("row")
+                if not primary_key or not isinstance(row, dict):
+                    raise RuntimeError(f"invalid {table} audit record: {path}")
+                prior = records.get(primary_key)
+                if prior is not None and prior != row:
+                    raise RuntimeError(f"conflicting {table} audit record: {primary_key}")
+                records[primary_key] = row
+    return list(records.values())
+
+
 def _config(
     project_root: Path,
     output: Path,
@@ -192,14 +218,18 @@ def _wait_version(run_root: Path, version: int, *, timeout: float) -> None:
 
 
 def _wait_process(
-    role: str, process: subprocess.Popen[Any], *, deadline: float, expected_zero: bool
+    role: str,
+    process: subprocess.Popen[Any],
+    *,
+    deadline: float,
+    expected_zero: bool | None,
 ) -> int:
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise TimeoutError(f"scenario timed out before {role} exited")
     process.wait(timeout=remaining)
     status = int(process.returncode)
-    if expected_zero != (status == 0):
+    if expected_zero is not None and expected_zero != (status == 0):
         raise RuntimeError(f"{role} exit status {status} violated expected_zero={expected_zero}")
     return status
 
@@ -482,10 +512,48 @@ def _static_replacement(
         os.kill(old.pid, signal.SIGCONT)
         deadline = time.monotonic() + 240.0
         statuses = {
-            "old": _wait_process("old", old, deadline=deadline, expected_zero=False),
+            "old": _wait_process("old", old, deadline=deadline, expected_zero=None),
             "new": _wait_process("new", new, deadline=deadline, expected_zero=True),
             "other": _wait_process("other", other, deadline=deadline, expected_zero=True),
             "syncer": _wait_process("syncer", syncer, deadline=deadline, expected_zero=True),
+        }
+        database = run_root / "control/syncer_metadata.sqlite3"
+        connection = sqlite3.connect(f"file:{database.resolve()}?mode=ro", uri=True)
+        connection.row_factory = sqlite3.Row
+        try:
+            old_history = connection.execute(
+                "SELECT * FROM static_binding_history WHERE learner_id='learner_000' "
+                "AND logical_launch_id=? AND attempt_id=?",
+                (logical, old_attempt),
+            ).fetchone()
+            current_binding = connection.execute(
+                "SELECT * FROM static_contributor_bindings WHERE learner_id='learner_000'"
+            ).fetchone()
+            hot_updates = [dict(row) for row in connection.execute("SELECT * FROM updates")]
+        finally:
+            connection.close()
+        old_updates = [
+            row
+            for row in [*hot_updates, *_audit_rows(run_root, "updates")]
+            if row.get("stable_contributor_key") == "learner_000"
+            and json.loads(str(row["fence_json"])).get("attempt_id") == old_attempt
+        ]
+        if old_history is None or old_history["final_status"] != "replaced":
+            raise RuntimeError("old static binding lacks durable replacement history")
+        if (
+            current_binding is None
+            or current_binding["logical_launch_id"] != logical
+            or current_binding["attempt_id"] != new_attempt
+            or int(current_binding["binding_generation"]) != 2
+        ):
+            raise RuntimeError("new static attempt is not the exact current binding")
+        if old_updates:
+            raise RuntimeError("resumed old static generation produced an authority update")
+        replacement_evidence = {
+            "old_final_status": str(old_history["final_status"]),
+            "current_attempt_id": str(current_binding["attempt_id"]),
+            "current_binding_generation": int(current_binding["binding_generation"]),
+            "old_generation_authority_updates": 0,
         }
     finally:
         if old.poll() is None:
@@ -500,6 +568,7 @@ def _static_replacement(
     return {
         "name": "static-2-learners-loss-rerun-old-resume",
         "process_statuses": statuses,
+        "replacement_evidence": replacement_evidence,
         **_validate(run_root, expected_epochs=1, expected_contributors=2),
     }
 

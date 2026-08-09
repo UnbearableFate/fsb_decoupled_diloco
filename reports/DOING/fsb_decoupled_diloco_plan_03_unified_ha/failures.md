@@ -938,3 +938,9 @@
 - Experiment ID `P6-G5-tiny-attempt1`，该正式门禁目标连续失败次数 1。PBS job `2512722.opbs` 完成并验证第一个1-learner static场景；第二个2-learner static场景所有进程clean exit、terminal finalized、token balance和SQLite integrity均正常，但 `_validate` 发现hot `global_versions` 有2行而非current-only 1行，随后fail-fast。
 - 现场DB显示latest v3，learner_001最后receipt属于已应用到v2的batch。`_audit_history_records()` 为满足 `contributor_progress.last_receipt_id` 的hot FK，排除任何包含某contributor最后receipt的batch，因此v2 update/batch/publication/version整组无法archive。单learner场景最后receipt恰在current version所以未暴露。
 - 该行为违反P6 terminal/current-only authority门禁，也说明active contributor每人保留1行虽有界，却能让最多M个旧version依赖留在recovery hot set。修复应让 `contributor_progress` 只持久保存last receipt ID/hash/cursor值而不以FK强制receipt留hot，并允许已裁决、非current version的最后receipt/update依赖闭包archive；ingest连续性仍由progress中的exact ID/hash校验。不得仅放宽G5 validator。
+
+## 2026-08-10 00:01 JST — P6 G5 attempt 2 overconstrained stale learner process exit
+
+- Experiment ID `P6-G5-tiny-attempt2`，该正式门禁目标连续失败次数 2。PBS job `2512732.opbs` 的前两个no-fault static场景均通过current-only/terminal/token/artifact验证；第三个static replacement场景已SIGSTOP old、授权同logical launch新attempt、等待new admission并SIGCONT old，但old最终exit 0，harness把“必须nonzero”当作失败。
+- Production允许被替换old actor在恢复后先观察到terminal/current control并clean exit；安全不变量是old generation不得获得新admission、不得产生pending/selected/applied update或commit，而不是Unix exit code必须非零。当前场景在极短tiny workload中new/other actor可先完成terminal，因此0是合法race结果。
+- 修复为让old resume的process status只做诊断，并从authority断言old binding已进入`replaced` history、current binding精确为new attempt/generation且old attempt active/applied update计数为0。new/other/syncer仍必须clean exit；不得仅忽略old进程而缺少durable stale-commit证明。
