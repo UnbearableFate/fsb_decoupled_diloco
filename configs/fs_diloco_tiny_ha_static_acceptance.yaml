@@ -91,7 +91,6 @@ syncer:
   device: cuda
   compute_dtype: float32
   publish_dtype: float32
-  parallel_checkpoint_writes: true
 learner:
   poll_latest_during_inner_steps: false
   adopt_global_after_upload: true

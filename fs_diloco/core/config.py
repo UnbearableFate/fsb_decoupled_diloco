@@ -177,7 +177,6 @@ class SyncerSection(ConfigSection):
     device: str = "auto"
     compute_dtype: str = "float32"
     publish_dtype: str = "float32"
-    parallel_checkpoint_writes: bool = True
 
 
 @dataclass
@@ -476,7 +475,6 @@ def resolve_config(
     max_staleness_versions: int | None = None,
     global_adoption_strategy: str | None = None,
     completion_mode: str | None = None,
-    parallel_checkpoint_writes: bool | None = None,
     project_root: str | Path | None = None,
     profile: str | None = None,
 ) -> Config:
@@ -529,8 +527,6 @@ def resolve_config(
         config.learner.global_adoption_strategy = str(global_adoption_strategy)
     if completion_mode is not None:
         config.training.completion_mode = str(completion_mode)
-    if parallel_checkpoint_writes is not None:
-        config.syncer.parallel_checkpoint_writes = bool(parallel_checkpoint_writes)
     if config.sync.scan_interval_seconds <= 0.0:
         raise ValueError("sync.scan_interval_seconds must be > 0")
     if config.sync.staleness_lambda < 0.0:

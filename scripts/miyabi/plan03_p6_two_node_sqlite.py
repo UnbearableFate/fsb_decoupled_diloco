@@ -20,6 +20,7 @@ from fs_diloco.storage.leader_lease import LeaseUnavailableError, StaleLeaderTok
 
 
 PLAN_ID = "fsb_decoupled_diloco_plan_03_unified_ha"
+REQUIREMENTS_COVERED = ("AUTH-11", "P6-ACCEPTANCE")
 LEASE_SECONDS = 2.0
 CLOCK_SKEW_SECONDS = 0.1
 
@@ -406,7 +407,7 @@ def orchestrate(
         "status": "PASS" if not errors else "BLOCKED",
         "source_commit": source_commit,
         "source_identity": {"git_commit": source_commit, "git_dirty": dirty},
-        "requirements_covered": ["P6-ACCEPTANCE"],
+        "requirements_covered": list(REQUIREMENTS_COVERED),
         "pbs_job_id": os.environ.get("PBS_JOBID"),
         "hosts": list(hosts),
         "results": results,

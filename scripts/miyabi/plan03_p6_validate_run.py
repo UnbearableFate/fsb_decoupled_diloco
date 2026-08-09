@@ -261,6 +261,8 @@ def validate_run(
         row["state"] for row in terminal_fences
     } != {"acked"}:
         errors.append("terminal contributor fences are incomplete")
+    if not update_dtypes:
+        errors.append("run has no archived or recovery-hot update dtype evidence")
     rollup = rollup_rows[0] if len(rollup_rows) == 1 else None
     balance = _token_balance(rollup)
     if balance != 0 or (rollup is not None and int(rollup["direct_outstanding"]) != 0):

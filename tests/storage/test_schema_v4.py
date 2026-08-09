@@ -53,7 +53,12 @@ def test_fresh_v4_schema_initializes_reopens_and_is_integral(
                     str(row[1])
                     for row in connection.execute("PRAGMA table_info(launch_requests)").fetchall()
                 }
+                stream_columns = {
+                    str(row[1])
+                    for row in connection.execute("PRAGMA table_info(streams)").fetchall()
+                }
             assert {"reservation_released_at", "stream_id", "replace_instance_id"} <= columns
+            assert "last_receipt_id" not in stream_columns
         assert not (tables & {"fragments", "fragment_updates", "fragment_versions"})
     marker = database.with_name("authority_v4_bootstrap_complete.json")
     assert marker.stat().st_mode & 0o222 == 0

@@ -1298,6 +1298,99 @@ def test_immutable_audit_batch_precedes_exact_history_prune_and_preserves_rollup
             )
 
 
+def test_online_archive_retains_each_current_receipt_until_terminal_ack(
+    tmp_path: Path,
+) -> None:
+    clock = Clock()
+    database = tmp_path / "authority.sqlite3"
+    scope = StaticMembershipScope(("learner-0", "learner-1"))
+    initialize_authority_v4(database, _identity(), scope, wall_clock=clock)
+    with LeaderAuthority(database, _identity(), scope, wall_clock=clock) as authority:
+        leader = authority.open_leader(
+            authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
+        )
+        fences: dict[str, StaticContributorFence] = {}
+        for index in range(2):
+            binding = leader.bind_or_replace_static_attempt(
+                command_id=f"bind-{index}",
+                learner_id=f"learner-{index}",
+                logical_launch_id=f"launch-{index}",
+                attempt_id=f"attempt-{index}",
+            )
+            fences[f"learner-{index}"] = StaticContributorFence(
+                kind="static",
+                learner_id=binding.learner_id,
+                logical_launch_id=binding.logical_launch_id,
+                attempt_id=binding.attempt_id,
+                binding_generation=binding.binding_generation,
+            )
+        leader.initialize_v0(
+            command_id="v0",
+            publication_id="publication-v0",
+            **publish_checkpoint_pair(tmp_path, version=0),
+        )
+        receipts: dict[str, CycleReceiptV1] = {}
+        proposals: dict[str, FullUpdateProposalV2] = {}
+        for index in range(2):
+            key = f"learner-{index}"
+            receipts[key], proposals[key] = _ingest_static_cycle(
+                leader,
+                tmp_path,
+                fences[key].as_dict(),
+                sequence=1,
+                previous=None,
+                stable_contributor_key=key,
+                update_ordinal=index + 1,
+            )
+            _commit_next(leader, tmp_path, version=index + 1)
+
+        records = authority.read.audit_history_records(cutoff_version=1)
+        first_payload = build_audit_batch(
+            batch_id="open-history-through-v1",
+            record_kind="authority_history",
+            cutoff_version=1,
+            records=records,
+        )
+        first_path, first_sha = publish_audit_batch(RunPaths(tmp_path), first_payload)
+        leader.archive_audit_batch(
+            command_id="archive-open-v1",
+            batch_id="open-history-through-v1",
+            cutoff_version=1,
+            relative_path=RunPaths(tmp_path).relative(first_path),
+            sha256=first_sha,
+        )
+
+        with sqlite3.connect(database) as connection:
+            assert (
+                connection.execute(
+                    "SELECT COUNT(*) FROM cycle_receipts WHERE receipt_id=?",
+                    (receipts["learner-0"].receipt_id,),
+                ).fetchone()[0]
+                == 1
+            )
+
+        leader.begin_terminal_close(command_id="close", reason="target reached")
+        for index in range(2):
+            key = f"learner-{index}"
+            assert (
+                leader.acknowledge_terminal_contributor(
+                    command_id=f"ack-{index}",
+                    fence=fences[key],
+                    final_cycle_seq=1,
+                    final_update_id=proposals[key].update_id,
+                )
+                == "acked"
+            )
+        assert leader.finalize_terminal(command_id="finalize", reason="done").value == "finalized"
+
+        terminal_records = authority.read.audit_history_records(cutoff_version=1)
+        assert any(
+            record["table"] == "cycle_receipts"
+            and record["primary_key"] == receipts["learner-0"].receipt_id
+            for record in terminal_records
+        )
+
+
 def test_audit_archive_never_prunes_latest_version_or_blocks_next_commit(tmp_path: Path) -> None:
     clock = Clock()
     with _open_static(tmp_path, clock) as authority:

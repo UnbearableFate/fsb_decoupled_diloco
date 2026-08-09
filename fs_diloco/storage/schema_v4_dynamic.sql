@@ -12,7 +12,6 @@ CREATE TABLE streams (
     current_instance_id TEXT,
     state TEXT NOT NULL CHECK (state IN ('available', 'active', 'draining', 'retired')),
     resume_cursor INTEGER NOT NULL CHECK (resume_cursor >= 0),
-    last_receipt_id TEXT REFERENCES cycle_receipts(receipt_id),
     updated_at REAL NOT NULL
 );
 

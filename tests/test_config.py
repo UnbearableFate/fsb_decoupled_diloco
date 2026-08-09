@@ -69,7 +69,6 @@ def test_shared_overrides_are_explicit_and_do_not_reintroduce_runtime_modes(
         max_staleness_versions=0,
         global_adoption_strategy="predict_post_publish_global",
         completion_mode="local_or_global",
-        parallel_checkpoint_writes=False,
     )
 
     assert config.run.shared_root == str(tmp_path / "literal_override")
@@ -83,7 +82,6 @@ def test_shared_overrides_are_explicit_and_do_not_reintroduce_runtime_modes(
     assert config.sync.max_staleness_versions == 0
     assert config.learner.global_adoption_strategy == "predict_post_publish_global"
     assert config.training.completion_mode == "local_or_global"
-    assert config.syncer.parallel_checkpoint_writes is False
     assert not (
         {"init", "fragments", "failure_sim", "coordination"} & config_to_dict(config).keys()
     )

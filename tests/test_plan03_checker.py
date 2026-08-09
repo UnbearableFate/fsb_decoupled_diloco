@@ -11,6 +11,7 @@ import pytest
 import yaml
 
 from scripts.miyabi.check_plan03 import (
+    EXECUTABLE_SOURCE_SCOPES,
     inventory,
     verify_boundaries,
     verify_inventory,
@@ -59,6 +60,11 @@ def test_plan03_checker_cli_prints_only_pass_for_frozen_verification() -> None:
 
     assert result.stdout == "PASS\n"
     assert "Traceback" not in result.stderr
+
+
+def test_plan03_phase_source_cleanliness_covers_tests_and_entrypoint() -> None:
+    assert "tests" in EXECUTABLE_SOURCE_SCOPES
+    assert "main.py" in EXECUTABLE_SOURCE_SCOPES
 
 
 def test_plan03_checker_blocks_count_manifest_and_tag_drift() -> None:

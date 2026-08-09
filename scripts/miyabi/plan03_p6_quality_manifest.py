@@ -10,6 +10,8 @@ from pathlib import Path
 import uuid
 from typing import Any
 
+from fs_diloco.storage.atomic_io import fsync_directory
+
 
 PLAN_ID = "fsb_decoupled_diloco_plan_03_unified_ha"
 QUALITY_TEST_OWNERS = (
@@ -52,8 +54,12 @@ def _read(path: Path) -> dict[str, Any]:
 def _write(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    with temporary.open("x", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
     os.replace(temporary, path)
+    fsync_directory(path.parent)
 
 
 def main() -> None:

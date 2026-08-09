@@ -1,0 +1,19 @@
+{
+  "api_error_status": null,
+  "base_commit": "7f797e47d983878e25f9c48c1fddbeb9f0b2ea4f",
+  "canonical_model": "claude-opus-5",
+  "duration_api_ms": 1102828,
+  "exit_code": 0,
+  "is_error": false,
+  "model": "claude-opus-5",
+  "num_turns": 89,
+  "output_format": "json",
+  "permission_denials": [],
+  "report": "reports/DOING/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P6-acceptance-final-review/claude-opus-5_e3a89c784005acb6c92603d6fea24170bea4daf5.md",
+  "result_summary": "Review completed with CHANGES_REQUIRED; the report was written by the requested reviewer.",
+  "session_id": "8a46cbc6-0bb4-40a0-bc94-39cdcf249255",
+  "status": "completed",
+  "stop_reason": "end_turn",
+  "target_commit": "e3a89c784005acb6c92603d6fea24170bea4daf5",
+  "terminal_reason": "completed"
+}

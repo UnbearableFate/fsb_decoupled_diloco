@@ -12,7 +12,6 @@ from safetensors.torch import load_file, save, save_file
 from .atomic_io import (
     ImmutablePublication,
     atomic_write_with_writer,
-    publish_immutable_bytes,
     publish_immutable_with_writer,
 )
 from .tensor_identity import tensor_content_sha256
@@ -100,30 +99,6 @@ def encode_outer_state(
         metadata={"fs_diloco_theta_sha256": theta_sha256},
     )
     return payload, theta_sha256
-
-
-def publish_global_weights_immutable(
-    path: str | Path,
-    theta: torch.Tensor,
-    param_index: dict,
-    *,
-    dtype: torch.dtype | None = None,
-) -> tuple[ImmutablePublication, str]:
-    payload, theta_sha256 = encode_global_weights(theta, param_index, dtype=dtype)
-    publication = publish_immutable_bytes(path, payload)
-    return publication, theta_sha256
-
-
-def publish_outer_state_immutable(
-    path: str | Path,
-    theta: torch.Tensor,
-    state: dict[str, torch.Tensor],
-    *,
-    dtype: torch.dtype | None = None,
-) -> tuple[ImmutablePublication, str]:
-    payload, theta_sha256 = encode_outer_state(theta, state, dtype=dtype)
-    publication = publish_immutable_bytes(path, payload)
-    return publication, theta_sha256
 
 
 def load_safetensors(

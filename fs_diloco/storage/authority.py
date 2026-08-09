@@ -5692,14 +5692,28 @@ def _audit_history_records(
     safe_cutoff = (
         -1 if latest_version is None else min(int(cutoff_version), int(latest_version) - 1)
     )
+    controller = connection.execute(
+        "SELECT state FROM controller_state WHERE singleton=1"
+    ).fetchone()
+    protect_current_receipts = int(
+        controller is None or str(controller["state"]) not in {"finalized", "error"}
+    )
 
     batch_rows = connection.execute(
         """
         SELECT b.* FROM selection_batches AS b
         WHERE b.target_version<=? AND b.state IN ('committed', 'abandoned')
+          AND (
+            ?=0 OR NOT EXISTS (
+              SELECT 1 FROM selection_batch_updates AS bu
+              JOIN updates AS u ON u.update_id=bu.update_id
+              JOIN contributor_progress AS p ON p.last_receipt_id=u.cycle_receipt_id
+              WHERE bu.batch_id=b.batch_id
+            )
+          )
         ORDER BY b.batch_id
         """,
-        (safe_cutoff,),
+        (safe_cutoff, protect_current_receipts),
     ).fetchall()
     batch_ids = {str(row["batch_id"]) for row in batch_rows}
     publication_rows = connection.execute(
@@ -5727,9 +5741,13 @@ def _audit_history_records(
     update_rows = connection.execute(
         """
         SELECT u.* FROM updates AS u
-        WHERE u.status IN ('applied', 'dropped')
+        LEFT JOIN contributor_progress AS p
+          ON ?=1 AND p.last_receipt_id=u.cycle_receipt_id
+        WHERE p.stable_contributor_key IS NULL
+          AND u.status IN ('applied', 'dropped')
         ORDER BY u.update_id
-        """
+        """,
+        (protect_current_receipts,),
     ).fetchall()
     update_rows = [
         row

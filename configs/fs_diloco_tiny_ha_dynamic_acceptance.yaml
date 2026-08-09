@@ -133,7 +133,6 @@ syncer:
   device: cpu
   compute_dtype: float32
   publish_dtype: bfloat16
-  parallel_checkpoint_writes: true
 learner:
   poll_latest_during_inner_steps: false
   adopt_global_after_upload: true
