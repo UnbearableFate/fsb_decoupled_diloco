@@ -27,6 +27,9 @@ from fs_diloco.tools.init_run import initialize_run
 
 
 PLAN03_REQUIREMENTS = frozenset({"ENV-01", "INIT-01"})
+MODEL_COMMIT = "a" * 40
+TOKENIZER_COMMIT = "b" * 40
+DATASET_COMMIT = "c" * 40
 
 
 class InjectedCrash(RuntimeError):
@@ -43,9 +46,9 @@ def _config(tmp_path: Path, name: str = "run"):
     shared.run.git_commit = "a" * 40
     shared.run.git_dirty = False
     shared.run.source_fingerprint = "sha256:source"
-    shared.model.revision = "model-revision"
-    shared.model.tokenizer_revision = "tokenizer-revision"
-    shared.data.revision = "dataset-revision"
+    shared.model.revision = MODEL_COMMIT
+    shared.model.tokenizer_revision = TOKENIZER_COMMIT
+    shared.data.revision = DATASET_COMMIT
     return ConfigV4(shared=shared)
 
 
@@ -76,8 +79,8 @@ def test_each_precomplete_crash_prefix_is_invisible_and_same_staging_retry_recov
     initialize_run(config, project_root=tmp_path)
     loaded = load_run_descriptor(config.shared.run.shared_root)
     assert loaded.descriptor["shared_root"] == str(Path(config.shared.run.shared_root).resolve())
-    assert loaded.descriptor["model_identity"]["revision"] == "model-revision"
-    assert loaded.descriptor["dataset_identity"]["revision"] == "dataset-revision"
+    assert loaded.descriptor["model_identity"]["revision"] == MODEL_COMMIT
+    assert loaded.descriptor["dataset_identity"]["revision"] == DATASET_COMMIT
     assert (
         find_reserved_staging(
             Path(config.shared.run.shared_root).resolve(), allow_missing_owner=True
@@ -120,7 +123,7 @@ def test_retry_and_completed_replay_bind_the_entire_resolved_config_identity(
 
     with pytest.raises(InjectedCrash):
         initialize_run(staged, project_root=tmp_path, fault_hook=crash)
-    staged.shared.data.revision = "different-dataset-revision"
+    staged.shared.data.revision = "d" * 40
     with pytest.raises(FileExistsError, match="full config identity"):
         initialize_run(staged, project_root=tmp_path)
 

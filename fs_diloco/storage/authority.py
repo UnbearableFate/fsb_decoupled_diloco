@@ -1600,13 +1600,6 @@ class LeaderSession:
         result = self._command(command_id, "ingest_proposal", request, operation)
         return ProposalDisposition(result["disposition"])
 
-    def record_proposal(
-        self, *, command_id: str, proposal: FullUpdateProposalV2
-    ) -> ProposalDisposition:
-        """Compatibility spelling for early P1 callers; production uses ingest_proposal."""
-
-        return self.ingest_proposal(command_id=command_id, proposal=proposal)
-
     def observe_proposal_visibility(
         self,
         *,

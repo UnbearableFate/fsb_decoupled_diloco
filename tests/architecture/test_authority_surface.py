@@ -29,7 +29,6 @@ def test_named_write_commands_are_explicit_methods() -> None:
         "admit_dynamic_incarnation",
         "ingest_cycle_receipt",
         "ingest_proposal",
-        "record_proposal",
         "observe_proposal_visibility",
         "try_select_batch",
         "prepare_publication",

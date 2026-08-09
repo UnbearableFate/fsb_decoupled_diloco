@@ -19,12 +19,12 @@ sync:
 ## 关键字段
 
 - `run`：name、run ID、shared root 模板、source/git identity。
-- `model`：model/tokenizer revision、dtype、compile、synthetic shape。
-- `data`：dataset/revision/split/block size/indexed shuffle。v4 full 拒绝 `streaming: true`，因为它不能精确恢复 cursor。
+- `model`：model/tokenizer revision、dtype、compile、synthetic shape。Hub-backed Full v4 model 必须使用 40 位小写 commit SHA；未单独填写 tokenizer revision 时继承 model revision。
+- `data`：dataset/revision/split/block size/indexed shuffle。Hub-backed Full v4 dataset 同样必须固定到 40 位小写 commit SHA；v4 full 拒绝 `streaming: true`，因为它不能精确恢复 cursor。
 - `training`：inner steps、micro batch、gradient accumulation、precision、seed、local completion。
 - `inner_optimizer` / `outer_optimizer`：local AdamW/scheduler 与 global outer step。
 - `sync`：learner/quorum、staleness、scan、grace、stop target。
-- `syncer`：device、compute/publish dtype 和 checkpoint write policy。
+- `syncer`：device 与 compute/publish dtype。
 - `learner`：global adoption strategy 与 prediction timing。
 - `membership`：`static|dynamic`、stream pool、bootstrap count、admission/heartbeat timeouts。
 - `scaling`：dynamic scheduler policy/budgets。连续低容量、productive/startup grace、cooldown、pending/total budget、launch TTL、observation retention、reconcile/uncertainty timeout 和 learner PBS script/walltime/queue 都由 runtime service 使用；启用时 walltime 必须是显式合法且不少于 `00:10:00` 的 `HH:MM:SS`。
@@ -35,6 +35,8 @@ sync:
 - `torch_baseline`：独立 baseline profile；不能用 full_v4 profile 伪装。
 
 所有 numeric identity/timeout 都拒绝 bool、NaN 和 infinity。leader lease 至少覆盖 renew/heartbeat/clock-skew 约束；publication orphan grace 至少覆盖 lease 加两倍 clock skew。
+
+synthetic model/data 和以 `/`、`./`、`../` 或 `file://` 明确标识的本地输入不经过 Hub commit 校验；Torch baseline profile 也保持自己的兼容规则。除此之外，tag、branch、短 SHA、空 revision 和大写 SHA 都会被 Full-v4 loader拒绝。repository-owned GPT-2/WikiText 配置固定到 cache-verified snapshots：model/tokenizer `607a30d783dfa663caf39e06633721c8d4cfcd7e`，dataset `b08601e04326c79dfdd32d625aee71d232d685c3`。
 
 ## 已删除字段
 
@@ -57,7 +59,7 @@ sync:
 
 ## Migration
 
-`tools.migrate_config_v3_to_v4` 默认 dry-run。输出路径 create-no-replace；repository-owned in-place migration 同时要求 `--in-place` 和原文件 `--expected-sha256`，publication 前再次核对 source identity。Fragment config 或语义不明确的旧 token stop 不自动迁移。
+`tools.migrate_config_v3_to_v4` 默认 dry-run。输出路径 create-no-replace；repository-owned in-place migration 同时要求 `--in-place` 和原文件 `--expected-sha256`，publication 前再次核对 source identity。Fragment config 或语义不明确的旧 token stop 不自动迁移。迁移工具不会猜测 Hub 内容 identity：旧配置若使用 Hub model/data，必须先由操作者写入经过核验的 immutable commit SHA，才能产生可用于 fresh Full-v4 run 的配置。
 
 旧 in-progress run state 不迁移。迁移配置只用于创建 fresh v4 attempt；不要把 v4 resolved config 写回旧 run root。
 

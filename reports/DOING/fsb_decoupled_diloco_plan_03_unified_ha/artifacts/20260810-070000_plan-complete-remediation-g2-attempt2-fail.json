@@ -1,0 +1,2008 @@
+{
+  "artifact_version": 1,
+  "commands": {
+    "collect": {
+      "command": [
+        "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+        "-m",
+        "pytest",
+        "--collect-only",
+        "-q"
+      ],
+      "elapsed_seconds": 103.50166083598742,
+      "log": "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/qsub_plan03_p6_g2_2514477/collect.log",
+      "returncode": 0
+    },
+    "focused": {
+      "command": [
+        "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/architecture",
+        "tests/legacy",
+        "tests/observability",
+        "tests/protocol",
+        "tests/runtime",
+        "tests/storage",
+        "tests/tools",
+        "tests/test_clean_run.py",
+        "tests/test_config.py",
+        "tests/test_plan03_checker.py",
+        "tests/test_torch_baseline_artifacts_and_data.py",
+        "tests/test_torch_baseline_health.py",
+        "tests/test_torch_baseline_protocol.py",
+        "--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/logs/qsub_plan03_p6_g2_2514477/focused.xml"
+      ],
+      "elapsed_seconds": 41.402613209036645,
+      "log": "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/qsub_plan03_p6_g2_2514477/focused.log",
+      "returncode": 1
+    },
+    "full": {
+      "command": [
+        "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/logs/qsub_plan03_p6_g2_2514477/full.xml"
+      ],
+      "elapsed_seconds": 115.38127727498068,
+      "log": "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/qsub_plan03_p6_g2_2514477/full.log",
+      "returncode": 1
+    }
+  },
+  "environment": {
+    "pbs_job_id": "2514477.opbs"
+  },
+  "errors": [
+    "test command returned 1: ['/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python', '-m', 'pytest', '-q', 'tests/architecture', 'tests/legacy', 'tests/observability', 'tests/protocol', 'tests/runtime', 'tests/storage', 'tests/tools', 'tests/test_clean_run.py', 'tests/test_config.py', 'tests/test_plan03_checker.py', 'tests/test_torch_baseline_artifacts_and_data.py', 'tests/test_torch_baseline_health.py', 'tests/test_torch_baseline_protocol.py', '--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/logs/qsub_plan03_p6_g2_2514477/focused.xml']",
+    "test command returned 1: ['/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python', '-m', 'pytest', '-q', '--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/logs/qsub_plan03_p6_g2_2514477/full.xml']",
+    "focused suite has failures/errors: {'tests': 664, 'failures': 58, 'errors': 0, 'skipped': 0}",
+    "full suite has failures/errors: {'tests': 792, 'failures': 58, 'errors': 0, 'skipped': 2}",
+    "formal executable source scope is dirty"
+  ],
+  "gate": "G2-focused-full-tests",
+  "metrics": {
+    "focused": {
+      "errors": 0,
+      "failures": 58,
+      "skipped": 0,
+      "tests": 664
+    },
+    "full": {
+      "errors": 0,
+      "failures": 58,
+      "skipped": 2,
+      "tests": 792
+    }
+  },
+  "phase_id": "P6-acceptance-final-review",
+  "plan_id": "fsb_decoupled_diloco_plan_03_unified_ha",
+  "requirements_covered": [],
+  "source_commit": "e0f4c9b88eab4a462c49e9746d8ac5da8fb8c6b0",
+  "source_identity": {
+    "captured_at": 1786312754.6391258,
+    "fingerprint_format": 1,
+    "git_commit": "e0f4c9b88eab4a462c49e9746d8ac5da8fb8c6b0",
+    "git_dirty": true,
+    "source_files": [
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": ".python-version",
+        "sha256": "02e735b3dfe1c32833eb550b7ff8ffa17f5f2bc3fa1e7bae61a8f5a3883ce398",
+        "size_bytes": 5
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/5000/fs_diloco_gpt2_wikitext2_8l_200x25steps.yaml",
+        "sha256": "c1bc1402ad5d3d53b24d1eb37ef7a3d4edd178161dd641e91dec9bd7a59e86b9",
+        "size_bytes": 2121
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_gpt2_wikitext2_1l_debug.yaml",
+        "sha256": "6015b16caa657dcff9421a033bb87b34848a38b3e3f29aac0134ff9c381792c5",
+        "size_bytes": 1748
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_gpt2_wikitext2_1l_rebase_state_debug.yaml",
+        "sha256": "731464918d8a84fefca5bf9a899f245ccf4279f538fbbadcad1d871af8fa028a",
+        "size_bytes": 1938
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_gpt2_wikitext2_8l.yaml",
+        "sha256": "ad098c9f89c56648845b29879f64e1724e14856cb0be50ddb62e05399e93dee0",
+        "size_bytes": 1809
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_gpt2_wikitext2_8l_5000steps.yaml",
+        "sha256": "b0c78776f84e3dcaf96bfffd41f155e796aa28641fc48a0190892b1b72c4d0bd",
+        "size_bytes": 2121
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_predict.yaml",
+        "sha256": "36d06550567e1f132f34bdcb8956a62208f7a5ead7d748099f06b45aa38c9e36",
+        "size_bytes": 2242
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_predict_bf16all_cuda.yaml",
+        "sha256": "1973c502ba3d2aa1e411b8504fcf02a453c5aa49cd502507377d33b74d14fc29",
+        "size_bytes": 2330
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_rebase_bf16all_cuda.yaml",
+        "sha256": "68f5f7f3f09795e1103015cbcf245eb2c742e196cfa822499e889e9f25a7295a",
+        "size_bytes": 2273
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_wait2p5.yaml",
+        "sha256": "d87f3d4b06bb76f157b2d81af98cf5a94ed07d1b9c1a02413d540de3042b520e",
+        "size_bytes": 2135
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_gpt2_wikitext2_8l_5000steps_wait2p5_predict.yaml",
+        "sha256": "9f2169772ef2605850414c5e2e61187de95856005de799e22922f1d470bab4fa",
+        "size_bytes": 2272
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_gpt2_wikitext2_8l_acceptance.yaml",
+        "sha256": "17dbc0e3aef652e406c48298eb0d110623341f8602669183cf9bfc0acd2b0c05",
+        "size_bytes": 1755
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_tiny_adaptive_global_stop.yaml",
+        "sha256": "3cfa7a7cd7ce2de9b79b584b22af60b713d00c8c5bdbf2b4bf463e90541f31c0",
+        "size_bytes": 1729
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_tiny_ha_dynamic_2node.yaml",
+        "sha256": "1552c79d81f7db28c363427675380bbd19287f6175c70040dc5fb7fd47ce5591",
+        "size_bytes": 3277
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_tiny_ha_dynamic_acceptance.yaml",
+        "sha256": "68b43fb108cbcecd06f0ec68095283e36cddeb428687dc46a65400a037456ed6",
+        "size_bytes": 3652
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_tiny_ha_static.yaml",
+        "sha256": "40d654ac0576f3df2fe5901a2fa59684539928a16fb5bdc52a66affd1741a20d",
+        "size_bytes": 2067
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_tiny_ha_static_acceptance.yaml",
+        "sha256": "e1b5b7381e8945ebdc33fad46ec8da5dd38fad37f8b0de7ead111ee16be18a3a",
+        "size_bytes": 2227
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_tiny_local.yaml",
+        "sha256": "376caf5e526676254f167e6d6fbe13bdcc0cdd68e8e5926cae238fe6ed1221fc",
+        "size_bytes": 1608
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_tiny_midcycle_replace_local.yaml",
+        "sha256": "0d677322de45827eaf95b4bd4951a1171189898017af0d6a997f39aa4b4cb7d3",
+        "size_bytes": 1803
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_tiny_predict_bf16_gpu.yaml",
+        "sha256": "07191b3f6658a78280f5a844b23894639a84c6a126ad7eace77a9458c22d1113",
+        "size_bytes": 1807
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_tiny_predict_local.yaml",
+        "sha256": "33d7c08cc662123e0cfb75350def1babb1b19b20a437cb31d2eff68f7befb766",
+        "size_bytes": 1921
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_tiny_publish_ingest_local.yaml",
+        "sha256": "3df6c0781bfd3e8409d043cb718fc1e563ad183028da7aa88f4fba39043e9d87",
+        "size_bytes": 1653
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_tiny_rebase_local.yaml",
+        "sha256": "cbbf7be563e4a4a87faeed2346377664b2c0ee3f6d619c95345e282827c3e315",
+        "size_bytes": 1869
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_tiny_scheduler_replace_local.yaml",
+        "sha256": "1d44ebb60e6590d754ff2905cca07990c37479b6924c8d79f9879313c13ab09e",
+        "size_bytes": 1708
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_tiny_syncer_bf16_gpu.yaml",
+        "sha256": "7c534b8baae0657f5f17fdd8473e019888ac3882f9f8e2e80a3338c5227d9285",
+        "size_bytes": 1621
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_tiny_wait_local.yaml",
+        "sha256": "9a52a45cab1d67b276a68fb7265cc45c5dd93c55fe28f6ce885304929904f69c",
+        "size_bytes": 1770
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/fs_diloco_tiny_watchdog_local.yaml",
+        "sha256": "d80a0892296ae2c99b2e47f912dbc10debb16dee92c33ba9cb7df76d0bb2c4dd",
+        "size_bytes": 1632
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/torch_baseline_gpt2_wikitext2_1rank_debug.yaml",
+        "sha256": "05022dc7c0b2d1c8be21fdc83f8c8b43283a0f896a2621d4f6af7097b163df94",
+        "size_bytes": 1108
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/torch_baseline_gpt2_wikitext2_2rank_debug.yaml",
+        "sha256": "181c89308ab40adb98c376859d4e4e316237b1dccdcd4272486fab3757b2e7fc",
+        "size_bytes": 1108
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/torch_baseline_gpt2_wikitext2_8n_5000steps.yaml",
+        "sha256": "e987e440c1f48294ef76f14cdc3d903c24cdd4350cc9a637af77716db24fe8c3",
+        "size_bytes": 1253
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "configs/torch_baseline_tiny_2rank.yaml",
+        "sha256": "52e9831140d57097e072a34aa68d05e6017d470b6e9ee4244a94886efde4202d",
+        "size_bytes": 1020
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/00-glossary.md",
+        "sha256": "0c6005b193df78ee24e0654b1c9578ff8a69aebb3e13e2417a7471ef1bea8a42",
+        "size_bytes": 2508
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/01-overview.md",
+        "sha256": "4228235fa4b1d211e5b37e620ab7eaed7ed6827f64711e9ad9ec7b3ea39774bb",
+        "size_bytes": 2879
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/02-architecture.md",
+        "sha256": "ba4620490947543046dbe2db73f18a34a6f4ff9ffab11fa4c9c58cbbffe3d695",
+        "size_bytes": 4305
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/03-runtime-flow.md",
+        "sha256": "104df5e04543376e37489f676c43a4d293958cbb3503fb37ffc0c3e26957cf9b",
+        "size_bytes": 4217
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/04-data-flow.md",
+        "sha256": "e15e308a1088da91007a33632e236fe363fbad33a7dae3bf989484be64cb850f",
+        "size_bytes": 5833
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/05-code-structure.md",
+        "sha256": "455149626d95e2ad8d15e0a81f2426251eb5695de9749c696b0e893ccf239d6b",
+        "size_bytes": 3487
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/06-configuration.md",
+        "sha256": "c45423acb06377b97ba477808b040b7f3c66332d1db6f22b5fad14675bfd456c",
+        "size_bytes": 4483
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/07-operations.md",
+        "sha256": "38be09fda2383f1fa441adfe94b32b94ac9573f159de1ce288644b2c710a15bc",
+        "size_bytes": 5487
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/08-compatibility-and-migration.md",
+        "sha256": "af16f6f6ded9aa6cd00954c28feda438bfb0b0b16ce2c1042347149f61d59542",
+        "size_bytes": 2938
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/README.md",
+        "sha256": "d0660a3f645ad3fe11ea4b326e3645a25b26fa7a1d80621274ec95beaef60685",
+        "size_bytes": 1011
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/modules/core.md",
+        "sha256": "020bab5c2a78d334eddbacb51eb95c043ce84b79a41d7f3b81df78624f55793d",
+        "size_bytes": 1492
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/modules/modeling.md",
+        "sha256": "e0a31d943800a68901c9b1394bc20c81b0bc814ba438c3a06bf3706ff46bdb1e",
+        "size_bytes": 757
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/modules/observability.md",
+        "sha256": "875519796b78da46e082188be1927cfa3f92ca219c453e91ceb6b001de09cb7f",
+        "size_bytes": 814
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/modules/protocol.md",
+        "sha256": "aea0b0dec756e9e15c6fb0f75ab1b4568a6ae33c6a2b8b88e686fc77575a2f54",
+        "size_bytes": 1180
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/modules/runtime-learner.md",
+        "sha256": "914d727fd8473ea8bf5cd90011cff3d571289e7684901a6f315d00db179df23b",
+        "size_bytes": 1701
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/modules/runtime-syncer.md",
+        "sha256": "6e79676cfe37474b6d1962ae845738a9e9dda21b292f26254a84bc8dbf032f94",
+        "size_bytes": 1678
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/modules/scripts.md",
+        "sha256": "1cf5a406c069e320dbb649f2d60ccf308e2847ec1edeb7458d6c4108544f28fd",
+        "size_bytes": 1112
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/modules/storage.md",
+        "sha256": "2b6c3374640b4ddb756cb84c06adc9718a4ef0c50240a4dab9427b80dbe2fa64",
+        "size_bytes": 2774
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "docs/modules/tools.md",
+        "sha256": "60f61657a7f2875e54566e60d18ac879e84b81f249733fddc43f5c370f3199ec",
+        "size_bytes": 1561
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/__init__.py",
+        "sha256": "de81b374df20f6690aba0226c051924f69a6fa206abd36b5fa3c6fb37d17dd7e",
+        "size_bytes": 102
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/analysis.py",
+        "sha256": "5ff8dc4375b2aff600ac2c70fd70f3835964a6bed76b183183b566bcc5061925",
+        "size_bytes": 258
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/baselines/__init__.py",
+        "sha256": "1595b0a53e251a2d6880370b489e84be79dbfd75b94ed8367e6e0896501166ad",
+        "size_bytes": 51
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/baselines/artifacts.py",
+        "sha256": "b18371c64a8362dbc3657d59aad14ddd4380c9f9d2228830911ff63425ce4e16",
+        "size_bytes": 6101
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/baselines/health.py",
+        "sha256": "63dbaa71391d2fbf73d86220418b1314eb66733a4fff5d788c6b5b05c50352ef",
+        "size_bytes": 12422
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/baselines/protocol.py",
+        "sha256": "4919f2e26c8d6da22028f26d66286cff7f2f51004d230672bc51c0ad9bbc1fc9",
+        "size_bytes": 6293
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/baselines/train.py",
+        "sha256": "e8734f0ffdbe04e0d55757c6d737f73fbf6d1eb008c952e22cabf059f365000d",
+        "size_bytes": 20342
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/cli.py",
+        "sha256": "8d6ce8ce947301146f154fd1cf6a8074d88ad98d53f9779e70804a974d5e89ce",
+        "size_bytes": 815
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/core/__init__.py",
+        "sha256": "45253b8a4d3a42ce30942e47ea2bc27b4659771d3822e2ef1c2a28ece8b8c1b1",
+        "size_bytes": 44
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/core/adoption_rules.py",
+        "sha256": "ad5d49c741b95f60ad24bc836a93f6d057ccf1249d2d8f5144ae2410a4e61c5c",
+        "size_bytes": 1285
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/core/config.py",
+        "sha256": "98fb408e66d1c51c2abf7bc2011fbc96e920011b56685c0d67e238dce55794c2",
+        "size_bytes": 32666
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/core/config_v4.py",
+        "sha256": "4d987697f27eea7a1fae947d43eae359aeafd0614735007d6b5f86aead74e49c",
+        "size_bytes": 23273
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/core/constants.py",
+        "sha256": "f9b5261f1273e8d5416c871011f63600eaf80d4be2c8cd5e59d695e1296a233d",
+        "size_bytes": 133
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/core/run_descriptor.py",
+        "sha256": "7967a937657de138ae9a3e8c3dffb60d9f74609047404d204d0ac168c5807fcf",
+        "size_bytes": 10905
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/core/versions.py",
+        "sha256": "9db1c8b111c28138bb0d594d544ccf3af27eb4739c5260845b132c765ceada0b",
+        "size_bytes": 773
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/eval_lm_harness.py",
+        "sha256": "385424162400ae3d96727819ae9bcee34a892b5d506b8d7b46d763d22fbc3ecb",
+        "size_bytes": 322
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/learner.py",
+        "sha256": "d175180edab991a0a908cee01da2b7500d3d565f9184b5de84bc673a042a3ba9",
+        "size_bytes": 220
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/legacy/__init__.py",
+        "sha256": "a1f65d04bc8bea49e9fa958e8a80f82a7a2dac7dd67feefa40c3bb841cd1365f",
+        "size_bytes": 503
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/legacy/config_v1_v3.py",
+        "sha256": "33c4d6ba0ed2bf632a45d53513757776bfd2556e758ec9c4561e195ee3ad41a1",
+        "size_bytes": 4694
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/legacy/fragment_v0.py",
+        "sha256": "127070ef1fe6d0de3cf4ac9246c5df62d9c2a3569e112a45e234fb727fdf04b1",
+        "size_bytes": 4010
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/legacy/reader.py",
+        "sha256": "5f3b1f5ea92b4649ec121da5e54d94118321834c8de97238f3a1d62dce8f7dee",
+        "size_bytes": 6908
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/modeling/__init__.py",
+        "sha256": "54d8e35d40904bed25e601d4f14f6aba808b541c71c7c38998ee88fd852a059a",
+        "size_bytes": 62
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/modeling/hf_data.py",
+        "sha256": "6f1bff521870ed88a5ff643921d860d22067d5c68fa17dec9475a9c8c3925719",
+        "size_bytes": 9596
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/modeling/hf_model.py",
+        "sha256": "d67423763cb205579e7b487bf87d3b15a1b03247f5effedb4c5c18acfca7c66e",
+        "size_bytes": 3257
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/modeling/outer_optim.py",
+        "sha256": "e6f9806f2d5246a9373a6b8e1e1116eff6d307f64b0215d0c074dd40d0f2f658",
+        "size_bytes": 5097
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/modeling/param_index.py",
+        "sha256": "3d9330520cbedd4c26ce047e6d3e9020008b084126fe7ae4bffe0cdff71fc7dc",
+        "size_bytes": 5674
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/modeling/training.py",
+        "sha256": "f8dcc92393114e81f0b59331b05b7b990bead208e251dd990e1ab60b0ff37c1c",
+        "size_bytes": 3364
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/observability/__init__.py",
+        "sha256": "7edc105449dedb56545584c3dbfcdc6cd826ff98e4a919e14d683693b1b17ccc",
+        "size_bytes": 62
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/observability/logging_utils.py",
+        "sha256": "4a58b5c593770210316f8386e2ad01def00c50c65378a5d09cba050a2ebdf96e",
+        "size_bytes": 3733
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "fs_diloco/observability/resource_monitor.py",
+        "sha256": "8cf07b81e2365ed25260dd43d7dfea7144365460481620c086ef04ad0c46a368",
+        "size_bytes": 7007
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/observability/wandb_logging.py",
+        "sha256": "2684e8e10420929703f6520f855dcbe9664f6328d2a0c6e5ab1b1efc00fcded4",
+        "size_bytes": 5075
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/protocol/__init__.py",
+        "sha256": "be43ed79751e534d5f2616472bdc0fbaac04cc8deecc790be6c9f719e1298d9d",
+        "size_bytes": 1868
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/protocol/_validation.py",
+        "sha256": "5fc7a13416046ceb70f7f774726c6c1ce2e661cfc5b5720a6fe131d53a6b8205",
+        "size_bytes": 3814
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/protocol/authority.py",
+        "sha256": "840605d26e1968c934bdb32b7dc81aa4b106f2f040f59e4800bf8dfb35b28c08",
+        "size_bytes": 11045
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/protocol/contributor.py",
+        "sha256": "4e6794e1c6bfaf2e161cc9fe301736d907dd3e79b9aba19150c63d1d6a5abd31",
+        "size_bytes": 6513
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/protocol/cycle_receipt.py",
+        "sha256": "0be29bf2c0859c601b9f991f5ed0c0870a1ea05950a3deb52a74ee192f8fcaae",
+        "size_bytes": 12024
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/protocol/data_cursor.py",
+        "sha256": "a1339dd129c68ae9b7bdb1ca7397c80369bd8399acb3b0212d0504399cfc9b55",
+        "size_bytes": 3833
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/protocol/merge.py",
+        "sha256": "d25bf5e65887515914670c077d40d3b189c9b139d5acf7fe47ff79e2c16a3fb2",
+        "size_bytes": 3302
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/protocol/proposal.py",
+        "sha256": "fb8dadfffb7aed613cbd028c8710384d21856eab32632dd6a55aba5e6b7bb442",
+        "size_bytes": 12399
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/protocol/scheduler.py",
+        "sha256": "bdbd152b08c0705be22eb299c83695b7b03ad5d229632ddce61673ccfbe2c935",
+        "size_bytes": 4727
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/protocol/selection.py",
+        "sha256": "eb1d9e50ad18b80d24c1d8be9295bc2a73ab6613defc27cb08d44e5bd00e8fce",
+        "size_bytes": 2122
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/protocol/token_accounting.py",
+        "sha256": "39a08d12622dca582026b93f03e92724dceb44c4e9f50b9aeb61818ba45340ed",
+        "size_bytes": 6889
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/runtime/__init__.py",
+        "sha256": "de02c15d0ad18f4b21f5c188d08d9a602f8c7826494a9d660a4b2a013527fccc",
+        "size_bytes": 43
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/runtime/adoption.py",
+        "sha256": "6a3f0172d1ea0e097b86919a7f07f74d0db8bf1680f0b99e30653306fbb2fea0",
+        "size_bytes": 23093
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "fs_diloco/runtime/learner_control.py",
+        "sha256": "91a02f424af16ee6de5af74ff3dd4895b3bc7e324493081c038533e028c36434",
+        "size_bytes": 1049
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/runtime/learner_entrypoint.py",
+        "sha256": "0686ad1545eb1a2e6dec913876da1191215125e05e833c7a546ac6aaa7e79355",
+        "size_bytes": 8866
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/runtime/learner_v4.py",
+        "sha256": "9c0339e3f6e0f5ca909afe3f93c4dd4f4d25ccac39b7acc8618f8459bcec18c0",
+        "size_bytes": 30735
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/runtime/pbs_scheduler.py",
+        "sha256": "1b79a294bbbad7a7f48045772060e8222d3e9f1700c318691e67f8026414e9f2",
+        "size_bytes": 9273
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/runtime/services/__init__.py",
+        "sha256": "e829b137daa3aa966ceaf3715212cdc23821bfe3ee264fb744f6609ecc6f9640",
+        "size_bytes": 453
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/runtime/services/dynamic_capacity.py",
+        "sha256": "2f4eaaf4daef4b147770c825eb15678dc8aada91adb49335f116ff46d509c21a",
+        "size_bytes": 28400
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "fs_diloco/runtime/services/maintenance.py",
+        "sha256": "516403c7deb6bbfd10ca9037ec63dbaa4072e1b1ab1fdb90e263b554ba497323",
+        "size_bytes": 8838
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/runtime/services/merge.py",
+        "sha256": "ececf35abf37ed0e58185f4f3f7599b9a8c51fdd3cb56ab3bc04fabb6d257a3a",
+        "size_bytes": 7149
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/runtime/services/terminal.py",
+        "sha256": "7f9e5b9ec6c7eda4165d49883a8dae999cb8628fa7040fd887b11e8381bc56fe",
+        "size_bytes": 13438
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/runtime/syncer_entrypoint.py",
+        "sha256": "91245abc6ce7e37e9d0de9b3858abe6d73d596a4b41d30dee77a63b600c33495",
+        "size_bytes": 10153
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/runtime/syncer_v4.py",
+        "sha256": "47eb7047b7efd77f4dcbbf638fa8ffe6f0faf806a36f16977c33b767e1db1c57",
+        "size_bytes": 36253
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/storage/__init__.py",
+        "sha256": "1833b6d26b91444474f186b0b9566af0cb9f89d62affd35170d3bd005e0be707",
+        "size_bytes": 244
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/storage/admission.py",
+        "sha256": "6fed5ce61c9feac46ce8c308bc99eec5e33027c5b9b2c2edd8f6f1157972f6a9",
+        "size_bytes": 43827
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/storage/artifact_policy.py",
+        "sha256": "262c662caa321137e90715b69a023c27392b8d7637f95ed07bc77465641b4250",
+        "size_bytes": 7502
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/storage/atomic_io.py",
+        "sha256": "2c14590ee9c626f44055f12f30155180effc53d432c8d8040d116dae4d9fb9ae",
+        "size_bytes": 6740
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/storage/audit_archive.py",
+        "sha256": "f6790b5ca8af904066ce122d465c906b460fc2047580bc14fd35e566fae97ad2",
+        "size_bytes": 15745
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/storage/authority.py",
+        "sha256": "3f22743df3d5127d0ec9298259b8fe4e92d89eeebdd46cd6a4ee52bf7f996cb5",
+        "size_bytes": 261287
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/storage/control.py",
+        "sha256": "f873d68b497685900da49833336afdae79011f719bce1ecccf6d34953057ebfe",
+        "size_bytes": 24500
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/storage/leader_lease.py",
+        "sha256": "be530e32ee1d323144a799f3706962cac8af81d55090d7c8e40c82438ab85a44",
+        "size_bytes": 3230
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/storage/object_store.py",
+        "sha256": "a566499b92b88a96d6fd998c0770bfad0e24b0ba2d46b487fde76408cd74c185",
+        "size_bytes": 21066
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/storage/paths.py",
+        "sha256": "6323fcabe8a2e7e15f3ffa7d582844fd07d4e648db79d1888eada44046ef8be9",
+        "size_bytes": 13532
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/storage/run_initializer.py",
+        "sha256": "d069159b78250beb5aed00caa5da84d2cc954cde285a7c8e5d6f76b228941198",
+        "size_bytes": 25266
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/storage/schema_v4.sql",
+        "sha256": "cd2e3a024652c391230704712263a1bfd61cc203fc1eb044859ced0a3c0c23ef",
+        "size_bytes": 23843
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/storage/schema_v4_dynamic.sql",
+        "sha256": "5907badc8a8ebdf02b662d5c8d782852fb8c372fbe01d9449f4fe0caf98b6f01",
+        "size_bytes": 6425
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/storage/tensor_codec.py",
+        "sha256": "6691e3177490c6358b0d9ee3b26e24271bccf5864f45cc7cf6b180976fec9d60",
+        "size_bytes": 7041
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/storage/tensor_identity.py",
+        "sha256": "3688670b2c1dd4a867f5e74bc74920cb2ccc0c6fe529cce55cd73ffac59dad99",
+        "size_bytes": 652
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/storage/terminal_request.py",
+        "sha256": "8911c46dbcc0061965bc54f114802c2e6701cff76ba87b831dc1c52963bb57be",
+        "size_bytes": 2956
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/syncer.py",
+        "sha256": "83e01421dd11ab6143cd577743f67cdecf14f8cce3bbaf541e34ace920109206",
+        "size_bytes": 217
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/tools/__init__.py",
+        "sha256": "1dd7c1f4477dca17b61275c611d9674dc4467a8749412b151e236d2dc73e85e7",
+        "size_bytes": 47
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/tools/analysis.py",
+        "sha256": "79a1a9e7639b6870aeec4ddbdc691d67f3f5bd4e193c33e99b59221edae14111",
+        "size_bytes": 34697
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/tools/authorize_static_replacement.py",
+        "sha256": "584b4c7db4ee92a14cadf62022ff96ed60c61408624db6cc14aacb8d3854a94b",
+        "size_bytes": 2210
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/tools/check_workload_equivalence.py",
+        "sha256": "1881213a0a0d354c78183bf41a7ce18ea63ecfc4b2fee6edc8c4bf60d21eb6be",
+        "size_bytes": 4629
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/tools/clean_run.py",
+        "sha256": "d2464d1d8b8bb9fe79526c632c2189669b87bd4dd9686320dfff6df207d33637",
+        "size_bytes": 28610
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/tools/compare_event_traces.py",
+        "sha256": "d26914bac4ceb72c44f05fc8aba6328f93ad4b038e3ae5093d489d0f0f076298",
+        "size_bytes": 13515
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/tools/eval_lm_harness.py",
+        "sha256": "2e3ecc91b6300b38c0ecf11891a253492360bfa8dffc84fc4963bb06295a0b19",
+        "size_bytes": 16952
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/tools/init_run.py",
+        "sha256": "e790573a7ffc0c33161b8cbf5c7f6d173c6fca70cb368ce16d65ebb43285bfae",
+        "size_bytes": 11370
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/tools/launch_independent_run.py",
+        "sha256": "0d11a801d786d4818a63d2fc321e6e0b066e14855aca4f628c3286f503002239",
+        "size_bytes": 7352
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/tools/migrate_config_v3_to_v4.py",
+        "sha256": "2253f266e145984cdbe7237beccc5137dbb9281ee2685575cd112f217eb7e24d",
+        "size_bytes": 7105
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "fs_diloco/tools/paired_performance.py",
+        "sha256": "d45c081eeb448d07113a65de6484b7b5aba46dfb50f0222be47f7a5c0a0694bf",
+        "size_bytes": 2106
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/tools/publish_quality_gate.py",
+        "sha256": "f01bbb9bf1196cb08391c0e7905295103d998332a4b72762a1ccb98ec06da356",
+        "size_bytes": 10015
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/tools/request_terminal_close.py",
+        "sha256": "c301de6cc38a7c0c99a63663daf021ff8aab8cccb20b37de89552638751d8668",
+        "size_bytes": 1365
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/tools/resolve_scheduler_uncertainty.py",
+        "sha256": "5a1ebd1ca60d3342922652b67f6e1d038649ddf62f94b111bf32298864a777de",
+        "size_bytes": 4007
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/tools/run_metrics_csv.py",
+        "sha256": "c5a91c8abd419db6d690d3dec61151116b75e93753a9afffd47a5a8ceb938cdf",
+        "size_bytes": 28946
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "fs_diloco/tools/validation_eval.py",
+        "sha256": "1018edbec556cb1637ffbead255396e755d3c9aa8c6ba5788efc126e5c1e7147",
+        "size_bytes": 17117
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "main.py",
+        "sha256": "2a43edf4db2eef7f875d9a83d6ee3dd96144b5e5d5332f25c655979202c5ed0e",
+        "size_bytes": 71
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "pyproject.toml",
+        "sha256": "9b96821f3b1f211311f2c1c9223c9b9961c5fc59f1e14cb6416468cca5a20de4",
+        "size_bytes": 2348
+      },
+      {
+        "kind": "file",
+        "mode": "0750",
+        "path": "scripts/local/clean_run.sh",
+        "sha256": "d3d506c0078e8da01f6847149432611c6fd5a89b33c3ac68777f8f2411724410",
+        "size_bytes": 4127
+      },
+      {
+        "kind": "file",
+        "mode": "0750",
+        "path": "scripts/local/prune_runs_without_5000.sh",
+        "sha256": "e8a42b0aaff6c562313afd7f7d2f03cd96dbb704a83085f5469eb065c9263e8e",
+        "size_bytes": 2973
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/local/run_tiny_2proc_smoke.sh",
+        "sha256": "91858cd250c8e9aa7611c151f31eee9cf60f7e0bfa22e8851b9c9a4f5ed45621",
+        "size_bytes": 3298
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/benchmark_syncer_device.py",
+        "sha256": "f9bf7579d0dedea48ee4c10a3d5a1d81f42ee2e41a54300d1313fc6370ca1299",
+        "size_bytes": 8075
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/build_plan03_p5_test_accounting.py",
+        "sha256": "5c52759ff6fd8276518ddfc3785898156bf9bcedd08c22ee2f2952f32e4678fb",
+        "size_bytes": 25495
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/capture_source_identity.py",
+        "sha256": "5fee11b2e7adc988a074bdeeb4977513e450d885a190f4a447e9cd7bea6b9a8c",
+        "size_bytes": 5389
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "scripts/miyabi/check_plan03.py",
+        "sha256": "6835f6f0fff19cabe49e8e4aaf8eaeee84909d32794532eff6d90523e044acbd",
+        "size_bytes": 50166
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/check_torch_baseline_health.py",
+        "sha256": "04be28caa1050e726f85b7495922e84fa43f59f0fd90ffabddf5ccaae950f4ad",
+        "size_bytes": 175
+      },
+      {
+        "kind": "file",
+        "mode": "0750",
+        "path": "scripts/miyabi/inspect_run.sh",
+        "sha256": "07d159b981f2d2894ff71a8ed46c9d409f70e4cfc8a79b0758baa9fbd5a93e5b",
+        "size_bytes": 438
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/measure_pointer_polling.py",
+        "sha256": "e880bf28e66dd83ab4c1d9d0ddadf5483a2df54eb6d33e492783f7790a896a4e",
+        "size_bytes": 3626
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "scripts/miyabi/plan03_fs_capability.py",
+        "sha256": "2cb729d27068e72cd89f240aeb25a9dfd75848325cef7da851393bfc56aaddcf",
+        "size_bytes": 30946
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/plan03_p6_acceptance.py",
+        "sha256": "1d2b8b8920cf49de2af2b9b71a75b825a6a1f1d01bb87478bf200a3d99a9ea34",
+        "size_bytes": 8000
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/plan03_p6_boundedness.py",
+        "sha256": "fa5ed309490277bba09f33e26560e693b3a37567c0e45e326429d8b38a0404df",
+        "size_bytes": 24389
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/plan03_p6_crash_matrix.py",
+        "sha256": "2e4e79ebe6fe68a7b1caca7a2fe48af1a701b90bc4399266c0e7b81ee95c8a7c",
+        "size_bytes": 8411
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/plan03_p6_dynamic_supervisor.py",
+        "sha256": "bb674a7fe83def6cb1dd7e005bcba9f6480ca9e177e3ea5d4ec02fee6b210bf7",
+        "size_bytes": 22890
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/plan03_p6_performance.py",
+        "sha256": "aee2e05bc9f93de6ce7fcea60cabfc234df15e9638e6abea1b9248447434548a",
+        "size_bytes": 37320
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/plan03_p6_quality_manifest.py",
+        "sha256": "e83ef588cfd4b268302030f152980727e8c54e030d8dd76145f45dae6c26a89e",
+        "size_bytes": 4250
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/plan03_p6_state_machine_gate.py",
+        "sha256": "68acc55ed5fadd04f8b2ae82f004383544aeca22d2ea25ba11e11ec2900b427c",
+        "size_bytes": 3615
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/plan03_p6_test_gate.py",
+        "sha256": "709a0fbb37ffd97ba6cca16b4f18997ccfa5c4e37f94235b9891c58eee544a03",
+        "size_bytes": 12363
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/plan03_p6_tiny_scenarios.py",
+        "sha256": "61774e0bf81250635d3da5a0c7fc20c6fd3014621839066653608fb9d80e38fa",
+        "size_bytes": 50648
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/plan03_p6_two_node_sqlite.py",
+        "sha256": "da6ea0745309e4d245199f920d4d45bf5e5510383e4a2c38c257c442e852db75",
+        "size_bytes": 15719
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/plan03_p6_validate_run.py",
+        "sha256": "178585c7c4faf5572a8575c4a2c90be60c16007152d1ca7b4eabf458cf4176c2",
+        "size_bytes": 22117
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_1node_debug.pbs",
+        "sha256": "55b721cbe60e1d42ee65fb2ddc7d5222569bd9668329f68d2c00bf5a6696cdcf",
+        "size_bytes": 1122
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_1node_lm_eval.pbs",
+        "sha256": "6d83bfce7cd3b85a99f5d4e75c15c3d2405dd58434f15cb9aa1115a015baa856",
+        "size_bytes": 5288
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_1node_validation_eval.pbs",
+        "sha256": "25c9c0741f2617679e2988e5586076698455bbb3c21ac5a6caa4081510086cee",
+        "size_bytes": 4835
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_2node_debug.pbs",
+        "sha256": "b398ae04a9d66515930acec3496839b67545ff48112a557f5afec5055e2f4731",
+        "size_bytes": 1123
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_2node_resume_regression.pbs",
+        "sha256": "7ae048dc3cc3368ecca5c1c746427b170631b42d4b9161cb829c6f8674e8e932",
+        "size_bytes": 6898
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_8node_colocated_gpt2_wikitext2_5000steps.pbs",
+        "sha256": "71c79ce84fe5bce704e1d12a8fe0206cddb2eb06f515be1fc734d81ebc7ef7c5",
+        "size_bytes": 1134
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_8node_torch_ddp_gpt2_wikitext2_5000steps.pbs",
+        "sha256": "ea84bde4cf2d4788e2c8dfddf58112e29364a08e3224838354036fc0ca421184",
+        "size_bytes": 5882
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_8node_torch_periodic_average_gpt2_wikitext2_5000steps.pbs",
+        "sha256": "cb020faead83832779e0ea3f4ce60174f97421e6ab264bdd860c0aebce31e856",
+        "size_bytes": 5909
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_9node_gpt2_wikitext2.pbs",
+        "sha256": "412408bdb087cced52da651ac6abd6dc304cf7d94a03ec480a2805b82ad53fc1",
+        "size_bytes": 1109
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_9node_gpt2_wikitext2_5000steps.pbs",
+        "sha256": "102f3ef116c134ffac3f2e9a181cb9e34f114e03ee08085642364142b72627de",
+        "size_bytes": 1132
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_dynamic_learner.pbs",
+        "sha256": "5730dd68d2fa9ee3475df9cc72aeace96520c0b0dd8cbe7894bfa5db5bf9a141",
+        "size_bytes": 6918
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_plan01_regression.pbs",
+        "sha256": "b0702e49fda09551f11ca19af400f3e8798cafc72be87f65b74920d9646e9fa7",
+        "size_bytes": 2326
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_plan03_phase4_error_successor.pbs",
+        "sha256": "259b9948eea30d2792688c5aab0efed17c70f4c74f5d0f633c6c3ecbd446acc2",
+        "size_bytes": 7090
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_plan03_phase4_static_rerun.pbs",
+        "sha256": "9d138d25ed313a9ffdfbbaee0b0344d93c858b57ec8d22d72d98194cdee1c28f",
+        "size_bytes": 11709
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_plan03_phase4_tests.pbs",
+        "sha256": "d50e7f51f81dfad87563e0ff18893f9bafa69d44d542bf955d3372de1f3f4177",
+        "size_bytes": 6941
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_plan03_phase5_tests.pbs",
+        "sha256": "5adf65832d88d73af4de454d4f5f9c8f9d6d38542990c0700f0fc25d875b55de",
+        "size_bytes": 3537
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/run_plan03_phase6_boundedness.pbs",
+        "sha256": "6e712f87953b4ebaac49f82cc595b60cd51e433d7e28c77130045de88704c0b3",
+        "size_bytes": 1247
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/run_plan03_phase6_dynamic_9node.pbs",
+        "sha256": "b9886b3eb4ef12e8c6b35408c0272f627e417486a48d2303c40a3503ac3467bd",
+        "size_bytes": 1276
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/run_plan03_phase6_generated_and_crash.pbs",
+        "sha256": "bf61c26c560027b8f2f29841739ed12414bcb53bc349c8b7672078613987e4aa",
+        "size_bytes": 1127
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/run_plan03_phase6_performance.pbs",
+        "sha256": "f6766f1f6c0772b634b60c78a432d50cbb471899e6632cfadbea8f6ab5e2f842",
+        "size_bytes": 2896
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/run_plan03_phase6_static_9node.pbs",
+        "sha256": "a604d13bdede2c24f7d227970120e38fae6a6918852e38d32da2a1bf1c6603de",
+        "size_bytes": 1504
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/run_plan03_phase6_tests.pbs",
+        "sha256": "a13675be3550fa3783e3af94e9c6fec11e91572e6135d99c7e1b1675abe3473d",
+        "size_bytes": 823
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/run_plan03_phase6_tiny_scenarios.pbs",
+        "sha256": "0747475082f0db155f0fa7e0c2dc14c4f8c5984bf2eb5fea0f280d15a0ffbaeb",
+        "size_bytes": 799
+      },
+      {
+        "kind": "file",
+        "mode": "0755",
+        "path": "scripts/miyabi/run_plan03_phase6_two_node.pbs",
+        "sha256": "d9664bbc00484bb0a628c32459967dde0bdae1fa110d37a4177e493a8c52860e",
+        "size_bytes": 1123
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_static_learner.pbs",
+        "sha256": "a03cdda7701dc5997807be368dfc02067057c02303163700ac3542413498658b",
+        "size_bytes": 2440
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_syncer_candidate.pbs",
+        "sha256": "f50a076bf9fb1c8ecd0fe8baf96568981b2a7cb02a57e1018d07d65dc1f83d18",
+        "size_bytes": 2042
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/run_v4_allocation.sh",
+        "sha256": "c434f83ad9bbc2abe6be18e8f74e5df5412ceed1158a536d26bc1b1ab53146b8",
+        "size_bytes": 6663
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/sqlite_shared_fs_probe.py",
+        "sha256": "13fa19dc75e4cfe6427c11dfc5514245f06b10ebf87a780cbb8948078c14898a",
+        "size_bytes": 24756
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "scripts/miyabi/submit_train_with_validation.sh",
+        "sha256": "69249cb68ed22bc46073ca16bd8347388c0b9cb25f050946e8802530749bcf55",
+        "size_bytes": 2364
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/architecture/test_authority_surface.py",
+        "sha256": "c41fc9ba58d34d30e890a0ebcf50412cd16fbdb58fd60eb3d9a254a22e836649",
+        "size_bytes": 2847
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/architecture/test_dependency_boundaries.py",
+        "sha256": "6540c17e130b96b55cc33c995a7d3c275f60394af6112cc18ebcd893700318a3",
+        "size_bytes": 1499
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/architecture/test_p5_removed_runtime.py",
+        "sha256": "c125bf82bcc2fdce60acbb902a17d4d00711cba68062b57d5aabd31a2bf3675b",
+        "size_bytes": 5340
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/architecture/test_plan_complete_dead_surfaces.py",
+        "sha256": "3ef390f109e0499f897747824989d372d957a2763bdb2f1f2add5c73bcbbc7c0",
+        "size_bytes": 2826
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/fixtures/golden/classic_full_v1_trace.json",
+        "sha256": "b9d6325aa578297281f8c3eb5464aa79580e3a0c842f00466166a337382055c7",
+        "size_bytes": 564
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/fixtures/golden/static_ha_v1_trace.json",
+        "sha256": "0ee20807b58d2ba8adcd39269b23e810276fe28d282883c1575a0e5e1e73123a",
+        "size_bytes": 561
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/fixtures/golden/unified_v4_trace.json",
+        "sha256": "2afc375bcc2c9ed06e3258e2fb7fb38b4027fb530706308c786b5adb6967a7a0",
+        "size_bytes": 2731
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/gates/test_plan03_p6_acceptance_aggregate.py",
+        "sha256": "fbde27542005271c6bb1e173b1de431e843bdf6c3d39d442fdb94be32b3cf989",
+        "size_bytes": 1726
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/gates/test_plan03_p6_dynamic_supervisor.py",
+        "sha256": "ab86e3324a7c7913d7133cefc1a9f01a5bb39863c0220c34d888ce05a7e855d1",
+        "size_bytes": 2922
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/gates/test_plan03_p6_performance_harness.py",
+        "sha256": "57b845f05510e69a96e9f1c2166e6ab210acfc4e450d4bfa052f5025f7ed060f",
+        "size_bytes": 10613
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/gates/test_plan03_p6_quality_manifest.py",
+        "sha256": "441fecdd93ccad4fff41552e9e280ee1ed35b990c2d9672ecd955b64466c2e96",
+        "size_bytes": 1554
+      },
+      {
+        "kind": "file",
+        "mode": "0644",
+        "path": "tests/gates/test_plan03_p6_state_machines.py",
+        "sha256": "5b96b86a4f828e6d7277021c418f56a4b10c05f2adcace2d5ce90816569caa11",
+        "size_bytes": 21656
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/gates/test_plan03_p6_two_node_evidence.py",
+        "sha256": "4d1da8cc58f4165845cddcb960c00777e30e4dcd2689db3d9b0bce4db8e72cdf",
+        "size_bytes": 251
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/legacy/test_legacy_v1_v3_reader.py",
+        "sha256": "b910fbf12edced52fee520759201642503eaf065326b66271727e57bbf1d5afc",
+        "size_bytes": 9746
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/observability/test_p3_operational_evidence.py",
+        "sha256": "0a11e7f89ad342f80e70185ba99a19a32c14413df57867db29c588786f397cae",
+        "size_bytes": 3485
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/protocol/test_cycle_receipt_v1.py",
+        "sha256": "75f8bd74d3a5fb7b5f1ccfbfeb8ee2b8a9a9f1c2371cf06b77f9cd21305d8ba8",
+        "size_bytes": 4254
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/protocol/test_p3_accounting_selection_cursor.py",
+        "sha256": "5def6a3ef22127e154f38c9c19cdd7314b9d41219501d623e7dafe88729e40c2",
+        "size_bytes": 10781
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/protocol/test_p3_unified_v4_golden.py",
+        "sha256": "0a366c13a36f52524d808f49d9288d3f450a921346e84a0ee16c5278eab95030",
+        "size_bytes": 6630
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/protocol/test_proposal_v2.py",
+        "sha256": "966e71dc01be5aa17630205e2decabecb5792464e3a2d0776c6a8fe3cab9cda3",
+        "size_bytes": 3569
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/runtime/test_dynamic_capacity_service.py",
+        "sha256": "9cfd9be5f5f7ba079d799103e768fbb7ec7bc5c62a3e59bbc3b80bf3d1be016c",
+        "size_bytes": 25434
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/runtime/test_learner_control.py",
+        "sha256": "bb94d5818063e8383cfa3802f12637c48d73b949578d895a56edd3231663b9c3",
+        "size_bytes": 1794
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/runtime/test_p4_mandatory_runtime.py",
+        "sha256": "ff35cfaf63c28ab1ec4dce2d39cc8cf38cc3d5c3d7afd2c86cfbf086cc639970",
+        "size_bytes": 86170
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/runtime/test_pbs_scheduler.py",
+        "sha256": "be3309f92a071c5cbb7b72a65b5289fa87b329a681c55a629d6be1e25caae788",
+        "size_bytes": 3510
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/runtime/test_syncer_startup_admission.py",
+        "sha256": "fa6c46defac17b36274553b6e9946c20c62536cb96b4a69d48602771adcc6091",
+        "size_bytes": 3538
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/runtime/test_terminal_service.py",
+        "sha256": "e4f34bec5972c8fe41c9d15ddb0529aec4ec25018c6f8327fc0ebeb719cc9a06",
+        "size_bytes": 16482
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/conftest.py",
+        "sha256": "3faa67a321aa9a0124749ee1e144a7041c076ed06580b3c683888778874a2a42",
+        "size_bytes": 324
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/test_artifact_policy_p3.py",
+        "sha256": "b55323c109c4c85c365215269df61f84f5231c0723a3cb25c50e58ea39dce728",
+        "size_bytes": 1867
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/test_audit_archive_p3.py",
+        "sha256": "73e131ba71364914c88892e06debfb99f3f28f62a2e4f706b909633ff692074b",
+        "size_bytes": 3531
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/test_authority_p2_dynamic.py",
+        "sha256": "d4e57df9415b41ec0c9d6ff25c9540ce1141f58a71fe159c2034d91f8328a045",
+        "size_bytes": 13939
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/test_authority_p3_operational.py",
+        "sha256": "c6b094a25603ff37f6dd484c8802161ebe3a08c55904137f88b03da1c6727eda",
+        "size_bytes": 64384
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/test_contributor_progress.py",
+        "sha256": "de58fff612009cbe73d83d02bdaa996c3210235a827261eb211fd53e737693f0",
+        "size_bytes": 3803
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/test_dynamic_admission_request.py",
+        "sha256": "855a2c14b5b44929f3f8b1aef224ba23715f9c0ee5b572456dd745fc80ada6cd",
+        "size_bytes": 1179
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/test_dynamic_launch_authorization.py",
+        "sha256": "5e35ef72669ae1f2968a821f3a54ef45b230b3c4ff17505e98faf67f77dfe6c8",
+        "size_bytes": 7913
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/test_leader_authority_commands.py",
+        "sha256": "c9088417bbc3cb41a216db59ea6419d74e0ca4b888a034201002ba78ac04130d",
+        "size_bytes": 17669
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/test_object_store_v4.py",
+        "sha256": "86536eea5f695fbb75954209070c195aa717d7a557df182c994b390accb60786",
+        "size_bytes": 7569
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/test_p2_state_machine.py",
+        "sha256": "112308904fe32b4926c672b3f8e52972e32ca37d0b40692bcc3a9f98ff438aeb",
+        "size_bytes": 11335
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/test_proposal_adjudication_v4.py",
+        "sha256": "0e104c13c53f689bda5b0897f8da56c179168e79f0c438226d15e8d0aaa84668",
+        "size_bytes": 12463
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/test_publication_v4.py",
+        "sha256": "dce78c6645a6ede3e77eda5930bab8c4581ad6aea15dba68608ab58363ed5ed1",
+        "size_bytes": 13005
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/test_run_initializer_p3.py",
+        "sha256": "d576e30fcb019c22afe61dedd71b94ed20d80af6e9c62c8b7ce276a238ea1344",
+        "size_bytes": 17855
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/test_schema_v4.py",
+        "sha256": "7d70b0c2d95140a0c9639fc1ed21804b3bcef168e5e1215d167196c58735cdef",
+        "size_bytes": 6872
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/test_static_contributor_binding.py",
+        "sha256": "fb2a78702c4831f9be6db53122cc100625e876227a8171a4cdd3f8bc99003668",
+        "size_bytes": 7865
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/test_terminal_request.py",
+        "sha256": "b9f1c78549c19fe526763be0b30653cc9d807af77c8e1e6db498827513a83708",
+        "size_bytes": 1447
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/storage/test_visibility_v4.py",
+        "sha256": "9e23913cbf93a532b7afd53fbcddf3bc1f00657713c133e58009ff9da2d856a7",
+        "size_bytes": 10522
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/support/__init__.py",
+        "sha256": "3d3a78caa5de1f6b9dccff2dbb2b7523a227a2e6430973cdf184487356769ca9",
+        "size_bytes": 414
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/support/clock.py",
+        "sha256": "6553b910f7b8d098fe76e8d788b65c3b1afe8b707db2cda58c7a52d2fb93d5d3",
+        "size_bytes": 797
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/support/fault_tape.py",
+        "sha256": "503deac597feff8cdb445559c3a0cf2094bcc673b23b836e71ddaf069fb5e0d4",
+        "size_bytes": 952
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/support/ids.py",
+        "sha256": "e298b68e005c84b8e9158f13b2abe0d7522a0debed4cd2172d90862555a25867",
+        "size_bytes": 474
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/support/pbs.py",
+        "sha256": "f8eb587d67a4ff7b37bc5bda53109c5df09f1d9cec2b9b04b07647251a58b6c8",
+        "size_bytes": 1807
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/support/performance.py",
+        "sha256": "e4803cd8c546b0e3866c28af6da6a7d2567260b7e923468e8fec4acff204fd58",
+        "size_bytes": 227
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/support/v4_protocol.py",
+        "sha256": "90e88dcc7e331ff2f07d38f79ca818544fcb9c3e83c7f7ac2690a64683f4d5c1",
+        "size_bytes": 6213
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_adoption_strategy.py",
+        "sha256": "94a950c1c11ab8b016580f7e2c2405371aa805bfb4b00e7b52086c72e3f71834",
+        "size_bytes": 13427
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_atomic_io.py",
+        "sha256": "b69aeb448f5261e59237c62f3709f243c002e1abdd02780bcac09183c7124aad",
+        "size_bytes": 319
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_capture_source_identity.py",
+        "sha256": "e6e898c498514257d6ba1a4ac7aeda4b6c9ed35a8374f37226864e312459baef",
+        "size_bytes": 4448
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_clean_run.py",
+        "sha256": "a9ace659f66f75cb6adf74cf6a0fe6695744452ebb6cb21c7bea9735508f82a5",
+        "size_bytes": 18447
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_compare_event_traces.py",
+        "sha256": "41e8e9234f591b6114b5d4241703b86e9699432ea4f71e6c7c368698b78a9791",
+        "size_bytes": 5393
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_config.py",
+        "sha256": "71b6feb9fbb4fdde0ee70b36c35ca38e633e5e321102c9e932b2eb6dfb6c2d10",
+        "size_bytes": 12137
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_data_shuffle.py",
+        "sha256": "cb6d0c427d1a1629dc84c83dc56e82aa02539b5060bb97296b69915727c70f0f",
+        "size_bytes": 1724
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_fragment_analysis.py",
+        "sha256": "2b83c34358f37c5f04754d9025273907bf2c04aaeb97fed0dba593fe368c43b5",
+        "size_bytes": 4728
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/test_hf_revision_pinning.py",
+        "sha256": "16ca036eaac0f5c1c1b072a8f3f1cb86058f9e405c91ad4135f87ce630797eb9",
+        "size_bytes": 3139
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_inner_scheduler.py",
+        "sha256": "a646fc47a4a92abd24b285ae082d35c3af16217fa631c20fcd3a24434216210f",
+        "size_bytes": 4041
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_merge.py",
+        "sha256": "37ec19410b317f34e18f82e3a44cb970ebbc3cdb5b772fa67c5b4a5577485747",
+        "size_bytes": 714
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_outer_optim.py",
+        "sha256": "93a3199edcca2911a959475cd046f9627641ea3181d738b23d66c4030da965b4",
+        "size_bytes": 1908
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_param_index_roundtrip.py",
+        "sha256": "e2dc1e703734af9ddd903e11e99da522042ba9bf30a167d356471de581ddaefb",
+        "size_bytes": 1505
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/test_plan03_checker.py",
+        "sha256": "2655604aceaf42c689a0d848ab2480050d1b4e9fc4cbfd35fa0c94576cabb703",
+        "size_bytes": 23881
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/test_plan03_fs_capability.py",
+        "sha256": "a371aa96d8e7553d627801d6443b33ebe86ea9c8be690515c95b48bbdff17dc0",
+        "size_bytes": 3234
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/test_plan03_support.py",
+        "sha256": "33a655fed51abca91d2d58466909772cb63c6246915c05156c38b147089fcc07",
+        "size_bytes": 2642
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_publish_quality_gate.py",
+        "sha256": "d48ddbf64d4c8b7ea02fd21925cac643fe61325052e39289eea0b089bb8f538d",
+        "size_bytes": 2110
+      },
+      {
+        "kind": "file",
+        "mode": "0600",
+        "path": "tests/test_resource_monitor.py",
+        "sha256": "2b91145dc0dbb86df0193b3c7e2e8a8baad798bd34c514a51581e7447c387884",
+        "size_bytes": 1954
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_run_metrics_csv.py",
+        "sha256": "8a3d35e21fc69dbbfde0b5e81d41708dd5c9b76f5f41ea66188b51e5b8ff578a",
+        "size_bytes": 10978
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_sqlite_probe.py",
+        "sha256": "bc6852378e900dd261a45724da90818b578882f3c4fb5262b7a09b544f6f9b6c",
+        "size_bytes": 4903
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_syncer_resource_cost.py",
+        "sha256": "923da9e4a9f47882fe637d14fb1244f4099c0c6714dd07d91b6f13842ffaa1b1",
+        "size_bytes": 1409
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_tensor_codec.py",
+        "sha256": "7dc170d7c48ad0e891ce2ca3dca2d3aaeffb1dab0fe47d24ed3de5806e2a5300",
+        "size_bytes": 1864
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_torch_baseline_artifacts_and_data.py",
+        "sha256": "13d121e0e2a8969cdd3b0a59a01a5812786b4aa235804ce9ce1036df6038ff11",
+        "size_bytes": 7139
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_torch_baseline_health.py",
+        "sha256": "d387b00c03b43c7003dd2b1c8c10cbdb724bbe1c94a95f807ec8a8654a39d4b3",
+        "size_bytes": 8144
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_torch_baseline_protocol.py",
+        "sha256": "5cb95a5388685c66296f6bc634dd6a62928c41a7f33a585e5d9cd6fa7c73cb4d",
+        "size_bytes": 7979
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_validation_eval.py",
+        "sha256": "e78cd84fdb73b58ad21fcd4da6f67e27214fbd01e3ec93ba4dbad159af1cc380",
+        "size_bytes": 9317
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_validation_submitter.py",
+        "sha256": "2e65e87a21a7dcfc281523f7adbbe46a91c9de28695f5335da0181ba03376dd0",
+        "size_bytes": 2238
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/test_wandb_logging.py",
+        "sha256": "7e40ad5eedb4c8b840bc28e3dc7fb564bae2ddb64af668a7ea8b68235d0e3a03",
+        "size_bytes": 2599
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/tools/test_authorize_static_replacement.py",
+        "sha256": "bede1dac865925e5c8fd5d9a7a8950d494b5ba86081efc445f1c94789c72a607",
+        "size_bytes": 1531
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "tests/tools/test_resolve_scheduler_uncertainty.py",
+        "sha256": "4fbf6613229608bf171cbe87d830b4a5b2722e25969c6a67e1dfb0f7d99dcb66",
+        "size_bytes": 2101
+      },
+      {
+        "kind": "file",
+        "mode": "0640",
+        "path": "uv.lock",
+        "sha256": "6057d1b42db0b83afbc82a67c05b8de070b4ef63e2160a94db9442cd596974eb",
+        "size_bytes": 769758
+      }
+    ],
+    "source_fingerprint": "sha256:70af4e41ddbccbdbd5b15d2aa9d79766e826a63a4d585d252f54c9284c969db8",
+    "source_scopes": [
+      "fs_diloco",
+      "tests",
+      "configs",
+      "scripts",
+      "docs",
+      "main.py",
+      "pyproject.toml",
+      "uv.lock",
+      ".python-version"
+    ]
+  },
+  "status": "BLOCKED"
+}

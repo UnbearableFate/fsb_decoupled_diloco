@@ -71,6 +71,7 @@ def load_text_split(data_config: Any, split: str) -> Any:
         return load_dataset(
             dataset_name,
             data_config.dataset_config_name,
+            revision=data_config.revision,
             split=split,
             cache_dir=data_config.cache_dir,
             streaming=bool(data_config.streaming),
@@ -82,6 +83,7 @@ def load_text_split(data_config: Any, split: str) -> Any:
             return load_dataset(
                 "Salesforce/wikitext",
                 data_config.dataset_config_name,
+                revision=data_config.revision,
                 split=split,
                 cache_dir=data_config.cache_dir,
                 streaming=bool(data_config.streaming),

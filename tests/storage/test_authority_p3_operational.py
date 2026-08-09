@@ -494,10 +494,10 @@ def test_dynamic_replacement_returns_full_contiguous_resume_state(tmp_path: Path
             replacement_reason="authorized replacement",
         )
 
-        assert second.resume_cursor == 8
-        assert second.last_receipt_id == receipt.receipt_id
-        assert second.last_receipt_sha256 == receipt.immutable_sha256()
-        assert second.next_cycle_seq == 2
+        assert second.resume.cursor == 8
+        assert second.resume.last_receipt_id == receipt.receipt_id
+        assert second.resume.last_receipt_sha256 == receipt.immutable_sha256()
+        assert second.resume.next_cycle_seq == 2
         assert second.resume.stream_epoch == second.fence.stream_epoch == 2
         assert authority.read.token_ledger_summary().direct_dropped == 6
 

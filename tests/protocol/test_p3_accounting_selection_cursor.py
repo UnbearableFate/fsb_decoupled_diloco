@@ -33,11 +33,15 @@ PLAN03_REQUIREMENTS = frozenset(
 
 def test_v4_rejects_fake_streaming_and_accepts_direct_weight_stop() -> None:
     streaming = ConfigV4()
+    streaming.shared.model.name_or_path = "synthetic-tiny"
+    streaming.shared.data.dataset_name = "synthetic"
     streaming.shared.data.streaming = True
     with pytest.raises(ValueError, match="not resumable"):
         streaming.validate(ConfigProfile.FULL_V4)
 
     direct = ConfigV4(stop_after_direct_weight_tokens_applied=1)
+    direct.shared.model.name_or_path = "synthetic-tiny"
+    direct.shared.data.dataset_name = "synthetic"
     direct.validate(ConfigProfile.FULL_V4)
 
 

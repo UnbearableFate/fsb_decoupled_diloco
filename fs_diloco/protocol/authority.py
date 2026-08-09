@@ -281,24 +281,6 @@ class DynamicAdmission:
         if self.resume.stream_epoch != self.fence.stream_epoch:
             raise ValueError("resume state stream epoch does not match the admission fence")
 
-    @property
-    def resume_cursor(self) -> int:
-        """Compatibility accessor for P1/P2 callers."""
-
-        return self.resume.cursor
-
-    @property
-    def last_receipt_id(self) -> str | None:
-        return self.resume.last_receipt_id
-
-    @property
-    def last_receipt_sha256(self) -> str | None:
-        return self.resume.last_receipt_sha256
-
-    @property
-    def next_cycle_seq(self) -> int:
-        return self.resume.next_cycle_seq
-
 
 @dataclass(frozen=True)
 class VisibilityDecision:

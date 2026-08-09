@@ -211,15 +211,3 @@ def sha256_file(path: str | Path, chunk_size: int = 1024 * 1024) -> str:
 
 def file_size(path: str | Path) -> int:
     return Path(path).stat().st_size
-
-
-def wait_for_file(path: str | Path, timeout_seconds: float, poll_seconds: float = 1.0) -> Path:
-    import time
-
-    path = Path(path)
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() <= deadline:
-        if path.exists():
-            return path
-        time.sleep(poll_seconds)
-    raise TimeoutError(f"timed out waiting for {path}")

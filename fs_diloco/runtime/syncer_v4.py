@@ -36,7 +36,6 @@ from ..protocol.contributor import (
 )
 from ..protocol.cycle_receipt import (
     CycleReceiptV1,
-    canonical_receipt_id,
     canonical_receipt_relative_path,
     contributor_fence_namespace,
 )
@@ -857,7 +856,6 @@ def _ingest_proposals(
     control: V4ControlPublisher,
     telemetry: ActorTelemetryWriter,
 ) -> None:
-    receipts_root = loaded.paths.shared_root / "updates" / "receipts"
     for fence in authority.read.current_contributor_fences():
         progress = authority.read.contributor_progress(fence.stable_contributor_key)
         sequences = (
@@ -867,12 +865,7 @@ def _ingest_proposals(
             canonical_path = loaded.paths.shared_root / canonical_receipt_relative_path(
                 fence, sequence
             )
-            legacy_path = (
-                receipts_root
-                / fence.stable_contributor_key
-                / f"{canonical_receipt_id(fence.stable_contributor_key, sequence)}.json"
-            )
-            path = canonical_path if canonical_path.exists() else legacy_path
+            path = canonical_path
             if not path.exists():
                 continue
             try:

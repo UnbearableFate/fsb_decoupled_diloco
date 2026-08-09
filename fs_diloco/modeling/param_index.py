@@ -8,14 +8,16 @@ from typing import Any
 import torch
 
 from ..storage.atomic_io import atomic_write_json, read_json
-from ..core.constants import FORMAT_VERSION
+from ..core.versions import PARAM_INDEX_FORMAT_VERSION
 
 
 def dtype_name(dtype: torch.dtype) -> str:
     return str(dtype)
 
 
-def build_param_index(model: torch.nn.Module, *, model_name_or_path: str, trainable_only: bool = True) -> dict[str, Any]:
+def build_param_index(
+    model: torch.nn.Module, *, model_name_or_path: str, trainable_only: bool = True
+) -> dict[str, Any]:
     params: list[dict[str, Any]] = []
     offset = 0
     for name, param in model.named_parameters():
@@ -33,7 +35,7 @@ def build_param_index(model: torch.nn.Module, *, model_name_or_path: str, traina
         )
         offset += numel
     return {
-        "format_version": FORMAT_VERSION,
+        "format_version": PARAM_INDEX_FORMAT_VERSION,
         "model_name_or_path": model_name_or_path,
         "trainable_only": trainable_only,
         "total_numel": offset,
@@ -47,7 +49,7 @@ def save_param_index(param_index: dict[str, Any], path: str | Path) -> Path:
 
 def load_param_index(path: str | Path) -> dict[str, Any]:
     payload = read_json(path)
-    if payload.get("format_version") != FORMAT_VERSION:
+    if payload.get("format_version") != PARAM_INDEX_FORMAT_VERSION:
         raise ValueError(f"unsupported param index format: {payload.get('format_version')}")
     return payload
 
@@ -105,7 +107,9 @@ def load_flat_into_model(
     strict_shape: bool = True,
 ) -> None:
     if int(flat.numel()) != int(param_index["total_numel"]):
-        raise ValueError(f"flat tensor has {flat.numel()} values, expected {param_index['total_numel']}")
+        raise ValueError(
+            f"flat tensor has {flat.numel()} values, expected {param_index['total_numel']}"
+        )
     named_params = _named_param_map(model)
     for entry in param_index["params"]:
         param = named_params[entry["name"]]
@@ -114,18 +118,28 @@ def load_flat_into_model(
         shape = tuple(entry["shape"])
         if strict_shape and tuple(param.shape) != shape:
             raise ValueError(f"shape mismatch for {entry['name']}: {tuple(param.shape)} != {shape}")
-        view = flat[offset : offset + numel].to(device=param.device, dtype=param.dtype).reshape(param.shape)
+        view = (
+            flat[offset : offset + numel]
+            .to(device=param.device, dtype=param.dtype)
+            .reshape(param.shape)
+        )
         param.copy_(view)
 
 
-def flat_to_named_tensors(flat: torch.Tensor, param_index: dict[str, Any]) -> dict[str, torch.Tensor]:
+def flat_to_named_tensors(
+    flat: torch.Tensor, param_index: dict[str, Any]
+) -> dict[str, torch.Tensor]:
     if int(flat.numel()) != int(param_index["total_numel"]):
-        raise ValueError(f"flat tensor has {flat.numel()} values, expected {param_index['total_numel']}")
+        raise ValueError(
+            f"flat tensor has {flat.numel()} values, expected {param_index['total_numel']}"
+        )
     tensors: dict[str, torch.Tensor] = {}
     for entry in param_index["params"]:
         offset = int(entry["offset"])
         numel = int(entry["numel"])
-        tensors[entry["name"]] = flat[offset : offset + numel].reshape(tuple(entry["shape"])).detach().cpu()
+        tensors[entry["name"]] = (
+            flat[offset : offset + numel].reshape(tuple(entry["shape"])).detach().cpu()
+        )
     return tensors
 
 
@@ -138,12 +152,7 @@ def named_tensors_to_flat(
 ) -> torch.Tensor:
     chunks = []
     for entry in param_index["params"]:
-        tensor = (
-            named_tensors[entry["name"]]
-            .detach()
-            .to(device=device, dtype=dtype)
-            .reshape(-1)
-        )
+        tensor = named_tensors[entry["name"]].detach().to(device=device, dtype=dtype).reshape(-1)
         if int(tensor.numel()) != int(entry["numel"]):
             raise ValueError(f"tensor size mismatch for {entry['name']}")
         chunks.append(tensor)
@@ -156,6 +165,8 @@ def validate_compatible_index(param_index: dict[str, Any], other: dict[str, Any]
     keys = ["format_version", "model_name_or_path", "trainable_only", "total_numel"]
     for key in keys:
         if param_index.get(key) != other.get(key):
-            raise ValueError(f"param index mismatch for {key}: {param_index.get(key)} != {other.get(key)}")
+            raise ValueError(
+                f"param index mismatch for {key}: {param_index.get(key)} != {other.get(key)}"
+            )
     if param_index.get("params") != other.get("params"):
         raise ValueError("parameter entries differ")

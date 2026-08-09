@@ -21,7 +21,9 @@ class TinyCausalLM(torch.nn.Module):
         self.lm_head = torch.nn.Linear(hidden_size, vocab_size, bias=False)
         self.config = type("TinyConfig", (), {"vocab_size": vocab_size})()
 
-    def forward(self, input_ids: torch.Tensor, labels: torch.Tensor | None = None) -> CausalLMOutput:
+    def forward(
+        self, input_ids: torch.Tensor, labels: torch.Tensor | None = None
+    ) -> CausalLMOutput:
         hidden = self.embed(input_ids)
         logits = self.lm_head(hidden)
         loss = None
@@ -68,12 +70,17 @@ def load_causal_lm_and_tokenizer(config: Any) -> tuple[torch.nn.Module, Any]:
 
     tokenizer = AutoTokenizer.from_pretrained(
         name,
+        revision=getattr(config, "tokenizer_revision", None) or getattr(config, "revision", None),
         trust_remote_code=bool(getattr(config, "trust_remote_code", False)),
     )
-    if getattr(tokenizer, "pad_token", None) is None and getattr(tokenizer, "eos_token", None) is not None:
+    if (
+        getattr(tokenizer, "pad_token", None) is None
+        and getattr(tokenizer, "eos_token", None) is not None
+    ):
         tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(
         name,
+        revision=getattr(config, "revision", None),
         trust_remote_code=bool(getattr(config, "trust_remote_code", False)),
         dtype=model_dtype(getattr(config, "dtype", "float32")),
     )

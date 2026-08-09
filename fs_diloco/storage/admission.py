@@ -1179,13 +1179,6 @@ def highest_static_generation(paths: RunPaths, learner_id: str) -> int | None:
         if isinstance(fence, dict) and fence.get("kind") == "static":
             generation = int(fence["binding_generation"])
             highest = generation if highest is None else max(highest, generation)
-    # Keep the early P4 development layout readable for generation discovery.
-    for path in paths.syncer_epochs.glob(f"e*_*/membership/admissions_v4/{learner_id}/*.json"):
-        payload = safe_read_json(path)
-        if isinstance(payload, dict) and isinstance(payload.get("fence"), dict):
-            generation = int(payload["fence"].get("binding_generation", 0))
-            if generation > 0:
-                highest = generation if highest is None else max(highest, generation)
     return highest
 
 

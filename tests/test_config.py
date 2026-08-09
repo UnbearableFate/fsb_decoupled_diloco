@@ -22,6 +22,16 @@ BASELINE_CONFIGS = tuple(sorted(Path("configs").glob("torch_baseline_*.yaml")))
 REPOSITORY_CONFIGS = FULL_CONFIGS + BASELINE_CONFIGS
 PRIMARY_RUNS_ROOT = Path("/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco")
 BASELINE_RUNS_ROOT = Path("/work/xg24i002/x10041/fsb_decoupled_diloco/runs/torch_baselines")
+HUB_COMMIT = "a" * 40
+GPT2_COMMIT = "607a30d783dfa663caf39e06633721c8d4cfcd7e"
+WIKITEXT_COMMIT = "b08601e04326c79dfdd32d625aee71d232d685c3"
+
+
+def _synthetic_v4(**kwargs) -> ConfigV4:
+    config = ConfigV4(**kwargs)
+    config.shared.model.name_or_path = "synthetic-tiny"
+    config.shared.data.dataset_name = "synthetic"
+    return config
 
 
 @pytest.mark.parametrize("path", FULL_CONFIGS, ids=lambda path: path.name)
@@ -35,6 +45,48 @@ def test_every_full_repository_config_is_strict_v4(path: Path) -> None:
         assert removed not in payload
     assert set(payload.get("coordination", {})) <= {"leader"}
     assert "stop_after_global_tokens" not in payload.get("sync", {})
+
+
+@pytest.mark.parametrize("path", FULL_CONFIGS, ids=lambda path: path.name)
+def test_every_hub_backed_full_config_pins_immutable_input_commits(path: Path) -> None:
+    config = load_config_v4(path, profile=ConfigProfile.FULL_V4).shared
+    if config.model.name_or_path not in {"synthetic-tiny", "tiny-synthetic", "tiny-local"}:
+        assert config.model.revision == GPT2_COMMIT
+        assert config.model.tokenizer_revision == GPT2_COMMIT
+    if config.data.dataset_name != "synthetic":
+        assert config.data.revision == WIKITEXT_COMMIT
+
+
+@pytest.mark.parametrize("revision", [None, "main", "v1.0", "A" * 40, "a" * 39])
+def test_full_v4_rejects_movable_or_missing_hub_revisions(revision: str | None) -> None:
+    config = ConfigV4()
+    config.shared.model.revision = revision
+    config.shared.data.revision = HUB_COMMIT
+
+    with pytest.raises(ValueError, match="model.revision.*40.*commit SHA"):
+        config.validate(ConfigProfile.FULL_V4)
+
+
+def test_full_v4_allows_effective_tokenizer_pin_and_requires_dataset_pin() -> None:
+    config = ConfigV4()
+    config.shared.model.revision = HUB_COMMIT
+    config.shared.model.tokenizer_revision = None
+    config.shared.data.revision = "main"
+
+    with pytest.raises(ValueError, match="data.revision.*40.*commit SHA"):
+        config.validate(ConfigProfile.FULL_V4)
+
+
+def test_synthetic_full_v4_and_unpinned_baseline_keep_their_profiles() -> None:
+    synthetic = ConfigV4()
+    synthetic.shared.model.name_or_path = "synthetic-tiny"
+    synthetic.shared.data.dataset_name = "synthetic"
+    synthetic.validate(ConfigProfile.FULL_V4)
+
+    baseline = ConfigV4()
+    baseline.shared.torch_baseline.enabled = True
+    baseline.shared.training.max_local_steps = 1
+    baseline.validate(ConfigProfile.TORCH_BASELINE)
 
 
 @pytest.mark.parametrize("path", BASELINE_CONFIGS, ids=lambda path: path.name)
@@ -135,6 +187,10 @@ def test_v4_direct_weight_stop_round_trips_without_legacy_token_field(tmp_path: 
 sync:
   stop_after_outer_steps: null
   stop_after_direct_weight_tokens_applied: 100
+model:
+  name_or_path: synthetic-tiny
+data:
+  dataset_name: synthetic
 coordination:
   leader: {}
 maintenance: {}
@@ -150,14 +206,14 @@ maintenance: {}
 
 
 def test_v4_full_profile_validates_shared_leader_and_maintenance() -> None:
-    ConfigV4().validate(ConfigProfile.FULL_V4)
+    _synthetic_v4().validate(ConfigProfile.FULL_V4)
 
-    streaming = ConfigV4()
+    streaming = _synthetic_v4()
     streaming.shared.data.streaming = True
     with pytest.raises(ValueError, match="streaming=true"):
         streaming.validate(ConfigProfile.FULL_V4)
 
-    short_grace = ConfigV4(
+    short_grace = _synthetic_v4(
         leader=LeaderSection(lease_duration_seconds=90.0, max_clock_skew_seconds=2.0),
         maintenance=MaintenanceSection(publication_orphan_grace_seconds=93.0),
     )

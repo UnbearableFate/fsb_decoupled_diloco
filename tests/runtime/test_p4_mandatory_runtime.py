@@ -100,6 +100,14 @@ PLAN03_REQUIREMENTS = frozenset(
         "P4-MIGRATE",
     }
 )
+PINNED_V3_INPUT = """model:
+  name_or_path: gpt2
+  revision: 607a30d783dfa663caf39e06633721c8d4cfcd7e
+  tokenizer_revision: 607a30d783dfa663caf39e06633721c8d4cfcd7e
+data:
+  dataset_name: wikitext
+  revision: b08601e04326c79dfdd32d625aee71d232d685c3
+"""
 
 
 class _TelemetryProbe:
@@ -248,7 +256,7 @@ def test_migration_is_dry_run_by_default_and_refuses_fragment_or_ambiguous_stop(
 ) -> None:
     source = tmp_path / "v3.yaml"
     source.write_text(
-        "sync:\n  stop_after_outer_steps: 2\n  stop_after_global_tokens: null\n",
+        PINNED_V3_INPUT + "sync:\n  stop_after_outer_steps: 2\n  stop_after_global_tokens: null\n",
         encoding="utf-8",
     )
     before = source.read_bytes()
@@ -269,7 +277,7 @@ def test_migration_is_dry_run_by_default_and_refuses_fragment_or_ambiguous_stop(
 
 def test_migration_output_no_clobber_and_hash_fenced_in_place(tmp_path: Path) -> None:
     source = tmp_path / "v3.yaml"
-    source.write_text("run:\n  name: migrate\n", encoding="utf-8")
+    source.write_text(PINNED_V3_INPUT + "run:\n  name: migrate\n", encoding="utf-8")
     output = tmp_path / "v4.yaml"
     migrate(source, output_path=output)
     load_config_v4(output, profile=ConfigProfile.FULL_V4)
@@ -289,7 +297,7 @@ def test_in_place_migration_revalidates_source_at_publication_boundary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source = tmp_path / "v3.yaml"
-    source.write_text("run:\n  name: original\n", encoding="utf-8")
+    source.write_text(PINNED_V3_INPUT + "run:\n  name: original\n", encoding="utf-8")
     expected = hashlib.sha256(source.read_bytes()).hexdigest()
     concurrent_edit = b"run:\n  name: concurrent-edit\n"
     original_migrate = migration_tool.migrate_v3_bytes_to_v4
@@ -309,7 +317,7 @@ def test_migration_output_failure_never_exposes_partial_final_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source = tmp_path / "v3.yaml"
-    source.write_text("run:\n  name: migrate\n", encoding="utf-8")
+    source.write_text(PINNED_V3_INPUT + "run:\n  name: migrate\n", encoding="utf-8")
     output = tmp_path / "v4.yaml"
 
     def fail_fsync(_descriptor: int) -> None:
@@ -323,7 +331,7 @@ def test_migration_output_failure_never_exposes_partial_final_path(
 
 def test_concurrent_migration_output_publishers_never_overwrite_winner(tmp_path: Path) -> None:
     source = tmp_path / "v3.yaml"
-    source.write_text("run:\n  name: migrate\n", encoding="utf-8")
+    source.write_text(PINNED_V3_INPUT + "run:\n  name: migrate\n", encoding="utf-8")
     output = tmp_path / "v4.yaml"
     barrier = threading.Barrier(2)
 
@@ -1928,6 +1936,8 @@ def test_dynamic_launcher_preserves_each_partial_submission_receipt(
     shared.sync.quorum_min = 1
     shared.sync.quorum_max = 2
     shared.scaling.desired_contributors = 1
+    shared.model.name_or_path = "synthetic-tiny"
+    shared.data.dataset_name = "synthetic"
     config = ConfigV4(shared=shared)
     monkeypatch.setattr(launch_independent_run, "resolve_config_v4", lambda *args, **kwargs: config)
     monkeypatch.setattr(
@@ -1982,6 +1992,8 @@ def test_learner_timeout_path_does_not_import_torch_before_admission(
     shared.sync.num_learners = 1
     shared.sync.quorum_min = 1
     shared.sync.quorum_max = 1
+    shared.model.name_or_path = "synthetic-tiny"
+    shared.data.dataset_name = "synthetic"
     config = ConfigV4(
         shared=shared,
         leader=LeaderSection(

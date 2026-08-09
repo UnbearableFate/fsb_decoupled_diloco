@@ -183,10 +183,10 @@ def test_typed_receipt_proposal_selection_and_v1_commit_flow(tmp_path: Path) -> 
         publish_proposal_payload(tmp_path, proposal)
 
         assert (
-            leader.record_proposal(command_id="proposal-1", proposal=proposal).value == "accepted"
+            leader.ingest_proposal(command_id="proposal-1", proposal=proposal).value == "accepted"
         )
         assert (
-            leader.record_proposal(command_id="proposal-replay", proposal=proposal).value
+            leader.ingest_proposal(command_id="proposal-replay", proposal=proposal).value
             == "exact_replay"
         )
         commit_v0(leader, tmp_path)

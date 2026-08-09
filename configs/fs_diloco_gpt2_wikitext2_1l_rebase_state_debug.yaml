@@ -5,11 +5,14 @@ run:
   log_level: INFO
 model:
   name_or_path: gpt2
+  revision: 607a30d783dfa663caf39e06633721c8d4cfcd7e
+  tokenizer_revision: 607a30d783dfa663caf39e06633721c8d4cfcd7e
   trust_remote_code: false
   dtype: bfloat16
   compile: false
 data:
   dataset_name: wikitext
+  revision: b08601e04326c79dfdd32d625aee71d232d685c3
   dataset_config_name: wikitext-2-raw-v1
   train_split: train
   validation_split: validation

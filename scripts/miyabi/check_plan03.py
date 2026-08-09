@@ -77,6 +77,11 @@ P6_ACCEPTANCE_CONFIG_PROJECTIONS: dict[str, dict[tuple[str, ...], Any]] = {
         },
     },
 }
+PLAN_COMPLETE_GPT2_WIKITEXT_PINS: dict[tuple[str, ...], str] = {
+    ("model", "revision"): "607a30d783dfa663caf39e06633721c8d4cfcd7e",
+    ("model", "tokenizer_revision"): "607a30d783dfa663caf39e06633721c8d4cfcd7e",
+    ("data", "revision"): "b08601e04326c79dfdd32d625aee71d232d685c3",
+}
 FROZEN_FULL_COMMIT = "a00a3d64a50f10a2478c3f4fe795e658d1b3b52f"
 P5_REMOVED_SOURCE = (
     "fs_diloco/observability/metrics.py",
@@ -441,8 +446,14 @@ def verify_p4_migration_contracts(root: Path, frozen_source_ref: str) -> list[st
         frozen_payload = frozen_payloads[path]
         current_payload = current_payloads[path]
         if kind == "full":
+            migration_input = copy.deepcopy(frozen_payload)
+            if (
+                migration_input.get("model", {}).get("name_or_path") == "gpt2"
+                and migration_input.get("data", {}).get("dataset_name") == "wikitext"
+            ):
+                apply_projection(migration_input, PLAN_COMPLETE_GPT2_WIKITEXT_PINS)
             migrated_bytes, _report = migrate_v3_bytes_to_v4(
-                _read_text(root, path, source_ref=frozen_source_ref).encode("utf-8")
+                yaml.safe_dump(migration_input, sort_keys=False).encode("utf-8")
             )
             expected_payload = yaml.safe_load(migrated_bytes) or {}
             if path in p5_dynamic_walltime_updates:

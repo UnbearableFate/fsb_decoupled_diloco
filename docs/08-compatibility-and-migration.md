@@ -24,7 +24,7 @@ tag 用于历史复现，不应作为当前 run 的 fallback runtime。主线删
 
 ## Config 迁移
 
-迁移工具只转换能证明语义明确的配置，并在内存中做 v4 round-trip validation。`stop_after_global_tokens` 不能普遍自动映射为 `stop_after_direct_weight_tokens_applied`；存在 replace、旧计数定义不明或 fragment 语义时必须阻塞并由用户明确选择新 target。
+迁移工具只转换能证明语义明确的配置，并在内存中做 v4 round-trip validation。`stop_after_global_tokens` 不能普遍自动映射为 `stop_after_direct_weight_tokens_applied`；存在 replace、旧计数定义不明或 fragment 语义时必须阻塞并由用户明确选择新 target。Hub-backed input 的 immutable model/tokenizer/dataset commit 也必须由操作者核验并写入；迁移工具不会把移动的默认 branch 伪装成 frozen identity。
 
 repository-owned in-place 迁移需要原 SHA-256 fence，且 publication 前再次读取验证；普通使用应输出到新路径。无论哪种方式，都必须用迁移后的配置创建 fresh v4 run root。
 
@@ -40,4 +40,4 @@ schema 9 的 online audit archive、durable command receipt 和 identity-checked
 
 ## Fresh-v4 identity
 
-resolved config SHA、source identity、descriptor、manifest newline/bytes 和 filesystem inode/link 规则是 fresh v4 publication contract。不要用这些规则“修复”不满足 v4 initializer 协议的历史 root。若旧 authorization/control 与新内容冲突，选择 fresh attempt ID；不要覆盖不可变对象。
+resolved config SHA、source identity、descriptor、实际 loader 使用的 Hub commit、manifest newline/bytes 和 filesystem inode/link 规则是 fresh v4 publication contract。主线只读取 fence-namespaced receipt、canonical admission response 和 epoch-scoped checkpoint layout，不为 early incomplete v4 layouts 提供 silent fallback。不要用这些规则“修复”不满足 v4 initializer 协议的历史 root。若旧 authorization/control 与新内容冲突，选择 fresh attempt ID；不要覆盖不可变对象。

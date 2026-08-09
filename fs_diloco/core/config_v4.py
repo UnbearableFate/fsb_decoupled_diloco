@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -178,6 +179,7 @@ class ConfigV4:
             and self.stop_after_direct_weight_tokens_applied is None
         ):
             raise ValueError("global_only completion requires an unambiguous global stop target")
+        _validate_full_input_revisions(self.shared)
 
 
 _REMOVED_V4_PATHS = (
@@ -532,3 +534,29 @@ def _validate_baseline(config: Config) -> None:
     if config.training.max_local_steps is None:
         raise ValueError("torch baseline requires training.max_local_steps")
     _require_positive_int(config.training.max_local_steps, "training.max_local_steps")
+
+
+_IMMUTABLE_HUB_REVISION = re.compile(r"[0-9a-f]{40}\Z")
+_SYNTHETIC_MODELS = frozenset({"synthetic-tiny", "tiny-synthetic", "tiny-local"})
+
+
+def _is_explicit_local_reference(value: str) -> bool:
+    return value.startswith(("/", "./", "../", "file://"))
+
+
+def _require_immutable_hub_revision(value: str | None, *, name: str) -> None:
+    if not isinstance(value, str) or _IMMUTABLE_HUB_REVISION.fullmatch(value) is None:
+        raise ValueError(f"{name} must be a 40-character lowercase Hub commit SHA")
+
+
+def _validate_full_input_revisions(config: Config) -> None:
+    model_name = config.model.name_or_path
+    if model_name not in _SYNTHETIC_MODELS and not _is_explicit_local_reference(model_name):
+        _require_immutable_hub_revision(config.model.revision, name="model.revision")
+        _require_immutable_hub_revision(
+            config.model.tokenizer_revision or config.model.revision,
+            name="model.tokenizer_revision",
+        )
+    dataset_name = config.data.dataset_name
+    if dataset_name != "synthetic" and not _is_explicit_local_reference(dataset_name):
+        _require_immutable_hub_revision(config.data.revision, name="data.revision")

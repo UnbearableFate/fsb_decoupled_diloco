@@ -63,52 +63,6 @@ def normalized_update_weights(
     return {update_id: weight / total for update_id, weight in raw.items()}
 
 
-def select_one_per_learner(
-    updates: list[dict[str, Any]],
-    *,
-    policy: str = "most_recent_per_learner",
-    quorum_max: int | None = None,
-) -> list[dict[str, Any]]:
-    by_learner: dict[str, dict[str, Any]] = {}
-    for update in updates:
-        learner_id = update["learner_id"]
-        current = by_learner.get(learner_id)
-        if current is None:
-            by_learner[learner_id] = update
-            continue
-        if policy == "oldest_pending":
-            if float(update["committed_at"]) < float(current["committed_at"]):
-                by_learner[learner_id] = update
-        elif policy == "most_recent_per_learner":
-            key = (int(update["local_step_end"]), float(update["committed_at"]))
-            current_key = (int(current["local_step_end"]), float(current["committed_at"]))
-            if key > current_key:
-                by_learner[learner_id] = update
-        else:
-            raise ValueError(f"unsupported selection_policy: {policy}")
-    selected = list(by_learner.values())
-    if policy == "oldest_pending":
-        selected.sort(key=lambda row: (float(row["committed_at"]), row["learner_id"]))
-    else:
-        selected.sort(key=lambda row: (row["learner_id"], int(row["local_step_end"])))
-    if quorum_max is not None:
-        selected = selected[:quorum_max]
-    return selected
-
-
-def stale_update_ids(
-    updates: list[dict[str, Any]],
-    *,
-    current_version: int,
-    max_staleness_versions: int,
-) -> list[str]:
-    return [
-        update["update_id"]
-        for update in updates
-        if staleness(current_version, int(update["base_global_version"])) > max_staleness_versions
-    ]
-
-
 def weighted_average_tensors(tensors: list[Any], weights: list[float]) -> Any:
     if not tensors:
         raise ValueError("cannot average zero tensors")

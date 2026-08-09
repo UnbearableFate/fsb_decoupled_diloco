@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Iterator
 
 from .atomic_io import ensure_dir
-from ..core.constants import GLOBAL_WEIGHT_TEMPLATE, OUTER_OPTIM_TEMPLATE
 
 
 @dataclass(frozen=True)
@@ -206,12 +205,6 @@ class RunPaths:
     def registration_request_path(self, instance_id: str) -> Path:
         return self.registration_requests / f"{instance_id}.json"
 
-    def global_weight_path(self, version: int) -> Path:
-        return self.weights / GLOBAL_WEIGHT_TEMPLATE.format(version=version)
-
-    def outer_optim_path(self, version: int) -> Path:
-        return self.optim / OUTER_OPTIM_TEMPLATE.format(version=version)
-
     @staticmethod
     def owner_short(owner_id: str) -> str:
         return hashlib.sha256(owner_id.encode("utf-8")).hexdigest()[:12]
@@ -377,39 +370,6 @@ class RunPaths:
     def iter_learner_heartbeats(self) -> Iterator[Path]:
         if self.heartbeats.is_dir():
             yield from sorted(self.heartbeats.rglob("*.json"))
-
-    def iter_instance_heartbeats(self) -> Iterator[Path]:
-        yield from self.iter_syncer_heartbeats()
-        yield from self.iter_learner_heartbeats()
-
-    def iter_instance_pointers(self) -> Iterator[Path]:
-        if self.updates_latest.is_dir():
-            yield from sorted(self.updates_latest.rglob("*.json"))
-
-    def iter_instance_payloads(self) -> Iterator[Path]:
-        if self.updates_payloads.is_dir():
-            yield from sorted(self.updates_payloads.rglob("*.safetensors"))
-
-    def iter_registration_requests(self) -> Iterator[Path]:
-        if self.registration_requests.is_dir():
-            yield from sorted(self.registration_requests.glob("*.json"))
-
-
-def prepare_run_dirs(paths: RunPaths, num_learners: int) -> None:
-    for directory in [
-        paths.control,
-        paths.weights,
-        paths.optim,
-        paths.updates_latest,
-        paths.updates_payloads,
-        paths.heartbeats,
-        paths.logs,
-        paths.metrics,
-    ]:
-        ensure_dir(directory)
-    for index in range(num_learners):
-        learner_id = f"learner_{index:03d}"
-        ensure_dir(paths.update_payload_dir(learner_id))
 
 
 def prepare_authority_dirs(paths: RunPaths) -> None:
