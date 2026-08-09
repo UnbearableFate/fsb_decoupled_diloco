@@ -173,8 +173,8 @@ class _SQLiteAdapter:
         )
         self.static_scope = StaticMembershipScope(("learner-0",))
         self.dynamic_scope = DynamicMembershipScope(1)
-        self.static_database = root / "static.sqlite3"
-        self.dynamic_database = root / "dynamic.sqlite3"
+        self.static_database = root / "static/authority.sqlite3"
+        self.dynamic_database = root / "dynamic/authority.sqlite3"
         initialize_authority_v4(
             self.static_database,
             self.static_identity,
@@ -207,7 +207,7 @@ class _SQLiteAdapter:
         self.static_leader.initialize_v0(
             command_id="static-v0",
             publication_id="static-publication-v0",
-            **publish_checkpoint_pair(root, version=0),
+            **publish_checkpoint_pair(self.static_database.parent, version=0),
         )
         self.dynamic_leader.initialize_dynamic_membership(command_id="dynamic-initialize")
         admission = self.dynamic_leader.admit_dynamic_incarnation(
