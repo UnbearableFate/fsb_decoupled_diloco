@@ -34,7 +34,10 @@ def test_dynamic_comparison_adds_omitted_static_terminal_defaults(tmp_path: Path
     )
 
     baseline = yaml.safe_load(configs["baseline"].read_text(encoding="utf-8"))
+    candidate = yaml.safe_load(configs["candidate"].read_text(encoding="utf-8"))
     assert baseline["terminal"]["max_terminal_merges"] == 0
+    assert baseline["learner"]["post_publish_latest_wait_seconds"] == module.ARM_TIMEOUT_SECONDS
+    assert candidate["learner"]["post_publish_latest_wait_seconds"] == module.ARM_TIMEOUT_SECONDS
     assert source.read_bytes() == original
 
 
@@ -136,3 +139,36 @@ def test_classic_summary_joins_archived_history_with_hot_authority(tmp_path: Pat
         "cursor_identity": [4, 4],
         "active_protocol_seconds": 2.0,
     }
+
+
+def test_classic_and_current_configs_share_post_publish_barrier(tmp_path: Path) -> None:
+    module = _load_harness()
+    classic_root = tmp_path / "classic"
+    classic_configs = classic_root / "configs"
+    classic_configs.mkdir(parents=True)
+    frozen_config = subprocess.run(
+        [
+            "git",
+            "show",
+            f"{module.CLASSIC_REF}:configs/fs_diloco_tiny_ha_static.yaml",
+        ],
+        cwd=PROJECT_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    (classic_configs / "fs_diloco_tiny_ha_static.yaml").write_text(frozen_config, encoding="utf-8")
+
+    configs = module._prepare_configs(
+        current_root=PROJECT_ROOT,
+        classic_root=classic_root,
+        scratch=tmp_path,
+        comparison="classic",
+    )
+
+    baseline = yaml.safe_load(configs["baseline"].read_text(encoding="utf-8"))
+    candidate = yaml.safe_load(configs["candidate"].read_text(encoding="utf-8"))
+    for config in (baseline, candidate):
+        assert config["training"]["completion_mode"] == "global_only"
+        assert config["learner"]["post_publish_latest_wait_seconds"] == module.ARM_TIMEOUT_SECONDS
+        assert config["learner"]["post_publish_latest_poll_seconds"] == 0.2

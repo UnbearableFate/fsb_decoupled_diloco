@@ -24,6 +24,7 @@ from fs_diloco.tools.check_workload_equivalence import compare_workloads
 PLAN_ID = "fsb_decoupled_diloco_plan_03_unified_ha"
 PAIRS = 20
 CLASSIC_REF = "archive/classic-full-v1-final"
+ARM_TIMEOUT_SECONDS = 90.0
 TIMER_ANCHOR = (
     "fresh run root absent before any arm-specific initialization through all actor wait() "
     "calls returning cleanly"
@@ -75,6 +76,10 @@ def _prepare_configs(
         stop_after_outer_steps=2,
     )
     static["training"].update(inner_steps=2, completion_mode="global_only")
+    static.setdefault("learner", {}).update(
+        post_publish_latest_wait_seconds=ARM_TIMEOUT_SECONDS,
+        post_publish_latest_poll_seconds=0.2,
+    )
     static.setdefault("terminal", {})["max_terminal_merges"] = 0
     static.setdefault("wandb", {})["enabled"] = False
     static_path = scratch / "current-static.yaml"
@@ -94,6 +99,11 @@ def _prepare_configs(
             stop_after_outer_steps=2,
         )
         classic["coordination"]["syncer_ha"]["enabled"] = False
+        classic["training"].update(inner_steps=2, completion_mode="global_only")
+        classic.setdefault("learner", {}).update(
+            post_publish_latest_wait_seconds=ARM_TIMEOUT_SECONDS,
+            post_publish_latest_poll_seconds=0.2,
+        )
         classic["failure_sim"].update(
             enabled=False,
             sleep_jitter_seconds=0.0,
@@ -126,6 +136,10 @@ def _prepare_configs(
         max_total_launch_requests=2,
     )
     dynamic["training"].update(inner_steps=2, completion_mode="global_only", precision="fp32")
+    dynamic.setdefault("learner", {}).update(
+        post_publish_latest_wait_seconds=ARM_TIMEOUT_SECONDS,
+        post_publish_latest_poll_seconds=0.2,
+    )
     dynamic["terminal"]["max_terminal_merges"] = 0
     dynamic["io"]["tensor_dtype"] = "float32"
     dynamic.setdefault("wandb", {})["enabled"] = False
@@ -492,6 +506,7 @@ def _workload_object(summary: dict[str, Any]) -> dict[str, Any]:
             "inner_steps": 2,
             "global_versions": 2,
             "precision": "float32",
+            "post_publish_latest_wait_seconds": ARM_TIMEOUT_SECONDS,
         },
         "model_identity": {
             "name": "synthetic-tiny",
@@ -619,7 +634,7 @@ def run(
                     environment=environment,
                     pair=-1,
                     warmup=True,
-                    timeout_seconds=90.0,
+                    timeout_seconds=ARM_TIMEOUT_SECONDS,
                 )
             )
         for pair in range(PAIRS):
@@ -637,7 +652,7 @@ def run(
                         environment=environment,
                         pair=pair,
                         warmup=False,
-                        timeout_seconds=90.0,
+                        timeout_seconds=ARM_TIMEOUT_SECONDS,
                     )
                 )
         measured = [row for row in trials if not row["warmup"]]
@@ -656,7 +671,11 @@ def run(
             _canonical(_workload_object(row["workload"])) for row in candidate_rows
         }
         if len(baseline_workloads) != 1 or len(candidate_workloads) != 1:
-            raise RuntimeError("measured workload identity varied between paired repeats")
+            raise RuntimeError(
+                "measured workload identity varied between paired repeats: "
+                f"baseline_variants={sorted(baseline_workloads)}; "
+                f"candidate_variants={sorted(candidate_workloads)}"
+            )
         comparison_input = {
             "baseline": json.loads(next(iter(baseline_workloads))),
             "candidate": json.loads(next(iter(candidate_workloads))),
@@ -747,14 +766,41 @@ def main() -> None:
     parser.add_argument("--shared-parent", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    payload = run(
-        comparison=args.comparison,
-        current_root=args.current_root.resolve(),
-        current_python=args.current_python.absolute(),
-        classic_root=None if args.classic_root is None else args.classic_root.resolve(),
-        classic_python=(None if args.classic_python is None else args.classic_python.absolute()),
-        shared_parent=args.shared_parent.resolve(),
-    )
+    current_root = args.current_root.resolve()
+    try:
+        payload = run(
+            comparison=args.comparison,
+            current_root=current_root,
+            current_python=args.current_python.absolute(),
+            classic_root=None if args.classic_root is None else args.classic_root.resolve(),
+            classic_python=(
+                None if args.classic_python is None else args.classic_python.absolute()
+            ),
+            shared_parent=args.shared_parent.resolve(),
+        )
+    except Exception as exc:
+        source = _capture_source(current_root)
+        payload = {
+            "artifact_version": 1,
+            "plan_id": PLAN_ID,
+            "phase_id": "P6-acceptance-final-review",
+            "gate": (
+                "G10-classic-vs-unified"
+                if args.comparison == "classic"
+                else "G10-static-vs-dynamic"
+            ),
+            "status": "BLOCKED",
+            "requirements_covered": [
+                "P6-PERF-CLASSIC" if args.comparison == "classic" else "P6-PERF-DYNAMIC"
+            ],
+            "source_commit": source["git_commit"],
+            "source_identity": source,
+            "environment": {
+                "pbs_job_id": os.environ.get("PBS_JOBID"),
+                "host": os.uname().nodename,
+            },
+            "errors": [f"{type(exc).__name__}: {exc}"],
+        }
     _write_json(args.output.resolve(), payload)
     print(payload["status"])
     if payload["status"] != "PASS":
