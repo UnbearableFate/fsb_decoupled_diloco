@@ -325,6 +325,47 @@ def _wait_replacement_launch(
         time.sleep(0.5)
 
 
+def _wait_replacement_admission(
+    database: Path, launch: dict[str, Any], *, timeout: float
+) -> dict[str, Any]:
+    request_id = str(launch["request_id"])
+    launch_job_id = str(launch["pbs_job_id"])
+    deadline = time.monotonic() + timeout
+    while True:
+        connection = sqlite3.connect(f"file:{database.resolve()}?mode=ro", uri=True)
+        connection.row_factory = sqlite3.Row
+        try:
+            row = connection.execute(
+                "SELECT li.*, lr.state AS launch_state, "
+                "lr.pbs_job_id AS launch_pbs_job_id "
+                "FROM launch_requests AS lr "
+                "LEFT JOIN learner_instances AS li "
+                "ON li.instance_id=lr.admitted_instance_id "
+                "WHERE lr.request_id=?",
+                (request_id,),
+            ).fetchone()
+        finally:
+            connection.close()
+        if row is None:
+            raise RuntimeError(f"replacement launch disappeared: {request_id}")
+        result = dict(row)
+        state = str(result["launch_state"])
+        if state == "admitted" and result.get("instance_id") is not None:
+            instance_status = str(result["status"])
+            if instance_status not in {"admitted", "draining", "stopped"}:
+                raise RuntimeError(
+                    f"replacement {request_id} was admitted with terminal status {instance_status}"
+                )
+            if normalize_job_id(str(result["pbs_job_id"])) != normalize_job_id(launch_job_id):
+                raise RuntimeError("replacement launch/registration PBS identities differ")
+            return result
+        if state in {"failed", "expired", "manual_review"}:
+            raise RuntimeError(f"replacement launch became terminal before admission: {state}")
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"replacement launch was not admitted: {request_id}")
+        time.sleep(0.2)
+
+
 def _terminate_scenario_job(
     *, job_id: str, project_root: Path, environment: dict[str, str]
 ) -> dict[str, str]:
@@ -851,7 +892,9 @@ def _dynamic_replacement(
         replacement_job_id = str(replacement_launch["pbs_job_id"])
         if replacement_job_id == initial_job_id:
             raise RuntimeError("replacement reused the terminal learner job ID")
-        replacement_instance = _wait_dynamic_admission(database, replacement_job_id, timeout=120.0)
+        replacement_instance = _wait_replacement_admission(
+            database, replacement_launch, timeout=120.0
+        )
         if int(replacement_instance["stream_id"]) != int(lost_instance["stream_id"]) or int(
             replacement_instance["stream_epoch"]
         ) <= int(lost_instance["stream_epoch"]):
@@ -919,8 +962,12 @@ def _dynamic_replacement(
         raise RuntimeError("dynamic tiny scenario did not admit a replacement")
     if len(nonbootstrap_launches) != 1 or nonbootstrap_launches[0]["role"] != "replacement":
         raise RuntimeError("dynamic replacement scenario submitted an unrelated scale-out")
-    if lost_final is None or lost_final["status"] != "revoked":
-        raise RuntimeError("lost dynamic instance was not durably revoked")
+    if (
+        lost_final is None
+        or lost_final["status"] != "expired"
+        or lost_final["status_reason"] != "confirmed_scheduler_terminal_after_progress_stall"
+    ):
+        raise RuntimeError("lost dynamic instance lacks exact scheduler-expiry evidence")
     if replacement_final is None or replacement_final["status"] != "stopped":
         raise RuntimeError("replacement dynamic instance did not stop terminally")
     old_applied_versions = [
@@ -1041,7 +1088,9 @@ def _dynamic_candidate_and_learner_failure(
         replacement_job_id = str(replacement_launch["pbs_job_id"])
         if replacement_job_id == initial_job_id:
             raise RuntimeError("replacement reused the terminal learner job ID")
-        replacement_instance = _wait_dynamic_admission(database, replacement_job_id, timeout=120.0)
+        replacement_instance = _wait_replacement_admission(
+            database, replacement_launch, timeout=120.0
+        )
         if int(replacement_instance["stream_id"]) != int(lost_instance["stream_id"]) or int(
             replacement_instance["stream_epoch"]
         ) <= int(lost_instance["stream_epoch"]):
@@ -1116,8 +1165,12 @@ def _dynamic_candidate_and_learner_failure(
         raise RuntimeError("combined failure scenario did not admit exactly one replacement")
     if len(nonbootstrap_launches) != 1 or nonbootstrap_launches[0]["role"] != "replacement":
         raise RuntimeError("combined failure scenario submitted an unrelated scale-out")
-    if lost_final is None or lost_final["status"] != "revoked":
-        raise RuntimeError("combined failure lost instance was not revoked")
+    if (
+        lost_final is None
+        or lost_final["status"] != "expired"
+        or lost_final["status_reason"] != "confirmed_scheduler_terminal_after_progress_stall"
+    ):
+        raise RuntimeError("combined failure lost instance lacks scheduler-expiry evidence")
     if replacement_final is None or replacement_final["status"] != "stopped":
         raise RuntimeError("combined failure replacement did not stop terminally")
     old_applied_versions = [

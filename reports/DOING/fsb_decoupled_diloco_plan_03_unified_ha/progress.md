@@ -716,3 +716,8 @@
 - Clean target `7aff2552b254b70274877929563b3d53eb7661f9` passed the full G0/G1 gate with exact config/schema/lock identities and all static/Checker/matrix checks: `artifacts/20260810-003700_p6-g0-g1-freeze-static_pass.json`.
 - PBS job `2513007.opbs` passed `616` focused tests in `41.17s` and the full suite as `724 passed, 2 skipped` in `58.86s`; JUnit failure/error counts are zero. The four newly collected tests cover bootstrap deadline suppression, post-admission liveness anchoring, pre-capture tombstone polling versus post-capture fencing, and collision-free terminal ack telemetry. Artifact: `artifacts/20260810-003900_p6-g2-tests_pass.json`.
 - This associated test group proves the attempt-4 production repairs but not the G5 runner's normalized PBS identity handling exposed immediately afterward. G5 remains failed until all six real scenarios complete on a subsequent clean target.
+
+## 2026-08-10 00:49 JST — P6 normalized-identity harness G0/G1 and G2 PASS
+
+- Clean target `9a8760ff7f37d781a2693087f7e271142a8f287b` passed G0/G1 (`artifacts/20260810-004800_p6-g0-g1-freeze-static_pass.json`) and compute G2 job `2513058.opbs` passed `616` focused tests plus full `724 passed, 2 skipped`, with zero JUnit failures/errors (`artifacts/20260810-004900_p6-g2-tests_pass.json`).
+- The only executable delta from `7aff255` was G5's PBS-ID normalization. Attempt 6 subsequently proved the dynamic production run and normalized lookup but exposed the distinct expired-vs-revoked oracle error; the second three-failure review and request-keyed replacement join therefore remain required before G5 can pass.

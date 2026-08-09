@@ -1,0 +1,31 @@
+{
+  "artifact_version": 1,
+  "errors": [
+    "harness expected scheduler-expired lost instance to use the operator-revoked status"
+  ],
+  "evidence": {
+    "parent_log": "fsdiloco_p6_g5.o2513076",
+    "partial_artifact_prefix": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/.20260810-005200_p6-g5-tiny-scenarios_pass.json",
+    "run_root": "runs/fs_diloco/plan03_p6_g5_dynamic-2-learners-replacement_2513076"
+  },
+  "experiment_id": "P6-G5-tiny-attempt6",
+  "metrics": {
+    "completed_scenarios": 4,
+    "dynamic_final_version": 11,
+    "dynamic_nonbootstrap_launches": 1,
+    "dynamic_stop_reason": "configured_target",
+    "lost_final_status": "expired",
+    "lost_status_reason": "confirmed_scheduler_terminal_after_progress_stall",
+    "replacement_final_status": "stopped"
+  },
+  "pbs": {
+    "exit_status": 1,
+    "host": "mg0006",
+    "job_id": "2513076.opbs",
+    "walltime_requested": "00:20:00"
+  },
+  "phase_id": "P6-acceptance-final-review",
+  "plan_id": "fsb_decoupled_diloco_plan_03_unified_ha",
+  "source_commit": "9a8760ff7f37d781a2693087f7e271142a8f287b",
+  "status": "BLOCKED"
+}
