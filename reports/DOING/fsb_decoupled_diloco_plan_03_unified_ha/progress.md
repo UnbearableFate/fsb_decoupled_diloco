@@ -807,3 +807,19 @@
 
 - After attempt 7 proved unified actual work stable and frozen classic actual work racy, the classic benchmark config now uses its existing local completion mode with exactly four steps; unified retains global completion so the v4 drain/ack cost remains measured. Workload identity records the common cursor horizon. Post-trial validation errors now retain all completed trials, timings, actor event tapes and workload variants before scratch removal.
 - Added a synthetic 42-trial regression that forces two baseline variants and proves the returned `BLOCKED` payload retains every trial/event plus exact variant sets. Focused Ruff lint/format, py_compile and diff checks all pass. PBS G0/G2 and real classic termination remain pending on the next clean target.
+
+## 2026-08-10 03:31 JST — classic exact-horizon target `320d74d` G0/G1 PASS
+
+- Clean target `320d74d` passed every formal static/Checker requirement, with exact modified-file formatting and `git_dirty=false`. Artifact: `artifacts/20260810-033100_p6-g0-g1-freeze-static-pass.json`; logs: `logs/plan03_p6_g0_20260810_033100/`.
+- This freezes the adapter/evidence change for G2. It does not prove the frozen classic actors stop at cursor four; that remains a compute/runtime assertion.
+
+## 2026-08-10 03:34 JST — classic exact-horizon adapter G2 PASS
+
+- PBS job `2513797.opbs` on `mg0014` passed target `320d74d0fee41ddf0c8f6a6634f7b1db34fb00a6`: focused `624 passed` in `40.32s`; full `741 passed, 2 skipped` in `84.59s`; zero failures/errors/xfails. Artifact: `artifacts/20260810-033200_p6-g2-tests-pass.json`; logs: `logs/qsub_plan03_p6_g2_20260810_033200/` and `fsdiloco_p6_g2.o2513797`.
+- This validates config generation and complete retained-failure evidence behavior. Real classic actor termination and unchanged performance statistics still require formal G10 attempt 8.
+
+## 2026-08-10 03:45 JST — P6 G10 formal paired performance PASS
+
+- Formal attempt 8, PBS job `2513806.opbs` on `mg0014`, clean target `320d74d0fee41ddf0c8f6a6634f7b1db34fb00a6`, completed both independent comparisons. Each arm has one warmup plus exact 20 AB/BA pairs; all 84 measured arms used fresh roots and ended cleanly. Every repeat has actual and selected workload exactly final v2, four updates, 256 processed/direct tokens and cursor `[4,4]`; no failure injection, replacement or clipping occurred. Both artifacts retain per-actor event tapes before scratch cleanup.
+- Classic vs unified: baseline `7.088–8.677s`, candidate `6.922–7.217s`; paired median signed overhead `-10.764%`, one-sided 95% bootstrap upper `-9.518%`, both within the pre-registered `<=10%` margin. Unified initialization is now only about `0.322–0.355s`; lazy authority tensor imports plus pre-admission overlap removed the former 2.5s/serialized startup without weakening tensor verification or the timer anchor. Artifact: `artifacts/20260810-033500_p6-g10-classic-performance-pass.json`.
+- Static vs dynamic: baseline `6.925–7.216s`, candidate `6.950–7.240s`; median overhead `0.036%`, one-sided 95% upper `0.947%`. Artifact: `artifacts/20260810-033500_p6-g10-dynamic-performance-pass.json`. Both comparison statuses are `COMPARABLE`, `noninferiority_pass=true`, and error lists are empty. This resets G10's failure count.
