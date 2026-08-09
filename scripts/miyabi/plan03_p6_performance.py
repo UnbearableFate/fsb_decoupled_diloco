@@ -99,7 +99,11 @@ def _prepare_configs(
             stop_after_outer_steps=2,
         )
         classic["coordination"]["syncer_ha"]["enabled"] = False
-        classic["training"].update(inner_steps=2, completion_mode="global_only")
+        classic["training"].update(
+            inner_steps=2,
+            completion_mode="local_or_global",
+            max_local_steps=4,
+        )
         classic.setdefault("learner", {}).update(
             post_publish_latest_wait_seconds=ARM_TIMEOUT_SECONDS,
             post_publish_latest_poll_seconds=0.2,
@@ -567,6 +571,7 @@ def _workload_object(summary: dict[str, Any]) -> dict[str, Any]:
             "global_versions": 2,
             "precision": "float32",
             "post_publish_latest_wait_seconds": ARM_TIMEOUT_SECONDS,
+            "actual_per_learner_cursor_horizon": 4,
         },
         "model_identity": {
             "name": "synthetic-tiny",
@@ -785,6 +790,12 @@ def run(
                 "bootstrap_samples": 10_000,
                 "failure_injection": False,
                 "mid_cycle_replacement": False,
+                "classic_completion_adapter": (
+                    "local_or_global with max_local_steps=4; unified remains global_only "
+                    "to acknowledge Full Protocol v4 drain"
+                    if comparison == "classic"
+                    else None
+                ),
             },
             "comparison": result,
             "primary_end_to_end_seconds": {
@@ -801,6 +812,64 @@ def run(
             },
             "trials": trials,
             "errors": errors,
+            "scratch_removed": True,
+        }
+    except Exception as exc:
+        measured = [row for row in trials if not row["warmup"]]
+        variants = {
+            arm: sorted(
+                {
+                    _canonical(_workload_object(row["workload"]))
+                    for row in measured
+                    if row["arm"] == arm
+                }
+            )
+            for arm in ("baseline", "candidate")
+        }
+        return {
+            "artifact_version": 1,
+            "plan_id": PLAN_ID,
+            "phase_id": "P6-acceptance-final-review",
+            "gate": (
+                "G10-classic-vs-unified" if comparison == "classic" else "G10-static-vs-dynamic"
+            ),
+            "status": "BLOCKED",
+            "requirements_covered": [
+                "P6-PERF-CLASSIC" if comparison == "classic" else "P6-PERF-DYNAMIC"
+            ],
+            "source_commit": current_source["git_commit"],
+            "source_identity": current_source,
+            "environment": {
+                "pbs_job_id": os.environ["PBS_JOBID"],
+                "host": os.uname().nodename,
+                "executable_sources": executable_sources,
+            },
+            "method": {
+                "pairs": PAIRS,
+                "arm_order": "AB on even pair indices, BA on odd indices",
+                "timer_anchor": TIMER_ANCHOR,
+                "classic_completion_adapter": (
+                    "local_or_global with max_local_steps=4; unified remains global_only "
+                    "to acknowledge Full Protocol v4 drain"
+                    if comparison == "classic"
+                    else None
+                ),
+            },
+            "completed_workload_variants": variants,
+            "primary_end_to_end_seconds": {
+                arm: [float(row["elapsed_seconds"]) for row in measured if row["arm"] == arm]
+                for arm in ("baseline", "candidate")
+            },
+            "secondary_active_protocol_seconds": {
+                arm: [
+                    float(row["timing"]["active_protocol_seconds"])
+                    for row in measured
+                    if row["arm"] == arm
+                ]
+                for arm in ("baseline", "candidate")
+            },
+            "trials": trials,
+            "errors": [f"{type(exc).__name__}: {exc}"],
             "scratch_removed": True,
         }
     finally:

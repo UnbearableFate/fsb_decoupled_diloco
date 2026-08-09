@@ -791,3 +791,19 @@
 
 - Moved the two tensor/object verification imports from `storage.authority` module scope to the exact proposal-ingest and prepared-publication verification paths. Admission, leadership and membership APIs can now load without Torch, while proposal/publication verification remains before its original transaction/commit boundary. The fresh-process test now covers authority, syncer entrypoint and syncer runtime modules together.
 - Focused Ruff lint/format, py_compile and `git diff --check` all passed for the authority/test change. Runtime import and the complete regression remain unverified until a new clean target passes G2; the failed `2513720` result is not reused.
+
+## 2026-08-10 03:18 JST — Torch-free authority target `fea4217` G0/G1 PASS
+
+- Clean target `fea42175e1e7d661b7890a9d8142b657f7811ee8` passed the complete static/Checker gate with `git_dirty=false`, including repository Ruff and exact changed-file format. Artifact: `artifacts/20260810-031800_p6-g0-g1-freeze-static-pass.json`; logs: `logs/plan03_p6_g0_20260810_031800/`.
+- This supersedes `8aaa7b7` for the G10 remediation source and authorizes a fresh G2 attempt. It does not convert job `2513720` into passing evidence.
+
+## 2026-08-10 03:21 JST — Torch-free admission/runtime remediation G2 PASS
+
+- PBS job `2513730.opbs` on `mg0002` validated clean target `fea42175e1e7d661b7890a9d8142b657f7811ee8`. Focused passed all `624` tests in `40.36s`; full passed `740` with the two formal-profile skips in `83.39s`; both JUnit summaries contain zero failures/errors and no xfail.
+- Artifact: `artifacts/20260810-031900_p6-g2-tests-pass.json`; raw logs: `logs/qsub_plan03_p6_g2_20260810_031900/` and `fsdiloco_p6_g2.o2513730`. This proves the fresh process can import authority, syncer entrypoint and admission-bearing syncer runtime without Torch, while the complete proposal/publication and admission regression remains passing.
+- Formal G10 is not yet authorized as attempt 7: the second-review plan requires an isolated diagnostic of startup overlap and initializer cost before deciding whether the separately proofed initializer optimization is necessary.
+
+## 2026-08-10 03:30 JST — classic exact-horizon adapter focused static group PASS
+
+- After attempt 7 proved unified actual work stable and frozen classic actual work racy, the classic benchmark config now uses its existing local completion mode with exactly four steps; unified retains global completion so the v4 drain/ack cost remains measured. Workload identity records the common cursor horizon. Post-trial validation errors now retain all completed trials, timings, actor event tapes and workload variants before scratch removal.
+- Added a synthetic 42-trial regression that forces two baseline variants and proves the returned `BLOCKED` payload retains every trial/event plus exact variant sets. Focused Ruff lint/format, py_compile and diff checks all pass. PBS G0/G2 and real classic termination remain pending on the next clean target.

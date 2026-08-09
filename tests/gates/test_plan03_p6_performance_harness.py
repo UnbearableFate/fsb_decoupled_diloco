@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import sqlite3
 import subprocess
+from typing import Any
 
 import yaml
 
@@ -194,7 +195,90 @@ def test_actor_event_tape_is_harvested_before_run_cleanup(tmp_path: Path) -> Non
     assert tape == {"metrics/syncer/owner/attempt.jsonl": rows}
 
 
-def test_classic_and_current_configs_share_post_publish_barrier(tmp_path: Path) -> None:
+def test_post_trial_validation_failure_retains_trials_and_variants(
+    tmp_path: Path, monkeypatch
+) -> None:
+    module = _load_harness()
+    monkeypatch.setenv("PBS_JOBID", "123.opbs")
+    monkeypatch.setattr(
+        module,
+        "_capture_source",
+        lambda _root: {
+            "git_commit": "a" * 40,
+            "git_dirty": False,
+            "source_fingerprint": "sha256:source",
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "_classic_ref_identity",
+        lambda _root: {
+            "ref": module.CLASSIC_REF,
+            "object_id": "b" * 40,
+            "object_type": "tag",
+            "commit": "c" * 40,
+        },
+    )
+
+    def fake_git(_root: Path, *arguments: str) -> str:
+        if arguments == ("rev-parse", "HEAD"):
+            return "c" * 40
+        if arguments == ("status", "--porcelain=v1"):
+            return ""
+        raise AssertionError(arguments)
+
+    monkeypatch.setattr(module, "_git", fake_git)
+    monkeypatch.setattr(
+        module,
+        "_prepare_configs",
+        lambda **_kwargs: {"baseline": tmp_path / "a", "candidate": tmp_path / "b"},
+    )
+
+    def fake_arm(**kwargs: Any) -> dict[str, Any]:
+        pair = int(kwargs["pair"])
+        arm = str(kwargs["arm"])
+        cursor = [4, 6] if arm == "baseline" and pair == 1 else [4, 4]
+        processed = 320 if cursor == [4, 6] else 256
+        return {
+            "arm": arm,
+            "pair": pair,
+            "warmup": bool(kwargs["warmup"]),
+            "elapsed_seconds": 1.0,
+            "timing": {"active_protocol_seconds": 0.5},
+            "workload": {
+                "final_version": 2,
+                "processed_tokens": processed,
+                "direct_weight_tokens": 256,
+                "selected_count": 4,
+                "cursor_identity": cursor,
+                "selected_processed_tokens": 256,
+                "selected_cursor_identity": [4, 4],
+            },
+            "actor_event_tape": {"metrics/syncer/a.jsonl": [{"event_type": "v0"}]},
+        }
+
+    monkeypatch.setattr(module, "_run_arm", fake_arm)
+
+    result = module.run(
+        comparison="classic",
+        current_root=tmp_path,
+        current_python=tmp_path / "current-python",
+        classic_root=tmp_path / "classic",
+        classic_python=tmp_path / "classic-python",
+        shared_parent=tmp_path,
+    )
+
+    assert result["status"] == "BLOCKED"
+    assert len(result["trials"]) == 42
+    assert len(result["completed_workload_variants"]["baseline"]) == 2
+    assert len(result["completed_workload_variants"]["candidate"]) == 1
+    assert result["trials"][0]["actor_event_tape"]
+    assert result["scratch_removed"] is True
+
+
+def test_classic_adapter_and_current_target_wait_share_exact_work_horizon(
+    tmp_path: Path,
+) -> None:
     module = _load_harness()
     classic_root = tmp_path / "classic"
     classic_configs = classic_root / "configs"
@@ -221,7 +305,11 @@ def test_classic_and_current_configs_share_post_publish_barrier(tmp_path: Path) 
 
     baseline = yaml.safe_load(configs["baseline"].read_text(encoding="utf-8"))
     candidate = yaml.safe_load(configs["candidate"].read_text(encoding="utf-8"))
+    assert baseline["training"]["completion_mode"] == "local_or_global"
+    assert baseline["training"]["max_local_steps"] == 4
+    assert candidate["training"]["completion_mode"] == "global_only"
     for config in (baseline, candidate):
-        assert config["training"]["completion_mode"] == "global_only"
+        assert config["training"]["inner_steps"] == 2
+        assert config["sync"]["stop_after_outer_steps"] == 2
         assert config["learner"]["post_publish_latest_wait_seconds"] == module.ARM_TIMEOUT_SECONDS
         assert config["learner"]["post_publish_latest_poll_seconds"] == 0.2
