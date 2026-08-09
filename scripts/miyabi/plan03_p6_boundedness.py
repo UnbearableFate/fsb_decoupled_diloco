@@ -290,6 +290,8 @@ def run_gate(
         )
         for cycle in range(1, cycles + 1):
             clock.now += 1.0
+            if cycle % 30 == 0:
+                authority.renew_leader(token)
             update_id = str(uuid.UUID(int=cycle, version=4))
             cycle_id = str(uuid.UUID(int=cycles + cycle, version=4))
             receipt = CycleReceiptV1.from_dict(
@@ -405,7 +407,9 @@ def run_gate(
                     }
                 )
         maintenance.tick(force=True)
-        clock.now += maintenance_config.publication_orphan_grace_seconds + 1.0
+        clock.now += 60.0
+        authority.renew_leader(token)
+        clock.now += maintenance_config.publication_orphan_grace_seconds - 59.0
         maintenance.tick()
         final_latency = {
             "latest": _latency_probe(authority.read.latest_committed_version),
