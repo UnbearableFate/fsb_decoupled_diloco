@@ -1,0 +1,28 @@
+{
+  "experiment_id": "p4-admission-hotpath-publication-red",
+  "attempt": 1,
+  "status": "EXPECTED_RED",
+  "command": "qsub -l walltime=00:10:00 scripts/miyabi/run_plan03_phase4_tests.pbs",
+  "pbs": {
+    "job_id": "2509434.opbs",
+    "compute_host": "mg0007",
+    "queue": "debug-g",
+    "group_id": "xg24i002",
+    "requested_walltime": "00:10:00",
+    "actual_walltime": "00:00:12",
+    "exit_status": 1
+  },
+  "identity": {
+    "git_commit": "0e8b14ed08eacda710a0f1b4ebf3b19f921f31e4",
+    "git_dirty": true
+  },
+  "result": {
+    "focused": "2 failed, 60 passed in 6.58s",
+    "expected_failures": [
+      "malformed and foreign admission requests remain in the hot discovery tree",
+      "an admitted request whose response publication raises OSError is incorrectly persisted as rejected"
+    ]
+  },
+  "raw_log": "fsdiloco_plan03_p4.o2509434",
+  "raw_log_sha256": "b4d9ed77bd34fd77f6ee376ae085b26c9ea72a18397676b7cb9594c6b1d3edf4"
+}

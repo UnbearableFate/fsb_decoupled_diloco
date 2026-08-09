@@ -48,8 +48,8 @@ class _LeaseRenewer:
         try:
             authority = self._factory()
             while not self._stop.wait(self._interval):
-                authority.renew_leader(self._token)
-                self._control.publish_heartbeat()
+                lease = authority.renew_leader(self._token)
+                self._control.publish_heartbeat(lease)
         except BaseException as exc:
             self._failed = exc
             self._stop.set()
@@ -127,12 +127,8 @@ def main(argv: list[str] | None = None) -> None:
                     raise TimeoutError("syncer candidate timed out waiting for leader lease")
                 time.sleep(config.leader.candidate_acquire_poll_seconds)
         leader = authority.open_leader(token)
-        control = V4ControlPublisher(
-            loaded.paths,
-            token,
-            lease_duration_seconds=config.leader.lease_duration_seconds,
-        )
-        control.publish_heartbeat()
+        control = V4ControlPublisher(loaded.paths, token)
+        control.publish_heartbeat(authority.committed_leader_lease(token))
         renewer = _LeaseRenewer(
             authority_factory=authority_factory,
             token=token,

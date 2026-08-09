@@ -1,0 +1,58 @@
+{
+  "artifact_policy_sha256": "fd2c50a29b25f908fe092d3a92589687954ac0417beb1e51fa2ad79d14862cdf",
+  "candidate_bytes": 26016,
+  "candidate_count": 5,
+  "candidates": [
+    {
+      "device": 743766374,
+      "inode": 270219127044445504,
+      "mtime_ns": 1786243431000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_000.json",
+      "size_bytes": 600
+    },
+    {
+      "device": 743766374,
+      "inode": 270219127044445485,
+      "mtime_ns": 1786243431000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_001.json",
+      "size_bytes": 600
+    },
+    {
+      "device": 743766374,
+      "inode": 270219127044445499,
+      "mtime_ns": 1786243431000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/4766befa-ad05-4dd9-94c4-623292bc5f56.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219127044445478,
+      "mtime_ns": 1786243431000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/56d0500d-d487-4791-bccd-f23313c8997d.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219127044445471,
+      "mtime_ns": 1786243431000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_001/9b3a54e3-d698-41d3-a1be-3fe43d303321.safetensors",
+      "size_bytes": 8272
+    }
+  ],
+  "completion_evidence": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-114430_p4-admission-collision-validation_pass.json",
+  "completion_evidence_sha256": "70805c7fd4379f884c95aedf59e73bb9fc9ee374a93f8fd7a408caa08805dca0",
+  "deleted_bytes": 26016,
+  "deleted_count": 5,
+  "format_version": 1,
+  "legacy_policy_override": false,
+  "retained_representative_learner_log": null,
+  "run_id": "plan03_p4_static_2509482",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_static_2509482",
+  "status": "complete",
+  "tool": "fs_diloco.tools.clean_run"
+}

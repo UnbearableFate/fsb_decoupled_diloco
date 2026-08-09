@@ -1,0 +1,162 @@
+{
+  "artifact_schema_version": 1,
+  "recorded_at": "2026-08-09T11:49:50+09:00",
+  "phase": "P4-mandatory-fenced-runtime",
+  "review_base": "f849214be19c66166a3b57962de86f4265e80e68",
+  "review_target": "0e8b14ed08eacda710a0f1b4ebf3b19f921f31e4",
+  "review": "reports/DOING/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P4-mandatory-fenced-runtime/gpt-5.6-sol_0e8b14ed08eacda710a0f1b4ebf3b19f921f31e4.md",
+  "review_verdict": "CHANGES_REQUIRED",
+  "remediation_source_commit": null,
+  "status": "fixed-pending-frozen-target-validation",
+  "findings": [
+    {
+      "id": "H1",
+      "severity": "High",
+      "disposition": "fixed",
+      "summary": "A duplicate static actor can no longer self-authorize replacement of an active attempt.",
+      "implementation": [
+        "fs_diloco/protocol/admission_v4.py",
+        "fs_diloco/runtime/syncer_v4.py",
+        "fs_diloco/tools/authorize_static_replacement.py",
+        "scripts/miyabi/run_plan03_phase4_static_rerun.pbs"
+      ],
+      "tests": [
+        "test_default_static_duplicate_cannot_replace_an_active_binding",
+        "test_exact_operator_authorization_allows_active_static_replacement",
+        "test_static_replacement_authorization_rejects_nonfinite_timestamp"
+      ],
+      "evidence": [
+        "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-102800_p4-review-remediation-red-attempt1_fail.json",
+        "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-110300_p4-review-static-duplicate-rerun-attempt2_pass.json"
+      ]
+    },
+    {
+      "id": "H2",
+      "severity": "High",
+      "disposition": "fixed",
+      "summary": "Admission responses are bound to one current fence, replay is revalidated against authority, and actors revalidate immediately before importing torch.",
+      "implementation": [
+        "fs_diloco/protocol/admission_v4.py",
+        "fs_diloco/runtime/learner_entrypoint.py",
+        "fs_diloco/runtime/syncer_v4.py",
+        "fs_diloco/storage/authority.py",
+        "fs_diloco/storage/paths.py"
+      ],
+      "tests": [
+        "test_same_epoch_stale_admission_is_superseded_by_current_fence",
+        "test_stale_epoch_admission_response_cannot_open_torch_gate",
+        "test_same_epoch_admission_repair_reuses_immutable_resume_snapshot",
+        "test_admission_disposition_retry_reuses_published_resume_snapshot"
+      ],
+      "evidence": [
+        "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-102800_p4-review-remediation-red-attempt1_fail.json",
+        "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-105400_p4-admission-publication-race-red_fail.json",
+        "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-111148_p4-admission-disposition-retry-red_fail.json",
+        "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-111500_p4-admission-remediation-validation_pass.json"
+      ]
+    },
+    {
+      "id": "M1",
+      "severity": "Medium",
+      "disposition": "fixed",
+      "summary": "Heartbeat publications use the exact committed lease timestamps and reject an already unsafe expiry.",
+      "implementation": [
+        "fs_diloco/protocol/control_v4.py",
+        "fs_diloco/runtime/syncer_entrypoint.py",
+        "fs_diloco/storage/leader_lease.py"
+      ],
+      "tests": [
+        "test_heartbeat_publication_uses_exact_committed_lease_and_rejects_delay"
+      ],
+      "evidence": [
+        "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-102800_p4-review-remediation-red-attempt1_fail.json",
+        "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-112730_p4-review-two-candidate-takeover_pass.json"
+      ]
+    },
+    {
+      "id": "M2",
+      "severity": "Medium",
+      "disposition": "fixed",
+      "summary": "In-place migration uses a stable sibling lock and publication-boundary CAS; output migration publishes a complete sibling create-no-replace and cleans failed temporary state.",
+      "implementation": [
+        "fs_diloco/tools/migrate_config_v3_to_v4.py"
+      ],
+      "tests": [
+        "test_in_place_migration_revalidates_source_at_publication_boundary",
+        "test_migration_output_failure_never_exposes_partial_final_path",
+        "test_concurrent_migration_output_publishers_never_overwrite_winner"
+      ],
+      "evidence": [
+        "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-102800_p4-review-remediation-red-attempt1_fail.json",
+        "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-114430_p4-admission-collision-validation_pass.json"
+      ]
+    },
+    {
+      "id": "M3",
+      "severity": "Medium",
+      "disposition": "fixed",
+      "summary": "The canonical latest reader derives and anchors the only legal pointer and validates exact head/payload run, epoch, owner, version, kind and digest identity.",
+      "implementation": [
+        "fs_diloco/protocol/control_v4.py",
+        "fs_diloco/storage/paths.py"
+      ],
+      "tests": [
+        "test_latest_head_rejects_path_escape_and_payload_identity_mismatch",
+        "test_epoch_control_ignores_polluted_fixed_cache_and_repairs_it"
+      ],
+      "evidence": [
+        "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-102800_p4-review-remediation-red-attempt1_fail.json",
+        "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-112430_p4-review-error-successor_pass.json"
+      ]
+    },
+    {
+      "id": "M4",
+      "severity": "Medium",
+      "disposition": "fixed",
+      "summary": "Every terminal request gets an immutable disposition/history record and leaves bounded hot discovery; recovery reuses exact immutable controls and telemetry is emitted only on transition.",
+      "implementation": [
+        "fs_diloco/protocol/admission_v4.py",
+        "fs_diloco/runtime/syncer_v4.py",
+        "fs_diloco/storage/artifact_policy.py",
+        "fs_diloco/storage/paths.py"
+      ],
+      "tests": [
+        "test_disposed_admission_request_leaves_hot_scan_and_emits_once",
+        "test_malformed_and_foreign_admission_requests_leave_hot_scan_once",
+        "test_identical_malformed_requests_share_archive_without_hot_path_collision",
+        "test_incomplete_admission_disposition_cannot_remove_hot_request",
+        "test_admission_control_publication_failure_is_not_persisted_as_rejection",
+        "test_admission_response_rejects_extra_fields_even_with_matching_pointer_hash"
+      ],
+      "evidence": [
+        "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-110655_p4-admission-hotpath-publication-red_fail.json",
+        "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-114100_p4-admission-collision-validation-red_fail.json",
+        "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-114430_p4-admission-collision-validation_pass.json"
+      ]
+    }
+  ],
+  "claude": {
+    "status": "skipped-session-limit",
+    "session_id": "63788ac1-d516-4594-b851-8fb540f74ef4",
+    "api_error_status": 429,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "metadata": "reports/DOING/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P4-mandatory-fenced-runtime/claude-opus-5_0e8b14ed08eacda710a0f1b4ebf3b19f921f31e4_skipped-session-limit.json",
+    "blocking": false
+  },
+  "validation": {
+    "latest_job_id": "2509482.opbs",
+    "latest_evidence": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-114430_p4-admission-collision-validation_pass.json",
+    "focused_tests": "66 passed",
+    "full_tests": "882 passed",
+    "static_pipeline": "PASS",
+    "dynamic_pipeline": "PASS",
+    "specialty_jobs": [
+      "2509429.opbs",
+      "2509456.opbs",
+      "2509464.opbs",
+      "2509465.opbs",
+      "2509471.opbs"
+    ]
+  }
+}

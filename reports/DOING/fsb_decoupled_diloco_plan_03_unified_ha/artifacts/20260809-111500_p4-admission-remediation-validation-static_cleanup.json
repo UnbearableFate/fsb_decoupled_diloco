@@ -1,0 +1,66 @@
+{
+  "artifact_policy_sha256": "fd2c50a29b25f908fe092d3a92589687954ac0417beb1e51fa2ad79d14862cdf",
+  "candidate_bytes": 34288,
+  "candidate_count": 6,
+  "candidates": [
+    {
+      "device": 743766374,
+      "inode": 270219123588350074,
+      "mtime_ns": 1786241669000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_000.json",
+      "size_bytes": 600
+    },
+    {
+      "device": 743766374,
+      "inode": 270219123588350073,
+      "mtime_ns": 1786241669000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_001.json",
+      "size_bytes": 600
+    },
+    {
+      "device": 743766374,
+      "inode": 270219123588350027,
+      "mtime_ns": 1786241669000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/5368e931-b37a-41c8-8164-5cbc8fa7a49f.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219123588350063,
+      "mtime_ns": 1786241669000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/ddeb920a-813e-4dd6-9500-69201361df67.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219123588350065,
+      "mtime_ns": 1786241669000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_001/504f919c-6792-4c06-a923-8e8ae50a122f.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219123588350028,
+      "mtime_ns": 1786241669000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_001/9c93448d-7365-4ad2-a47e-560dd7a81dbf.safetensors",
+      "size_bytes": 8272
+    }
+  ],
+  "completion_evidence": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-111500_p4-admission-remediation-validation_pass.json",
+  "completion_evidence_sha256": "528ad160d0032fbbfc4ab151baeb676d94f36e535708b690da9022f617494723",
+  "deleted_bytes": 34288,
+  "deleted_count": 6,
+  "format_version": 1,
+  "legacy_policy_override": false,
+  "retained_representative_learner_log": null,
+  "run_id": "plan03_p4_static_2509446",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_static_2509446",
+  "status": "complete",
+  "tool": "fs_diloco.tools.clean_run"
+}

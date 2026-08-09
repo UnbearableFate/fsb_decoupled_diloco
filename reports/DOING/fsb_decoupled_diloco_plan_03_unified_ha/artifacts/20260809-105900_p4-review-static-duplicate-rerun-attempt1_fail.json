@@ -1,0 +1,18 @@
+{
+  "experiment_id": "p4-review-static-duplicate-rerun",
+  "attempt": 1,
+  "result": "validation-wrapper-fail",
+  "pbs_job_id": "2509427.opbs",
+  "run_id": "plan03_p4_static_rerun_2509427",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_static_rerun_2509427",
+  "protocol_result": {
+    "unauthorized_duplicate_rejected_before_admission_signal": true,
+    "old_binding_remained_generation_1_until_operator_authorization": true,
+    "authorized_replacement_generation": 2,
+    "final_version": 20,
+    "direct_weight_tokens_applied": 1280,
+    "sqlite_integrity": "ok"
+  },
+  "wrapper_error": "expected stale-process regex omitted the new AdmissionSupersededError diagnostic",
+  "raw_log": "/work/xg24i002/x10041/fsb_decoupled_diloco/fsdiloco_p4_static_rerun.o2509427"
+}

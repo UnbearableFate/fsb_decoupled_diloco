@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import os
+import stat
 import time
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Literal
 
 from ..core.versions import CONTROL_FORMAT_VERSION, SYNCER_HEARTBEAT_FORMAT_VERSION
 from ..storage.atomic_io import atomic_write_json, publish_immutable_bytes, safe_read_json
-from ..storage.leader_lease import LeaderToken
+from ..storage.leader_lease import CommittedLeaderLease, LeaderToken, StaleLeaderTokenError
 from ..storage.paths import RunPaths
 from .contributor import ContributorFence, decode_contributor_fence
 from .cycle_receipt import CycleReceiptV1
@@ -44,25 +47,23 @@ class V4ControlPublisher:
         self,
         paths: RunPaths,
         token: LeaderToken,
-        *,
-        lease_duration_seconds: float,
     ) -> None:
         self.paths = paths
         self.token = token
-        self.lease_duration_seconds = float(lease_duration_seconds)
-        self._heartbeat_seq = 0
 
-    def publish_heartbeat(self, *, renewed_at: float | None = None) -> dict[str, Any]:
-        now = time.time() if renewed_at is None else float(renewed_at)
-        self._heartbeat_seq += 1
+    def publish_heartbeat(self, lease: CommittedLeaderLease) -> dict[str, Any]:
+        if lease.token != self.token:
+            raise StaleLeaderTokenError("heartbeat lease snapshot token mismatch")
+        if time.time() >= lease.lease_expires_at:
+            raise StaleLeaderTokenError("committed leader lease already expired")
         payload = {
             "format_version": SYNCER_HEARTBEAT_FORMAT_VERSION,
             "run_id": self.token.run_id,
             "epoch": self.token.epoch,
             "owner_id": self.token.owner_id,
-            "heartbeat_seq": self._heartbeat_seq,
-            "renewed_at": now,
-            "lease_expires_at": now + self.lease_duration_seconds,
+            "heartbeat_seq": lease.heartbeat_seq,
+            "renewed_at": lease.renewed_at,
+            "lease_expires_at": lease.lease_expires_at,
         }
         payload["payload_sha256"] = _payload_sha256(payload)
         atomic_write_json(
@@ -223,15 +224,16 @@ def read_current_control(
         return None
     for directory in sorted(paths.syncer_epochs.glob("e*_*")):
         heartbeat = safe_read_json(directory / "heartbeat.json")
-        if not isinstance(heartbeat, dict):
+        if not _valid_heartbeat(
+            paths,
+            directory,
+            heartbeat,
+            run_id=run_id,
+            observed_at=observed_at,
+            max_clock_skew_seconds=max_clock_skew_seconds,
+        ):
             continue
-        if heartbeat.get("run_id") != run_id:
-            continue
-        core = {key: value for key, value in heartbeat.items() if key != "payload_sha256"}
-        if heartbeat.get("payload_sha256") != _payload_sha256(core):
-            continue
-        if observed_at > float(heartbeat["lease_expires_at"]) + float(max_clock_skew_seconds):
-            continue
+        assert isinstance(heartbeat, dict)
         epoch = int(heartbeat["epoch"])
         owner = str(heartbeat["owner_id"])
         latest = _read_latest(paths, directory, run_id=run_id, epoch=epoch, owner_id=owner)
@@ -349,25 +351,244 @@ def _read_latest(
     owner_id: str,
 ) -> dict[str, Any] | None:
     head = safe_read_json(directory / "latest" / "head.json")
-    if not isinstance(head, dict):
+    if not _valid_latest_head(head, run_id=run_id, epoch=epoch, owner_id=owner_id):
         return None
-    if (
-        head.get("run_id") != run_id
-        or int(head.get("epoch", -1)) != epoch
-        or head.get("owner_id") != owner_id
+    assert isinstance(head, dict)
+    version = int(head["version"])
+    pointer = paths.epoch_version_pointer_path(epoch, owner_id, version)
+    expected_relative = pointer.relative_to(paths.shared_root).as_posix()
+    if head["pointer_path"] != expected_relative:
+        return None
+    try:
+        data = _read_anchored_regular_file(paths.shared_root, PurePosixPath(expected_relative))
+    except (OSError, ValueError):
+        return None
+    if hashlib.sha256(data).hexdigest() != head["pointer_sha256"]:
+        return None
+    try:
+        payload = json.loads(data)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not _valid_latest_payload(
+        payload,
+        run_id=run_id,
+        epoch=epoch,
+        owner_id=owner_id,
+        version=version,
     ):
         return None
-    pointer = paths.shared_root / str(head.get("pointer_path", ""))
-    try:
-        data = pointer.read_bytes()
-    except OSError:
-        return None
-    if hashlib.sha256(data).hexdigest() != head.get("pointer_sha256"):
-        return None
-    payload = json.loads(data)
-    if not isinstance(payload, dict) or payload.get("publication_id") is None:
-        return None
+    assert isinstance(payload, dict)
     return payload
+
+
+def _valid_heartbeat(
+    paths: RunPaths,
+    directory: Path,
+    heartbeat: Any,
+    *,
+    run_id: str,
+    observed_at: float,
+    max_clock_skew_seconds: float,
+) -> bool:
+    fields = {
+        "format_version",
+        "run_id",
+        "epoch",
+        "owner_id",
+        "heartbeat_seq",
+        "renewed_at",
+        "lease_expires_at",
+        "payload_sha256",
+    }
+    if not isinstance(heartbeat, dict) or set(heartbeat) != fields:
+        return False
+    epoch = heartbeat.get("epoch")
+    sequence = heartbeat.get("heartbeat_seq")
+    owner = heartbeat.get("owner_id")
+    renewed_at = heartbeat.get("renewed_at")
+    expires_at = heartbeat.get("lease_expires_at")
+    if (
+        heartbeat.get("format_version") != SYNCER_HEARTBEAT_FORMAT_VERSION
+        or heartbeat.get("run_id") != run_id
+        or isinstance(epoch, bool)
+        or not isinstance(epoch, int)
+        or epoch < 1
+        or not isinstance(owner, str)
+        or not owner
+        or isinstance(sequence, bool)
+        or not isinstance(sequence, int)
+        or sequence < 1
+        or isinstance(renewed_at, bool)
+        or not isinstance(renewed_at, (int, float))
+        or not math.isfinite(float(renewed_at))
+        or isinstance(expires_at, bool)
+        or not isinstance(expires_at, (int, float))
+        or not math.isfinite(float(expires_at))
+        or float(expires_at) <= float(renewed_at)
+        or directory != paths.syncer_epoch_dir(epoch, owner)
+    ):
+        return False
+    core = {key: value for key, value in heartbeat.items() if key != "payload_sha256"}
+    digest = heartbeat.get("payload_sha256")
+    return (
+        _is_sha256(digest)
+        and digest == _payload_sha256(core)
+        and observed_at <= float(expires_at) + float(max_clock_skew_seconds)
+    )
+
+
+def _valid_latest_head(head: Any, *, run_id: str, epoch: int, owner_id: str) -> bool:
+    fields = {
+        "format_version",
+        "kind",
+        "run_id",
+        "epoch",
+        "owner_id",
+        "version",
+        "pointer_path",
+        "pointer_sha256",
+    }
+    if not isinstance(head, dict) or set(head) != fields:
+        return False
+    version = head.get("version")
+    return (
+        head.get("format_version") == CONTROL_FORMAT_VERSION
+        and head.get("kind") == "latest_head"
+        and head.get("run_id") == run_id
+        and head.get("epoch") == epoch
+        and head.get("owner_id") == owner_id
+        and not isinstance(version, bool)
+        and isinstance(version, int)
+        and version >= 0
+        and isinstance(head.get("pointer_path"), str)
+        and _is_sha256(head.get("pointer_sha256"))
+    )
+
+
+def _valid_latest_payload(
+    payload: Any,
+    *,
+    run_id: str,
+    epoch: int,
+    owner_id: str,
+    version: int,
+) -> bool:
+    fields = {
+        "format_version",
+        "kind",
+        "run_id",
+        "epoch",
+        "owner_id",
+        "source_commit_epoch",
+        "source_commit_owner_id",
+        "version",
+        "publication_id",
+        "weight_path",
+        "optim_path",
+        "weight_size_bytes",
+        "optim_size_bytes",
+        "weight_sha256",
+        "optim_sha256",
+        "theta_sha256",
+        "direct_weight_tokens_applied",
+        "published_at",
+    }
+    if not isinstance(payload, dict) or set(payload) != fields:
+        return False
+    source_epoch = payload.get("source_commit_epoch")
+    weight_size = payload.get("weight_size_bytes")
+    optim_size = payload.get("optim_size_bytes")
+    tokens = payload.get("direct_weight_tokens_applied")
+    published_at = payload.get("published_at")
+    return (
+        payload.get("format_version") == CONTROL_FORMAT_VERSION
+        and payload.get("kind") == "latest"
+        and payload.get("run_id") == run_id
+        and payload.get("epoch") == epoch
+        and payload.get("owner_id") == owner_id
+        and payload.get("version") == version
+        and not isinstance(source_epoch, bool)
+        and isinstance(source_epoch, int)
+        and source_epoch >= 1
+        and isinstance(payload.get("source_commit_owner_id"), str)
+        and bool(payload["source_commit_owner_id"])
+        and isinstance(payload.get("publication_id"), str)
+        and bool(payload["publication_id"])
+        and _is_canonical_relative_path(payload.get("weight_path"))
+        and _is_canonical_relative_path(payload.get("optim_path"))
+        and not isinstance(weight_size, bool)
+        and isinstance(weight_size, int)
+        and weight_size >= 0
+        and not isinstance(optim_size, bool)
+        and isinstance(optim_size, int)
+        and optim_size >= 0
+        and _is_sha256(payload.get("weight_sha256"))
+        and _is_sha256(payload.get("optim_sha256"))
+        and _is_sha256(payload.get("theta_sha256"))
+        and not isinstance(tokens, bool)
+        and isinstance(tokens, int)
+        and tokens >= 0
+        and not isinstance(published_at, bool)
+        and isinstance(published_at, (int, float))
+        and math.isfinite(float(published_at))
+        and float(published_at) >= 0.0
+    )
+
+
+def _read_anchored_regular_file(root: Path, relative: PurePosixPath) -> bytes:
+    if relative.is_absolute() or any(part in {"", ".", ".."} for part in relative.parts):
+        raise ValueError("control pointer path must be canonical and relative")
+    directory_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    descriptor = os.open(root, directory_flags)
+    try:
+        for component in relative.parts[:-1]:
+            next_descriptor = os.open(component, directory_flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = next_descriptor
+        file_descriptor = os.open(
+            relative.name,
+            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=descriptor,
+        )
+        try:
+            metadata = os.fstat(file_descriptor)
+            if not stat.S_ISREG(metadata.st_mode):
+                raise OSError("control pointer is not a regular file")
+            chunks: list[bytes] = []
+            while True:
+                chunk = os.read(file_descriptor, 1024 * 1024)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            named = os.stat(relative.name, dir_fd=descriptor, follow_symlinks=False)
+            final = os.fstat(file_descriptor)
+            if (named.st_dev, named.st_ino) != (final.st_dev, final.st_ino):
+                raise OSError("control pointer identity changed while reading")
+            return b"".join(chunks)
+        finally:
+            os.close(file_descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _is_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _is_canonical_relative_path(value: Any) -> bool:
+    if not isinstance(value, str) or not value or value.startswith("/") or "\\" in value:
+        return False
+    path = PurePosixPath(value)
+    return all(part not in {"", ".", ".."} for part in path.parts) and path.as_posix() == value
 
 
 def _read_terminal(

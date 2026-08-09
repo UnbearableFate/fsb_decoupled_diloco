@@ -1,0 +1,19 @@
+{
+  "experiment_id": "p4-review-remediation-validation",
+  "attempt": 1,
+  "result": "fail",
+  "pbs_job_id": "2509408.opbs",
+  "compute_host": "mg0003",
+  "queue": "debug-g",
+  "requested_walltime": "00:10:00",
+  "command": "qsub -l walltime=00:10:00 scripts/miyabi/run_plan03_phase4_tests.pbs",
+  "focused_result": {"passed": 58, "failed": 0, "duration_seconds": 6.69},
+  "full_result": {"passed": 874, "failed": 0, "duration_seconds": 64.19},
+  "runtime_result": "static pipeline failed after committed version 1; dynamic pipeline not run",
+  "run_id": "plan03_p4_static_2509408",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_static_2509408",
+  "error_type": "FileExistsError",
+  "error": "same-epoch admission repair regenerated an immutable response with advanced resume state at the existing attempt path",
+  "raw_log": "/work/xg24i002/x10041/fsb_decoupled_diloco/fsdiloco_plan03_p4.o2509408",
+  "next_test": "repair an existing response from its immutable resume payload; use authority progress only when creating the response in a successor epoch"
+}

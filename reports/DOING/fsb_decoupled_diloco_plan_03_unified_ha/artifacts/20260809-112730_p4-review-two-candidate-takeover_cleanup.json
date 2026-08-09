@@ -1,0 +1,186 @@
+{
+  "artifact_policy_sha256": "fd2c50a29b25f908fe092d3a92589687954ac0417beb1e51fa2ad79d14862cdf",
+  "candidate_bytes": 166042,
+  "candidate_count": 21,
+  "candidates": [
+    {
+      "device": 743766374,
+      "inode": 270219117531759101,
+      "mtime_ns": 1786242430000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_000.json",
+      "size_bytes": 602
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531758979,
+      "mtime_ns": 1786242420000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/0d3276e0-8bd3-4e61-b3c5-36eac4c52e6c.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759083,
+      "mtime_ns": 1786242429000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/2689640f-14a5-407e-8db4-91f644485650.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759018,
+      "mtime_ns": 1786242426000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/28a6e902-3b4f-4999-b059-97304c0f605a.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759058,
+      "mtime_ns": 1786242428000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/2ae18340-b62c-4ce8-85b9-7f3d1454696b.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759093,
+      "mtime_ns": 1786242430000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/332d19ed-5927-4ae6-8f8d-bedca2661bd3.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759088,
+      "mtime_ns": 1786242430000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/3eb58a6e-9ff6-4c84-8b5b-3872179f72cd.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759053,
+      "mtime_ns": 1786242428000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/4c589f07-a294-4d90-a7de-310860b4f5a5.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759038,
+      "mtime_ns": 1786242427000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/58bbf23d-5223-483a-84d4-3de2fc96ef60.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759063,
+      "mtime_ns": 1786242428000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/6f333178-c010-4767-9a8a-e5fbc0b98fd0.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759073,
+      "mtime_ns": 1786242429000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/76a10f90-1f4b-4457-a8fa-aefe3dd514e1.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759023,
+      "mtime_ns": 1786242426000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/a1d44c88-89e8-49ae-afdc-67fc8d5b8032.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759043,
+      "mtime_ns": 1786242427000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/a2a91623-c5bf-4ff6-bf58-24b08135d248.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759098,
+      "mtime_ns": 1786242430000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/b3c24d4f-a107-480c-a649-1136ddcffa5c.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759028,
+      "mtime_ns": 1786242426000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/b7730966-e90b-4154-b329-ce6d4ff5fdde.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759068,
+      "mtime_ns": 1786242428000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/b8afdd90-a9cb-4a48-9562-e03f53bc98d4.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759013,
+      "mtime_ns": 1786242426000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/c2c6c283-944a-4fce-adae-b1b14841e0a7.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759048,
+      "mtime_ns": 1786242427000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/c65b6382-cbca-44cc-b75d-8293c54f9f48.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759033,
+      "mtime_ns": 1786242427000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/cfbac8b0-4d9c-4fa2-9c5d-a9219de6c5b0.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759078,
+      "mtime_ns": 1786242429000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/ec5c77df-8345-4adb-a225-a063ad2b1af9.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219117531759008,
+      "mtime_ns": 1786242421000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/ec5e9908-d9bd-42c6-a5a6-2a330d73416a.safetensors",
+      "size_bytes": 8272
+    }
+  ],
+  "completion_evidence": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-112730_p4-review-two-candidate-takeover_pass.json",
+  "completion_evidence_sha256": "d41c79fe029725ac2dbaec381a02bdac7b3135c058c50395c5b394481fe7a0bd",
+  "deleted_bytes": 166042,
+  "deleted_count": 21,
+  "format_version": 1,
+  "legacy_policy_override": false,
+  "retained_representative_learner_log": null,
+  "run_id": "20260809_112650_fs_diloco_2node_resume",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/20260809_112650_fs_diloco_2node_resume",
+  "status": "complete",
+  "tool": "fs_diloco.tools.clean_run"
+}

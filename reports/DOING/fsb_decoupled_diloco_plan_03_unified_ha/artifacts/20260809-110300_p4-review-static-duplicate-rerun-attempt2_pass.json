@@ -1,0 +1,83 @@
+{
+  "artifact_schema_version": 1,
+  "command": "qsub -l walltime=00:10:00 scripts/miyabi/run_plan03_phase4_static_rerun.pbs",
+  "errors": [],
+  "experiment_id": "p4-review-static-duplicate-rerun",
+  "identity": {
+    "descriptor_sha256": "7f646a48388d5a0cc82a7e1ca8fc301246c9a722f528ea3281c2a3a20393aeec",
+    "git_commit": "0e8b14ed08eacda710a0f1b4ebf3b19f921f31e4",
+    "git_dirty": true,
+    "run_id": "plan03_p4_static_rerun_2509429",
+    "source_fingerprint": "sha256:b209a6a8e26ef3cbf37c9883f86c5f969631542d8042420bea3619dfcc0428a3"
+  },
+  "pbs": {
+    "actual_walltime": "00:00:22",
+    "compute_host": "mg0003",
+    "exit_status": 0,
+    "group_id": "xg24i002",
+    "job_id": "2509429.opbs",
+    "queue": "debug-g",
+    "requested_walltime": "00:10:00",
+    "stdout_sha256": "6b39cc05a561ca2fd325fd991aae62fa5a0feed642d52bbcec3547f2cc02b8fb"
+  },
+  "recorded_at": "2026-08-09T11:03:00+09:00",
+  "run_root": "runs/fs_diloco/plan03_p4_static_rerun_2509429",
+  "sha256": {
+    "authority_database_before_cleanup": "d3886cac56b4cc9d9db6c8ffbc095532be3556a32a860394d2e824cf0dafeb90"
+  },
+  "status": "PASS",
+  "terminal": {
+    "direct_weight_tokens_applied": 1280,
+    "final_version": 20,
+    "state": "finalized"
+  },
+  "verified": {
+    "all_learners_stopped": true,
+    "authority_database_integrity": "ok",
+    "binding_history": [
+      {
+        "attempt_id": "attempt-old-2509429",
+        "binding_generation": 1,
+        "final_status": "replaced"
+      }
+    ],
+    "current_binding": {
+      "attempt_id": "attempt-new-2509429",
+      "binding_generation": 2,
+      "logical_launch_id": "static-rerun-2509429",
+      "status": "terminal"
+    },
+    "new_generation_applied_versions": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "old_generation_successful_commits_after_replacement": 0,
+    "operator_authorization_bound_exact_old_and_new_fences": true,
+    "stale_process_exit_status": 0,
+    "terminal_fence_state": "acked",
+    "terminal_hard_crash_gap_tokens": 0,
+    "token_ledger_outstanding": 0,
+    "unauthorized_duplicate_admission_signal_observed": false,
+    "unauthorized_duplicate_exit_status": 1,
+    "unauthorized_duplicate_rejection": "MembershipFenceError: active static replacement requires expected_generation and reason",
+    "version_at_replacement": 0
+  }
+}

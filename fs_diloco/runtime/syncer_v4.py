@@ -18,12 +18,25 @@ from ..modeling.outer_optim import init_outer_state, outer_optimizer_step
 from ..modeling.param_index import build_param_index, flatten_trainable_params
 from ..observability.logging_utils import ActorTelemetryWriter
 from ..protocol.admission_v4 import (
+    ADMISSION_RESPONSE_FORMAT_VERSION,
+    AdmissionAuthorizationError,
+    admission_request_error,
+    admission_request_sha256,
+    archive_disposed_admission_request,
+    dispose_invalid_admission_request,
     iter_admission_requests,
     publish_admission_response,
+    publish_admission_disposition,
+    publish_admission_rejection,
+    read_static_replacement_authorization,
 )
 from ..protocol.authority import MergeFenceConflict
 from ..protocol.control_v4 import V4ControlPublisher, iter_terminal_acks
-from ..protocol.contributor import StaticContributorFence, decode_contributor_fence
+from ..protocol.contributor import (
+    ContributorFence,
+    StaticContributorFence,
+    decode_contributor_fence,
+)
 from ..protocol.cycle_receipt import (
     CycleReceiptV1,
     canonical_receipt_id,
@@ -32,8 +45,13 @@ from ..protocol.cycle_receipt import (
 from ..protocol.data_cursor import ContributorResumeState
 from ..protocol.merge import normalized_update_weights, weighted_average_tensors
 from ..protocol.proposal import FullUpdateProposalV2
-from ..storage.atomic_io import publish_immutable_bytes
-from ..storage.authority import LeaderAuthority, LeaderSession
+from ..storage.atomic_io import atomic_write_json, publish_immutable_bytes, safe_read_json
+from ..storage.authority import (
+    CommandConflictError,
+    LeaderAuthority,
+    LeaderSession,
+    MembershipFenceError,
+)
 from ..storage.tensor_codec import (
     dtype_from_name,
     load_outer_state,
@@ -111,7 +129,6 @@ def run_fenced_syncer(
         accelerator_identity=os.environ.get("CUDA_VISIBLE_DEVICES") or str(device),
     )
     telemetry.event("leadership_acquired", epoch=token.epoch, device=str(device))
-    control.publish_heartbeat()
     renewer.raise_if_failed()
     leader.reconcile_publications(command_id=f"reconcile-publications-e{token.epoch}")
     if config.membership.mode == "dynamic":
@@ -329,29 +346,77 @@ def _admit_requests(
     telemetry: ActorTelemetryWriter,
 ) -> None:
     descriptor = loaded.descriptor
+    _repair_current_admission_controls(loaded, authority, leader)
     for path, request in iter_admission_requests(loaded.paths):
-        if (
-            request.get("format_version") != 1
-            or request.get("run_id") != descriptor["run_id"]
-            or request.get("descriptor_sha256") != descriptor["descriptor_sha256"]
-        ):
+        invalid = (
+            ("MalformedAdmissionRequest", "request is not a JSON object")
+            if request is None
+            else admission_request_error(
+                request,
+                run_id=str(descriptor["run_id"]),
+                descriptor_sha256=str(descriptor["descriptor_sha256"]),
+            )
+        )
+        if invalid is not None:
+            error_type, message = invalid
+            disposition = dispose_invalid_admission_request(
+                loaded.paths,
+                request_path=path,
+                run_id=str(descriptor["run_id"]),
+                descriptor_sha256=str(descriptor["descriptor_sha256"]),
+                epoch=leader.token.epoch,
+                owner_id=leader.token.owner_id,
+                error_type=error_type,
+                message=message,
+            )
+            telemetry.event(
+                "admission_request_discarded",
+                request_path=str(path),
+                disposition_path=str(disposition),
+                error_type=error_type,
+            )
             continue
-        request_sha = hashlib.sha256(
-            json.dumps(request, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
-        command_id = f"admit-{request_sha}"
+        request_sha = admission_request_sha256(request)
+        disposition_path = loaded.paths.registration_disposition_path(request_sha)
+        if disposition_path.is_file():
+            archive_disposed_admission_request(loaded.paths, request_path=path, request=request)
+            continue
+        command_id = f"admit-e{leader.token.epoch}-{request_sha}"
         try:
             if request.get("mode") == "static":
+                prior = authority.read.static_binding(str(request["learner_id"]))
+                authorization = None
+                if prior is not None and (
+                    prior.attempt_id != str(request["attempt_id"])
+                    or prior.logical_launch_id != str(request["logical_launch_id"])
+                ):
+                    prior_fence = StaticContributorFence(
+                        kind="static",
+                        learner_id=prior.learner_id,
+                        logical_launch_id=prior.logical_launch_id,
+                        attempt_id=prior.attempt_id,
+                        binding_generation=prior.binding_generation,
+                    )
+                    if prior.status == "active" or (
+                        prior.logical_launch_id != str(request["logical_launch_id"])
+                    ):
+                        authorization = read_static_replacement_authorization(
+                            loaded.paths,
+                            request=request,
+                            current_fence=prior_fence,
+                        )
                 binding = leader.bind_or_replace_static_attempt(
                     command_id=command_id,
                     learner_id=str(request["learner_id"]),
                     logical_launch_id=str(request["logical_launch_id"]),
                     attempt_id=str(request["attempt_id"]),
                     expected_generation=request["expected_generation"],
-                    allow_logical_replacement=bool(request["allow_logical_replacement"]),
+                    allow_logical_replacement=authorization is not None,
                     replacement_reason=(
-                        "same_logical_launch_rerun"
-                        if request["expected_generation"] is not None
+                        f"operator_static_replacement:{authorization[1]}"
+                        if prior is not None
+                        and prior.status == "active"
+                        and authorization is not None
                         else None
                     ),
                 )
@@ -391,23 +456,205 @@ def _admit_requests(
                 fence = admission.fence
                 resume = admission.resume
             else:
-                continue
-            response = publish_admission_response(
+                raise ValueError("unknown admission request mode")
+        except (
+            AdmissionAuthorizationError,
+            CommandConflictError,
+            MembershipFenceError,
+            ValueError,
+        ) as exc:
+            rejection = publish_admission_rejection(
                 loaded.paths,
                 epoch=leader.token.epoch,
                 owner_id=leader.token.owner_id,
                 request=request,
-                fence=fence,
-                resume=resume,
+                error_type=type(exc).__name__,
+                message=str(exc),
             )
-            telemetry.event("learner_admitted", request_path=str(path), response_path=str(response))
-        except Exception as exc:
+            publish_admission_disposition(
+                loaded.paths,
+                request=request,
+                epoch=leader.token.epoch,
+                owner_id=leader.token.owner_id,
+                outcome="rejected",
+                control_path=rejection,
+                error_type=type(exc).__name__,
+            )
+            archive_disposed_admission_request(loaded.paths, request_path=path, request=request)
             telemetry.event(
                 "admission_rejected",
                 request_path=str(path),
                 error_type=type(exc).__name__,
                 error=str(exc),
             )
+            continue
+        if fence not in authority.read.current_contributor_fences():
+            raise RuntimeError("admission command returned a fence that is no longer current")
+        actor_id = fence.learner_id if fence.kind == "static" else fence.instance_id
+        attempt_id = fence.attempt_id if fence.kind == "static" else fence.instance_id
+        persisted_resume = _existing_admission_resume(
+            loaded,
+            leader,
+            fence=fence,
+            actor_id=actor_id,
+            attempt_id=attempt_id,
+        )
+        if persisted_resume is not None:
+            resume = persisted_resume
+        response = publish_admission_response(
+            loaded.paths,
+            epoch=leader.token.epoch,
+            owner_id=leader.token.owner_id,
+            request=request,
+            fence=fence,
+            resume=resume,
+        )
+        publish_admission_disposition(
+            loaded.paths,
+            request=request,
+            epoch=leader.token.epoch,
+            owner_id=leader.token.owner_id,
+            outcome="admitted",
+            control_path=response,
+            fence=fence,
+        )
+        archive_disposed_admission_request(loaded.paths, request_path=path, request=request)
+        telemetry.event("learner_admitted", request_path=str(path), response_path=str(response))
+
+
+def _repair_current_admission_controls(
+    loaded: LoadedRunDescriptor,
+    authority: LeaderAuthority,
+    leader: LeaderSession,
+) -> None:
+    descriptor = loaded.descriptor
+    current_fences = authority.read.current_contributor_fences()
+    current_keys = {fence.stable_contributor_key for fence in current_fences}
+    current_directory = (
+        loaded.paths.epoch_membership_dir(leader.token.epoch, leader.token.owner_id)
+        / "admissions_v4"
+        / "current"
+    )
+    if current_directory.is_dir():
+        for pointer_path in current_directory.glob("*.json"):
+            if pointer_path.stem not in current_keys:
+                tombstone = {
+                    "format_version": 1,
+                    "kind": "superseded",
+                    "run_id": descriptor["run_id"],
+                    "leader_epoch": leader.token.epoch,
+                    "leader_owner_id": leader.token.owner_id,
+                    "stable_contributor_key": pointer_path.stem,
+                }
+                if safe_read_json(pointer_path) != tombstone:
+                    atomic_write_json(pointer_path, tombstone)
+    for fence in current_fences:
+        if fence.kind == "static":
+            actor_id = fence.learner_id
+            attempt_id = fence.attempt_id
+            request = {
+                "mode": "static",
+                "run_id": descriptor["run_id"],
+                "descriptor_sha256": descriptor["descriptor_sha256"],
+                "learner_id": fence.learner_id,
+                "attempt_id": fence.attempt_id,
+            }
+        else:
+            actor_id = fence.instance_id
+            attempt_id = fence.instance_id
+            request = {
+                "mode": "dynamic",
+                "run_id": descriptor["run_id"],
+                "descriptor_sha256": descriptor["descriptor_sha256"],
+                "instance_id": fence.instance_id,
+            }
+        resume = _existing_admission_resume(
+            loaded,
+            leader,
+            fence=fence,
+            actor_id=actor_id,
+            attempt_id=attempt_id,
+        )
+        if resume is None:
+            progress = authority.read.contributor_progress(fence.stable_contributor_key)
+            resume = _resume_from_progress(fence, progress)
+        publish_admission_response(
+            loaded.paths,
+            epoch=leader.token.epoch,
+            owner_id=leader.token.owner_id,
+            request=request,
+            fence=fence,
+            resume=resume,
+        )
+
+
+def _existing_admission_resume(
+    loaded: LoadedRunDescriptor,
+    leader: LeaderSession,
+    *,
+    fence: ContributorFence,
+    actor_id: str,
+    attempt_id: str,
+) -> ContributorResumeState | None:
+    response_path = loaded.paths.epoch_admission_response_path(
+        leader.token.epoch,
+        leader.token.owner_id,
+        actor_id,
+        attempt_id,
+    )
+    existing = safe_read_json(response_path)
+    if existing is None:
+        if response_path.exists():
+            raise RuntimeError("existing admission response is malformed")
+        return None
+    expected = {
+        "format_version": ADMISSION_RESPONSE_FORMAT_VERSION,
+        "run_id": loaded.descriptor["run_id"],
+        "descriptor_sha256": loaded.descriptor["descriptor_sha256"],
+        "actor_id": actor_id,
+        "attempt_id": attempt_id,
+        "leader_epoch": leader.token.epoch,
+        "leader_owner_id": leader.token.owner_id,
+    }
+    if set(existing) != {*expected, "fence", "resume"} or any(
+        existing.get(key) != value for key, value in expected.items()
+    ):
+        raise RuntimeError("existing admission response identity is invalid")
+    if decode_contributor_fence(existing.get("fence")) != fence:
+        raise RuntimeError("existing admission response does not match current fence")
+    resume_payload = existing.get("resume")
+    if not isinstance(resume_payload, dict) or set(resume_payload) != {
+        "cursor",
+        "last_receipt_id",
+        "last_receipt_sha256",
+        "next_cycle_seq",
+        "stream_epoch",
+    }:
+        raise RuntimeError("existing admission response resume state is invalid")
+    try:
+        return ContributorResumeState(
+            cursor=int(resume_payload["cursor"]),
+            last_receipt_id=resume_payload["last_receipt_id"],
+            last_receipt_sha256=resume_payload["last_receipt_sha256"],
+            next_cycle_seq=int(resume_payload["next_cycle_seq"]),
+            stream_epoch=(
+                None
+                if resume_payload["stream_epoch"] is None
+                else int(resume_payload["stream_epoch"])
+            ),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError("existing admission response resume state is invalid") from exc
+
+
+def _resume_from_progress(fence: ContributorFence, progress: Any) -> ContributorResumeState:
+    return ContributorResumeState(
+        cursor=0 if progress is None else progress.data_cursor,
+        last_receipt_id=None if progress is None else progress.last_receipt_id,
+        last_receipt_sha256=None if progress is None else progress.last_receipt_sha256,
+        next_cycle_seq=1 if progress is None else progress.last_cycle_seq + 1,
+        stream_epoch=fence.stream_epoch if fence.kind == "dynamic" else None,
+    )
 
 
 def _ingest_proposals(

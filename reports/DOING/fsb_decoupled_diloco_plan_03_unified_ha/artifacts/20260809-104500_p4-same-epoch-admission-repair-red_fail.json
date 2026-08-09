@@ -1,0 +1,13 @@
+{
+  "experiment_id": "p4-same-epoch-admission-repair-red",
+  "attempt": 1,
+  "result": "fail-as-expected",
+  "pbs_job_id": "2509413.opbs",
+  "compute_host": "mg0003",
+  "command": "qsub -l walltime=00:10:00 scripts/miyabi/run_plan03_phase4_tests.pbs",
+  "focused_result": {"passed": 58, "failed": 1, "duration_seconds": 6.45},
+  "failed_test": "test_same_epoch_admission_repair_reuses_immutable_resume_snapshot",
+  "error_type": "FileExistsError",
+  "expected_invariant": "same-epoch current-pointer repair reuses the immutable admission resume snapshot after authority progress advances",
+  "raw_log": "/work/xg24i002/x10041/fsb_decoupled_diloco/fsdiloco_plan03_p4.o2509413"
+}

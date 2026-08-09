@@ -1,0 +1,58 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-admission-collision-validation",
+  "recorded_at": "2026-08-09T11:44:30+09:00",
+  "status": "PASS",
+  "errors": [],
+  "source_commit": "0e8b14ed08eacda710a0f1b4ebf3b19f921f31e4",
+  "identity": {
+    "git_dirty": true,
+    "source_fingerprint": "sha256:243e7d1e7968f1793b9d523485fb00fdab76720d307ccda271614fdb5b82d97a",
+    "static_descriptor_sha256": "692cdd9900eeb0e48d0004a8889fd7c49fb33a854b2e69320d8e901b8b66b99d",
+    "dynamic_descriptor_sha256": "1c1961737776f7ee2ee38016cc3cac31d2247801e8863a080b7d402a7c349d70"
+  },
+  "pbs": {
+    "job_id": "2509482.opbs",
+    "host": "mg0007",
+    "nodes": 1,
+    "queue": "debug-g",
+    "group_id": "xg24i002",
+    "requested_walltime": "00:10:00",
+    "actual_walltime": "00:01:33",
+    "exit_status": 0,
+    "stdout_sha256": "739ee4f69456df7e7cd8a163fbaab17ca2adde8975c73ef418bfcb667247d612"
+  },
+  "checks": {
+    "ruff": "PASS",
+    "format_files": 20,
+    "boundary_checker": "PASS",
+    "focused_tests": "66 passed in 6.59s",
+    "full_tests": "882 passed in 64.10s"
+  },
+  "static": {
+    "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_static_2509482",
+    "descriptor_sha256": "692cdd9900eeb0e48d0004a8889fd7c49fb33a854b2e69320d8e901b8b66b99d",
+    "authority_database_sha256_before_cleanup": "45f746d6a4fb0145c1c24eceefa25586a9a8df10f1a634bf5007459c8510ec8b",
+    "summary": {
+      "run_id": "plan03_p4_static_2509482",
+      "final_version": 2,
+      "direct_weight_tokens_applied": 192,
+      "acked_terminal_fences": 2,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "integrity_check": "ok"
+    }
+  },
+  "dynamic": {
+    "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_dynamic_2509482",
+    "descriptor_sha256": "1c1961737776f7ee2ee38016cc3cac31d2247801e8863a080b7d402a7c349d70",
+    "authority_database_sha256_before_cleanup": "1a6f9302765b372159e2f432aa535dce95f28c2306c9d01db2361c142c6d7d3a",
+    "summary": {
+      "run_id": "plan03_p4_dynamic_2509482",
+      "final_version": 12,
+      "direct_weight_tokens_applied": 3840,
+      "acked_terminal_fences": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "integrity_check": "ok"
+    }
+  }
+}

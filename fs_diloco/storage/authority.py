@@ -60,6 +60,7 @@ from .audit_archive import (
     validate_audit_partition_manifest,
 )
 from .leader_lease import (
+    CommittedLeaderLease,
     LeaderToken,
     LeaseUnavailableError,
     StaleLeaderTokenError,
@@ -775,7 +776,13 @@ class LeaderAuthority:
             raise
         return LeaderToken(self._identity.run_id, epoch, owner_id)
 
-    def renew_leader(self, token: LeaderToken) -> None:
+    def committed_leader_lease(self, token: LeaderToken) -> CommittedLeaderLease:
+        """Return the exact active lease row after verifying this token is still safe."""
+
+        row = self._verify_token(token)
+        return _decode_committed_leader_lease(token, row)
+
+    def renew_leader(self, token: LeaderToken) -> CommittedLeaderLease:
         self._connection.execute("BEGIN IMMEDIATE")
         try:
             now = float(self._wall_clock())
@@ -794,10 +801,21 @@ class LeaderAuthority:
                 "UPDATE syncer_epochs SET last_renewed_at=? WHERE epoch=? AND owner_id=?",
                 (now, token.epoch, token.owner_id),
             )
+            row = self._connection.execute(
+                """
+                SELECT * FROM syncer_leader
+                WHERE singleton=1 AND epoch=? AND owner_id=? AND state='active'
+                """,
+                (token.epoch, token.owner_id),
+            ).fetchone()
+            if row is None:
+                raise StaleLeaderTokenError("leader changed during renewal")
+            committed = _decode_committed_leader_lease(token, row)
             self._connection.commit()
         except Exception:
             self._connection.rollback()
             raise
+        return committed
 
     def release_leader(self, token: LeaderToken) -> None:
         self._connection.execute("BEGIN IMMEDIATE")
@@ -4918,6 +4936,17 @@ def _audit_history_records(
 
 def _canonical_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+def _decode_committed_leader_lease(
+    token: LeaderToken, row: Mapping[str, Any]
+) -> CommittedLeaderLease:
+    return CommittedLeaderLease(
+        token=token,
+        renewed_at=float(row["renewed_at"]),
+        lease_expires_at=float(row["lease_expires_at"]),
+        heartbeat_seq=int(row["heartbeat_seq"]),
+    )
 
 
 def _decode_static_binding(row: Mapping[str, Any]) -> StaticBinding:

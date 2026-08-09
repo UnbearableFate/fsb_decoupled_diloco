@@ -1,0 +1,25 @@
+{
+  "experiment_id": "p4-admission-disposition-retry-red",
+  "attempt": 1,
+  "status": "EXPECTED_RED",
+  "command": "qsub -l walltime=00:10:00 scripts/miyabi/run_plan03_phase4_tests.pbs",
+  "pbs": {
+    "job_id": "2509445.opbs",
+    "compute_host": "mg0011",
+    "queue": "debug-g",
+    "group_id": "xg24i002",
+    "requested_walltime": "00:10:00",
+    "actual_walltime": "00:00:12",
+    "exit_status": 1
+  },
+  "identity": {
+    "git_commit": "0e8b14ed08eacda710a0f1b4ebf3b19f921f31e4",
+    "git_dirty": true
+  },
+  "result": {
+    "focused": "1 failed, 62 passed in 6.76s",
+    "expected_failure": "retry after response/current publication but before disposition recomputes an advanced resume snapshot and collides with the immutable response"
+  },
+  "raw_log": "fsdiloco_plan03_p4.o2509445",
+  "raw_log_sha256": "cddde80fa9c09f2e3322518e56e9b38e4a58dd9e96556c88f416ca8ce405dcfb"
+}

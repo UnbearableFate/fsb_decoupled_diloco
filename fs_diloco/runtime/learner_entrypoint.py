@@ -104,9 +104,6 @@ def main(argv: list[str] | None = None) -> None:
             logical_launch_id=logical_launch_id,
             attempt_id=attempt_id,
             expected_generation=observed_generation,
-            allow_logical_replacement=bool(
-                os.environ.get("FS_DILOCO_ALLOW_LOGICAL_REPLACEMENT") == "1"
-            ),
         )
         response_attempt_id = attempt_id
     timeout = (
@@ -150,6 +147,18 @@ def main(argv: list[str] | None = None) -> None:
                 "fence": admission.fence.as_dict(),
             },
         )
+    current_admission = read_admission_response(
+        loaded.paths,
+        run_id=str(descriptor["run_id"]),
+        descriptor_sha256=str(descriptor["descriptor_sha256"]),
+        actor_id=actor_id,
+        attempt_id=response_attempt_id,
+        max_clock_skew_seconds=config.leader.max_clock_skew_seconds,
+    )
+    if current_admission != admission:
+        raise RuntimeError("learner admission changed immediately before torch import")
+    if "torch" in sys.modules:
+        raise RuntimeError("learner admission revalidation imported torch")
     from .learner_v4 import run_admitted_learner
 
     run_admitted_learner(loaded, admission)

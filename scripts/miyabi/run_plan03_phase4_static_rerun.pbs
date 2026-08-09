@@ -21,9 +21,11 @@ LOG_ROOT="${LOG_ROOT:-$PROJECT_ROOT/logs/qsub_${RUN_ID}}"
 TMP_ROOT="${TMPDIR:?TMPDIR is required}"
 TEST_CONFIG="$TMP_ROOT/${RUN_ID}.yaml"
 OLD_SIGNAL="$TMP_ROOT/${RUN_ID}_old_admission.json"
+DUPLICATE_SIGNAL="$TMP_ROOT/${RUN_ID}_duplicate_admission.json"
 NEW_SIGNAL="$TMP_ROOT/${RUN_ID}_new_admission.json"
 LOGICAL_LAUNCH_ID="static-rerun-${PBS_JOBID%%.*}"
 OLD_ATTEMPT_ID="attempt-old-${PBS_JOBID%%.*}"
+DUPLICATE_ATTEMPT_ID="attempt-duplicate-${PBS_JOBID%%.*}"
 NEW_ATTEMPT_ID="attempt-new-${PBS_JOBID%%.*}"
 mkdir -p "$LOG_ROOT"
 cd "$PROJECT_ROOT"
@@ -88,10 +90,11 @@ export FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT="$FS_DILOCO_SOURCE_FINGERPRINT"
 
 syncer_pid=""
 old_pid=""
+duplicate_pid=""
 new_pid=""
 cleanup() {
   kill -CONT "$old_pid" 2>/dev/null || true
-  kill "$syncer_pid" "$old_pid" "$new_pid" 2>/dev/null || true
+  kill "$syncer_pid" "$old_pid" "$duplicate_pid" "$new_pid" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
@@ -129,6 +132,77 @@ if [[ "$old_ready" != true ]]; then
   exit 1
 fi
 kill -STOP "$old_pid"
+
+FS_DILOCO_TEST_ADMISSION_SIGNAL_PATH="$DUPLICATE_SIGNAL" \
+  "$PYTHON_BIN" -m fs_diloco.learner \
+    --config "$CONFIG" --shared-root "$RUN_ROOT" \
+    --learner-id learner_000 \
+    --logical-launch-id "$LOGICAL_LAUNCH_ID" \
+    --attempt-id "$DUPLICATE_ATTEMPT_ID" \
+    > "$LOG_ROOT/learner_unauthorized_duplicate.log" 2>&1 &
+duplicate_pid=$!
+
+duplicate_exited=false
+duplicate_status=0
+for _ in $(seq 1 6000); do
+  if ! kill -0 "$duplicate_pid" 2>/dev/null; then
+    wait "$duplicate_pid" || duplicate_status=$?
+    duplicate_pid=""
+    duplicate_exited=true
+    break
+  fi
+  sleep 0.01
+done
+if [[ "$duplicate_exited" != true ]]; then
+  echo "Unauthorized duplicate did not receive a prompt rejection" >&2
+  exit 1
+fi
+if [[ "$duplicate_status" -eq 0 ]]; then
+  echo "Unauthorized duplicate unexpectedly exited successfully" >&2
+  exit 1
+fi
+if [[ -e "$DUPLICATE_SIGNAL" ]]; then
+  echo "Unauthorized duplicate crossed the pre-torch admission signal" >&2
+  exit 1
+fi
+if ! rg -q 'AdmissionRejectedError.*active static replacement requires' \
+  "$LOG_ROOT/learner_unauthorized_duplicate.log"; then
+  tail -n 160 "$LOG_ROOT/learner_unauthorized_duplicate.log" >&2 || true
+  echo "Unauthorized duplicate did not fail at the active-binding gate" >&2
+  exit 1
+fi
+"$PYTHON_BIN" - "$RUN_ROOT" "$OLD_ATTEMPT_ID" <<'PY'
+from pathlib import Path
+import sqlite3
+import sys
+
+root, old_attempt = Path(sys.argv[1]), sys.argv[2]
+connection = sqlite3.connect(root / "control/syncer_metadata.sqlite3")
+connection.row_factory = sqlite3.Row
+try:
+    current = connection.execute(
+        "SELECT * FROM static_contributor_bindings WHERE learner_id='learner_000'"
+    ).fetchone()
+    assert current is not None
+    assert current["attempt_id"] == old_attempt
+    assert current["binding_generation"] == 1
+    assert current["status"] == "active"
+finally:
+    connection.close()
+PY
+
+"$PYTHON_BIN" -m fs_diloco.tools.authorize_static_replacement \
+  --shared-root "$RUN_ROOT" \
+  --run-id "$RUN_ID" \
+  --descriptor-sha256 "$FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256" \
+  --learner-id learner_000 \
+  --old-logical-launch-id "$LOGICAL_LAUNCH_ID" \
+  --old-attempt-id "$OLD_ATTEMPT_ID" \
+  --old-binding-generation 1 \
+  --new-logical-launch-id "$LOGICAL_LAUNCH_ID" \
+  --new-attempt-id "$NEW_ATTEMPT_ID" \
+  --reason "operator-authorized static rerun after exact old process suspension" \
+  > "$LOG_ROOT/static_replacement_authorization.json"
 
 FS_DILOCO_TEST_ADMISSION_SIGNAL_PATH="$NEW_SIGNAL" \
   "$PYTHON_BIN" -m fs_diloco.learner \
@@ -207,13 +281,14 @@ old_status=0
 wait "$old_pid" || old_status=$?
 old_pid=""
 if [[ "$old_status" -ne 0 ]] && ! rg -q \
-  'immutable target collision|MembershipFenceError|stale fence|terminal' \
+  'AdmissionSupersededError|immutable target collision|MembershipFenceError|stale fence|terminal' \
   "$LOG_ROOT/learner_old.log"; then
   tail -n 160 "$LOG_ROOT/learner_old.log" >&2 || true
   echo "Old learner failed for an unexpected reason: status=$old_status" >&2
   exit "$old_status"
 fi
 printf 'STALE_STATIC_LEARNER_STATUS=%s\n' "$old_status"
+printf 'UNAUTHORIZED_DUPLICATE_STATUS=%s\n' "$duplicate_status"
 wait "$syncer_pid"
 syncer_pid=""
 trap - EXIT INT TERM

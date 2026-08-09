@@ -85,6 +85,18 @@ class RunPaths:
         return self.control / "registration_requests"
 
     @property
+    def registration_history_v4(self) -> Path:
+        return self.control / "registration_history_v4"
+
+    @property
+    def registration_dispositions_v4(self) -> Path:
+        return self.control / "registration_dispositions_v4"
+
+    @property
+    def static_replacement_requests(self) -> Path:
+        return self.control / "static_replacement_requests"
+
+    @property
     def scheduler_operator_requests(self) -> Path:
         return self.control / "scheduler_operator_requests"
 
@@ -259,6 +271,47 @@ class RunPaths:
     def epoch_admission_path(self, epoch: int, owner_id: str, instance_id: str) -> Path:
         return self.epoch_membership_dir(epoch, owner_id) / "admissions" / f"{instance_id}.json"
 
+    def epoch_admission_response_path(
+        self, epoch: int, owner_id: str, actor_id: str, attempt_id: str
+    ) -> Path:
+        return (
+            self.epoch_membership_dir(epoch, owner_id)
+            / "admissions_v4"
+            / "responses"
+            / actor_id
+            / f"{attempt_id}.json"
+        )
+
+    def epoch_current_admission_path(
+        self, epoch: int, owner_id: str, stable_contributor_key: str
+    ) -> Path:
+        return (
+            self.epoch_membership_dir(epoch, owner_id)
+            / "admissions_v4"
+            / "current"
+            / f"{stable_contributor_key}.json"
+        )
+
+    def epoch_admission_rejection_path(
+        self, epoch: int, owner_id: str, actor_id: str, attempt_id: str
+    ) -> Path:
+        return (
+            self.epoch_membership_dir(epoch, owner_id)
+            / "admissions_v4"
+            / "rejections"
+            / actor_id
+            / f"{attempt_id}.json"
+        )
+
+    def registration_disposition_path(self, request_sha256: str) -> Path:
+        return self.registration_dispositions_v4 / f"{request_sha256}.json"
+
+    def registration_history_path(self, request_sha256: str) -> Path:
+        return self.registration_history_v4 / f"{request_sha256}.json"
+
+    def static_replacement_request_path(self, learner_id: str, attempt_id: str) -> Path:
+        return self.static_replacement_requests / learner_id / f"{attempt_id}.json"
+
     def epoch_receipt_ack_path(
         self,
         epoch: int,
@@ -403,6 +456,9 @@ def prepare_authority_dirs(paths: RunPaths) -> None:
         paths.syncer_epochs,
         paths.syncer_launch_claims,
         paths.registration_requests,
+        paths.registration_history_v4,
+        paths.registration_dispositions_v4,
+        paths.static_replacement_requests,
         paths.scheduler_operator_requests,
         paths.audit_batches,
         paths.audit_partitions,

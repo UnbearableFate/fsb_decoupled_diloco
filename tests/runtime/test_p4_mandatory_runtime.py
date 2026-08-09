@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import subprocess
 import sys
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -20,9 +25,14 @@ from fs_diloco.core.config_v4 import (
 from fs_diloco.modeling.hf_data import build_indexed_batch_iterator
 from fs_diloco.protocol._validation import identity as validate_identity
 from fs_diloco.protocol.admission_v4 import (
+    AdmissionAuthorizationError,
+    admission_request_sha256,
     dynamic_placement_id,
     publish_admission_response,
+    publish_static_replacement_authorization,
+    publish_static_request,
     read_admission_response,
+    read_static_replacement_authorization,
 )
 from fs_diloco.protocol.contributor import StaticContributorFence, StaticMembershipScope
 from fs_diloco.protocol.control_v4 import (
@@ -32,21 +42,62 @@ from fs_diloco.protocol.control_v4 import (
 )
 from fs_diloco.protocol.data_cursor import ContributorResumeState, IndexedBlockCursor
 from fs_diloco.protocol.cycle_receipt import canonical_receipt_relative_path
-from fs_diloco.storage.atomic_io import atomic_write_json
-from fs_diloco.storage.authority import AuthorityIdentity, CommittedVersion, LeaderAuthority
-from fs_diloco.storage.leader_lease import LeaderToken
+from fs_diloco.storage.atomic_io import atomic_write_json, sha256_file
+from fs_diloco.storage.authority import (
+    AuthorityIdentity,
+    CommittedVersion,
+    LeaderAuthority,
+    initialize_authority_v4,
+)
+from fs_diloco.storage.leader_lease import CommittedLeaderLease, LeaderToken
 from fs_diloco.storage.paths import RunPaths
 from fs_diloco.tools import launch_independent_run
 from fs_diloco.tools.init_run import initialize_run
 from fs_diloco.tools.launch_independent_run import _walltime_resource
+from fs_diloco.tools import migrate_config_v3_to_v4 as migration_tool
 from fs_diloco.tools.migrate_config_v3_to_v4 import migrate
-from fs_diloco.runtime.syncer_v4 import _raise_injected_candidate_failure
+from fs_diloco.runtime.syncer_v4 import _admit_requests, _raise_injected_candidate_failure
+from fs_diloco.runtime import syncer_v4 as syncer_runtime
 from tests.support.v4_protocol import receipt
 
 
 PLAN03_REQUIREMENTS = frozenset(
     {"AUTH-02", "AUTH-03", "AUTH-04", "AUTH-05", "AUTH-07", "AUTH-09", "AUTH-10", "P4-MIGRATE"}
 )
+
+
+class _TelemetryProbe:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, object]]] = []
+
+    def event(self, name: str, **fields: object) -> None:
+        self.events.append((name, fields))
+
+
+def _static_admission_runtime(tmp_path: Path):
+    paths = RunPaths(tmp_path)
+    identity = AuthorityIdentity("run-v4", "source-fingerprint", "d" * 64)
+    scope = StaticMembershipScope(("learner_000",))
+    initialize_authority_v4(paths.sqlite_db, identity, scope, wall_clock=lambda: 100.0)
+    authority = LeaderAuthority(paths.sqlite_db, identity, scope, wall_clock=lambda: 100.0)
+    token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
+    loaded = SimpleNamespace(
+        paths=paths,
+        descriptor={"run_id": "run-v4", "descriptor_sha256": "d" * 64},
+    )
+    return paths, authority, authority.open_leader(token), loaded
+
+
+def _publish_synthetic_heartbeat(publisher: V4ControlPublisher, *, sequence: int = 1) -> None:
+    renewed_at = time.time()
+    publisher.publish_heartbeat(
+        CommittedLeaderLease(
+            token=publisher.token,
+            renewed_at=renewed_at,
+            lease_expires_at=renewed_at + 30.0,
+            heartbeat_seq=sequence,
+        )
+    )
 
 
 def test_receipt_object_identity_is_isolated_by_contributor_fence() -> None:
@@ -195,6 +246,65 @@ def test_migration_output_no_clobber_and_hash_fenced_in_place(tmp_path: Path) ->
     load_config_v4(source, profile=ConfigProfile.FULL_V4)
 
 
+def test_in_place_migration_revalidates_source_at_publication_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "v3.yaml"
+    source.write_text("run:\n  name: original\n", encoding="utf-8")
+    expected = hashlib.sha256(source.read_bytes()).hexdigest()
+    concurrent_edit = b"run:\n  name: concurrent-edit\n"
+    original_migrate = migration_tool.migrate_v3_bytes_to_v4
+
+    def edit_after_initial_read(data: bytes):
+        source.write_bytes(concurrent_edit)
+        return original_migrate(data)
+
+    monkeypatch.setattr(migration_tool, "migrate_v3_bytes_to_v4", edit_after_initial_read)
+    with pytest.raises(RuntimeError, match="changed"):
+        migrate(source, in_place=True, expected_sha256=expected)
+    assert source.read_bytes() == concurrent_edit
+
+
+def test_migration_output_failure_never_exposes_partial_final_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "v3.yaml"
+    source.write_text("run:\n  name: migrate\n", encoding="utf-8")
+    output = tmp_path / "v4.yaml"
+
+    def fail_fsync(_descriptor: int) -> None:
+        raise OSError("injected fsync failure")
+
+    monkeypatch.setattr(migration_tool.os, "fsync", fail_fsync)
+    with pytest.raises(OSError, match="injected fsync failure"):
+        migrate(source, output_path=output)
+    assert not output.exists()
+
+
+def test_concurrent_migration_output_publishers_never_overwrite_winner(tmp_path: Path) -> None:
+    source = tmp_path / "v3.yaml"
+    source.write_text("run:\n  name: migrate\n", encoding="utf-8")
+    output = tmp_path / "v4.yaml"
+    barrier = threading.Barrier(2)
+
+    def publish() -> str:
+        barrier.wait()
+        try:
+            migrate(source, output_path=output)
+        except FileExistsError:
+            return "collision"
+        return "published"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(publish) for _ in range(2)]
+        outcomes = sorted(future.result() for future in futures)
+
+    assert outcomes == ["collision", "published"]
+    load_config_v4(output, profile=ConfigProfile.FULL_V4)
+
+
 def test_independent_walltimes_have_repository_minimum() -> None:
     assert _walltime_resource("00:10:00", required=True) == [
         "-l",
@@ -257,20 +367,545 @@ def test_admission_response_replay_is_byte_idempotent(tmp_path: Path) -> None:
     assert second.read_bytes() == first_bytes
 
 
+def test_default_static_duplicate_cannot_replace_an_active_binding(tmp_path: Path) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    try:
+        publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-1",
+            expected_generation=None,
+        )
+        _admit_requests(loaded, authority, leader, telemetry)
+        first = authority.read.static_binding("learner_000")
+        assert first is not None and first.attempt_id == "attempt-1"
+
+        publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-2",
+            expected_generation=first.binding_generation,
+        )
+        _admit_requests(loaded, authority, leader, telemetry)
+
+        current = authority.read.static_binding("learner_000")
+        assert current is not None
+        assert current.attempt_id == "attempt-1"
+        assert current.binding_generation == 1
+        assert [name for name, _fields in telemetry.events].count("learner_admitted") == 1
+        assert [name for name, _fields in telemetry.events].count("admission_rejected") == 1
+    finally:
+        authority.close()
+
+
+def test_exact_operator_authorization_allows_active_static_replacement(tmp_path: Path) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    try:
+        publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-1",
+            expected_generation=None,
+        )
+        _admit_requests(loaded, authority, leader, telemetry)
+        first = authority.read.static_binding("learner_000")
+        assert first is not None
+        old_fence = StaticContributorFence(
+            "static",
+            first.learner_id,
+            first.logical_launch_id,
+            first.attempt_id,
+            first.binding_generation,
+        )
+        publish_static_replacement_authorization(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            old_fence=old_fence,
+            new_logical_launch_id="logical-1",
+            new_attempt_id="attempt-2",
+            reason="operator observed exact old process termination",
+        )
+        publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-2",
+            expected_generation=1,
+        )
+        _admit_requests(loaded, authority, leader, telemetry)
+
+        current = authority.read.static_binding("learner_000")
+        assert current is not None
+        assert current.attempt_id == "attempt-2"
+        assert current.binding_generation == 2
+    finally:
+        authority.close()
+
+
+def test_static_replacement_authorization_rejects_nonfinite_timestamp(
+    tmp_path: Path,
+) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    try:
+        publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-1",
+            expected_generation=None,
+        )
+        _admit_requests(loaded, authority, leader, telemetry)
+        first = authority.read.static_binding("learner_000")
+        assert first is not None
+        old_fence = StaticContributorFence(
+            "static",
+            first.learner_id,
+            first.logical_launch_id,
+            first.attempt_id,
+            first.binding_generation,
+        )
+        request_path = publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-2",
+            expected_generation=1,
+        )
+        authorization_path = publish_static_replacement_authorization(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            old_fence=old_fence,
+            new_logical_launch_id="logical-1",
+            new_attempt_id="attempt-2",
+            reason="operator observed exact old process termination",
+        )
+        authorization = json.loads(authorization_path.read_text())
+        authorization["created_at"] = float("nan")
+        authorization_path.chmod(0o600)
+        authorization_path.write_text(json.dumps(authorization), encoding="utf-8")
+
+        with pytest.raises(
+            AdmissionAuthorizationError,
+            match="authorization payload is invalid",
+        ):
+            read_static_replacement_authorization(
+                paths,
+                request=json.loads(request_path.read_text()),
+                current_fence=old_fence,
+            )
+    finally:
+        authority.close()
+
+
+def test_disposed_admission_request_leaves_hot_scan_and_emits_once(tmp_path: Path) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    try:
+        publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-1",
+            expected_generation=None,
+        )
+        _admit_requests(loaded, authority, leader, telemetry)
+        _admit_requests(loaded, authority, leader, telemetry)
+
+        assert not tuple(paths.registration_requests.rglob("*.json"))
+        assert [name for name, _fields in telemetry.events] == ["learner_admitted"]
+        dispositions = tuple((paths.control / "registration_dispositions_v4").rglob("*.json"))
+        assert len(dispositions) == 1
+        payload = json.loads(dispositions[0].read_text(encoding="utf-8"))
+        assert payload["outcome"] == "admitted"
+    finally:
+        authority.close()
+
+
+def test_malformed_and_foreign_admission_requests_leave_hot_scan_once(tmp_path: Path) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    malformed = paths.registration_requests / "static" / "learner_000" / "broken.json"
+    malformed.parent.mkdir(parents=True, exist_ok=True)
+    malformed.write_bytes(b'{"format_version":1')
+    foreign = paths.registration_requests / "dynamic" / "foreign.json"
+    foreign.parent.mkdir(parents=True, exist_ok=True)
+    foreign.write_text(
+        json.dumps(
+            {
+                "format_version": 1,
+                "mode": "dynamic",
+                "run_id": "another-run",
+                "descriptor_sha256": "e" * 64,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    try:
+        _admit_requests(loaded, authority, leader, telemetry)
+        _admit_requests(loaded, authority, leader, telemetry)
+
+        assert not tuple(paths.registration_requests.rglob("*.json"))
+        assert [name for name, _fields in telemetry.events] == [
+            "admission_request_discarded",
+            "admission_request_discarded",
+        ]
+        dispositions = tuple(paths.registration_dispositions_v4.rglob("*.json"))
+        history = tuple(paths.registration_history_v4.rglob("*.json"))
+        assert len(dispositions) == 2
+        assert len(history) == 2
+        assert {
+            json.loads(path.read_text(encoding="utf-8"))["error_type"] for path in dispositions
+        } == {"ForeignAdmissionRequest", "MalformedAdmissionRequest"}
+    finally:
+        authority.close()
+
+
+def test_identical_malformed_requests_share_archive_without_hot_path_collision(
+    tmp_path: Path,
+) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    request_bytes = b'{"format_version":1'
+    for learner_id in ("learner_000", "learner_001"):
+        path = paths.registration_requests / "static" / learner_id / "broken.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(request_bytes)
+    try:
+        _admit_requests(loaded, authority, leader, telemetry)
+
+        assert not tuple(paths.registration_requests.rglob("*.json"))
+        assert len(tuple(paths.registration_dispositions_v4.rglob("*.json"))) == 1
+        assert len(tuple(paths.registration_history_v4.rglob("*.json"))) == 1
+        assert [name for name, _fields in telemetry.events] == [
+            "admission_request_discarded",
+            "admission_request_discarded",
+        ]
+    finally:
+        authority.close()
+
+
+def test_incomplete_admission_disposition_cannot_remove_hot_request(tmp_path: Path) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    request_path = publish_static_request(
+        paths,
+        run_id="run-v4",
+        descriptor_sha256="d" * 64,
+        learner_id="learner_000",
+        logical_launch_id="logical-1",
+        attempt_id="attempt-1",
+        expected_generation=None,
+    )
+    request = json.loads(request_path.read_bytes())
+    request_sha = admission_request_sha256(request)
+    atomic_write_json(
+        paths.registration_disposition_path(request_sha),
+        {"request_sha256": request_sha},
+    )
+    try:
+        with pytest.raises(RuntimeError, match="disposition"):
+            _admit_requests(loaded, authority, leader, telemetry)
+
+        assert request_path.is_file()
+        assert authority.read.static_binding("learner_000") is None
+        assert telemetry.events == []
+    finally:
+        authority.close()
+
+
+def test_admission_control_publication_failure_is_not_persisted_as_rejection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    request_path = publish_static_request(
+        paths,
+        run_id="run-v4",
+        descriptor_sha256="d" * 64,
+        learner_id="learner_000",
+        logical_launch_id="logical-1",
+        attempt_id="attempt-1",
+        expected_generation=None,
+    )
+
+    def fail_response(*_args: object, **_kwargs: object) -> Path:
+        raise OSError("injected admission response publication failure")
+
+    monkeypatch.setattr(syncer_runtime, "publish_admission_response", fail_response)
+    try:
+        with pytest.raises(OSError, match="publication failure"):
+            _admit_requests(loaded, authority, leader, telemetry)
+
+        binding = authority.read.static_binding("learner_000")
+        assert binding is not None and binding.attempt_id == "attempt-1"
+        assert request_path.is_file()
+        assert not tuple(paths.registration_dispositions_v4.rglob("*.json"))
+        rejection_root = (
+            paths.epoch_membership_dir(leader.token.epoch, leader.token.owner_id)
+            / "admissions_v4"
+            / "rejections"
+        )
+        assert not tuple(rejection_root.rglob("*.json"))
+        assert telemetry.events == []
+    finally:
+        authority.close()
+
+
+def test_admission_disposition_retry_reuses_published_resume_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    request_path = publish_static_request(
+        paths,
+        run_id="run-v4",
+        descriptor_sha256="d" * 64,
+        learner_id="learner_000",
+        logical_launch_id="logical-1",
+        attempt_id="attempt-1",
+        expected_generation=None,
+    )
+    original_disposition = syncer_runtime.publish_admission_disposition
+
+    def fail_disposition(*_args: object, **_kwargs: object) -> Path:
+        raise OSError("injected disposition publication failure")
+
+    monkeypatch.setattr(syncer_runtime, "publish_admission_disposition", fail_disposition)
+    try:
+        with pytest.raises(OSError, match="disposition publication failure"):
+            _admit_requests(loaded, authority, leader, telemetry)
+        binding = authority.read.static_binding("learner_000")
+        assert binding is not None
+        fence = StaticContributorFence(
+            "static",
+            binding.learner_id,
+            binding.logical_launch_id,
+            binding.attempt_id,
+            binding.binding_generation,
+        )
+        response_path = paths.epoch_admission_response_path(
+            leader.token.epoch,
+            leader.token.owner_id,
+            fence.learner_id,
+            fence.attempt_id,
+        )
+        response_before = response_path.read_bytes()
+        leader.ingest_cycle_receipt(
+            command_id="receipt-after-partial-admission-publication",
+            receipt=receipt(
+                run_id="run-v4",
+                stable_contributor_key="learner_000",
+                fence=fence.as_dict(),
+            ),
+        )
+
+        monkeypatch.setattr(
+            syncer_runtime,
+            "publish_admission_disposition",
+            original_disposition,
+        )
+        _admit_requests(loaded, authority, leader, telemetry)
+
+        assert response_path.read_bytes() == response_before
+        assert not request_path.exists()
+        assert len(tuple(paths.registration_dispositions_v4.rglob("*.json"))) == 1
+    finally:
+        authority.close()
+
+
+def test_same_epoch_admission_repair_reuses_immutable_resume_snapshot(tmp_path: Path) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    try:
+        publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-1",
+            expected_generation=None,
+        )
+        _admit_requests(loaded, authority, leader, telemetry)
+        binding = authority.read.static_binding("learner_000")
+        assert binding is not None
+        fence = StaticContributorFence(
+            "static",
+            binding.learner_id,
+            binding.logical_launch_id,
+            binding.attempt_id,
+            binding.binding_generation,
+        )
+        response = paths.epoch_admission_response_path(
+            leader.token.epoch,
+            leader.token.owner_id,
+            fence.learner_id,
+            fence.attempt_id,
+        )
+        initial_bytes = response.read_bytes()
+        leader.ingest_cycle_receipt(
+            command_id="receipt-after-admission",
+            receipt=receipt(
+                run_id="run-v4",
+                stable_contributor_key="learner_000",
+                fence=fence.as_dict(),
+            ),
+        )
+
+        _admit_requests(loaded, authority, leader, telemetry)
+        assert response.read_bytes() == initial_bytes
+        assert [name for name, _fields in telemetry.events] == ["learner_admitted"]
+    finally:
+        authority.close()
+
+
+def test_same_epoch_stale_admission_is_superseded_by_current_fence(tmp_path: Path) -> None:
+    paths = RunPaths(tmp_path)
+    publisher = V4ControlPublisher(
+        paths,
+        LeaderToken(run_id="run-1", epoch=1, owner_id="owner-1"),
+    )
+    _publish_synthetic_heartbeat(publisher)
+    resume = ContributorResumeState(0, None, None, 1)
+    first_request = {
+        "mode": "static",
+        "run_id": "run-1",
+        "descriptor_sha256": "d" * 64,
+        "learner_id": "learner_000",
+        "attempt_id": "attempt-1",
+    }
+    second_request = {**first_request, "attempt_id": "attempt-2"}
+    first_fence = StaticContributorFence("static", "learner_000", "logical-1", "attempt-1", 1)
+    second_fence = StaticContributorFence("static", "learner_000", "logical-1", "attempt-2", 2)
+    publish_admission_response(
+        paths,
+        epoch=1,
+        owner_id="owner-1",
+        request=first_request,
+        fence=first_fence,
+        resume=resume,
+    )
+    paths.epoch_current_admission_path(1, "owner-1", "learner_000").unlink()
+    assert (
+        read_admission_response(
+            paths,
+            run_id="run-1",
+            descriptor_sha256="d" * 64,
+            actor_id="learner_000",
+            attempt_id="attempt-1",
+            max_clock_skew_seconds=0.0,
+        )
+        is None
+    )
+    publish_admission_response(
+        paths,
+        epoch=1,
+        owner_id="owner-1",
+        request=first_request,
+        fence=first_fence,
+        resume=resume,
+    )
+    publish_admission_response(
+        paths,
+        epoch=1,
+        owner_id="owner-1",
+        request=second_request,
+        fence=second_fence,
+        resume=resume,
+    )
+
+    with pytest.raises(RuntimeError, match="superseded"):
+        read_admission_response(
+            paths,
+            run_id="run-1",
+            descriptor_sha256="d" * 64,
+            actor_id="learner_000",
+            attempt_id="attempt-1",
+            max_clock_skew_seconds=0.0,
+        )
+
+
+def test_admission_response_rejects_extra_fields_even_with_matching_pointer_hash(
+    tmp_path: Path,
+) -> None:
+    paths = RunPaths(tmp_path)
+    publisher = V4ControlPublisher(
+        paths,
+        LeaderToken(run_id="run-1", epoch=1, owner_id="owner-1"),
+    )
+    _publish_synthetic_heartbeat(publisher)
+    request = {
+        "mode": "static",
+        "run_id": "run-1",
+        "descriptor_sha256": "d" * 64,
+        "learner_id": "learner_000",
+        "attempt_id": "attempt-1",
+    }
+    fence = StaticContributorFence("static", "learner_000", "logical-1", "attempt-1", 1)
+    response = publish_admission_response(
+        paths,
+        epoch=1,
+        owner_id="owner-1",
+        request=request,
+        fence=fence,
+        resume=ContributorResumeState(0, None, None, 1),
+    )
+    payload = json.loads(response.read_bytes())
+    payload["unexpected"] = "field"
+    atomic_write_json(response, payload)
+    pointer_path = paths.epoch_current_admission_path(1, "owner-1", "learner_000")
+    pointer = json.loads(pointer_path.read_bytes())
+    pointer["response_sha256"] = sha256_file(response)
+    atomic_write_json(pointer_path, pointer)
+
+    with pytest.raises(RuntimeError, match="fields"):
+        read_admission_response(
+            paths,
+            run_id="run-1",
+            descriptor_sha256="d" * 64,
+            actor_id="learner_000",
+            attempt_id="attempt-1",
+            max_clock_skew_seconds=0.0,
+        )
+
+
 def test_stale_epoch_admission_response_cannot_open_torch_gate(tmp_path: Path) -> None:
     paths = RunPaths(tmp_path)
     old = V4ControlPublisher(
         paths,
         LeaderToken(run_id="run-1", epoch=1, owner_id="owner-old"),
-        lease_duration_seconds=30.0,
     )
     current = V4ControlPublisher(
         paths,
         LeaderToken(run_id="run-1", epoch=2, owner_id="owner-current"),
-        lease_duration_seconds=30.0,
     )
-    old.publish_heartbeat()
-    current.publish_heartbeat()
+    _publish_synthetic_heartbeat(old)
+    _publish_synthetic_heartbeat(current)
     request = {
         "mode": "static",
         "run_id": "run-1",
@@ -330,16 +965,14 @@ def test_receipt_ack_is_current_epoch_fenced_and_byte_idempotent(tmp_path: Path)
     old = V4ControlPublisher(
         paths,
         LeaderToken(run_id="run-v4", epoch=1, owner_id="owner-old"),
-        lease_duration_seconds=30.0,
     )
     current = V4ControlPublisher(
         paths,
         LeaderToken(run_id="run-v4", epoch=2, owner_id="owner-current"),
-        lease_duration_seconds=30.0,
     )
-    old.publish_heartbeat()
+    _publish_synthetic_heartbeat(old)
     old.publish_receipt_ack(cycle_receipt, descriptor_sha256="d" * 64)
-    current.publish_heartbeat()
+    _publish_synthetic_heartbeat(current)
     with pytest.raises(TimeoutError, match="receipt acknowledgement"):
         wait_for_receipt_barrier(
             paths,
@@ -374,9 +1007,8 @@ def test_epoch_control_ignores_polluted_fixed_cache_and_repairs_it(tmp_path: Pat
     publisher = V4ControlPublisher(
         paths,
         LeaderToken(run_id="run-v4", epoch=2, owner_id="owner-current"),
-        lease_duration_seconds=30.0,
     )
-    publisher.publish_heartbeat()
+    _publish_synthetic_heartbeat(publisher)
     version = CommittedVersion(
         version=3,
         predecessor_version=2,
@@ -402,6 +1034,106 @@ def test_epoch_control_ignores_polluted_fixed_cache_and_repairs_it(tmp_path: Pat
     assert current is not None and current.latest == expected
     publisher.publish_latest(version)
     assert yaml.safe_load(paths.latest_json.read_text(encoding="utf-8")) == expected
+
+
+def test_heartbeat_publication_uses_exact_committed_lease_and_rejects_delay(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = [100.0]
+    paths = RunPaths(tmp_path)
+    identity = AuthorityIdentity("run-v4", "source-fingerprint", "d" * 64)
+    scope = StaticMembershipScope(("learner_000",))
+    initialize_authority_v4(paths.sqlite_db, identity, scope, wall_clock=lambda: now[0])
+    with LeaderAuthority(
+        paths.sqlite_db,
+        identity,
+        scope,
+        wall_clock=lambda: now[0],
+        lease_duration_seconds=20.0,
+    ) as authority:
+        token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
+        acquired = authority.committed_leader_lease(token)
+        assert acquired.renewed_at == 100.0
+        assert acquired.lease_expires_at == 120.0
+        assert acquired.heartbeat_seq == 1
+
+        now[0] = 105.0
+        renewed = authority.renew_leader(token)
+        assert renewed.renewed_at == 105.0
+        assert renewed.lease_expires_at == 125.0
+        assert renewed.heartbeat_seq == 2
+
+        publisher = V4ControlPublisher(paths, token)
+        monkeypatch.setattr("fs_diloco.protocol.control_v4.time.time", lambda: 124.0)
+        heartbeat = publisher.publish_heartbeat(renewed)
+        assert heartbeat["renewed_at"] == 105.0
+        assert heartbeat["lease_expires_at"] == 125.0
+        assert heartbeat["heartbeat_seq"] == 2
+
+        monkeypatch.setattr("fs_diloco.protocol.control_v4.time.time", lambda: 126.0)
+        with pytest.raises(RuntimeError, match="expired"):
+            publisher.publish_heartbeat(renewed)
+
+
+def test_latest_head_rejects_path_escape_and_payload_identity_mismatch(tmp_path: Path) -> None:
+    paths = RunPaths(tmp_path / "run")
+    publisher = V4ControlPublisher(
+        paths,
+        LeaderToken(run_id="run-v4", epoch=1, owner_id="owner-1"),
+    )
+    _publish_synthetic_heartbeat(publisher)
+    head_path = paths.epoch_head_path(1, "owner-1")
+    outside = tmp_path / "outside.json"
+    outside.write_text('{"publication_id":"outside"}\n', encoding="utf-8")
+    atomic_write_json(
+        head_path,
+        {
+            "format_version": 2,
+            "kind": "latest_head",
+            "run_id": "run-v4",
+            "epoch": 1,
+            "owner_id": "owner-1",
+            "version": 7,
+            "pointer_path": "../outside.json",
+            "pointer_sha256": sha256_file(outside),
+        },
+    )
+    current = read_current_control(paths, run_id="run-v4")
+    assert current is not None and current.latest is None
+
+    pointer = paths.epoch_version_pointer_path(1, "owner-1", 7)
+    pointer.parent.mkdir(parents=True, exist_ok=True)
+    pointer.write_text(
+        json.dumps(
+            {
+                "format_version": 2,
+                "kind": "latest",
+                "run_id": "run-v4",
+                "epoch": 1,
+                "owner_id": "wrong-owner",
+                "version": 7,
+                "publication_id": "publication-7",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    atomic_write_json(
+        head_path,
+        {
+            "format_version": 2,
+            "kind": "latest_head",
+            "run_id": "run-v4",
+            "epoch": 1,
+            "owner_id": "owner-1",
+            "version": 7,
+            "pointer_path": paths.relative(pointer),
+            "pointer_sha256": sha256_file(pointer),
+        },
+    )
+    current = read_current_control(paths, run_id="run-v4")
+    assert current is not None and current.latest is None
 
 
 def test_authority_missing_fails_closed_even_when_fixed_cache_exists(tmp_path: Path) -> None:
