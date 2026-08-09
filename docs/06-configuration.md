@@ -60,4 +60,4 @@ sync:
 
 旧 in-progress run state 不迁移。迁移配置只用于创建 fresh v4 attempt；不要把 v4 resolved config 写回旧 run root。
 
-authority schema 8 在 schema 7 的 exact dynamic launch identity 之上，增加 durable preclose cutoff、跨 successor terminal deadlines 和 terminal merge accounting。当前没有 in-place v4 schema 6/7→8 migration；旧 completed v4 evidence 保持原提交只读，新的执行必须初始化 fresh schema 8 run。
+authority schema 9 保留 schema 8 的 durable preclose cutoff、跨 successor terminal deadlines 和 terminal merge accounting，并增加 online dependency-closed audit batching/partition compaction、durable command receipts 和 identity-checked artifact/audit GC。contributor progress 不再以外键阻止已归档 receipt history 的精确 prune；cursor/hash chain 仍由 progress row 持久化。当前没有 in-place v4 schema 6/7/8→9 migration；旧 completed v4 evidence 保持原提交只读，新的执行必须初始化 fresh schema 9 run。

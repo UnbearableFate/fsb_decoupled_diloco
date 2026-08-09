@@ -4,13 +4,13 @@
 
 | 输入/运行形态 | 当前主线能力 |
 |---|---|
-| fresh Full Protocol v4 / authority schema 8 static | 初始化、训练、接管、终态、分析、评估 |
-| fresh Full Protocol v4 / authority schema 8 dynamic | 初始化、admission/scaling/replacement、训练、接管、终态、分析、评估 |
+| fresh Full Protocol v4 / authority schema 9 static | 初始化、训练、接管、online maintenance、终态、分析、评估 |
+| fresh Full Protocol v4 / authority schema 9 dynamic | 初始化、admission/scaling/replacement、online maintenance、终态、分析、评估 |
 | torch DDP / periodic-average baseline | 独立训练与 evidence/checker |
 | completed classic v1-v3 full | query-only inspect/export/eval |
 | completed Fragment V0 | query-only inspect；用已物化 full checkpoint export/eval |
 | in-progress classic/Fragment run | 不可 resume 或原地迁移 |
-| authority schema 6 v4 run | 保持原提交 evidence；当前代码不做 in-place resume/migration |
+| authority schema 6/7/8 v4 run | 保持原提交 evidence；当前代码不做 in-place resume/migration |
 
 ## 归档定位
 
@@ -35,6 +35,8 @@ repository-owned in-place 迁移需要原 SHA-256 fence，且 publication 前再
 legacy projection 只保留 model/data/run 等分析和评估需要的共享字段，丢弃 init/fragment/failure/旧 coordination runtime switch，并把已知 prediction timeout spelling 映射到当前只读结构。它不使 `Config` 能表达旧 runtime。
 
 导出派生数据必须写到旧 root 之外。current code 不会为旧 DB 建表、迁移、repair sidecar、prune history 或发布 control。
+
+schema 9 的 online audit archive、durable command receipt 和 identity-checked GC 只适用于 fresh run；它们不是旧 schema 的离线升级步骤。
 
 ## Fresh-v4 identity
 

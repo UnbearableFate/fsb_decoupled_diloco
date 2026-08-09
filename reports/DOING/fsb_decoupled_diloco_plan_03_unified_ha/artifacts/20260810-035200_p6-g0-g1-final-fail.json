@@ -1,0 +1,11 @@
+{
+  "artifact_version": 1,
+  "errors": [
+    "FileNotFoundError: [Errno 2] No such file or directory: '/work/xg24i002/x10041/plan03-p6-final-320d/uv.lock'"
+  ],
+  "gate": "G0-G1",
+  "phase_id": "P6-acceptance-final-review",
+  "plan_id": "fsb_decoupled_diloco_plan_03_unified_ha",
+  "requirements_covered": [],
+  "status": "BLOCKED"
+}

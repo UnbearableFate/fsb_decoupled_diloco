@@ -33,7 +33,8 @@
 │   └── attestations/<kind>/<actor>/<attempt>.json
 └── audit/
     ├── batches/
-    └── partitions/
+    ├── partitions/
+    └── command_receipts/
 ```
 
 SQLite 的 WAL/SHM/journal 是 authority sidecar，任何清理都必须 fail closed，而不是按临时文件处理。
@@ -86,7 +87,11 @@ carried ancestry 与 hard-crash gap upper bound 单独报告，不能混入 dire
 
 ## Audit 与 telemetry
 
-authority history 的不可变 audit object 先发布并校验，DB 才删除精确 source rows；partition compact 后 source batch 才可通过 claim/complete GC 删除。actor telemetry 是每 attempt 单写者 JSONL，可以丢失或清理，但不能改变 authority summary。
+active leader 的 bounded maintenance pass 在 commit 后和 terminal close 执行。authority history 的不可变 audit batch 先发布并校验，DB 才删除 dependency-closed 的精确 source rows；多个 hot batch 合并成带 manifest 的 partition 后，source batch 才可通过 fenced claim/complete GC 删除。启动与恢复只扫描有界 hot authority，不全量读取历史 partition。
+
+被 DB history prune 的 command 仍以 immutable `audit/command_receipts/` 保存 request digest 和 result；相同 command 重放会验证 receipt 后返回原结果，digest 冲突仍 fail closed。artifact/audit GC 在 authority 中先 claim，再核对 regular-file、path、size 和 SHA-256 identity 后删除，不能把未知对象当成 orphan。
+
+actor telemetry 是每 attempt 单写者 JSONL，可以丢失或清理，但不能改变 authority summary。
 
 ## Legacy 数据
 

@@ -31,3 +31,7 @@ learner 在 admission 完成前不 import torch、不分配 CUDA。learner 永�
 当前分支不提供 classic full、Fragment V0、旧 resume、fixed latest/stop authority、旧 schema bootstrap 或动态 mutator proxy。旧完成 run 只能 query-only 分析、导出或评估；旧未完成 run 不可续训。
 
 归档 tag `archive/classic-full-v1-final` 和 `archive/fragment-v0-final` 均指向 `a00a3d64a50f10a2478c3f4fe795e658d1b3b52f`。
+
+## 已验证的运行边界
+
+正式验收已在两种 9-node 拓扑上覆盖超过 50 local steps × 10 global steps 的基线：static 使用 8 个 FP32 learner 和 1 个 candidate，完成 60-step cycle、terminal global version 21 和全部 8 个 contributor 的终态确认；dynamic 使用 8 个 BF16 learner/update/publish actor 和 1 个 CPU/FP32 compute syncer allocation，完成 60-step cycle、terminal global version 121，并覆盖永久 learner 丢失/替换、重复进程 admission 拒绝、candidate 接管和旧进程 fence。两者的 token ledger 均守恒，终态只保留 current authority，所有 current contributor 均完成 final acknowledgement。详细实验身份和验收 artifact 见 [`reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/`](../reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/)。

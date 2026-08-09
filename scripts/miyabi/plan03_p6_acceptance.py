@@ -20,6 +20,32 @@ EXPECTED_SCENARIOS = {
     "dynamic-2-learners-replacement",
     "dynamic-2-learners-2-candidates-syncer-and-learner-failure",
 }
+EXPECTED_PHASE_REQUIREMENTS = frozenset(
+    {
+        "AUTH-11",
+        "P6-ACCEPTANCE",
+        "P6-STATIC-9N",
+        "P6-DYNAMIC-9N",
+        "P6-PERF-CLASSIC",
+        "P6-PERF-DYNAMIC",
+        "P6-QUALITY",
+        "P6-DOCS",
+    }
+)
+
+
+def phase_requirement_error(value: Any) -> str | None:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        return "G0 P6 requirement matrix has an invalid requirement list"
+    actual = set(value)
+    if len(actual) != len(value) or actual != EXPECTED_PHASE_REQUIREMENTS:
+        return (
+            "G0 P6 requirement matrix differs from the exact phase set: "
+            f"missing={sorted(EXPECTED_PHASE_REQUIREMENTS - actual)}, "
+            f"extra={sorted(actual - EXPECTED_PHASE_REQUIREMENTS)}, "
+            f"duplicates={len(value) - len(actual)}"
+        )
+    return None
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -58,8 +84,9 @@ def validate(paths: dict[str, Path]) -> dict[str, Any]:
     g01 = artifacts["g0_g1"]
     if int(g01.get("cost", {}).get("estimated_total_jobs", -1)) != 19:
         errors.append("G0 cost/job freeze is missing")
-    if len(g01.get("phase_requirements", [])) != 7:
-        errors.append("G0 P6 requirement matrix is incomplete")
+    requirement_error = phase_requirement_error(g01.get("phase_requirements"))
+    if requirement_error is not None:
+        errors.append(requirement_error)
     if any(item.get("returncode") != 0 for item in g01.get("checks", [])):
         errors.append("G1 contains a failed static command")
 

@@ -12,6 +12,34 @@ from typing import Any
 
 
 PLAN_ID = "fsb_decoupled_diloco_plan_03_unified_ha"
+QUALITY_TEST_OWNERS = (
+    "tests/protocol/test_p3_unified_v4_golden.py",
+    "tests/gates/test_plan03_p6_performance_harness.py",
+    "tests/test_torch_baseline_health.py",
+)
+FROZEN_ORACLE_EVIDENCE = (
+    "tests/fixtures/golden/classic_full_v1_trace.json",
+    "tests/fixtures/golden/static_ha_v1_trace.json",
+    (
+        "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/"
+        "20260808-233400_p0-classic-ha-equivalence_pass.json"
+    ),
+)
+
+
+def quality_evidence_errors(project_root: Path) -> list[str]:
+    """Return missing retained quality owners/evidence after the P5 deletion."""
+
+    missing_owners = [path for path in QUALITY_TEST_OWNERS if not (project_root / path).is_file()]
+    missing_frozen = [
+        path for path in FROZEN_ORACLE_EVIDENCE if not (project_root / path).is_file()
+    ]
+    errors: list[str] = []
+    if missing_owners:
+        errors.append(f"quality regression owners are missing: {missing_owners}")
+    if missing_frozen:
+        errors.append(f"frozen classic/static oracle evidence is missing: {missing_frozen}")
+    return errors
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -42,14 +70,7 @@ def main() -> None:
     full = g2.get("metrics", {}).get("full", {})
     if int(full.get("failures", 1)) or int(full.get("errors", 1)):
         errors.append("G2 full regression contains failures/errors")
-    required_tests = (
-        "tests/protocol/test_p3_unified_v4_golden.py",
-        "tests/reference/test_plan03_classic_static_oracle.py",
-        "tests/test_torch_baseline_health.py",
-    )
-    missing = [path for path in required_tests if not (project_root / path).is_file()]
-    if missing:
-        errors.append(f"quality regression owners are missing: {missing}")
+    errors.extend(quality_evidence_errors(project_root))
     source_commit = g2.get("source_commit")
     payload = {
         "artifact_version": 1,
@@ -64,9 +85,10 @@ def main() -> None:
         },
         "requirements_covered": ["P6-QUALITY"],
         "correctness_quality_evidence": {
-            "deterministic_oracle": "verified by G2 full regression",
+            "current_deterministic_oracles": "verified by G2 full regression",
+            "frozen_classic_static_oracle_evidence": list(FROZEN_ORACLE_EVIDENCE),
             "finite_numeric_regressions": "verified by G2 full regression",
-            "test_owners": list(required_tests),
+            "test_owners": list(QUALITY_TEST_OWNERS),
             "g2_artifact": str(args.g2.resolve()),
         },
         "non_blocking_follow_up": {

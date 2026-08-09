@@ -335,6 +335,35 @@ def test_clean_run_applies_artifact_policy_and_authority_live_references(
     }
 
 
+@pytest.mark.parametrize("gc_state", ["pending", "claimed"])
+def test_clean_run_retains_authority_owned_gc_and_cleans_unrelated_terminal_files(
+    tmp_path: Path, gc_state: str
+) -> None:
+    run, evidence = _completed_run(tmp_path, "authority-gc-run")
+    retained = run / "updates/payloads/learner-0/update.safetensors"
+    removable = run / "heartbeats/learner-0.json"
+    _write(retained)
+    _write(removable)
+    relative = retained.relative_to(run).as_posix()
+    database = run / "control" / "syncer_metadata.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE gc_candidates(relative_path TEXT, state TEXT)")
+        connection.execute(
+            "INSERT INTO gc_candidates(relative_path, state) VALUES (?, ?)",
+            (relative, gc_state),
+        )
+
+    plan = build_cleanup_plan(tmp_path, run, evidence)
+
+    assert plan.retained_authority_owned_gc_paths == (relative,)
+    assert {item.path for item in plan.candidates} == {removable}
+    manifest = tmp_path / "reports/DOING/plan/authority-gc-cleanup.json"
+    result = execute_cleanup(plan, manifest)
+    assert result["retained_authority_owned_gc_paths"] == [relative]
+    assert retained.is_file()
+    assert not removable.exists()
+
+
 def test_clean_run_refuses_symlinked_policy_or_authority_database(tmp_path: Path) -> None:
     run, evidence = _completed_run(tmp_path, "policy-symlink-run")
     policy = run / "control" / "artifact_policy.json"

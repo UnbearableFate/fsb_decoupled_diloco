@@ -11,10 +11,11 @@ launcher 先提交 syncer candidate，再提交一个 static learner array 或�
 1. `runtime.syncer_entrypoint` 验证 descriptor/config identity。
 2. 打开严格 authority，轮询获取 leader lease。
 3. 独立 renewer 周期续租并发布 heartbeat。
-4. leader reconcile predecessor publication，初始化 dynamic pool（如需要）。
-5. `syncer_v4` 创建或恢复 global v0，随后组合 admission/ingest、唯一 merge service，以及 dynamic 模式下的 capacity/PBS reconcile service。
-6. terminal policy 达到 global target、deadline、launch-budget exhaustion 或收到合法 manual request 后进入 terminal close。
-7. 正常结束发布 terminal；异常先发布 error control 并 fence 当前 leader。
+4. leader 初始化 dynamic pool（如需要），随后在最多 5 秒的有界窗口中先处理 initial admission；此阶段不 import torch 或构造 model，使 learner 的 model 初始化可与 syncer 的重初始化重叠。窗口到期不丢请求，主 loop 会继续扫描同一 durable request 目录。
+5. `syncer_v4` 才加载 Torch/model runtime，reconcile predecessor publication，并创建或恢复 global v0。
+6. 主 loop 组合 admission/ingest、唯一 merge service、online maintenance，以及 dynamic 模式下的 capacity/PBS reconcile service。
+7. terminal policy 达到 global target、deadline、launch-budget exhaustion 或收到合法 manual request 后进入 terminal close。
+8. 正常结束发布 terminal；异常先发布 error control 并 fence 当前 leader。
 
 ## 3. Learner 生命周期
 
@@ -23,7 +24,7 @@ launcher 先提交 syncer candidate，再提交一个 static learner array 或�
 3. reader 只接受最高 live epoch、exact current pointer、request digest 和 contributor fence 匹配的 admission。
 4. admission 再验证后才 import torch/CUDA，写 actor attestation 并恢复 authority 提供的 cursor/hash chain。
 5. 每个 cycle 训练、结算 segment token、发布可选 proposal 和 mandatory receipt。
-6. learner 等待 exact receipt acknowledgement、drain 或 terminal；没有 ack 时不开始无限后续 cycle。
+6. learner 等待 exact receipt acknowledgement、drain 或 terminal；没有 ack 时不开始无限后续 cycle。若 current latest 已达到配置的 global target，learner 不再消费数据或开始训练 cycle，但继续存活，等待 leader 发布 drain 并完成 final acknowledgement。
 7. latest 采纳只接受 current epoch digest chain；terminal drain 发布 exact final-cycle ack 后退出。
 
 ## 4. Merge 和提交

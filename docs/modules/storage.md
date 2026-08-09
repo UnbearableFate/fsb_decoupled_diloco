@@ -4,7 +4,7 @@
 
 `authority.py` 提供 `initialize_authority_v4`、`LeaderAuthority`、只读 model 和绑定 token 的 `LeaderSession`。公开 mutation 是有限命名 command；command journal 绑定 canonical request digest。每个业务事务取得 SQLite write lock 后重新检查 leader 和 contributor fence。
 
-schema 8 分为 `schema_v4.sql`（static）和 `schema_v4_dynamic.sql`（dynamic）。两者共享 proposal/receipt/token/selection/publication/terminal/audit 域，并持久化 preclose cutoff、跨 successor drain deadline 和 terminal merge count；fresh DDL 不含 Fragment V0 表。dynamic feature 另外保存 stream-bound `launch_requests`、capacity observations、one-use bootstrap reservation 和 operator-file disposition；已处理文件移出 hot scan，static schema 不创建假的 scheduler 表。
+schema 9 分为 `schema_v4.sql`（static）和 `schema_v4_dynamic.sql`（dynamic）。两者共享 proposal/receipt/token/selection/publication/terminal/audit 域，并持久化 preclose cutoff、跨 successor drain deadline、terminal merge count、audit partition index 和 identity-checked GC claim；fresh DDL 不含 Fragment V0 表。dynamic feature 另外保存 stream-bound `launch_requests`、capacity observations、one-use bootstrap reservation 和 operator-file disposition；已处理文件移出 hot scan，static schema 不创建假的 scheduler 表。
 
 ## Lease 与 object I/O
 
@@ -24,6 +24,6 @@ schema 8 分为 `schema_v4.sql`（static）和 `schema_v4_dynamic.sql`（dynamic
 
 - `run_initializer.py`：same-parent staging、sibling identity reservation、manifest-hashed hard links 和 `.complete` publication/explicit repair。
 - `artifact_policy.py`：versioned artifact class、generic-cleanup allow/forbid 与 checksum。
-- `audit_archive.py`：immutable batch/partition build/publish/verify，以及 symlink-safe GC。
+- `audit_archive.py`：immutable batch/partition/command receipt build、publish、verify，以及 symlink-safe GC。
 
-publication orphan 和 audit source GC 必须先由 fenced authority claim；generic cleanup 永不删除 DB、sidecar、current control、publication intent、terminal 或 audit authority。
+`runtime.services.MaintenanceService` 在 leader fence 下归档 dependency-closed history、compact hot batch，并完成 artifact/audit claim。command journal 被精确 prune 后，immutable command receipt 仍保证 replay identity 和结果；contributor cursor/hash chain 独立留在 progress row。publication orphan 和 audit source GC 必须先由 fenced authority claim；generic cleanup 永不删除 DB、sidecar、current control、publication intent、terminal 或 audit authority。

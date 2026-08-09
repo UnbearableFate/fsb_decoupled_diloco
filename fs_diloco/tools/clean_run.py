@@ -4,8 +4,9 @@ The cleaner intentionally accepts only an exact run directory and a matching
 PASS evidence artifact bound to the current terminal version.  It preserves
 the authority database, fsync-before-prune histories, checkpoints,
 configuration, control publications, syncer logs, and one representative
-learner log.  Deletion is opt-in and always leaves an immutable report-side
-manifest of the resolved targets.
+learner log.  Objects already owned by fenced authority GC are retained and
+listed separately instead of blocking unrelated cleanup.  Deletion is opt-in
+and always leaves an immutable report-side manifest of the resolved targets.
 """
 
 from __future__ import annotations
@@ -62,6 +63,7 @@ class CleanupPlan:
     legacy_policy_override: bool
     candidates: tuple[CleanupCandidate, ...]
     retained_representative_learner_log: str | None
+    retained_authority_owned_gc_paths: tuple[str, ...]
 
     @property
     def total_bytes(self) -> int:
@@ -305,7 +307,7 @@ def _load_artifact_policy(
         raise CleanupRefusedError(f"artifact policy is invalid: {exc}") from exc
 
 
-def _authority_live_paths(run_root: Path) -> set[str]:
+def _authority_live_paths(run_root: Path) -> tuple[set[str], set[str]]:
     database = run_root / "control" / "syncer_metadata.sqlite3"
     try:
         metadata = database.lstat()
@@ -319,7 +321,8 @@ def _authority_live_paths(run_root: Path) -> set[str]:
         connection.row_factory = sqlite3.Row
     except sqlite3.Error as exc:
         raise CleanupRefusedError("cannot open authority database read-only") from exc
-    live: set[str] = set()
+    blocking: set[str] = set()
+    authority_owned_gc: set[str] = set()
     try:
         tables = {
             str(row[0])
@@ -347,7 +350,7 @@ def _authority_live_paths(run_root: Path) -> set[str]:
                             raw = raw.resolve().relative_to(run_root)
                         except ValueError:
                             continue
-                    live.add(raw.as_posix())
+                    blocking.add(raw.as_posix())
         if "artifact_publications" in tables:
             rows = connection.execute(
                 """
@@ -355,17 +358,17 @@ def _authority_live_paths(run_root: Path) -> set[str]:
                 WHERE state IN ('prepared','committed','orphan')
                 """
             ).fetchall()
-            live.update(str(row[0]) for row in rows)
+            blocking.update(str(row[0]) for row in rows)
         if "gc_candidates" in tables:
             rows = connection.execute(
                 "SELECT relative_path FROM gc_candidates WHERE state IN ('pending','claimed')"
             ).fetchall()
-            live.update(str(row[0]) for row in rows)
+            authority_owned_gc.update(str(row[0]) for row in rows)
     except sqlite3.Error as exc:
         raise CleanupRefusedError("cannot inspect authority live references") from exc
     finally:
         connection.close()
-    return live
+    return blocking, authority_owned_gc
 
 
 def _validate_policy_candidates(
@@ -374,9 +377,9 @@ def _validate_policy_candidates(
     policy: ArtifactPolicy | None,
     candidates: tuple[CleanupCandidate, ...],
 ) -> None:
-    live = _authority_live_paths(run_root)
+    blocking, authority_owned_gc = _authority_live_paths(run_root)
     for candidate in candidates:
-        if candidate.relative_path in live:
+        if candidate.relative_path in blocking or candidate.relative_path in authority_owned_gc:
             raise CleanupRefusedError(
                 f"authority still references cleanup candidate: {candidate.relative_path}"
             )
@@ -491,9 +494,20 @@ def build_cleanup_plan(
             if path.name.endswith((".tmp", ".part", ".staging")) or path.name.startswith(".tmp-"):
                 selected[path] = "temporary or staging file"
 
+    blocking, authority_owned_gc = _authority_live_paths(run)
+    selected_relative_paths = {path.relative_to(run).as_posix(): path for path in selected}
+    blocking_selected = sorted(set(selected_relative_paths) & blocking)
+    if blocking_selected:
+        raise CleanupRefusedError(
+            f"authority still references cleanup candidate: {blocking_selected[0]}"
+        )
+    retained_authority_owned_gc_paths = tuple(
+        sorted(set(selected_relative_paths) & authority_owned_gc)
+    )
     candidates = tuple(
         _candidate(path, run_root=run, reason=selected[path])
         for path in sorted(selected, key=lambda item: item.relative_to(run).as_posix())
+        if path.relative_to(run).as_posix() not in authority_owned_gc
     )
     _validate_policy_candidates(
         run_root=run,
@@ -512,6 +526,7 @@ def build_cleanup_plan(
         retained_representative_learner_log=(
             None if representative is None else representative.relative_to(run).as_posix()
         ),
+        retained_authority_owned_gc_paths=retained_authority_owned_gc_paths,
     )
 
 
@@ -529,6 +544,8 @@ def _manifest(plan: CleanupPlan, *, status: str) -> dict[str, Any]:
         "candidate_count": len(plan.candidates),
         "candidate_bytes": plan.total_bytes,
         "retained_representative_learner_log": plan.retained_representative_learner_log,
+        "retained_authority_owned_gc_count": len(plan.retained_authority_owned_gc_paths),
+        "retained_authority_owned_gc_paths": list(plan.retained_authority_owned_gc_paths),
         "candidates": [candidate.as_dict() for candidate in plan.candidates],
     }
 

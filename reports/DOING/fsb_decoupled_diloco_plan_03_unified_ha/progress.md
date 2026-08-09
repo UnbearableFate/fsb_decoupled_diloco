@@ -821,5 +821,55 @@
 ## 2026-08-10 03:45 JST — P6 G10 formal paired performance PASS
 
 - Formal attempt 8, PBS job `2513806.opbs` on `mg0014`, clean target `320d74d0fee41ddf0c8f6a6634f7b1db34fb00a6`, completed both independent comparisons. Each arm has one warmup plus exact 20 AB/BA pairs; all 84 measured arms used fresh roots and ended cleanly. Every repeat has actual and selected workload exactly final v2, four updates, 256 processed/direct tokens and cursor `[4,4]`; no failure injection, replacement or clipping occurred. Both artifacts retain per-actor event tapes before scratch cleanup.
+
+## 2026-08-10 04:18 JST — P6 G10 final common-target paired performance PASS
+
+- Formal common-target rerun used PBS job `2513897.opbs`, one `debug-g` node and explicit `00:30:00` walltime against frozen clean target `320d74d0fee41ddf0c8f6a6634f7b1db34fb00a6`; both artifacts carry the common source fingerprint `sha256:4fcb609101e12f022a3124e9483700f44339fb7c772140cc499e276f38526386`. The frozen classic tag ran in its own worktree and frozen-lock environment; every arm used a fresh root and all scratch roots were removed after evidence capture.
+- Classic-vs-unified and static-vs-dynamic each completed one unmeasured warmup per arm plus the pre-registered 20 pairs with AB/BA alternation, no failure injection, no mid-cycle replacement and no clipping. All workload identities are exact final v2/four selected updates/256 processed and direct-weight tokens/cursor `[4,4]`.
+- Classic comparison is `COMPARABLE`, paired median signed overhead `-11.7890%` and one-sided 95% bootstrap upper `-10.5206%`; dynamic comparison is `COMPARABLE`, paired median signed overhead `0.2905%` and upper `1.5335%`. Both are below the pre-registered 10% non-inferiority bound. Evidence: `artifacts/20260810-040100_p6-g10-classic-final-pass.json` and `artifacts/20260810-040100_p6-g10-dynamic-final-pass.json`; joined PBS stdout ends with two `PASS` results.
+- This common-target pass supersedes only source-materialization differences in the earlier paired pass; the method, 20-pair sample size, timer anchor, workload oracle and thresholds were unchanged. P6 performance requirements are ready to bind after the final requirement matrix/checker target is frozen.
+
+## 2026-08-10 04:20 JST — P6 G6 final 10,000-cycle boundedness PASS
+
+- PBS job `2513858.opbs` ran the frozen clean target `320d74d0fee41ddf0c8f6a6634f7b1db34fb00a6` on `mg0016` with one `debug-g` node and explicit `00:30:00` walltime. A 200-cycle calibration completed in `21.30s`, projected about `1065s` for the formal profile and emitted `artifacts/20260810-035600_p6-g6-final-calibration-review.json`; the required separate formal run then completed 10,000 cycles in `1318.08s` and returned `PASS`.
+- The common-source formal artifact records live-page slope `0.0001475` page/cycle with one-sided 95% upper `0.0055985 < 0.01`, and active/recovery file slope `-0.0000508` with upper `0.0045227 < 0.01`. At quiescence it has one current version, no active proposal, no prepared intent, no GC candidate, three active/recovery files and two retained checkpoint files; audit history is separated into 51,813 immutable files with only 13 hot archive batches.
+- The adjudicated ledger covers 80,000 processed tokens, 60,000 direct-applied tokens and balance zero. Recovery discovery/latency remained bounded while audit growth remained explicitly separate. Evidence: `artifacts/20260810-035600_p6-g6-final-pass.json`; joined stdout `/work/xg24i002/x10041/plan03-p6-final-320d/fsdiloco_p6_bounded.o2513858` ends with `REVIEW` then `PASS`.
+- G6 now shares exact clean commit and fingerprint with final G0-G5/G7 and can be included in the strict G0-G7 correctness aggregate.
 - Classic vs unified: baseline `7.088–8.677s`, candidate `6.922–7.217s`; paired median signed overhead `-10.764%`, one-sided 95% bootstrap upper `-9.518%`, both within the pre-registered `<=10%` margin. Unified initialization is now only about `0.322–0.355s`; lazy authority tensor imports plus pre-admission overlap removed the former 2.5s/serialized startup without weakening tensor verification or the timer anchor. Artifact: `artifacts/20260810-033500_p6-g10-classic-performance-pass.json`.
 - Static vs dynamic: baseline `6.925–7.216s`, candidate `6.950–7.240s`; median overhead `0.036%`, one-sided 95% upper `0.947%`. Artifact: `artifacts/20260810-033500_p6-g10-dynamic-performance-pass.json`. Both comparison statuses are `COMPARABLE`, `noninferiority_pass=true`, and error lists are empty. This resets G10's failure count.
+
+## 2026-08-10 03:54 JST — final common target G0/G1 PASS
+
+- A detached, clean worktree at executable target `320d74d0fee41ddf0c8f6a6634f7b1db34fb00a6` passed the complete login-node static gate after its ignored environment lockfile was materialized byte-for-byte from the primary checkout. All diff, compile, Ruff lint/format, shell/PBS syntax, literal-group, removed-surface, import-boundary, documentation-link, requirement-inventory and source/config/schema identity checks returned zero; `git_dirty=false`.
+- The artifact retains the seven P6 matrix rows, the frozen 19-job/node/runtime/walltime cost model and each command result: `artifacts/20260810-035400_p6-g0-g1-final-pass.json`; logs: `logs/plan03_p6_g0_20260810_035400/`. This target is now the common executable source for the remaining final G2–G9 reruns and already owns the formal G10 run.
+
+## 2026-08-10 03:56 JST — final common target G3/G4 PASS
+
+- PBS job `2513860.opbs` on `mg0018`, explicit `00:20:00` walltime, clean source `320d74d0fee41ddf0c8f6a6634f7b1db34fb00a6`, exited 0 in `00:01:05`. G3 completed the exact gate profiles (`1000×300` pure and `200×150` SQLite, all 13 actions) with zero violations; artifact: `artifacts/20260810-035600_p6-g3-final-pass.json`.
+- The same job completed G4 at all 18 publication/crash boundaries with exactly 10 repetitions per boundary, transaction-before/after recovery, no duplicate application/version fork/stale commit and no errors. Artifact: `artifacts/20260810-035600_p6-g4-final-pass.json`; logs: `logs/qsub_plan03_p6_g3_g4_final_20260810_035600/` and `/work/xg24i002/x10041/plan03-p6-final-320d/fsdiloco_p6_g3_g4.o2513860`.
+
+## 2026-08-10 03:56 JST — final common target G7 PASS
+
+- Two-node PBS job `2513861.opbs` on `mg0394`/`mg0444`, explicit `00:10:00` walltime, clean source `320d74d0fee41ddf0c8f6a6634f7b1db34fb00a6`, exited 0 in `00:00:16`. All 11 supplemental contracts passed.
+- Outside a transaction, the successor took epoch 2 and the resumed stale writer committed zero times. Inside a held SQLite transaction, the successor waited `3.280s`; the old writer was then explicitly killed (mpirun 137), rollback preserved integrity and the successor acquired the authority. Both databases report `integrity=["ok"]`. Artifact: `artifacts/20260810-035600_p6-g7-final-pass.json`; run: `runs/fs_diloco/plan03_p6_g7_2513861/`; raw log: `/work/xg24i002/x10041/plan03-p6-final-320d/fsdiloco_p6_g7_2n.o2513861`.
+
+## 2026-08-10 03:57 JST — final common target G2 PASS
+
+- PBS job `2513859.opbs` on `mg0017`, explicit `00:10:00` walltime, clean source `320d74d0fee41ddf0c8f6a6634f7b1db34fb00a6`, exited 0 in `00:01:34`. All `624` focused tests passed; the full repository suite completed `743 passed, 2 skipped`, with zero failure/error/xfail.
+- Artifact: `artifacts/20260810-035600_p6-g2-final-pass.json`; logs: `logs/qsub_plan03_p6_g2_final_20260810_035600/`; raw log: `/work/xg24i002/x10041/plan03-p6-final-320d/fsdiloco_p6_g2.o2513859`.
+
+## 2026-08-10 03:57 JST — final common target G8 static 9-node PASS
+
+- Formal PBS job `2513862.opbs` used nine distinct hosts (`mg0445`, `mg0446`, `mg0447`, `mg0448`, `mg0450`, `mg0457`, `mg0458`, `mg0460`, `mg0465`) for eight learner ranks plus one candidate, explicit `00:20:00` walltime, and clean source `320d74d0fee41ddf0c8f6a6634f7b1db34fb00a6`; it exited 0 in `00:00:29`.
+- The full FP32 configuration completed 60 inner steps per cycle and terminal version 21. All eight contributors were selected at every committed version (credit 21 each), all terminal fences acknowledged at cursor 1260/cycle 21, authority retained only v21 hot, SQLite integrity was `ok`, token balance was zero (`322,560` adjudicated/direct applied), and no pending selection/prepared intent remained. Artifact: `artifacts/20260810-035600_p6-g8-final-pass.json`; run: `runs/fs_diloco/plan03_p6_g8_static_2513862/`; raw log: `/work/xg24i002/x10041/plan03-p6-final-320d/fsdiloco_p6_g8_static.o2513862`.
+
+## 2026-08-10 03:58 JST — final common target G5 PASS
+
+- PBS job `2513865.opbs` on `mg0014`, explicit `00:20:00` walltime, clean source `320d74d0fee41ddf0c8f6a6634f7b1db34fb00a6`, exited 0 in `00:02:05`. All six required real pipelines passed: static 1×1, static 2×1, static learner loss/rerun/stale resume, static active-candidate crash, dynamic replacement, and dynamic candidate+learner failure.
+- Each scenario ended with a finalized summary, every learner stopped, token balance zero, current-only authority and no error list. Final versions were 2, 2, 11, 10, 11 and 11 respectively. Artifact: `artifacts/20260810-035500_p6-g5-final-pass.json`; raw log: `/work/xg24i002/x10041/plan03-p6-final-320d/fsdiloco_p6_g5.o2513865`. This resets the final-common-target G5 bootstrap failure count.
+
+## 2026-08-10 04:01 JST — final common target G9 dynamic 9-allocation soak PASS
+
+- Formal parent job `2513863.opbs` on `mg0467`, explicit `00:30:00` walltime, clean source `320d74d0fee41ddf0c8f6a6634f7b1db34fb00a6`, exited 0 in `00:05:45`. The scheduler timeline proves a maximum of exactly nine simultaneous allocations (one CPU candidate plus eight learner allocations); the replacement reused released capacity rather than expanding the topology.
+- Eight BF16 bootstrap learners were admitted once, the duplicate bootstrap actor was rejected before Torch, stream 0 suffered permanent scheduler-confirmed loss and was replaced at stream epoch 2, and the active epoch-1 candidate was SIGSTOPed only after both its main/renewer SQLite transactions were quiescent. Epoch 2 took over; the stale candidate produced zero authority effects. Training completed 60 inner steps per cycle and terminal version 121 with CPU FP32 merge compute/BF16 publication, all eight current fences acknowledged, current-only v121 hot authority, SQLite integrity `ok`, zero token imbalance (`1,751,040` adjudicated/direct applied), and no pending selection/prepared intent.
+- Artifact: `artifacts/20260810-035600_p6-g9-final-pass.json`; run: `runs/fs_diloco/plan03_p6_g9_dynamic_2513863/`; parent/child jobs `2513863`, `2513867`–`2513874`, `2513881`; raw parent log: `/work/xg24i002/x10041/plan03-p6-final-320d/fsdiloco_p6_g9_dynamic.o2513863`. This repeats and closes the formal G9 evidence on the final runtime target.
