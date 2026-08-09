@@ -890,3 +890,9 @@
 
 - 新安全修复target提交前`git diff --cached --check`只报告clean job `2511948`保留stdout的module-list两行含上游输出尾随空格；source/test/report JSON均无whitespace错误，尚未commit。
 - 原始clean-worktree log的SHA/size已单独核验。下一步在tracked代表日志中只移除这两处展示性尾随空格，并把evidence JSON明确改为normalized retained-log的新SHA/size，同时保留原始PBS stdout SHA作为`original_raw_log_sha256`，不改变测试结论。
+
+## 2026-08-09 21:20 JST — P5 final security increment Claude review skipped-session-limit
+
+- 连续review range为`a540febd489abfac245790967a0b2a5667f90345..57fd2bef341df75c373f433ba3a38252240c6e26`，ancestor检查通过。Codex已在调用Claude前独立保存`code_review/.../P5-delete-classic-refactor/gpt-5.6-sol_57fd2bef341df75c373f433ba3a38252240c6e26.md`，结论`APPROVE`且无finding。
+- fresh Claude session `d4d17fbc-e66f-4514-a1b9-ceb54b16271d`显式请求`claude-opus-5`；JSON回执为HTTP 429、input/output token均0、`modelUsage={}`，原文`You've hit your session limit · resets 10:20pm (Asia/Tokyo)`，未生成target报告。
+- 依据用户规则与`plans/AGENTS.md`，该调用记为`skipped-session-limit`，不重试、不伪造报告且不阻断P5。下一步只汇总Codex审查和该skip，关闭此前H-01/M-01 finding处置并绑定phase evidence/matrix。

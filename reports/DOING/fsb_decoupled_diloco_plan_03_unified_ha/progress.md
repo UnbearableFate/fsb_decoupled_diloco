@@ -648,7 +648,7 @@
 
 - 新冻结target `a540febd489abfac245790967a0b2a5667f90345`，base `eb56219e13817b1f659921ea093c2dfdfa473abd`；ancestor检查通过。detached worktree `/work/xg24i002/x10041/plan03-p5-a540-clean.H5XxF2` 的source identity为 `git_dirty=false`、fingerprint `sha256:cb662e1e2444cff4a3b6406bd8dcab3f37f8d199fb230536ae2a9b7216122a96`。
 - PBS job `2511948.opbs` 在 `mg0006` 通过 Ruff、45文件format、P3/current-boundary/P5 Checker、focused `451 passed in 40.23s`、full `622 passed in 40.02s`及completion marker；exit 0，申请10分钟、实际1分27秒。
-- Clean evidence：`artifacts/20260809-205800_p5-incremental-review-remediation-target-runtime_pass.json`；保留的最小完整stdout为同名前缀`.log`，SHA-256 `7eba0f8df6754ce49c7e601dd759b2a4f9177c2ccea297cfde61986de699173a`，2053 bytes。未产生run root/checkpoint等需清理的runtime对象。
+- Clean evidence：`artifacts/20260809-205800_p5-incremental-review-remediation-target-runtime_pass.json`；原始PBS stdout SHA-256为`7eba0f8df6754ce49c7e601dd759b2a4f9177c2ccea297cfde61986de699173a`、2053 bytes；tracked代表日志只移除module header的两对尾随空格，SHA-256为`eb8f07991cd6a2f95823b0fa5d3c191b7ed75fe4aacf46ba34df7f7a6e63c855`、2049 bytes。未产生run root/checkpoint等需清理的runtime对象。
 - 下一工作单元仅审查冻结增量 `eb56219..a540feb`：Codex报告必须先落盘，再调用fresh Claude；明确session-limit时按用户规则非阻断skip。review finding处置和matrix/tracked-evidence gate尚未完成，P5仍未complete。
 
 ## 2026-08-09 21:11 JST — P5 operator disposal review repair precommit PASS
@@ -657,3 +657,17 @@
 - 修复删除了非必要的`processed` filesystem archive：valid request完整字段已在scheduler audit表，所有file均有durable disposition digest/reason；successor只no-follow重读并在identity+SHA仍一致时unlink hot entry。regular file以64 KiB块stream digest，parser最多保留1 MiB+1；symlink/non-regular只形成有界拒绝marker。
 - 新反例覆盖processed symlink不外写、2 MiB file retained bytes有界且只拒绝一次、disposition-before-unlink successor cleanup、观察后source replacement不误删。job `2511996.opbs`（`mg0028`）通过静态/Checker、focused `454 passed in 39.11s`、full `625 passed in 54.13s`，exit0，实际1分40秒。
 - Evidence：`artifacts/20260809-211152_p5-operator-disposal-review-repair-precommit_pass.json`，raw log SHA-256 `4f45f4010ad49dbae552435eeb9c73d62a92bf392fde302c2d37ab128bcefaff`；该证据为`git_dirty=true`，下一步仍需冻结新安全边界target、clean rerun及连续增量复审。
+
+## 2026-08-09 21:18 JST — P5 operator disposal review repair clean target PASS
+
+- 安全边界修复已冻结为target `57fd2bef341df75c373f433ba3a38252240c6e26`；detached worktree `/work/xg24i002/x10041/plan03-p5-57fd-clean` 无tracked/untracked source改动，source identity为`git_dirty=false`、fingerprint `sha256:70f21cc8e3ddb038c8316e5a90f7cfde89786f1a3e338fb100b28c849dc411ee`。提交前已对全部PBS做`bash -n`，phase脚本含literal group `xg24i002`。
+- PBS job `2512047.opbs`在`mg0006`通过Ruff、45文件format、P3/current-boundary/P5 Checker、focused `454 passed in 40.08s`、full `625 passed in 40.03s`及completion marker。历史记录为`FINISH`/exit 0，申请10分钟、实际1分26秒。
+- Evidence：`artifacts/20260809-211800_p5-operator-disposal-review-repair-target-runtime_pass.json`。原始stdout SHA-256为`5ba970379fa54aabff038148242059ae86d4399b60cc3bb6dea62b5744cc972b`、2053 bytes；tracked代表日志只移除module header两对尾随空格，SHA-256为`bbd364420cdc1bc5ebf56a664b7176654186ad0b0f4e881432c7df5324151284`、2049 bytes。未产生run root/checkpoint等需清理的runtime对象。
+- 下一门禁是只审查连续增量`a540febd489abfac245790967a0b2a5667f90345..57fd2bef341df75c373f433ba3a38252240c6e26`；Codex报告须先落盘，Claude若明确返回账户session limit则按规则记录为非阻断skip。P5 matrix/tracked evidence仍未闭合。
+
+## 2026-08-09 21:23 JST — P5 continuous review and requirement matrix PASS
+
+- Codex在Claude调用前完成连续增量`a540febd489abfac245790967a0b2a5667f90345..57fd2bef341df75c373f433ba3a38252240c6e26`的独立审查，结论`APPROVE`、无Critical/High/Medium/Low finding；报告为`code_review/.../P5-delete-classic-refactor/gpt-5.6-sol_57fd2bef341df75c373f433ba3a38252240c6e26.md`。fresh Claude session `d4d17fbc-e66f-4514-a1b9-ceb54b16271d`明确HTTP 429 session limit、token为0且未产出报告，按规则记为非阻断`skipped-session-limit`。
+- `artifacts/20260809-212300_p5-review-finding-dispositions_review.json`逐条处置P5四段连续审查的全部finding；所有Critical/High均fixed，Medium除classic-only G4/G10 harness明确归属P6外均fixed，Low仅保留malformed manual-request telemetry的P6可观测性follow-up，并以authority必须独立分类为依据拒绝无DB checkpoint目录兼容建议。blocking finding为0。
+- Requirement matrix中`P5-FRAGMENT`、`P5-ARCH`、`LEGACY-01`已改为`complete`且绑定`checker requirements.<ID>`和clean target evidence；混入P5的pending `P6-DOCS`已纠正到`P6-acceptance-final-review`。Checker以verification target `57fd2bef341df75c373f433ba3a38252240c6e26`同时验证frozen inventory、current boundaries、P3 operational contracts、P5 contracts和三条phase requirement，结果`PASS`、differences为空。
+- Requirement evidence：`artifacts/20260809-212200_p5-operator-disposal-target-requirements_pass.json`，SHA-256 `30bb057baf8199bd0016da2c42afac64cdf240465a2b2f4eb9bcddc1a73ca1f0`。下一步提交review/evidence-only descendant并重跑`--require-tracked-evidence`；通过后P5才正式关闭。
