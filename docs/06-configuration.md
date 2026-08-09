@@ -36,7 +36,7 @@ sync:
 
 所有 numeric identity/timeout 都拒绝 bool、NaN 和 infinity。leader lease 至少覆盖 renew/heartbeat/clock-skew 约束；publication orphan grace 至少覆盖 lease 加两倍 clock skew。
 
-synthetic model/data 和以 `/`、`./`、`../` 或 `file://` 明确标识的本地输入不经过 Hub commit 校验；Torch baseline profile 也保持自己的兼容规则。除此之外，tag、branch、短 SHA、空 revision 和大写 SHA 都会被 Full-v4 loader拒绝。repository-owned GPT-2/WikiText 配置固定到 cache-verified snapshots：model/tokenizer `607a30d783dfa663caf39e06633721c8d4cfcd7e`，dataset `b08601e04326c79dfdd32d625aee71d232d685c3`。
+synthetic model/data 不经过 Hub commit 校验；Torch baseline profile 也保持自己的兼容规则。当前 Full-v4 descriptor 没有 local model/dataset content manifest，因此 `/`、`./`、`../` 或 `file://` spelling 会明确 fail closed，不能作为 revision 逃生口。其他 Hub 输入中的 tag、branch、短 SHA、空 revision 和大写 SHA 同样会被拒绝。repository-owned GPT-2/WikiText 配置固定到 cache-verified snapshots：model/tokenizer `607a30d783dfa663caf39e06633721c8d4cfcd7e`，dataset `b08601e04326c79dfdd32d625aee71d232d685c3`。
 
 ## 已删除字段
 

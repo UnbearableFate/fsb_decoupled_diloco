@@ -551,12 +551,22 @@ def _require_immutable_hub_revision(value: str | None, *, name: str) -> None:
 
 def _validate_full_input_revisions(config: Config) -> None:
     model_name = config.model.name_or_path
-    if model_name not in _SYNTHETIC_MODELS and not _is_explicit_local_reference(model_name):
+    if _is_explicit_local_reference(model_name):
+        raise ValueError(
+            "local model input requires descriptor-bound content identity, which Full v4 "
+            "does not support"
+        )
+    if model_name not in _SYNTHETIC_MODELS:
         _require_immutable_hub_revision(config.model.revision, name="model.revision")
         _require_immutable_hub_revision(
             config.model.tokenizer_revision or config.model.revision,
             name="model.tokenizer_revision",
         )
     dataset_name = config.data.dataset_name
-    if dataset_name != "synthetic" and not _is_explicit_local_reference(dataset_name):
+    if _is_explicit_local_reference(dataset_name):
+        raise ValueError(
+            "local data input requires descriptor-bound content identity, which Full v4 "
+            "does not support"
+        )
+    if dataset_name != "synthetic":
         _require_immutable_hub_revision(config.data.revision, name="data.revision")

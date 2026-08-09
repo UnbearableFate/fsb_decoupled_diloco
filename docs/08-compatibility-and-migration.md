@@ -40,4 +40,4 @@ schema 9 的 online audit archive、durable command receipt 和 identity-checked
 
 ## Fresh-v4 identity
 
-resolved config SHA、source identity、descriptor、实际 loader 使用的 Hub commit、manifest newline/bytes 和 filesystem inode/link 规则是 fresh v4 publication contract。主线只读取 fence-namespaced receipt、canonical admission response 和 epoch-scoped checkpoint layout，不为 early incomplete v4 layouts 提供 silent fallback。不要用这些规则“修复”不满足 v4 initializer 协议的历史 root。若旧 authorization/control 与新内容冲突，选择 fresh attempt ID；不要覆盖不可变对象。
+resolved config SHA、source identity、descriptor、实际 loader 使用的 Hub commit、manifest newline/bytes 和 filesystem inode/link 规则是 fresh v4 publication contract。没有 descriptor-bound content manifest 的 local model/data path 不属于当前 Full-v4 input contract。主线只读取 fence-namespaced receipt、canonical admission response 和 epoch-scoped checkpoint layout，不为 early incomplete v4 layouts 提供 silent fallback。不要用这些规则“修复”不满足 v4 initializer 协议的历史 root。若旧 authorization/control 与新内容冲突，选择 fresh attempt ID；不要覆盖不可变对象。

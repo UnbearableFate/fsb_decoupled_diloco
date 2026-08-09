@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 from pathlib import Path
+import re
 
 import pytest
 import yaml
@@ -51,10 +52,15 @@ def test_every_full_repository_config_is_strict_v4(path: Path) -> None:
 def test_every_hub_backed_full_config_pins_immutable_input_commits(path: Path) -> None:
     config = load_config_v4(path, profile=ConfigProfile.FULL_V4).shared
     if config.model.name_or_path not in {"synthetic-tiny", "tiny-synthetic", "tiny-local"}:
-        assert config.model.revision == GPT2_COMMIT
-        assert config.model.tokenizer_revision == GPT2_COMMIT
+        assert re.fullmatch(r"[0-9a-f]{40}", config.model.revision or "")
+        assert re.fullmatch(r"[0-9a-f]{40}", config.model.tokenizer_revision or "")
+        if config.model.name_or_path == "gpt2":
+            assert config.model.revision == GPT2_COMMIT
+            assert config.model.tokenizer_revision == GPT2_COMMIT
     if config.data.dataset_name != "synthetic":
-        assert config.data.revision == WIKITEXT_COMMIT
+        assert re.fullmatch(r"[0-9a-f]{40}", config.data.revision or "")
+        if config.data.dataset_name == "wikitext":
+            assert config.data.revision == WIKITEXT_COMMIT
 
 
 @pytest.mark.parametrize("revision", [None, "main", "v1.0", "A" * 40, "a" * 39])
@@ -87,6 +93,45 @@ def test_synthetic_full_v4_and_unpinned_baseline_keep_their_profiles() -> None:
     baseline.shared.torch_baseline.enabled = True
     baseline.shared.training.max_local_steps = 1
     baseline.validate(ConfigProfile.TORCH_BASELINE)
+
+
+def test_full_v4_accepts_other_hub_inputs_at_immutable_commits() -> None:
+    config = ConfigV4()
+    config.shared.model.name_or_path = "organization/other-model"
+    config.shared.model.revision = "a" * 40
+    config.shared.model.tokenizer_revision = "b" * 40
+    config.shared.data.dataset_name = "organization/other-dataset"
+    config.shared.data.revision = "c" * 40
+
+    config.validate(ConfigProfile.FULL_V4)
+
+
+@pytest.mark.parametrize(
+    ("section", "local_reference"),
+    [
+        ("model", "/models/gpt2"),
+        ("model", "./models/gpt2"),
+        ("model", "../models/gpt2"),
+        ("model", "file:///models/gpt2"),
+        ("data", "/datasets/wikitext"),
+        ("data", "./datasets/wikitext"),
+        ("data", "../datasets/wikitext"),
+        ("data", "file:///datasets/wikitext"),
+    ],
+)
+def test_full_v4_rejects_local_inputs_without_content_identity(
+    section: str, local_reference: str
+) -> None:
+    config = ConfigV4()
+    config.shared.model.revision = HUB_COMMIT
+    config.shared.data.revision = HUB_COMMIT
+    if section == "model":
+        config.shared.model.name_or_path = local_reference
+    else:
+        config.shared.data.dataset_name = local_reference
+
+    with pytest.raises(ValueError, match=rf"local {section}.*content identity"):
+        config.validate(ConfigProfile.FULL_V4)
 
 
 @pytest.mark.parametrize("path", BASELINE_CONFIGS, ids=lambda path: path.name)

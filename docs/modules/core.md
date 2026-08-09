@@ -8,7 +8,7 @@
 
 ## `config_v4.py`
 
-`ConfigV4` 包含 shared config、schema version、`LeaderSection`、`MaintenanceSection` 和 `stop_after_direct_weight_tokens_applied`。`load_config_v4` 拒绝 old init/fragment/failure/HA/recovery/token key，并要求 Hub-backed Full-v4 model、有效 tokenizer 与 dataset revision 是 immutable 40 位小写 commit SHA；synthetic/显式本地输入和 Torch baseline 有独立边界。`resolve_config_v4` 产生 fresh run identity。`migrate_v3_bytes_to_v4` 只做有限、可证明的 config 迁移，不替操作者猜 Hub revision。
+`ConfigV4` 包含 shared config、schema version、`LeaderSection`、`MaintenanceSection` 和 `stop_after_direct_weight_tokens_applied`。`load_config_v4` 拒绝 old init/fragment/failure/HA/recovery/token key，并要求 Hub-backed Full-v4 model、有效 tokenizer 与 dataset revision 是 immutable 40 位小写 commit SHA；synthetic 与 Torch baseline 有独立边界。当前 descriptor 没有 local input content manifest，所以 Full v4 对 local model/data path fail closed。`resolve_config_v4` 产生 fresh run identity。`migrate_v3_bytes_to_v4` 只做有限、可证明的 config 迁移，不替操作者猜 Hub revision。
 
 ## `run_descriptor.py`
 
