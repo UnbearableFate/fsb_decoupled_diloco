@@ -332,7 +332,10 @@ def _initialize_v0(
     )
 
     config = loaded.config.shared
-    model, _tokenizer = load_causal_lm_and_tokenizer(config.model)
+    model, _tokenizer = load_causal_lm_and_tokenizer(
+        config.model,
+        require_frozen_identity=True,
+    )
     model.to(device)
     param_index = build_param_index(model, model_name_or_path=config.model.name_or_path)
     param_index_data = (

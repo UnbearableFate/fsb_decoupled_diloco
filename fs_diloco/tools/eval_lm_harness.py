@@ -219,7 +219,10 @@ def export_checkpoint(
     manifest["source_protocol"] = source_protocol
 
     config_obj = load_query_config_snapshot(manifest["config_path"])
-    model, tokenizer = load_causal_lm_and_tokenizer(config_obj.model)
+    model, tokenizer = load_causal_lm_and_tokenizer(
+        config_obj.model,
+        require_frozen_identity=source_protocol == "full-protocol-v4",
+    )
 
     param_index = load_param_index(manifest["param_index_path"])
     current_index = build_param_index(model, model_name_or_path=config_obj.model.name_or_path)

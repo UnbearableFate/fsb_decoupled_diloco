@@ -11,6 +11,7 @@ from typing import Any, Iterator
 import torch
 
 from ..protocol.data_cursor import IndexedBlockCursor
+from .hf_identity import reject_local_reference
 
 
 @dataclass
@@ -60,13 +61,21 @@ def _chunks(tokens: list[int], block_size: int) -> list[list[int]]:
     return [tokens[i : i + block_size] for i in range(0, usable, block_size)]
 
 
-def load_text_split(data_config: Any, split: str) -> Any:
+def load_text_split(
+    data_config: Any,
+    split: str,
+    *,
+    require_frozen_identity: bool = False,
+) -> Any:
     """Load one configured text split with the same WikiText fallback as training."""
-    from datasets import load_dataset
-
     dataset_name = data_config.dataset_name
     if dataset_name == "wikitext" and os.environ.get("FS_DILOCO_HF_WIKITEXT_REPO"):
         dataset_name = os.environ["FS_DILOCO_HF_WIKITEXT_REPO"]
+    if require_frozen_identity:
+        reject_local_reference(str(dataset_name), kind="dataset")
+
+    from datasets import load_dataset
+
     try:
         return load_dataset(
             dataset_name,
@@ -79,6 +88,8 @@ def load_text_split(data_config: Any, split: str) -> Any:
     except Exception as exc:
         if data_config.dataset_name != "wikitext" or "/" in str(dataset_name):
             raise
+        if require_frozen_identity:
+            reject_local_reference("Salesforce/wikitext", kind="dataset")
         try:
             return load_dataset(
                 "Salesforce/wikitext",
@@ -242,7 +253,11 @@ def build_indexed_batch_iterator(
         dataset_blocks = 2**31 - 1
         materialized_blocks: list[list[int]] | None = None
     else:
-        dataset = load_text_split(config.data, config.data.train_split)
+        dataset = load_text_split(
+            config.data,
+            config.data.train_split,
+            require_frozen_identity=True,
+        )
         materialized_blocks = text_rows_to_blocks(dataset, tokenizer, block_size)
         dataset_blocks = len(materialized_blocks)
         if dataset_blocks < cursor.shard_count:

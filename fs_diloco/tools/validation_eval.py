@@ -271,8 +271,16 @@ def run_validation(args: argparse.Namespace) -> dict[str, Any]:
         )
     if config.data.dataset_name == "synthetic":
         raise ValueError("formal validation evaluator requires a configured text dataset")
-    dataset = load_text_split(config.data, config.data.validation_split)
-    model, tokenizer = load_causal_lm_and_tokenizer(config.model)
+    require_frozen_identity = source_protocol == "full-protocol-v4"
+    dataset = load_text_split(
+        config.data,
+        config.data.validation_split,
+        require_frozen_identity=require_frozen_identity,
+    )
+    model, tokenizer = load_causal_lm_and_tokenizer(
+        config.model,
+        require_frozen_identity=require_frozen_identity,
+    )
     blocks = text_rows_to_blocks(dataset, tokenizer, int(config.data.block_size))
     if args.max_blocks is not None:
         blocks = blocks[: int(args.max_blocks)]

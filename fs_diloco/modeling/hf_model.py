@@ -7,6 +7,8 @@ from typing import Any
 
 import torch
 
+from .hf_identity import reject_local_reference
+
 
 @dataclass
 class CausalLMOutput:
@@ -57,7 +59,11 @@ def model_dtype(dtype_name: str) -> torch.dtype:
     return torch.float32
 
 
-def load_causal_lm_and_tokenizer(config: Any) -> tuple[torch.nn.Module, Any]:
+def load_causal_lm_and_tokenizer(
+    config: Any,
+    *,
+    require_frozen_identity: bool = False,
+) -> tuple[torch.nn.Module, Any]:
     name = config.name_or_path
     if is_synthetic_model(name):
         model = TinyCausalLM(
@@ -66,6 +72,8 @@ def load_causal_lm_and_tokenizer(config: Any) -> tuple[torch.nn.Module, Any]:
         ).to(dtype=model_dtype(getattr(config, "dtype", "float32")))
         return model, SyntheticTokenizer(model.config.vocab_size)
 
+    if require_frozen_identity:
+        reject_local_reference(name, kind="model")
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained(

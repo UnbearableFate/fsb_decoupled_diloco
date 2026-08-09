@@ -162,7 +162,10 @@ def run_admitted_learner(
         attempt_id=attempt_id,
     )
     device = choose_device()
-    model, tokenizer = load_causal_lm_and_tokenizer(config.model)
+    model, tokenizer = load_causal_lm_and_tokenizer(
+        config.model,
+        require_frozen_identity=True,
+    )
     model.to(device)
     write_actor_attestation(
         loaded,
