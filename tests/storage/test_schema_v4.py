@@ -38,8 +38,8 @@ def test_fresh_v4_schema_initializes_reopens_and_is_integral(
         tables = set(authority.read.table_names())
         assert authority.read.integrity_check() == ("ok",)
         assert metadata.ddl_sha256 == ddl_bundle_sha256(metadata.mode)
-        assert AUTHORITY_SCHEMA_VERSION == 8
-        assert metadata.schema_version == 8
+        assert AUTHORITY_SCHEMA_VERSION == 9
+        assert metadata.schema_version == 9
         assert ("learner_instances" in tables) is dynamic_expected
         assert "static_contributor_bindings" in tables
         assert "publication_intents" in tables

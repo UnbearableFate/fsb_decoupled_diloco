@@ -6,7 +6,7 @@ import math
 from typing import Any
 
 
-PLAN03_REQUIREMENTS = frozenset({"TOK-04"})
+PLAN03_REQUIREMENTS = frozenset({"P6-QUALITY", "TOK-04"})
 
 
 def staleness(current_version: int, base_global_version: int) -> int:

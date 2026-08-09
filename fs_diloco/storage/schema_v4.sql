@@ -1,6 +1,6 @@
 CREATE TABLE schema_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-    schema_version INTEGER NOT NULL CHECK (schema_version = 8),
+    schema_version INTEGER NOT NULL CHECK (schema_version = 9),
     protocol_version INTEGER NOT NULL CHECK (protocol_version = 4),
     mode TEXT NOT NULL CHECK (mode IN ('static', 'dynamic')),
     features_json TEXT NOT NULL,
@@ -529,9 +529,13 @@ CREATE TABLE gc_candidates (
     artifact_kind TEXT NOT NULL,
     owning_epoch INTEGER NOT NULL CHECK (owning_epoch >= 1),
     publication_id TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL CHECK (size_bytes > 0),
+    sha256 TEXT NOT NULL CHECK (length(sha256) = 64),
     state TEXT NOT NULL CHECK (state IN ('pending', 'claimed', 'deleted', 'cancelled')),
     not_before REAL NOT NULL,
     recorded_by_epoch INTEGER NOT NULL CHECK (recorded_by_epoch >= 1),
     recorded_at REAL NOT NULL,
+    claimed_by_epoch INTEGER CHECK (claimed_by_epoch >= 1),
+    claimed_at REAL,
     deleted_at REAL
 );

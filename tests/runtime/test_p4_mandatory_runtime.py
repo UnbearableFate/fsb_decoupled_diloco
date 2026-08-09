@@ -9,8 +9,10 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from types import SimpleNamespace
+from contextlib import contextmanager
 from pathlib import Path
+import signal
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -74,7 +76,11 @@ from fs_diloco.tools.init_run import initialize_run
 from fs_diloco.tools.launch_independent_run import _walltime_resource
 from fs_diloco.tools import migrate_config_v3_to_v4 as migration_tool
 from fs_diloco.tools.migrate_config_v3_to_v4 import migrate
-from fs_diloco.runtime.syncer_v4 import _admit_requests, _raise_injected_candidate_failure
+from fs_diloco.runtime.syncer_v4 import (
+    _admit_requests,
+    _pause_candidate_outside_transaction,
+    _raise_injected_candidate_failure,
+)
 from fs_diloco.runtime import syncer_v4 as syncer_runtime
 from tests.support.v4_protocol import receipt
 
@@ -88,6 +94,7 @@ PLAN03_REQUIREMENTS = frozenset(
         "AUTH-07",
         "AUTH-09",
         "AUTH-10",
+        "AUTH-11",
         "MODE-02",
         "P4-MIGRATE",
     }
@@ -1703,6 +1710,52 @@ def test_candidate_failure_hook_is_exact_and_disabled_by_default(
     _raise_injected_candidate_failure(1)
     with pytest.raises(RuntimeError, match="committed version 2"):
         _raise_injected_candidate_failure(2)
+
+
+def test_candidate_pause_hook_quiesces_renewer_and_proves_transaction_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Authority:
+        def __init__(self) -> None:
+            self.checked = 0
+
+        def assert_outside_transaction(self) -> None:
+            self.checked += 1
+
+    class Renewer:
+        def __init__(self) -> None:
+            self.quiesced = 0
+
+        @contextmanager
+        def quiesce_for_test_pause(self):
+            self.quiesced += 1
+            yield
+
+    authority = Authority()
+    renewer = Renewer()
+    leader = SimpleNamespace(token=SimpleNamespace(epoch=3, owner_id="owner-3"))
+    marker = tmp_path / "pause.json"
+    observed_signals: list[tuple[int, signal.Signals]] = []
+    monkeypatch.setenv("FS_DILOCO_TEST_PAUSE_AFTER_COMMITTED_VERSION", "4")
+    monkeypatch.setenv("FS_DILOCO_TEST_PAUSE_MARKER_PATH", str(marker))
+    monkeypatch.setattr(os, "kill", lambda pid, value: observed_signals.append((pid, value)))
+
+    _pause_candidate_outside_transaction(authority, leader, renewer, version=3)
+    assert not marker.exists()
+    _pause_candidate_outside_transaction(authority, leader, renewer, version=4)
+
+    payload = json.loads(marker.read_text(encoding="utf-8"))
+    assert payload["committed_version"] == 4
+    assert payload["epoch"] == 3
+    assert payload["sqlite_transaction_active"] is False
+    assert payload["lease_renewer_quiesced"] is True
+    assert renewer.quiesced == 1
+    assert authority.checked == 2
+    assert observed_signals == [(os.getpid(), signal.SIGSTOP)]
+
+    _pause_candidate_outside_transaction(authority, leader, renewer, version=5)
+    assert renewer.quiesced == 1
 
 
 def test_epoch_publication_paths_separate_same_version_and_owner() -> None:

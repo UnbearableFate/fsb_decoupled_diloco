@@ -11,6 +11,7 @@ from typing import Any
 from .paired_performance import paired_noninferiority
 
 
+PLAN03_REQUIREMENTS = frozenset({"P6-PERF-CLASSIC", "P6-PERF-DYNAMIC"})
 MATCHED_FIELDS = (
     "source_identity",
     "config_identity",

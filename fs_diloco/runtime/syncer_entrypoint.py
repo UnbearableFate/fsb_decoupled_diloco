@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import os
 import threading
 import time
@@ -28,6 +29,7 @@ class _LeaseRenewer:
         self._interval = float(interval_seconds)
         self._stop = threading.Event()
         self._failed: BaseException | None = None
+        self._renewal_lock = threading.Lock()
         self._thread = threading.Thread(target=self._run, name="v4-lease-renewer", daemon=True)
 
     def start(self) -> None:
@@ -43,12 +45,26 @@ class _LeaseRenewer:
         if self._failed is not None:
             raise RuntimeError("leader lease renewal failed") from self._failed
 
+    @contextmanager
+    def quiesce_for_test_pause(self) -> Any:
+        """Exclude an in-flight renewal transaction around a test-only SIGSTOP.
+
+        The production loop never calls this unless the explicit Plan 03 test
+        injection environment is present.  Holding the lock across SIGSTOP
+        proves that neither the main authority connection nor the renewer can
+        retain a SQLite write transaction while the candidate is paused.
+        """
+
+        with self._renewal_lock:
+            yield
+
     def _run(self) -> None:
         authority = None
         try:
             authority = self._factory()
             while not self._stop.wait(self._interval):
-                lease = authority.renew_leader(self._token)
+                with self._renewal_lock:
+                    lease = authority.renew_leader(self._token)
                 self._control.publish_heartbeat(lease)
         except BaseException as exc:
             self._failed = exc

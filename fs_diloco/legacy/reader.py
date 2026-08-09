@@ -23,7 +23,7 @@ FRAGMENT_V0_TABLES = (
     "fragment_versions",
     "fragment_updates",
 )
-PLAN03_REQUIREMENTS = frozenset({"LEGACY-01"})
+PLAN03_REQUIREMENTS = frozenset({"LEGACY-01", "P6-DOCS"})
 
 
 def open_query_only_database(database_path: str | Path) -> sqlite3.Connection:

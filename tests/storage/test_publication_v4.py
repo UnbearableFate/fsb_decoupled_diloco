@@ -16,6 +16,7 @@ from fs_diloco.storage.atomic_io import publish_immutable_bytes
 from fs_diloco.storage.authority import AuthorityIdentity, LeaderAuthority, initialize_authority_v4
 from fs_diloco.storage.leader_lease import StaleLeaderTokenError
 from fs_diloco.storage.tensor_codec import tensor_content_sha256
+import fs_diloco.storage.atomic_io as atomic_io_module
 
 
 @dataclass
@@ -107,6 +108,39 @@ def test_concurrent_immutable_publishers_never_overwrite_the_winner(tmp_path: Pa
     assert winner in {b"alpha", b"beta"}
     assert sum(created for _payload, created in outcomes) == 1
     assert all(payload == winner.decode() or not created for payload, created in outcomes)
+
+
+@pytest.mark.crash_matrix
+@pytest.mark.parametrize("repetition", range(10))
+@pytest.mark.parametrize("object_kind", ("tensor", "proposal_metadata"))
+@pytest.mark.parametrize("crash_boundary", ("temporary_fsync", "create"))
+def test_immutable_publication_crash_boundaries_replay_exactly(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    repetition: int,
+    object_kind: str,
+    crash_boundary: str,
+) -> None:
+    target = tmp_path / f"{object_kind}-{crash_boundary}-{repetition}.immutable"
+    payload = checkpoint_bytes(0)[0] if object_kind == "tensor" else b'{"proposal":1}\n'
+
+    def inject(name: str) -> None:
+        if name == crash_boundary:
+            raise RuntimeError(f"injected crash at {name}")
+
+    monkeypatch.setattr(atomic_io_module, "_immutable_publication_boundary", inject)
+    with pytest.raises(RuntimeError, match=f"injected crash at {crash_boundary}"):
+        publish_immutable_bytes(target, payload)
+    if crash_boundary == "temporary_fsync":
+        assert not target.exists()
+    else:
+        assert target.read_bytes() == payload
+
+    monkeypatch.setattr(atomic_io_module, "_immutable_publication_boundary", lambda _name: None)
+    replay = publish_immutable_bytes(target, payload)
+    assert replay.created is (crash_boundary == "temporary_fsync")
+    assert target.read_bytes() == payload
+    assert not [path for path in tmp_path.iterdir() if path.name.startswith(f".{target.name}.")]
 
 
 def test_prepared_intent_precedes_io_and_commit_verifies_exact_theta_pair(
@@ -209,9 +243,13 @@ def test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe(
         authority.renew_leader(second_token)
         clock.now = 288.0
         claimed = second.claim_orphan_gc(command_id="claim-after-grace")
-        assert set(claimed) == {
+        assert {item["relative_path"] for item in claimed} == {
             str(metadata["weight_relative_path"]),
             str(metadata["optim_relative_path"]),
+        }
+        assert {item["sha256"] for item in claimed} == {
+            str(metadata["weight_sha256"]),
+            str(metadata["optim_sha256"]),
         }
 
         connection = sqlite3.connect(tmp_path / "authority.sqlite3")

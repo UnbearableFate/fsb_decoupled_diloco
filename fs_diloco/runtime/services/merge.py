@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from enum import Enum
 from typing import Any
@@ -12,14 +13,15 @@ from ...core.run_descriptor import LoadedRunDescriptor
 from ...modeling.outer_optim import outer_optimizer_step
 from ...protocol.authority import MergeFenceConflict
 from ...protocol.merge import normalized_update_weights, weighted_average_tensors
+from ...storage.atomic_io import publish_immutable_bytes
 from ...storage.authority import CommittedVersion, LeaderAuthority, LeaderSession
 from ...storage.control import V4ControlPublisher
 from ...storage.tensor_codec import (
     dtype_from_name,
+    encode_global_weights,
+    encode_outer_state,
     load_outer_state,
     load_update_vector,
-    publish_global_weights_immutable,
-    publish_outer_state_immutable,
 )
 
 
@@ -119,14 +121,12 @@ class MergeService:
             target_version,
             publication_id,
         )
-        weight, weight_theta_sha = publish_global_weights_immutable(
-            weight_path,
+        weight_payload, weight_theta_sha = encode_global_weights(
             next_theta,
             self.param_index,
             dtype=dtype_from_name(config.syncer.publish_dtype),
         )
-        optim, optim_theta_sha = publish_outer_state_immutable(
-            optim_path,
+        optim_payload, optim_theta_sha = encode_outer_state(
             next_theta,
             next_outer,
             dtype=dtype_from_name(config.syncer.publish_dtype),
@@ -136,15 +136,17 @@ class MergeService:
             publication_id=publication_id,
             target_version=target_version,
             selection_batch_id=batch.batch_id,
-            weight_relative_path=paths.relative(weight.path),
-            weight_size=weight.size_bytes,
-            weight_sha256=weight.sha256,
-            optim_relative_path=paths.relative(optim.path),
-            optim_size=optim.size_bytes,
-            optim_sha256=optim.sha256,
+            weight_relative_path=paths.relative(weight_path),
+            weight_size=len(weight_payload),
+            weight_sha256=hashlib.sha256(weight_payload).hexdigest(),
+            optim_relative_path=paths.relative(optim_path),
+            optim_size=len(optim_payload),
+            optim_sha256=hashlib.sha256(optim_payload).hexdigest(),
             weight_theta_sha256=weight_theta_sha,
             optim_theta_sha256=optim_theta_sha,
         )
+        publish_immutable_bytes(weight_path, weight_payload)
+        publish_immutable_bytes(optim_path, optim_payload)
         terminal_arguments: dict[str, int] = {}
         if purpose == "terminal":
             controller = self.authority.read.controller_status()

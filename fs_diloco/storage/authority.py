@@ -55,6 +55,8 @@ from ..protocol.scheduler import (
 )
 from .atomic_io import fsync_directory, publish_immutable_bytes, read_json, sha256_file
 from .audit_archive import (
+    publish_command_receipt,
+    read_command_receipt,
     validate_audit_batch,
     validate_audit_partition,
     validate_audit_partition_manifest,
@@ -78,6 +80,7 @@ PLAN03_REQUIREMENTS = frozenset(
         "AUTH-05",
         "AUTH-09",
         "AUTH-10",
+        "AUTH-11",
         "DATA-02",
         "DATA-03",
         "DMB-05",
@@ -103,6 +106,10 @@ AUTHORITY_APPLICATION_ID = 0x46534434  # "FSD4"
 BASE_SCHEMA_NAME = "schema_v4.sql"
 DYNAMIC_SCHEMA_NAME = "schema_v4_dynamic.sql"
 V4_BOOTSTRAP_MARKER_NAME = "authority_v4_bootstrap_complete.json"
+
+
+def _publication_commit_boundary(_name: str) -> None:
+    """No-op seam used to inject deterministic transaction faults in gate tests."""
 
 
 class AuthoritySchemaError(RuntimeError):
@@ -702,6 +709,35 @@ class AuthorityReadModel:
         assert row is not None
         return {key: int(row[key]) for key in row.keys()}
 
+    def audit_hot_batches(self) -> tuple[dict[str, Any], ...]:
+        rows = self._authority._fetchall(
+            "SELECT * FROM archive_batches WHERE state='committed' "
+            "ORDER BY cutoff_version, archive_batch_id"
+        )
+        return tuple(dict(row) for row in rows)
+
+    def artifact_gc_ready(self, *, claimant_epoch: int) -> bool:
+        now = float(self._authority._wall_clock())
+        return (
+            self._authority._fetchone(
+                "SELECT 1 FROM gc_candidates "
+                "WHERE not_before<=? AND (state='pending' "
+                "OR (state='claimed' AND claimed_by_epoch<>?)) LIMIT 1",
+                (now, claimant_epoch),
+            )
+            is not None
+        )
+
+    def audit_gc_ready(self, *, claimant_epoch: int) -> bool:
+        return (
+            self._authority._fetchone(
+                "SELECT 1 FROM audit_gc_candidates "
+                "WHERE state='pending' OR (state='claimed' AND claimed_by_epoch<>?) LIMIT 1",
+                (claimant_epoch,),
+            )
+            is not None
+        )
+
 
 class LeaderAuthority:
     """Owner of a validated writable v4 connection and lease lifecycle."""
@@ -773,6 +809,12 @@ class LeaderAuthority:
 
     def close(self) -> None:
         self._connection.close()
+
+    def assert_outside_transaction(self) -> None:
+        """Fail closed if test instrumentation reached a SQLite transaction boundary."""
+
+        if self._connection.in_transaction:
+            raise RuntimeError("authority connection has an active SQLite transaction")
 
     def __enter__(self) -> "LeaderAuthority":
         return self
@@ -3332,6 +3374,7 @@ class LeaderSession:
                     direct_tokens,
                 ),
             )
+            _publication_commit_boundary("version_insert")
             connection.execute(
                 """
                 UPDATE publication_intents SET state='committed', committed_at=?
@@ -3390,6 +3433,7 @@ class LeaderSession:
                         now=now,
                         applied_version=target,
                     )
+                _publication_commit_boundary("proposal_transition")
             if terminal_commit:
                 connection.execute(
                     """
@@ -3404,6 +3448,7 @@ class LeaderSession:
                 "SELECT * FROM global_versions WHERE version=?", (target,)
             ).fetchone()
             assert result is not None
+            _publication_commit_boundary("db_commit")
             return {"outcome": "committed", "version": dict(result)}
 
         result = self._command(command_id, "commit_merge", request, operation)
@@ -3487,8 +3532,8 @@ class LeaderSession:
         result = self._command(command_id, "reconcile_publications", request, operation)
         return tuple(str(item) for item in result["publication_ids"])
 
-    def claim_orphan_gc(self, *, command_id: str, limit: int = 64) -> tuple[str, ...]:
-        """Claim only lease-safe orphan paths; deletion remains external I/O."""
+    def claim_orphan_gc(self, *, command_id: str, limit: int = 64) -> tuple[dict[str, Any], ...]:
+        """Claim only lease-safe artifact paths with immutable deletion identity."""
 
         if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
             raise ValueError("orphan GC limit must be a positive integer")
@@ -3498,24 +3543,78 @@ class LeaderSession:
             now = float(self._authority._wall_clock())
             rows = connection.execute(
                 """
-                SELECT relative_path FROM gc_candidates
-                WHERE state='pending' AND not_before<=?
+                SELECT relative_path, size_bytes, sha256 FROM gc_candidates
+                WHERE not_before<=?
+                  AND (state='pending'
+                       OR (state='claimed' AND claimed_by_epoch<>?))
                 ORDER BY not_before, relative_path LIMIT ?
                 """,
-                (now, limit),
+                (now, self.token.epoch, limit),
             ).fetchall()
-            paths = [str(row["relative_path"]) for row in rows]
-            for path in paths:
+            candidates = [
+                {
+                    "relative_path": str(row["relative_path"]),
+                    "size_bytes": int(row["size_bytes"]),
+                    "sha256": str(row["sha256"]),
+                }
+                for row in rows
+            ]
+            for candidate in candidates:
                 connection.execute(
                     """
-                    UPDATE gc_candidates SET state='claimed'
-                    WHERE relative_path=? AND state='pending'
+                    UPDATE gc_candidates
+                    SET state='claimed', claimed_by_epoch=?, claimed_at=?
+                    WHERE relative_path=?
+                      AND (state='pending'
+                           OR (state='claimed' AND claimed_by_epoch<>?))
                     """,
-                    (path,),
+                    (
+                        self.token.epoch,
+                        now,
+                        candidate["relative_path"],
+                        self.token.epoch,
+                    ),
                 )
-            return {"relative_paths": paths}
+            return {"candidates": candidates}
 
         result = self._command(command_id, "claim_orphan_gc", request, operation)
+        return tuple(dict(item) for item in result["candidates"])
+
+    def complete_artifact_gc(
+        self, *, command_id: str, relative_paths: tuple[str, ...]
+    ) -> tuple[str, ...]:
+        paths = tuple(sorted(relative_paths))
+        if not paths or len(set(paths)) != len(paths):
+            raise ValueError("artifact GC completion requires unique paths")
+        for relative_path in paths:
+            if relative_path.startswith("/") or ".." in Path(relative_path).parts:
+                raise ValueError("artifact GC completion path is invalid")
+            try:
+                (self._authority._run_root / relative_path).lstat()
+            except FileNotFoundError:
+                pass
+            else:
+                raise RuntimeError("artifact GC object still exists")
+        request = {"relative_paths": list(paths)}
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            now = float(self._authority._wall_clock())
+            for relative_path in paths:
+                cursor = connection.execute(
+                    """
+                    UPDATE gc_candidates SET state='deleted', deleted_at=?
+                    WHERE relative_path=? AND state='claimed' AND claimed_by_epoch=?
+                    """,
+                    (now, relative_path, self.token.epoch),
+                )
+                if cursor.rowcount != 1:
+                    raise RuntimeError("artifact GC candidate is not claimed")
+                connection.execute(
+                    "DELETE FROM gc_candidates WHERE relative_path=?", (relative_path,)
+                )
+            return {"relative_paths": list(paths)}
+
+        result = self._command(command_id, "complete_artifact_gc", request, operation)
         return tuple(str(item) for item in result["relative_paths"])
 
     def archive_audit_batch(
@@ -3534,11 +3633,8 @@ class LeaderSession:
             raise ValueError("cutoff_version must be an integer")
         if cutoff_version < 0:
             raise ValueError("cutoff_version must be non-negative")
-        if (
-            not relative_path.startswith("audit/batches/authority_history/")
-            or relative_path.startswith("/")
-            or ".." in Path(relative_path).parts
-        ):
+        expected_relative_path = f"audit/batches/authority_history/{batch_id}.json"
+        if relative_path != expected_relative_path:
             raise ValueError("audit batch path must be canonical and authority-history scoped")
         if len(sha256) != 64:
             raise ValueError("audit batch sha256 must be a SHA-256 digest")
@@ -3555,9 +3651,14 @@ class LeaderSession:
             "SELECT * FROM audit_partition_batches WHERE archive_batch_id=?", (batch_id,)
         )
         if compacted is not None:
-            if compacted["sha256"] != sha256:
+            if (
+                compacted["sha256"] != sha256
+                or compacted["record_kind"] != "authority_history"
+                or int(compacted["cutoff_version"]) != cutoff_version
+                or compacted["relative_path"] != relative_path
+            ):
                 raise RuntimeError("compacted audit batch ID has different immutable content")
-            return {
+            compacted_result: dict[str, Any] | None = {
                 "archive_batch_id": batch_id,
                 "record_kind": str(compacted["record_kind"]),
                 "cutoff_version": int(compacted["cutoff_version"]),
@@ -3567,55 +3668,92 @@ class LeaderSession:
                 "state": "compacted",
                 "partition_id": str(compacted["partition_id"]),
             }
-        batch_path = _lexical_protocol_path(self._authority._run_root, relative_path)
-        try:
-            metadata = batch_path.lstat()
-        except FileNotFoundError:
-            archived_source = self._find_compacted_audit_source(batch_id)
-            if archived_source is None:
-                raise
-            if (
-                archived_source["file_sha256"] != sha256
-                or int(archived_source["cutoff_version"]) != cutoff_version
-            ):
-                raise RuntimeError("compacted audit batch ID has different immutable content")
-            return {
-                "archive_batch_id": batch_id,
-                "record_kind": "authority_history",
-                "cutoff_version": cutoff_version,
-                "row_count": int(archived_source["row_count"]),
-                "relative_path": relative_path,
-                "sha256": sha256,
-                "state": "compacted",
-                "partition_id": str(archived_source["partition_id"]),
-            }
-        if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
-            raise ValueError("audit batch must be a non-writable regular file")
-        if sha256_file(batch_path) != sha256:
-            raise ValueError("audit batch file hash mismatch")
-        payload = read_json(batch_path)
-        validate_audit_batch(payload)
-        if (
-            payload["batch_id"] != batch_id
-            or payload["record_kind"] != "authority_history"
-            or int(payload["cutoff_version"]) != cutoff_version
+        else:
+            compacted_result = None
+        hot_batch = self._authority._fetchone(
+            "SELECT * FROM archive_batches WHERE archive_batch_id=?", (batch_id,)
+        )
+        if hot_batch is not None and (
+            hot_batch["sha256"] != sha256
+            or hot_batch["record_kind"] != "authority_history"
+            or int(hot_batch["cutoff_version"]) != cutoff_version
+            or hot_batch["relative_path"] != relative_path
         ):
-            raise ValueError("audit batch immutable identity mismatch")
+            raise RuntimeError("audit batch ID was replayed with different content")
+        batch_path = _lexical_protocol_path(self._authority._run_root, relative_path)
+        payload: dict[str, Any] | None = None
+        if compacted_result is None:
+            try:
+                metadata = batch_path.lstat()
+            except FileNotFoundError:
+                archived_source = self._find_compacted_audit_source(batch_id)
+                if archived_source is None:
+                    raise
+                if (
+                    archived_source["file_sha256"] != sha256
+                    or int(archived_source["cutoff_version"]) != cutoff_version
+                ):
+                    raise RuntimeError("compacted audit batch ID has different immutable content")
+                compacted_result = {
+                    "archive_batch_id": batch_id,
+                    "record_kind": "authority_history",
+                    "cutoff_version": cutoff_version,
+                    "row_count": int(archived_source["row_count"]),
+                    "relative_path": relative_path,
+                    "sha256": sha256,
+                    "state": "compacted",
+                    "partition_id": str(archived_source["partition_id"]),
+                }
+            else:
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
+                    raise ValueError("audit batch must be a non-writable regular file")
+                if sha256_file(batch_path) != sha256:
+                    raise ValueError("audit batch file hash mismatch")
+                payload = read_json(batch_path)
+                validate_audit_batch(payload)
+                if (
+                    payload["batch_id"] != batch_id
+                    or payload["record_kind"] != "authority_history"
+                    or int(payload["cutoff_version"]) != cutoff_version
+                ):
+                    raise ValueError("audit batch immutable identity mismatch")
+        if compacted_result is None and hot_batch is None:
+            assert payload is not None
+            expected_before_transaction = _audit_history_records(
+                self._authority._connection, cutoff_version
+            )
+            if payload["records"] != expected_before_transaction:
+                raise RuntimeError(
+                    "audit batch does not exactly cover the archivable authority rows"
+                )
+            for record in expected_before_transaction:
+                if record["table"] == "command_records":
+                    publish_command_receipt(
+                        RunPaths(self._authority._run_root), dict(record["row"])
+                    )
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            existing = connection.execute(
+                "SELECT * FROM archive_batches WHERE archive_batch_id=?", (batch_id,)
+            ).fetchone()
+            if existing is not None:
+                if (
+                    existing["sha256"] != sha256
+                    or existing["record_kind"] != "authority_history"
+                    or int(existing["cutoff_version"]) != cutoff_version
+                    or existing["relative_path"] != relative_path
+                ):
+                    raise RuntimeError("audit batch ID was replayed with different content")
+                return dict(existing)
+            if compacted_result is not None:
+                return compacted_result
+            assert payload is not None
             expected = _audit_history_records(connection, cutoff_version)
             if payload["records"] != expected:
                 raise RuntimeError(
                     "audit batch does not exactly cover the archivable authority rows"
                 )
             now = float(self._authority._wall_clock())
-            existing = connection.execute(
-                "SELECT * FROM archive_batches WHERE archive_batch_id=?", (batch_id,)
-            ).fetchone()
-            if existing is not None:
-                if existing["sha256"] != sha256:
-                    raise RuntimeError("audit batch ID was replayed with different content")
-                return dict(existing)
             connection.execute(
                 """
                 INSERT INTO archive_batches(
@@ -3636,7 +3774,50 @@ class LeaderSession:
             keys: dict[str, list[Any]] = {}
             for record in expected:
                 keys.setdefault(str(record["table"]), []).append(record["primary_key"])
+                row = record["row"]
+                if record["table"] == "artifact_publications":
+                    connection.execute(
+                        """
+                        INSERT INTO gc_candidates(
+                            relative_path, artifact_kind, owning_epoch, publication_id,
+                            size_bytes, sha256, state, not_before, recorded_by_epoch, recorded_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+                        ON CONFLICT(relative_path) DO NOTHING
+                        """,
+                        (
+                            row["relative_path"],
+                            row["artifact_kind"],
+                            row["owning_epoch"],
+                            row["publication_id"],
+                            row["size_bytes"],
+                            row["sha256"],
+                            now + self._authority._orphan_grace_seconds,
+                            self.token.epoch,
+                            now,
+                        ),
+                    )
+                elif record["table"] == "updates":
+                    connection.execute(
+                        """
+                        INSERT INTO gc_candidates(
+                            relative_path, artifact_kind, owning_epoch, publication_id,
+                            size_bytes, sha256, state, not_before, recorded_by_epoch, recorded_at
+                        ) VALUES (?, 'update_payload', ?, ?, ?, ?, 'pending', ?, ?, ?)
+                        ON CONFLICT(relative_path) DO NOTHING
+                        """,
+                        (
+                            row["payload_relative_path"],
+                            row["applied_by_epoch"] or row["dropped_by_epoch"] or self.token.epoch,
+                            row["update_id"],
+                            row["payload_size"],
+                            row["payload_sha256"],
+                            now + self._authority._orphan_grace_seconds,
+                            self.token.epoch,
+                            now,
+                        ),
+                    )
             delete_order = (
+                "command_records",
                 "proposal_conflicts",
                 "proposal_observations",
                 "selection_batch_updates",
@@ -3649,6 +3830,7 @@ class LeaderSession:
                 "selection_batches",
             )
             primary_columns = {
+                "command_records": "command_id",
                 "proposal_conflicts": "CAST(observation_id AS TEXT)",
                 "proposal_observations": "CAST(observation_id AS TEXT)",
                 "selection_batch_updates": "batch_id || ':' || update_id",
@@ -3769,6 +3951,17 @@ class LeaderSession:
         replay = self._command_replay(command_id, "compact_audit_batches", request)
         if replay is not None:
             return replay
+        hot_partition = self._authority._fetchone(
+            "SELECT * FROM archive_partitions WHERE partition_id=?", (partition_id,)
+        )
+        if hot_partition is not None and (
+            hot_partition["record_kind"] != record_kind
+            or hot_partition["relative_path"] != partition_relative_path
+            or hot_partition["sha256"] != partition_sha256
+            or hot_partition["manifest_relative_path"] != manifest_relative_path
+            or hot_partition["manifest_sha256"] != manifest_sha256
+        ):
+            raise RuntimeError("audit partition ID was replayed with different content")
         partition_path = self._immutable_audit_object(
             partition_relative_path, partition_sha256, prefix="audit/partitions/"
         )
@@ -3791,16 +3984,17 @@ class LeaderSession:
         ):
             raise ValueError("audit partition immutable identity mismatch")
         placeholders = ",".join("?" for _ in normalized_batch_ids)
-        source_rows = self._authority._fetchall(
-            f"SELECT * FROM archive_batches WHERE archive_batch_id IN ({placeholders})",
-            normalized_batch_ids,
-        )
-        if len(source_rows) != len(normalized_batch_ids):
-            raise RuntimeError("audit compaction source batches are not all hot and committed")
-        for row in source_rows:
-            self._immutable_audit_object(
-                str(row["relative_path"]), str(row["sha256"]), prefix="audit/batches/"
+        if hot_partition is None:
+            source_rows = self._authority._fetchall(
+                f"SELECT * FROM archive_batches WHERE archive_batch_id IN ({placeholders})",
+                normalized_batch_ids,
             )
+            if len(source_rows) != len(normalized_batch_ids):
+                raise RuntimeError("audit compaction source batches are not all hot and committed")
+            for row in source_rows:
+                self._immutable_audit_object(
+                    str(row["relative_path"]), str(row["sha256"]), prefix="audit/batches/"
+                )
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
             existing = connection.execute(
@@ -3808,7 +4002,10 @@ class LeaderSession:
             ).fetchone()
             if existing is not None:
                 if (
-                    existing["sha256"] != partition_sha256
+                    existing["record_kind"] != record_kind
+                    or existing["relative_path"] != partition_relative_path
+                    or existing["sha256"] != partition_sha256
+                    or existing["manifest_relative_path"] != manifest_relative_path
                     or existing["manifest_sha256"] != manifest_sha256
                 ):
                     raise RuntimeError("audit partition ID was replayed with different content")
@@ -5086,9 +5283,9 @@ class LeaderSession:
             connection.execute(
                 """
                 INSERT INTO gc_candidates(
-                    relative_path, artifact_kind, owning_epoch, publication_id, state,
-                    not_before, recorded_by_epoch, recorded_at
-                ) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
+                    relative_path, artifact_kind, owning_epoch, publication_id,
+                    size_bytes, sha256, state, not_before, recorded_by_epoch, recorded_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
                 ON CONFLICT(relative_path) DO NOTHING
                 """,
                 (
@@ -5096,6 +5293,8 @@ class LeaderSession:
                     artifact["artifact_kind"],
                     artifact["owning_epoch"],
                     publication_id,
+                    artifact["size_bytes"],
+                    artifact["sha256"],
                     now + self._authority._orphan_grace_seconds,
                     self.token.epoch,
                     now,
@@ -5377,7 +5576,10 @@ class LeaderSession:
         )
         self._authority._verify_token(self.token)
         if existing is None:
-            return None
+            existing = read_command_receipt(RunPaths(self._authority._run_root), command_id)
+            self._authority._verify_token(self.token)
+            if existing is None:
+                return None
         if existing["command_kind"] != kind or existing["request_sha256"] != request_sha:
             raise CommandConflictError("command ID was replayed with a different kind or request")
         return json.loads(str(existing["result_json"]))
@@ -5393,6 +5595,9 @@ class LeaderSession:
         request_json = _canonical_json(dict(request))
         request_sha = hashlib.sha256(request_json.encode("utf-8")).hexdigest()
         connection = self._authority._connection
+        archived = self._command_replay(command_id, kind, request)
+        if archived is not None:
+            return archived
         started_transaction = False
         try:
             connection.execute("BEGIN IMMEDIATE")
@@ -5617,6 +5822,13 @@ def _audit_history_records(
             tuple(sorted(publication_ids)),
         ).fetchall()
     groups: tuple[tuple[str, str, list[sqlite3.Row]], ...] = (
+        (
+            "command_records",
+            "command_id",
+            list(
+                connection.execute("SELECT * FROM command_records ORDER BY command_id").fetchall()
+            ),
+        ),
         ("proposal_conflicts", "observation_id", list(conflict_rows)),
         ("proposal_observations", "observation_id", list(observation_rows)),
         ("selection_batch_updates", "batch_update", list(batch_update_rows)),

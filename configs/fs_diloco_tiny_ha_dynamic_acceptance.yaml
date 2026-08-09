@@ -18,7 +18,7 @@ data:
   num_proc: 1
   cache_dir: null
   streaming: false
-  synthetic_num_batches: 4096
+  synthetic_num_batches: 16384
 sync:
   num_learners: 8
   quorum_min: 7
@@ -80,8 +80,8 @@ scaling:
   scheduler_reconcile_interval_seconds: 1.0
   starvation_observation_seconds: 2.0
   learner_pbs_script: scripts/miyabi/run_dynamic_learner.pbs
-  learner_walltime: 00:10:00
-  learner_queue: debug-g
+  learner_walltime: 00:20:00
+  learner_queue: regular-g
 terminal:
   admission_close_policy: global_target_or_launch_budget
   drain_ack_timeout_seconds: 15.0
@@ -95,15 +95,15 @@ liveness:
   dead_after_seconds: 10.0
   no_progress_timeout_seconds: 120.0
 training:
-  inner_steps: 51
+  inner_steps: 60
   micro_batch_size: 2
   gradient_accumulation_steps: 1
   block_size: 16
   max_local_steps: null
   completion_mode: global_only
-  precision: fp32
+  precision: bf16
   seed: 1337
-  log_every_steps: 25
+  log_every_steps: 60
   grad_clip: 1.0
 inner_optimizer:
   name: adamw
@@ -125,10 +125,15 @@ outer_optimizer:
   - 0.999
   eps: 1.0e-08
 io:
-  tensor_dtype: float32
+  tensor_dtype: bfloat16
   atomic_write: true
   compute_sha256: true
   checkpoint_digest_mode: false
+syncer:
+  device: cpu
+  compute_dtype: float32
+  publish_dtype: bfloat16
+  parallel_checkpoint_writes: true
 learner:
   poll_latest_during_inner_steps: false
   adopt_global_after_upload: true

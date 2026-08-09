@@ -1,0 +1,32 @@
+#!/bin/bash
+#PBS -N fsdiloco_p6_g7_2n
+#PBS -q regular-g
+#PBS -W group_list=xg24i002
+#PBS -l select=2:mpiprocs=1
+#PBS -l walltime=00:10:00
+#PBS -j oe
+#PBS -m ae
+
+set -eEuo pipefail
+trap 'echo "[ERROR] P6 G7 two-node failed at line $LINENO" >&2' ERR
+
+: "${EVIDENCE_OUTPUT:?EVIDENCE_OUTPUT is required}"
+: "${PBS_NODEFILE:?PBS_NODEFILE is required}"
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+export CUDA_VISIBLE_DEVICES=""
+module list 2>&1 | cat
+
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PRIMARY_WORKTREE_ROOT="${PRIMARY_WORKTREE_ROOT:-/work/xg24i002/x10041/fsb_decoupled_diloco}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+RUN_ROOT="${RUN_ROOT:-$PRIMARY_WORKTREE_ROOT/runs/fs_diloco/plan03_p6_g7_${PBS_JOBID%%.*}}"
+mapfile -t HOSTS < <(sort -u "$PBS_NODEFILE")
+test "${#HOSTS[@]}" -eq 2
+
+cd "$PROJECT_ROOT"
+"$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/plan03_p6_two_node_sqlite.py" \
+  --project-root "$PROJECT_ROOT" \
+  --shared-root "$RUN_ROOT" \
+  --output "$EVIDENCE_OUTPUT" \
+  --hosts "${HOSTS[0]}" "${HOSTS[1]}"
+printf 'PLAN03_P6_G7_TWO_NODE_COMPLETE=%s\n' "${PBS_JOBID:-unknown}"

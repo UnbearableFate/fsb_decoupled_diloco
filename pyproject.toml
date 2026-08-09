@@ -58,6 +58,7 @@ xfail_strict = true
 markers = [
     "plan03_red: pre-fix characterization for a Plan 03 accepted behavior defect",
     "state_machine: bounded generated protocol state-machine validation",
+    "p6_formal: expensive formal Plan 03 P6 gate disabled from the default suite",
     "crash_matrix: deterministic publication crash-point validation",
     "integration: multi-component or real pipeline validation",
     "performance: paired performance or boundedness measurement",

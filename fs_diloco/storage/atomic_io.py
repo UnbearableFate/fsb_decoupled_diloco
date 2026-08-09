@@ -24,6 +24,10 @@ class ImmutablePublication:
     created: bool
 
 
+def _immutable_publication_boundary(_name: str) -> None:
+    """No-op seam used for deterministic crash-prefix tests."""
+
+
 def _fsync_directory(path: Path) -> None:
     descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     try:
@@ -124,6 +128,7 @@ def publish_immutable_with_writer(
         os.chmod(temporary, mode)
         with temporary.open("rb") as handle:
             os.fsync(handle.fileno())
+        _immutable_publication_boundary("temporary_fsync")
         size = temporary.stat().st_size
         digest = sha256_file(temporary, chunk_size=chunk_size)
         try:
@@ -162,6 +167,7 @@ def publish_immutable_with_writer(
             finally:
                 os.close(existing_fd)
             return ImmutablePublication(target, size, digest, False)
+        _immutable_publication_boundary("create")
         _fsync_directory(target.parent)
         return ImmutablePublication(target, size, digest, True)
     finally:

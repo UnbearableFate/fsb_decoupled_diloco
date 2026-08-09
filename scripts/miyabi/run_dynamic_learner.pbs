@@ -85,12 +85,14 @@ learner_command=(
 )
 
 if [[ -z "${FS_DILOCO_TEST_TERMINATE_AFTER_ADMISSION_SECONDS:-}" && \
-      -z "${FS_DILOCO_TEST_PAUSE_AFTER_SECONDS:-}" ]]; then
+      -z "${FS_DILOCO_TEST_PAUSE_AFTER_SECONDS:-}" && \
+      -z "${FS_DILOCO_TEST_SPAWN_DUPLICATE_PRETORCH:-}" ]]; then
   exec "${learner_command[@]}"
 fi
 
 admission_signal=""
-if [[ -n "${FS_DILOCO_TEST_TERMINATE_AFTER_ADMISSION_SECONDS:-}" ]]; then
+if [[ -n "${FS_DILOCO_TEST_TERMINATE_AFTER_ADMISSION_SECONDS:-}" || \
+      -n "${FS_DILOCO_TEST_SPAWN_DUPLICATE_PRETORCH:-}" ]]; then
   admission_signal="${TMPDIR:?TMPDIR is required}/fsdiloco-admitted-${PBS_JOBID:?PBS_JOBID is required}.json"
   export FS_DILOCO_TEST_ADMISSION_SIGNAL_PATH="$admission_signal"
 fi
@@ -98,6 +100,7 @@ fi
 "${learner_command[@]}" &
 learner_pid=$!
 helper_pids=()
+duplicate_helper_pid=""
 
 if [[ -n "${FS_DILOCO_TEST_TERMINATE_AFTER_ADMISSION_SECONDS:-}" ]]; then
   (
@@ -122,6 +125,61 @@ PY
   helper_pids+=("$!")
 fi
 
+if [[ -n "${FS_DILOCO_TEST_SPAWN_DUPLICATE_PRETORCH:-}" ]]; then
+  : "${FS_DILOCO_TEST_DUPLICATE_RESULT_PATH:?duplicate result path is required}"
+  (
+    duplicate_signal="${TMPDIR:?TMPDIR is required}/fsdiloco-duplicate-admitted-${PBS_JOBID:?PBS_JOBID is required}.json"
+    duplicate_log="${TMPDIR:?TMPDIR is required}/fsdiloco-duplicate-${PBS_JOBID:?PBS_JOBID is required}.log"
+    "$PYTHON_BIN" - "$admission_signal" \
+      "${FS_DILOCO_TEST_ADMISSION_WAIT_TIMEOUT_SECONDS:-60}" <<'PY'
+import pathlib
+import sys
+import time
+
+signal_path = pathlib.Path(sys.argv[1])
+deadline = time.monotonic() + float(sys.argv[2])
+while not signal_path.is_file():
+    if time.monotonic() >= deadline:
+        raise SystemExit(1)
+    time.sleep(0.1)
+PY
+    set +e
+    FS_DILOCO_TEST_ADMISSION_SIGNAL_PATH="$duplicate_signal" \
+      timeout "${FS_DILOCO_TEST_DUPLICATE_TIMEOUT_SECONDS:-60}" \
+      "${learner_command[@]}" >"$duplicate_log" 2>&1
+    duplicate_status=$?
+    set -e
+    "$PYTHON_BIN" - "$FS_DILOCO_TEST_DUPLICATE_RESULT_PATH" "$duplicate_log" \
+      "$duplicate_signal" "$duplicate_status" <<'PY'
+import json
+import pathlib
+import sys
+
+target, log_path, signal_path = map(pathlib.Path, sys.argv[1:4])
+returncode = int(sys.argv[4])
+log = log_path.read_text(encoding="utf-8", errors="replace")
+payload = {
+    "format_version": 1,
+    "returncode": returncode,
+    "admission_signal_created": signal_path.exists(),
+    "rejected_before_torch": (
+        returncode not in {0, 124}
+        and not signal_path.exists()
+        and "AdmissionRejectedError" in log
+    ),
+    "output_tail": log.splitlines()[-20:],
+}
+target.parent.mkdir(parents=True, exist_ok=True)
+temporary = target.with_name(f".{target.name}.tmp")
+temporary.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+temporary.replace(target)
+raise SystemExit(0 if payload["rejected_before_torch"] else 1)
+PY
+  ) &
+  duplicate_helper_pid=$!
+  helper_pids+=("$duplicate_helper_pid")
+fi
+
 if [[ -n "${FS_DILOCO_TEST_PAUSE_AFTER_SECONDS:-}" ]]; then
   : "${FS_DILOCO_TEST_PAUSE_DURATION_SECONDS:?pause duration is required}"
   (
@@ -138,8 +196,16 @@ set +e
 wait "$learner_pid"
 learner_status=$?
 set -e
+helper_status=0
 for helper_pid in "${helper_pids[@]}"; do
-  kill "$helper_pid" 2>/dev/null || true
-  wait "$helper_pid" 2>/dev/null || true
+  if [[ "$helper_pid" == "$duplicate_helper_pid" ]]; then
+    wait "$helper_pid" || helper_status=$?
+  else
+    kill "$helper_pid" 2>/dev/null || true
+    wait "$helper_pid" 2>/dev/null || true
+  fi
 done
+if ((helper_status != 0)); then
+  exit "$helper_status"
+fi
 exit "$learner_status"

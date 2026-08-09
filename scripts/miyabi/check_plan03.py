@@ -24,6 +24,14 @@ import yaml
 
 
 PLAN_ID = "fsb_decoupled_diloco_plan_03_unified_ha"
+EXECUTABLE_SOURCE_SCOPES = (
+    "fs_diloco",
+    "configs",
+    "scripts",
+    "pyproject.toml",
+    "uv.lock",
+    ".python-version",
+)
 ARCHIVE_TAGS = (
     "archive/classic-full-v1-final",
     "archive/fragment-v0-final",
@@ -42,6 +50,36 @@ P5_BASELINE_PROTOCOL_SHA256 = "4919f2e26c8d6da22028f26d66286cff7f2f51004d230672b
 P5_ADDITIONAL_REMOVED_FULL_CONFIGS = frozenset(
     {"configs/fs_diloco_gpt2_wikitext2_8l_5000steps_terminal_capture.yaml"}
 )
+P6_ACCEPTANCE_CONFIG_PROJECTIONS: dict[str, dict[tuple[str, ...], Any]] = {
+    "configs/fs_diloco_tiny_ha_static_acceptance.yaml": {
+        ("data", "synthetic_num_batches"): 4096,
+        ("sync", "stop_after_outer_steps"): 20,
+        ("training", "inner_steps"): 60,
+        ("training", "log_every_steps"): 60,
+        ("wandb", "enabled"): False,
+        ("syncer",): {
+            "device": "cuda",
+            "compute_dtype": "float32",
+            "publish_dtype": "float32",
+            "parallel_checkpoint_writes": True,
+        },
+    },
+    "configs/fs_diloco_tiny_ha_dynamic_acceptance.yaml": {
+        ("data", "synthetic_num_batches"): 16384,
+        ("scaling", "learner_walltime"): "00:20:00",
+        ("scaling", "learner_queue"): "regular-g",
+        ("training", "inner_steps"): 60,
+        ("training", "precision"): "bf16",
+        ("training", "log_every_steps"): 60,
+        ("io", "tensor_dtype"): "bfloat16",
+        ("syncer",): {
+            "device": "cpu",
+            "compute_dtype": "float32",
+            "publish_dtype": "bfloat16",
+            "parallel_checkpoint_writes": True,
+        },
+    },
+}
 FROZEN_FULL_COMMIT = "a00a3d64a50f10a2478c3f4fe795e658d1b3b52f"
 P5_REMOVED_SOURCE = (
     "fs_diloco/observability/metrics.py",
@@ -377,6 +415,17 @@ def verify_p4_migration_contracts(root: Path, frozen_source_ref: str) -> list[st
         "configs/fs_diloco_tiny_ha_dynamic_2node.yaml": "00:10:00",
         "configs/fs_diloco_tiny_ha_dynamic_acceptance.yaml": "00:10:00",
     }
+
+    def apply_projection(payload: dict[str, Any], projection: dict[tuple[str, ...], Any]) -> None:
+        for path, value in projection.items():
+            current: dict[str, Any] = payload
+            for component in path[:-1]:
+                nested = current.setdefault(component, {})
+                if not isinstance(nested, dict):
+                    raise RuntimeError(f"config projection crosses non-mapping field: {path}")
+                current = nested
+            current[path[-1]] = copy.deepcopy(value)
+
     for kind in ("full", "baseline", "fragment", "historical"):
         expected_paths = sorted(
             path
@@ -401,6 +450,8 @@ def verify_p4_migration_contracts(root: Path, frozen_source_ref: str) -> list[st
             expected_payload = yaml.safe_load(migrated_bytes) or {}
             if path in p5_dynamic_walltime_updates:
                 expected_payload["scaling"]["learner_walltime"] = p5_dynamic_walltime_updates[path]
+            if path in P6_ACCEPTANCE_CONFIG_PROJECTIONS:
+                apply_projection(expected_payload, P6_ACCEPTANCE_CONFIG_PROJECTIONS[path])
             if current_payload != expected_payload:
                 differences.append(f"config-migration.full-semantic:{path}")
         elif kind == "baseline":
@@ -914,7 +965,10 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("--inventory-output", type=Path)
+    parser.add_argument("--output", type=Path, help="alias for --inventory-output")
     parser.add_argument("--source-ref")
+    parser.add_argument("--phase", help="matrix phase ID for the unified phase checker")
+    parser.add_argument("--mode", choices=("staged", "completed"))
     parser.add_argument(
         "--verification-target-ref",
         help="commit that structured phase evidence must attest (defaults to HEAD)",
@@ -946,6 +1000,25 @@ def main() -> None:
         help="verify the current classic/fragment removal and legacy-reader boundary",
     )
     args = parser.parse_args()
+    if args.output is not None:
+        if args.inventory_output is not None:
+            parser.error("--output and --inventory-output are aliases and cannot be combined")
+        args.inventory_output = args.output
+    if (args.phase is None) != (args.mode is None):
+        parser.error("--phase and --mode must be supplied together")
+    if args.phase is not None:
+        if args.verify_phase_requirements is not None:
+            parser.error("--phase cannot be combined with --verify-phase-requirements")
+        args.verify_phase_requirements = args.phase
+        if args.mode == "completed":
+            args.require_tracked_evidence = True
+        if args.expect is None:
+            args.expect = (
+                args.root.resolve()
+                / "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts"
+                / "20260809-003335_p0-current-boundary-check_review.json"
+            )
+            args.verify_boundaries = True
     root = args.root.resolve()
     try:
         expected = None
@@ -1037,6 +1110,51 @@ def main() -> None:
             payload["status"] = "PASS" if not differences else "BLOCKED"
             payload["differences"] = differences
             payload["checks"] = checks
+            if args.phase is not None:
+                current = inventory(root)
+                payload.update(
+                    {
+                        "phase_id": args.phase,
+                        "mode": args.mode,
+                        "source_identity": {
+                            "git_commit": current["source_identity"]["commit"],
+                            "git_dirty": bool(
+                                _git(
+                                    root,
+                                    "status",
+                                    "--short",
+                                    "--untracked-files=all",
+                                    "--",
+                                    *EXECUTABLE_SOURCE_SCOPES,
+                                )
+                            ),
+                        },
+                        "environment": {
+                            "pbs_job_id": os.environ.get("PBS_JOBID"),
+                            "python": sys.version.split()[0],
+                        },
+                        "schema_identity": {
+                            "authority_schema_sha256": _sha256(
+                                root / "fs_diloco/storage/schema_v4.sql"
+                            ),
+                            "dynamic_schema_sha256": _sha256(
+                                root / "fs_diloco/storage/schema_v4_dynamic.sql"
+                            ),
+                        },
+                        "metrics": {
+                            "requirement_count": len(checks.get("requirements", {})),
+                            "difference_count": len(differences),
+                        },
+                        "errors": list(differences),
+                        "evidence_paths": sorted(
+                            {
+                                path
+                                for item in checks.get("requirements", {}).values()
+                                for path in item.get("structured_evidence_paths", [])
+                            }
+                        ),
+                    }
+                )
     except (OSError, RuntimeError, KeyError, ValueError, subprocess.CalledProcessError) as exc:
         payload = {
             "artifact_version": 1,

@@ -1,0 +1,40 @@
+#!/bin/bash
+#PBS -N fsdiloco_p6_bounded
+#PBS -q debug-g
+#PBS -W group_list=xg24i002
+#PBS -l select=1:mpiprocs=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+
+set -eEuo pipefail
+trap 'echo "[ERROR] P6 boundedness failed at line $LINENO" >&2' ERR
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+export CUDA_VISIBLE_DEVICES=""
+export PYTHONDONTWRITEBYTECODE=1
+module list 2>&1 | cat
+
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+RUNS_ROOT="${RUNS_ROOT:-$PROJECT_ROOT/runs/fs_diloco}"
+RUN_ID="${RUN_ID:-plan03_p6_boundedness_${PBS_JOBID%%.*}}"
+RUN_ROOT="${RUN_ROOT:-$RUNS_ROOT/$RUN_ID}"
+: "${EVIDENCE_OUTPUT:?EVIDENCE_OUTPUT is required}"
+: "${CALIBRATION_OUTPUT:?CALIBRATION_OUTPUT is required}"
+
+cd "$PROJECT_ROOT"
+"$PYTHON_BIN" scripts/miyabi/plan03_p6_boundedness.py \
+  --project-root "$PROJECT_ROOT" \
+  --run-root "${RUN_ROOT}_calibration" \
+  --output "$CALIBRATION_OUTPUT" \
+  --cycles 200 \
+  --warmup 50 \
+  --sample-every 10 \
+  --calibration \
+  --delete-run-on-pass
+"$PYTHON_BIN" scripts/miyabi/plan03_p6_boundedness.py \
+  --project-root "$PROJECT_ROOT" \
+  --run-root "$RUN_ROOT" \
+  --output "$EVIDENCE_OUTPUT" \
+  --cycles 10000 \
+  --warmup 2000 \
+  --sample-every 100

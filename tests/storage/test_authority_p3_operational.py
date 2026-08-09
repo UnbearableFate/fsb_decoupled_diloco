@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from fs_diloco.core.config_v4 import MaintenanceSection
 from fs_diloco.protocol.contributor import (
     DynamicMembershipScope,
     StaticContributorFence,
@@ -18,16 +19,22 @@ from fs_diloco.protocol.scheduler import (
     SchedulerOperatorRequest,
     scheduler_state_sha256,
 )
+from fs_diloco.runtime.services.maintenance import (
+    MaintenanceService,
+    delete_claimed_artifact_object,
+)
 from fs_diloco.storage.atomic_io import read_json
 from fs_diloco.storage.audit_archive import (
     build_audit_batch,
     build_audit_partition,
+    command_receipt_path,
     delete_claimed_audit_batch_object,
     publish_audit_batch,
     publish_audit_partition,
 )
 from fs_diloco.storage.authority import (
     AuthorityIdentity,
+    CommandConflictError,
     LeaderAuthority,
     MembershipFenceError,
     initialize_authority_v4,
@@ -56,6 +63,8 @@ PLAN03_REQUIREMENTS = frozenset(
         "DMB-05",
         "DMB-09",
         "DMB-10",
+        "P6-DYNAMIC-9N",
+        "P6-STATIC-9N",
         "SCHED-01",
         "SCHED-02",
         "SCHED-03",
@@ -1263,6 +1272,29 @@ def test_immutable_audit_batch_precedes_exact_history_prune_and_preserves_rollup
         assert authority.read.contributor_progress("learner-0").last_cycle_seq == 2
         assert authority.read.token_ledger_summary() == before
         assert path.stat().st_mode & 0o222 == 0
+        connection = sqlite3.connect(tmp_path / "authority.sqlite3")
+        try:
+            assert (
+                connection.execute(
+                    "SELECT COUNT(*) FROM command_records WHERE command_id='v0-prepare'"
+                ).fetchone()[0]
+                == 0
+            )
+        finally:
+            connection.close()
+        assert command_receipt_path(RunPaths(tmp_path), "v0-prepare").is_file()
+        replayed_v0 = leader.initialize_v0(
+            command_id="v0",
+            publication_id="publication-v0",
+            **publish_checkpoint_pair(tmp_path, version=0),
+        )
+        assert replayed_v0.version == 0
+        with pytest.raises(CommandConflictError, match="different kind or request"):
+            leader.initialize_v0(
+                command_id="v0",
+                publication_id="different-publication-v0",
+                **publish_checkpoint_pair(tmp_path, version=0),
+            )
 
 
 def test_audit_archive_never_prunes_latest_version_or_blocks_next_commit(tmp_path: Path) -> None:
@@ -1417,3 +1449,106 @@ def test_active_leader_compacts_audit_batches_before_exact_source_gc(tmp_path: P
         )
         assert replay["state"] == "compacted"
         assert replay["partition_id"] == "partition-1"
+
+
+class _MaintenanceTelemetry:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, object]]] = []
+
+    def event(self, name: str, **fields: object) -> None:
+        self.events.append((name, fields))
+
+
+def test_fenced_maintenance_archives_history_and_successor_reclaims_artifact_gc(
+    tmp_path: Path,
+) -> None:
+    clock = Clock()
+    paths = RunPaths(tmp_path)
+    telemetry = _MaintenanceTelemetry()
+    config = MaintenanceSection(archive_batch_rows=1, recent_batch_dedup_count=2)
+    with _open_static(tmp_path, clock) as authority:
+        token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
+        leader = authority.open_leader(token)
+        fence = _static_fence(leader)
+        version_zero = publish_checkpoint_pair(tmp_path, version=0)
+        leader.initialize_v0(
+            command_id="v0",
+            publication_id="publication-v0",
+            **version_zero,
+        )
+        _ingest_static_cycle(leader, tmp_path, fence, sequence=1, previous=None)
+        version_one = publish_checkpoint_pair(tmp_path, version=1)
+        attempt = leader.try_select_batch(command_id="select-1", quorum_min=1, quorum_max=1)
+        assert attempt.batch is not None
+        leader.prepare_publication(
+            command_id="prepare-1",
+            publication_id="publication-1",
+            target_version=1,
+            selection_batch_id=attempt.batch.batch_id,
+            **version_one,
+        )
+        leader.commit_merge(command_id="commit-1", publication_id="publication-1")
+        service = MaintenanceService(
+            authority=authority,
+            leader=leader,
+            paths=paths,
+            config=config,
+            telemetry=telemetry,
+        )
+
+        archived = service.tick(force=True)
+
+        assert archived["archived_batch"]["cutoff_version"] == 0
+        old_paths = {
+            str(version_zero["weight_relative_path"]),
+            str(version_zero["optim_relative_path"]),
+        }
+        assert all((tmp_path / relative_path).is_file() for relative_path in old_paths)
+        assert all(
+            (tmp_path / str(version_one[field])).is_file()
+            for field in ("weight_relative_path", "optim_relative_path")
+        )
+        clock.now += config.publication_orphan_grace_seconds + 1.0
+        claimed = leader.claim_orphan_gc(command_id="old-leader-claim")
+        assert {item["relative_path"] for item in claimed} == old_paths
+        authority.release_leader(token)
+        successor = authority.open_leader(
+            authority.acquire_leader(owner_id="successor", hostname="host", pid=2)
+        )
+        successor_service = MaintenanceService(
+            authority=authority,
+            leader=successor,
+            paths=paths,
+            config=config,
+            telemetry=telemetry,
+        )
+
+        completed = successor_service.tick()
+
+        assert set(completed["artifact_gc"]) == old_paths
+        assert all(not (tmp_path / relative_path).exists() for relative_path in old_paths)
+        assert authority.read.integrity_check() == ("ok",)
+        connection = sqlite3.connect(tmp_path / "authority.sqlite3")
+        try:
+            assert connection.execute("SELECT COUNT(*) FROM gc_candidates").fetchone()[0] == 0
+        finally:
+            connection.close()
+
+
+def test_artifact_gc_refuses_symlinked_or_identity_changed_objects(tmp_path: Path) -> None:
+    paths = RunPaths(tmp_path)
+    target = tmp_path / "weights" / "epochs" / "e1" / "payload.safetensors"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"immutable")
+    target.chmod(0o444)
+    digest = hashlib.sha256(b"immutable").hexdigest()
+    target.unlink()
+    target.symlink_to(tmp_path / "outside")
+
+    with pytest.raises(RuntimeError, match="immutable identity changed"):
+        delete_claimed_artifact_object(
+            paths,
+            relative_path="weights/epochs/e1/payload.safetensors",
+            expected_size=len(b"immutable"),
+            expected_sha256=digest,
+        )

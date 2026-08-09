@@ -18,7 +18,7 @@ data:
   num_proc: 1
   cache_dir: null
   streaming: false
-  synthetic_num_batches: 256
+  synthetic_num_batches: 4096
 sync:
   num_learners: 8
   quorum_min: 8
@@ -31,7 +31,7 @@ sync:
     mode: fixed
     fixed_seconds: 0.2
     max_seconds: 0.2
-  stop_after_outer_steps: 10
+  stop_after_outer_steps: 20
   stop_file_poll_seconds: 0.2
 coordination:
   leader:
@@ -53,7 +53,7 @@ liveness:
   dead_after_seconds: 20.0
   no_progress_timeout_seconds: 60.0
 training:
-  inner_steps: 2
+  inner_steps: 60
   micro_batch_size: 2
   gradient_accumulation_steps: 1
   block_size: 16
@@ -61,7 +61,7 @@ training:
   completion_mode: global_only
   precision: fp32
   seed: 1337
-  log_every_steps: 5
+  log_every_steps: 60
   grad_clip: 1.0
 inner_optimizer:
   name: adamw
@@ -87,11 +87,16 @@ io:
   atomic_write: true
   compute_sha256: true
   checkpoint_digest_mode: false
+syncer:
+  device: cuda
+  compute_dtype: float32
+  publish_dtype: float32
+  parallel_checkpoint_writes: true
 learner:
   poll_latest_during_inner_steps: false
   adopt_global_after_upload: true
 wandb:
-  enabled: true
+  enabled: false
   mode: offline
 config_schema_version: 1
 maintenance: {}

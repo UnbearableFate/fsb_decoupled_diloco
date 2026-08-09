@@ -9,7 +9,7 @@ from fs_diloco.observability.logging_utils import ActorTelemetryWriter
 from fs_diloco.tools.check_workload_equivalence import MATCHED_FIELDS, compare_workloads
 
 
-PLAN03_REQUIREMENTS = frozenset({"AUDIT-05"})
+PLAN03_REQUIREMENTS = frozenset({"AUDIT-05", "P6-PERF-CLASSIC", "P6-PERF-DYNAMIC"})
 
 
 def test_actor_telemetry_claim_prevents_shared_attempt_append(tmp_path: Path) -> None:

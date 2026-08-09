@@ -1,0 +1,33 @@
+#!/bin/bash
+#PBS -N fsdiloco_p6_g3_g4
+#PBS -q debug-g
+#PBS -W group_list=xg24i002
+#PBS -l select=1:mpiprocs=1
+#PBS -l walltime=00:20:00
+#PBS -j oe
+
+set -eEuo pipefail
+trap 'echo "[ERROR] P6 G3/G4 failed at line $LINENO" >&2' ERR
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+export CUDA_VISIBLE_DEVICES=""
+export PYTHONDONTWRITEBYTECODE=1
+module list 2>&1 | cat
+
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+: "${STATE_EVIDENCE_OUTPUT:?STATE_EVIDENCE_OUTPUT is required}"
+: "${CRASH_EVIDENCE_OUTPUT:?CRASH_EVIDENCE_OUTPUT is required}"
+LOG_ROOT="${LOG_ROOT:-$PROJECT_ROOT/logs/qsub_plan03_p6_g3_g4_${PBS_JOBID%%.*}}"
+mkdir -p "$LOG_ROOT"
+
+cd "$PROJECT_ROOT"
+"$PYTHON_BIN" scripts/miyabi/plan03_p6_state_machine_gate.py \
+  --project-root "$PROJECT_ROOT" \
+  --python "$PYTHON_BIN" \
+  --log "$LOG_ROOT/state-machines.log" \
+  --output "$STATE_EVIDENCE_OUTPUT"
+"$PYTHON_BIN" scripts/miyabi/plan03_p6_crash_matrix.py \
+  --project-root "$PROJECT_ROOT" \
+  --python "$PYTHON_BIN" \
+  --log "$LOG_ROOT/crash-matrix.log" \
+  --output "$CRASH_EVIDENCE_OUTPUT"

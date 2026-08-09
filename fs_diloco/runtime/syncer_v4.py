@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+from pathlib import Path
+import signal
 import time
 import uuid
 from typing import Any
@@ -43,6 +46,7 @@ from ..protocol.cycle_receipt import (
     contributor_fence_namespace,
 )
 from ..protocol.data_cursor import ContributorResumeState
+from ..protocol.authority import MergeFenceConflict
 from ..protocol.proposal import FullUpdateProposalV2
 from ..storage.atomic_io import atomic_write_json, publish_immutable_bytes, safe_read_json
 from ..storage.authority import (
@@ -55,13 +59,14 @@ from ..storage.authority import (
 from ..storage.leader_lease import StaleLeaderTokenError
 from ..storage.tensor_codec import (
     dtype_from_name,
+    encode_global_weights,
+    encode_outer_state,
     load_outer_state,
-    publish_global_weights_immutable,
-    publish_outer_state_immutable,
 )
 from .pbs_scheduler import PBSScheduler
 from .services import (
     DynamicCapacityService,
+    MaintenanceService,
     MergeAttemptStatus,
     MergeService,
     TerminalService,
@@ -78,6 +83,8 @@ PLAN03_REQUIREMENTS = frozenset(
         "AUTH-07",
         "AUTH-09",
         "AUTH-10",
+        "P6-DYNAMIC-9N",
+        "P6-STATIC-9N",
         "MODE-02",
         "P4-MIGRATE",
     }
@@ -104,6 +111,54 @@ def _raise_injected_candidate_failure(version: int) -> None:
         )
     if int(version) >= target:
         raise RuntimeError(f"injected candidate failure after committed version {version}")
+
+
+def _pause_candidate_outside_transaction(
+    authority: LeaderAuthority,
+    leader: LeaderSession,
+    renewer: Any,
+    *,
+    version: int,
+) -> None:
+    """SIGSTOP one test candidate only after both SQLite writers are quiescent."""
+
+    raw_target = os.environ.get("FS_DILOCO_TEST_PAUSE_AFTER_COMMITTED_VERSION")
+    if raw_target is None:
+        return
+    try:
+        target = int(raw_target)
+    except ValueError as exc:
+        raise ValueError(
+            "FS_DILOCO_TEST_PAUSE_AFTER_COMMITTED_VERSION must be a nonnegative integer"
+        ) from exc
+    if target < 0:
+        raise ValueError(
+            "FS_DILOCO_TEST_PAUSE_AFTER_COMMITTED_VERSION must be a nonnegative integer"
+        )
+    marker_value = os.environ.get("FS_DILOCO_TEST_PAUSE_MARKER_PATH")
+    if not marker_value:
+        raise ValueError(
+            "FS_DILOCO_TEST_PAUSE_MARKER_PATH is required with the candidate pause hook"
+        )
+    marker = Path(marker_value)
+    if version < target or marker.exists():
+        return
+    with renewer.quiesce_for_test_pause():
+        authority.assert_outside_transaction()
+        atomic_write_json(
+            marker,
+            {
+                "format_version": 1,
+                "pid": os.getpid(),
+                "epoch": leader.token.epoch,
+                "owner_id": leader.token.owner_id,
+                "committed_version": int(version),
+                "sqlite_transaction_active": False,
+                "lease_renewer_quiesced": True,
+            },
+        )
+        os.kill(os.getpid(), signal.SIGSTOP)
+    authority.assert_outside_transaction()
 
 
 def run_fenced_syncer(
@@ -170,6 +225,12 @@ def run_fenced_syncer(
         )
         telemetry.event("authority_resumed", version=latest.version)
     control.publish_latest(latest)
+    _pause_candidate_outside_transaction(
+        authority,
+        leader,
+        renewer,
+        version=latest.version,
+    )
     _raise_injected_candidate_failure(latest.version)
     terminal = authority.read.terminal_record()
     if terminal is not None:
@@ -200,6 +261,13 @@ def run_fenced_syncer(
         if config.membership.mode == "dynamic" and config.scaling.enabled
         else None
     )
+    maintenance_service = MaintenanceService(
+        authority=authority,
+        leader=leader,
+        paths=paths,
+        config=loaded.config.maintenance,
+        telemetry=telemetry,
+    )
     while True:
         renewer.raise_if_failed()
         _admit_requests(loaded, authority, leader, telemetry)
@@ -226,6 +294,7 @@ def run_fenced_syncer(
             )
             terminal = terminal_service.finalize(reason=close_reason)
             control.publish_terminal(terminal)
+            maintenance_service.tick(force=True)
             telemetry.event("terminal_finalized", terminal=terminal)
             return
         outcome = merge_service.merge_once(
@@ -247,6 +316,13 @@ def run_fenced_syncer(
             if outcome is MergeAttemptStatus.NO_BATCH:
                 time.sleep(poll_seconds)
         else:
+            maintenance_service.tick()
+            _pause_candidate_outside_transaction(
+                authority,
+                leader,
+                renewer,
+                version=outcome.version,
+            )
             _raise_injected_candidate_failure(outcome.version)
 
 
@@ -278,30 +354,38 @@ def _initialize_v0(
     optim_path = loaded.paths.epoch_outer_optim_path(
         leader.token.epoch, leader.token.owner_id, 0, publication_id
     )
-    weight, weight_theta_sha = publish_global_weights_immutable(
-        weight_path,
+    weight_payload, weight_theta_sha = encode_global_weights(
         theta,
         param_index,
         dtype=dtype_from_name(config.syncer.publish_dtype),
     )
-    optim, optim_theta_sha = publish_outer_state_immutable(
-        optim_path,
+    optim_payload, optim_theta_sha = encode_outer_state(
         theta,
         outer_state,
         dtype=dtype_from_name(config.syncer.publish_dtype),
     )
-    committed = leader.initialize_v0(
-        command_id=f"initialize-v0-{publication_id}",
+    leader.prepare_publication(
+        command_id=f"initialize-v0-{publication_id}-prepare",
         publication_id=publication_id,
-        weight_relative_path=loaded.paths.relative(weight.path),
-        weight_size=weight.size_bytes,
-        weight_sha256=weight.sha256,
-        optim_relative_path=loaded.paths.relative(optim.path),
-        optim_size=optim.size_bytes,
-        optim_sha256=optim.sha256,
+        target_version=0,
+        selection_batch_id=None,
+        weight_relative_path=loaded.paths.relative(weight_path),
+        weight_size=len(weight_payload),
+        weight_sha256=hashlib.sha256(weight_payload).hexdigest(),
+        optim_relative_path=loaded.paths.relative(optim_path),
+        optim_size=len(optim_payload),
+        optim_sha256=hashlib.sha256(optim_payload).hexdigest(),
         weight_theta_sha256=weight_theta_sha,
         optim_theta_sha256=optim_theta_sha,
     )
+    publish_immutable_bytes(weight_path, weight_payload)
+    publish_immutable_bytes(optim_path, optim_payload)
+    committed = leader.commit_merge(
+        command_id=f"initialize-v0-{publication_id}-commit",
+        publication_id=publication_id,
+    )
+    if isinstance(committed, MergeFenceConflict):
+        raise RuntimeError("v0 unexpectedly encountered a membership fence conflict")
     committed_theta, committed_outer_state = load_outer_state(
         loaded.paths.shared_root / committed.optim_relative_path,
         device=device,

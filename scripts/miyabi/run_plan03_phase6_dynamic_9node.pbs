@@ -1,0 +1,35 @@
+#!/bin/bash
+#PBS -N fsdiloco_p6_g9_dynamic
+#PBS -q regular-g
+#PBS -W group_list=xg24i002
+#PBS -l select=1:mpiprocs=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+#PBS -m ae
+
+set -eEuo pipefail
+trap 'echo "[ERROR] P6 G9 dynamic failed at line $LINENO" >&2' ERR
+
+: "${EVIDENCE_OUTPUT:?EVIDENCE_OUTPUT is required}"
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+export CUDA_VISIBLE_DEVICES=""
+module list 2>&1 | cat
+
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PRIMARY_WORKTREE_ROOT="${PRIMARY_WORKTREE_ROOT:-/work/xg24i002/x10041/fsb_decoupled_diloco}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+CONFIG="${CONFIG:-$PROJECT_ROOT/configs/fs_diloco_tiny_ha_dynamic_acceptance.yaml}"
+RUN_ID="${RUN_ID:-plan03_p6_g9_dynamic_${PBS_JOBID%%.*}}"
+SHARED_ROOT="${SHARED_ROOT:-$PRIMARY_WORKTREE_ROOT/runs/fs_diloco/$RUN_ID}"
+LOG_ROOT="${LOG_ROOT:-$PRIMARY_WORKTREE_ROOT/logs/qsub_${RUN_ID}}"
+
+cd "$PROJECT_ROOT"
+"$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/plan03_p6_dynamic_supervisor.py" \
+  --project-root "$PROJECT_ROOT" \
+  --config "$CONFIG" \
+  --run-id "$RUN_ID" \
+  --shared-root "$SHARED_ROOT" \
+  --log-root "$LOG_ROOT" \
+  --evidence-output "$EVIDENCE_OUTPUT" \
+  --timeout-seconds 1500
+printf 'PLAN03_P6_G9_DYNAMIC_COMPLETE=%s\n' "${PBS_JOBID:-unknown}"

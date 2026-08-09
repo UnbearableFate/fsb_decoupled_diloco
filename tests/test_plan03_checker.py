@@ -195,6 +195,26 @@ def test_plan03_p4_semantic_migration_only_allows_the_reviewed_p5_walltime_chang
     )
 
 
+def test_plan03_p6_acceptance_projection_is_exact_and_rejects_extra_drift(
+    tmp_path: Path,
+) -> None:
+    clone = tmp_path / "clone"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--no-hardlinks", str(ROOT), str(clone)],
+        check=True,
+    )
+    relative = "configs/fs_diloco_tiny_ha_dynamic_acceptance.yaml"
+    path = clone / relative
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    payload["sync"]["quorum_min"] = 1
+    path.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    frozen = str(_expected()["source_identity"]["commit"])
+    assert f"config-migration.full-semantic:{relative}" in verify_p4_migration_contracts(
+        clone, frozen
+    )
+
+
 def test_plan03_checker_guards_p5_removal_and_compatibility_contracts() -> None:
     assert verify_p5_contracts(ROOT, _expected()) == []
 

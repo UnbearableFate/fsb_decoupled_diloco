@@ -8,12 +8,105 @@ import stat
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
-from .atomic_io import publish_immutable_bytes
-from .atomic_io import fsync_directory, sha256_file
+from .atomic_io import fsync_directory, publish_immutable_bytes, read_json, sha256_file
 from .paths import RunPaths
 
 
 PLAN03_REQUIREMENTS = frozenset({"AUDIT-02", "AUDIT-04"})
+
+
+def command_receipt_path(paths: RunPaths, command_id: str) -> Path:
+    if not isinstance(command_id, str) or not command_id:
+        raise ValueError("command_id must not be empty")
+    identity = hashlib.sha256(command_id.encode("utf-8")).hexdigest()
+    return paths.audit_command_receipts / identity[:2] / f"{identity}.json"
+
+
+def _ensure_real_directory(path: Path, *, create: bool) -> bool:
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        if not create:
+            return False
+        path.mkdir()
+        fsync_directory(path.parent)
+        metadata = path.lstat()
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise RuntimeError("archived command receipt parent is not a real directory")
+    return True
+
+
+def _command_receipt_parent(paths: RunPaths, command_id: str, *, create: bool) -> Path | None:
+    target = command_receipt_path(paths, command_id)
+    current = paths.shared_root
+    for component in ("audit", "command_receipts", target.parent.name):
+        current = current / component
+        if not _ensure_real_directory(current, create=create):
+            return None
+    return current
+
+
+def publish_command_receipt(paths: RunPaths, row: dict[str, Any]) -> Path:
+    expected_fields = {
+        "command_id",
+        "command_kind",
+        "request_sha256",
+        "owner_epoch",
+        "result_json",
+        "committed_at",
+    }
+    if set(row) != expected_fields:
+        raise ValueError("archived command receipt has unexpected fields")
+    payload: dict[str, Any] = {"format_version": 1, **row}
+    payload["content_sha256"] = hashlib.sha256(_canonical(payload)).hexdigest()
+    target = command_receipt_path(paths, str(row["command_id"]))
+    _command_receipt_parent(paths, str(row["command_id"]), create=True)
+    publish_immutable_bytes(target, _canonical(payload) + b"\n")
+    return target
+
+
+def read_command_receipt(paths: RunPaths, command_id: str) -> dict[str, Any] | None:
+    target = command_receipt_path(paths, command_id)
+    if _command_receipt_parent(paths, command_id, create=False) is None:
+        return None
+    try:
+        metadata = target.lstat()
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
+        raise RuntimeError("archived command receipt is not an immutable regular file")
+    payload = read_json(target)
+    if payload.get("format_version") != 1 or payload.get("command_id") != command_id:
+        raise RuntimeError("archived command receipt identity is invalid")
+    recorded = payload.get("content_sha256")
+    content = {key: value for key, value in payload.items() if key != "content_sha256"}
+    if recorded != hashlib.sha256(_canonical(content)).hexdigest():
+        raise RuntimeError("archived command receipt content hash is invalid")
+    expected_fields = {
+        "format_version",
+        "command_id",
+        "command_kind",
+        "request_sha256",
+        "owner_epoch",
+        "result_json",
+        "committed_at",
+        "content_sha256",
+    }
+    if set(payload) != expected_fields:
+        raise RuntimeError("archived command receipt has unexpected fields")
+    if (
+        not isinstance(payload["command_kind"], str)
+        or not isinstance(payload["request_sha256"], str)
+        or len(payload["request_sha256"]) != 64
+        or isinstance(payload["owner_epoch"], bool)
+        or not isinstance(payload["owner_epoch"], int)
+        or payload["owner_epoch"] < 1
+        or not isinstance(payload["result_json"], str)
+        or isinstance(payload["committed_at"], bool)
+        or not isinstance(payload["committed_at"], (int, float))
+    ):
+        raise RuntimeError("archived command receipt fields are invalid")
+    return {key: payload[key] for key in expected_fields - {"format_version", "content_sha256"}}
 
 
 def build_audit_batch(

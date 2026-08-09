@@ -88,6 +88,10 @@ class RunPaths:
         return self.shared_root / "audit" / "partitions"
 
     @property
+    def audit_command_receipts(self) -> Path:
+        return self.shared_root / "audit" / "command_receipts"
+
+    @property
     def bootstrap_scheduler_jobs_json(self) -> Path:
         return self.control / "bootstrap_scheduler_jobs.json"
 
@@ -429,6 +433,7 @@ def prepare_authority_dirs(paths: RunPaths) -> None:
         paths.scheduler_operator_requests,
         paths.audit_batches,
         paths.audit_partitions,
+        paths.audit_command_receipts,
     ):
         ensure_dir(directory)
 

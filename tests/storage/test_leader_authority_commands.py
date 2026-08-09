@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import fs_diloco.storage.authority as authority_module
 from fs_diloco.protocol.contributor import StaticMembershipScope
 from fs_diloco.protocol.cycle_receipt import CycleReceiptV1
 from fs_diloco.protocol.proposal import FullUpdateProposalV2
@@ -208,6 +209,114 @@ def test_typed_receipt_proposal_selection_and_v1_commit_flow(tmp_path: Path) -> 
         assert committed.version == 1
         assert committed.predecessor_version == 0
         assert committed.direct_weight_tokens_applied == 6
+
+
+@pytest.mark.crash_matrix
+@pytest.mark.parametrize("repetition", range(10))
+@pytest.mark.parametrize(
+    ("crash_boundary", "lifecycle"),
+    (
+        ("version_insert", "v0"),
+        ("version_insert", "merge"),
+        ("proposal_transition", "merge"),
+        ("db_commit", "v0"),
+        ("db_commit", "merge"),
+    ),
+)
+def test_commit_fault_boundaries_roll_back_and_exact_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    repetition: int,
+    crash_boundary: str,
+    lifecycle: str,
+) -> None:
+    clock = Clock()
+    root = tmp_path / f"{crash_boundary}-{lifecycle}-{repetition}"
+    with open_authority(root, clock) as authority:
+        token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
+        leader = authority.open_leader(token)
+        proposal: FullUpdateProposalV2 | None = None
+        if lifecycle == "v0":
+            intent = leader.prepare_publication(
+                command_id="prepare-v0",
+                publication_id="publication-v0",
+                target_version=0,
+                selection_batch_id=None,
+                **publish_checkpoint_pair(root, version=0),
+            )
+            expected_before = None
+        else:
+            binding = leader.bind_or_replace_static_attempt(
+                command_id="bind-1",
+                learner_id="learner-0",
+                logical_launch_id="launch-0",
+                attempt_id="attempt-1",
+            )
+            fence = {
+                "kind": "static",
+                "learner_id": binding.learner_id,
+                "logical_launch_id": binding.logical_launch_id,
+                "attempt_id": binding.attempt_id,
+                "binding_generation": binding.binding_generation,
+            }
+            receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence))
+            leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
+            proposal = FullUpdateProposalV2.from_dict(
+                proposal_payload(receipt_sha256=receipt.immutable_sha256(), fence=fence)
+            )
+            publish_proposal_payload(root, proposal)
+            leader.ingest_proposal(command_id="proposal-1", proposal=proposal)
+            commit_v0(leader, root)
+            selection = leader.try_select_batch(command_id="select-v1", quorum_min=1, quorum_max=1)
+            assert selection.batch is not None
+            intent = leader.prepare_publication(
+                command_id="prepare-v1",
+                publication_id="publication-v1",
+                target_version=1,
+                selection_batch_id=selection.batch.batch_id,
+                **publish_checkpoint_pair(root, version=1),
+            )
+            expected_before = 0
+
+        def inject(name: str) -> None:
+            if name == crash_boundary:
+                raise RuntimeError(f"injected crash at {name}")
+
+        monkeypatch.setattr(authority_module, "_publication_commit_boundary", inject)
+        with pytest.raises(RuntimeError, match=f"injected crash at {crash_boundary}"):
+            leader.commit_merge(
+                command_id=f"commit-{lifecycle}", publication_id=intent.publication_id
+            )
+
+        connection = sqlite3.connect(root / "authority.sqlite3")
+        try:
+            assert (
+                connection.execute("SELECT MAX(version) FROM global_versions").fetchone()[0]
+                == expected_before
+            )
+            if proposal is not None:
+                assert (
+                    connection.execute(
+                        "SELECT status FROM updates WHERE update_id=?", (proposal.update_id,)
+                    ).fetchone()[0]
+                    == "selected"
+                )
+            assert (
+                connection.execute(
+                    "SELECT state FROM publication_intents WHERE publication_id=?",
+                    (intent.publication_id,),
+                ).fetchone()[0]
+                == "prepared"
+            )
+        finally:
+            connection.close()
+
+        monkeypatch.setattr(authority_module, "_publication_commit_boundary", lambda _name: None)
+        committed = leader.commit_merge(
+            command_id=f"commit-{lifecycle}", publication_id=intent.publication_id
+        )
+        assert committed.version == (0 if lifecycle == "v0" else 1)
+        assert authority.read.latest_committed_version() == committed
 
 
 @pytest.mark.parametrize(

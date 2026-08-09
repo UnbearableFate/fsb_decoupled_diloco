@@ -896,3 +896,9 @@
 - 连续review range为`a540febd489abfac245790967a0b2a5667f90345..57fd2bef341df75c373f433ba3a38252240c6e26`，ancestor检查通过。Codex已在调用Claude前独立保存`code_review/.../P5-delete-classic-refactor/gpt-5.6-sol_57fd2bef341df75c373f433ba3a38252240c6e26.md`，结论`APPROVE`且无finding。
 - fresh Claude session `d4d17fbc-e66f-4514-a1b9-ceb54b16271d`显式请求`claude-opus-5`；JSON回执为HTTP 429、input/output token均0、`modelUsage={}`，原文`You've hit your session limit · resets 10:20pm (Asia/Tokyo)`，未生成target报告。
 - 依据用户规则与`plans/AGENTS.md`，该调用记为`skipped-session-limit`，不重试、不伪造报告且不阻断P5。下一步只汇总Codex审查和该skip，关闭此前H-01/M-01 finding处置并绑定phase evidence/matrix。
+
+## 2026-08-09 23:18 JST — P6 G1 static attempt 1 found three unused/extraneous imports
+
+- Experiment ID `P6-G1-static-attempt1`，该静态门禁目标连续失败次数 1。登录节点并行执行 `git diff --check`、`compileall`、Ruff lint、显式 P6 format scope、P6 PBS `bash -n` 和 P3/P4/P5 boundary Checker；除 Ruff lint 外均通过，未运行 pytest、Torch 或 runtime workload。
+- Ruff 精确报告三个机械问题：`runtime/services/maintenance.py` 遗留未使用的 `Path`，`plan03_p6_test_gate.py` 的常量 `"G0-G1"` 带无效 f-string 前缀，`plan03_p6_two_node_sqlite.py` 遗留未使用的 `sys`。这些均不涉及运行语义。
+- 下一步只删除这两个未使用 import 和一个多余 f-string 前缀，然后从完整 G1 静态门禁重跑；不修改对应 maintenance、test-gate 或 two-node 协议逻辑。

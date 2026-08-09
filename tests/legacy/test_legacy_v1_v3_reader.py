@@ -22,7 +22,7 @@ FRAGMENT_TABLES = (
     "fragment_versions",
     "fragment_updates",
 )
-PLAN03_REQUIREMENTS = frozenset({"LEGACY-01", "P5-FRAGMENT"})
+PLAN03_REQUIREMENTS = frozenset({"LEGACY-01", "P5-FRAGMENT", "P6-DOCS"})
 
 
 def _sha256(path: Path) -> str:

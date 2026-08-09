@@ -7,9 +7,14 @@ import json
 
 import torch
 from safetensors import safe_open
-from safetensors.torch import load_file, save_file
+from safetensors.torch import load_file, save, save_file
 
-from .atomic_io import ImmutablePublication, atomic_write_with_writer, publish_immutable_with_writer
+from .atomic_io import (
+    ImmutablePublication,
+    atomic_write_with_writer,
+    publish_immutable_bytes,
+    publish_immutable_with_writer,
+)
 from .tensor_identity import tensor_content_sha256
 from ..modeling.outer_optim import state_from_tensors, state_to_tensors
 from ..modeling.param_index import flat_to_named_tensors, named_tensors_to_flat
@@ -55,6 +60,48 @@ def publish_safetensors_immutable(
     return publish_immutable_with_writer(path, writer)
 
 
+def encode_global_weights(
+    theta: torch.Tensor,
+    param_index: dict,
+    *,
+    dtype: torch.dtype | None = None,
+) -> tuple[bytes, str]:
+    """Serialize deterministic weight bytes before reserving their publication."""
+
+    published = theta.detach().cpu().contiguous()
+    if dtype is not None:
+        published = published.to(dtype=dtype)
+    theta_sha256 = tensor_content_sha256(published)
+    named_tensors = flat_to_named_tensors(published, param_index)
+    payload = save(
+        named_tensors,
+        metadata={
+            "fs_diloco_theta_sha256": theta_sha256,
+            "fs_diloco_theta_order": json.dumps(list(named_tensors), separators=(",", ":")),
+        },
+    )
+    return payload, theta_sha256
+
+
+def encode_outer_state(
+    theta: torch.Tensor,
+    state: dict[str, torch.Tensor],
+    *,
+    dtype: torch.dtype | None = None,
+) -> tuple[bytes, str]:
+    """Serialize deterministic outer-state bytes before publication I/O."""
+
+    published = theta.detach().cpu().contiguous()
+    if dtype is not None:
+        published = published.to(dtype=dtype)
+    theta_sha256 = tensor_content_sha256(published)
+    payload = save(
+        state_to_tensors(published, state, dtype=dtype),
+        metadata={"fs_diloco_theta_sha256": theta_sha256},
+    )
+    return payload, theta_sha256
+
+
 def publish_global_weights_immutable(
     path: str | Path,
     theta: torch.Tensor,
@@ -62,19 +109,8 @@ def publish_global_weights_immutable(
     *,
     dtype: torch.dtype | None = None,
 ) -> tuple[ImmutablePublication, str]:
-    published = theta.detach().cpu().contiguous()
-    if dtype is not None:
-        published = published.to(dtype=dtype)
-    theta_sha256 = tensor_content_sha256(published)
-    named_tensors = flat_to_named_tensors(published, param_index)
-    publication = publish_safetensors_immutable(
-        path,
-        named_tensors,
-        metadata={
-            "fs_diloco_theta_sha256": theta_sha256,
-            "fs_diloco_theta_order": json.dumps(list(named_tensors), separators=(",", ":")),
-        },
-    )
+    payload, theta_sha256 = encode_global_weights(theta, param_index, dtype=dtype)
+    publication = publish_immutable_bytes(path, payload)
     return publication, theta_sha256
 
 
@@ -85,15 +121,8 @@ def publish_outer_state_immutable(
     *,
     dtype: torch.dtype | None = None,
 ) -> tuple[ImmutablePublication, str]:
-    published = theta.detach().cpu().contiguous()
-    if dtype is not None:
-        published = published.to(dtype=dtype)
-    theta_sha256 = tensor_content_sha256(published)
-    publication = publish_safetensors_immutable(
-        path,
-        state_to_tensors(published, state, dtype=dtype),
-        metadata={"fs_diloco_theta_sha256": theta_sha256},
-    )
+    payload, theta_sha256 = encode_outer_state(theta, state, dtype=dtype)
+    publication = publish_immutable_bytes(path, payload)
     return publication, theta_sha256
 
 

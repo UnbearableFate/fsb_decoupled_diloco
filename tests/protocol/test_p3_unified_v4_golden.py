@@ -15,7 +15,7 @@ from fs_diloco.protocol.selection import PersistentFairSelector
 from fs_diloco.protocol.token_accounting import TrainingSegmentAccumulator
 
 
-PLAN03_REQUIREMENTS = frozenset({"P3-REBASE", "SEL-02", "SEL-06", "TOK-02"})
+PLAN03_REQUIREMENTS = frozenset({"P3-REBASE", "P6-QUALITY", "SEL-02", "SEL-06", "TOK-02"})
 
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures/golden"
