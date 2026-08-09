@@ -1,0 +1,11 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-remediation-final-target-dynamic-replacement",
+  "recorded_at": "2026-08-09T13:44:17+09:00",
+  "status": "PASS", "errors": [], "source_commit": "27f1a0388cbe27a32b24e6d5d72ff550818a4797",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_dynamic_replace_2509854",
+  "identity": {"run_id": "plan03_p4_dynamic_replace_2509854", "git_dirty": false, "source_fingerprint": "sha256:585201b9e6fd6b7f5599185c37dcc7d23c555e66fcdeede6aac7d2d0d16e360f", "descriptor_sha256": "21e179ff8b110c6ef13acad12b9cee9815be8e0cdd73bf7b42a34ba50697a459"},
+  "pbs": {"job_id": "2509854.opbs", "host": "mg0011", "queue": "debug-g", "requested_walltime": "00:10:00", "actual_walltime": "00:00:16", "exit_status": 0, "stdout_sha256": "7b67b5e71e968f0b8ef3c01e2be28c602c3d344a7eb448283c872dd8aa3158b9"},
+  "checks": {"stale_old_process_status": 0, "old_instance_status": "revoked", "replacement_instance_status": "stopped", "old_incarnation_successful_commits_after_replacement": 0},
+  "authority": {"database_sha256_before_cleanup": "37c9c0066c351f1a696c0845087f686770278cff1a501c52a01d4e63b515b4f4", "final_version": 20, "direct_weight_tokens_applied": 6400, "acked_terminal_fences": 1, "hard_crash_gap_tokens_upper_bound": 0, "integrity_check": "ok"}
+}

@@ -1,0 +1,37 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-remediation-final-target-runtime",
+  "recorded_at": "2026-08-09T13:45:00+09:00",
+  "status": "PASS",
+  "errors": [],
+  "source_commit": "27f1a0388cbe27a32b24e6d5d72ff550818a4797",
+  "source_identity": {
+    "git_dirty": false,
+    "source_fingerprint": "sha256:585201b9e6fd6b7f5599185c37dcc7d23c555e66fcdeede6aac7d2d0d16e360f",
+    "review_target_worktree": "/work/xg24i002/x10041/fsb_decoupled_diloco_p4_27f1a03"
+  },
+  "requirements_covered": ["AUTH-02", "AUTH-03", "AUTH-04", "AUTH-05", "AUTH-07", "AUTH-09", "AUTH-10", "MODE-02", "P4-MIGRATE"],
+  "static_validation": {
+    "status": "PASS",
+    "commands": ["bash -n scripts/miyabi/*.pbs scripts/miyabi/*.sh scripts/local/*.sh", "literal #PBS -W group_list=xg24i002 per-file scan", "ruff check fs_diloco tests scripts/miyabi", "python -m compileall -q fs_diloco scripts/miyabi tests", "git diff --check", "Plan03 frozen/current boundary Checker"],
+    "walltime_basis": "target jobs completed in 16-90 seconds; all submissions used the repository minimum 00:10:00"
+  },
+  "evidence": {
+    "main": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-134417_p4-remediation-final-target-main_pass.json",
+    "static_rerun": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-134417_p4-remediation-final-target-static-rerun_pass.json",
+    "dynamic_replacement": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-134417_p4-remediation-final-target-dynamic-replacement_pass.json",
+    "error_successor": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-134417_p4-remediation-final-target-error-successor_pass.json",
+    "two_host_takeover": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-134417_p4-remediation-final-target-two-host-takeover_pass.json",
+    "plan01_regression": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-134417_p4-remediation-final-target-plan01-regression_pass.json",
+    "migration_baseline": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-095600_p4-config-migration-matrix_pass.json",
+    "migration_delta": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-121500_p4-remediation-migration-delta_pass.json"
+  },
+  "compute_jobs": [
+    {"job_id": "2509856.opbs", "hosts": ["mg0013"], "nodes": 1, "actual_walltime": "00:01:30", "purpose": "lint/format/Checker, focused and full tests, real static and dynamic pipelines", "result": {"focused_tests": 78, "full_tests": 896, "static_final_version": 2, "dynamic_final_version": 12, "acked_terminal_fences": 3, "hard_crash_gap_tokens_upper_bound": 0, "integrity_check": "ok"}},
+    {"job_id": "2509855.opbs", "hosts": ["mg0012"], "nodes": 1, "actual_walltime": "00:00:21", "purpose": "unauthorized static duplicate plus operator-authorized same-launch replacement after post-revalidation pause", "result": {"unauthorized_duplicate_exit_status": 1, "old_post_boundary_commits": 0, "new_generation": 2, "final_version": 20, "integrity_check": "ok"}},
+    {"job_id": "2509854.opbs", "hosts": ["mg0011"], "nodes": 1, "actual_walltime": "00:00:16", "purpose": "dynamic replacement and stale-incarnation fencing", "result": {"old_instance_status": "revoked", "replacement_instance_status": "stopped", "old_post_boundary_commits": 0, "final_version": 20, "integrity_check": "ok"}},
+    {"job_id": "2509857.opbs", "hosts": ["mg0014"], "nodes": 1, "actual_walltime": "00:00:19", "purpose": "candidate error, polluted fixed cache, explicit successor", "result": {"epoch_states": ["error", "released"], "final_version": 20, "integrity_check": "ok"}},
+    {"job_id": "2509858.opbs", "hosts": ["mg0843", "mg0856"], "nodes": 2, "actual_walltime": "00:00:22", "purpose": "two-host candidate death and lease-expiry takeover", "result": {"epoch_states": ["expired", "released"], "duplicate_versions": 0, "final_version": 20, "integrity_check": "ok"}},
+    {"job_id": "2509853.opbs", "hosts": ["mg0010"], "nodes": 1, "actual_walltime": "00:01:15", "purpose": "Plan01 full-suite and strict-v4 compatibility regression", "result": {"full_tests": 896, "final_version": 2, "actor_attestations": 3, "jsonl_telemetry_streams": 3, "legacy_csv_files": 0, "integrity_check": "ok"}}
+  ]
+}

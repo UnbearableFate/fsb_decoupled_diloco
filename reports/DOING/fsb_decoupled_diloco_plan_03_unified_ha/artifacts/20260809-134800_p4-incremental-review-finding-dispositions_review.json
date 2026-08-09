@@ -1,0 +1,142 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-incremental-review-finding-dispositions",
+  "recorded_at": "2026-08-09T13:48:00+09:00",
+  "status": "PASS",
+  "review_base": "0e8b14ed08eacda710a0f1b4ebf3b19f921f31e4",
+  "review_target": "d18fae055b5beec1887f38c3f2070f0bf6ec901b",
+  "remediation_source_commit": "27f1a0388cbe27a32b24e6d5d72ff550818a4797",
+  "review_reports": [
+    "reports/DOING/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P4-mandatory-fenced-runtime/gpt-5.6-sol_d18fae055b5beec1887f38c3f2070f0bf6ec901b.md",
+    "reports/DOING/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P4-mandatory-fenced-runtime/claude-opus-5_d18fae055b5beec1887f38c3f2070f0bf6ec901b.md"
+  ],
+  "codex": {
+    "M1": {
+      "disposition": "fixed",
+      "resolution": "Admission discovery now distinguishes unreadable observations from successfully read invalid bytes, isolates every observation, retries transient reads without disposition or removal, and durably disposes invalid UTF-8 without terminating the candidate.",
+      "tests": [
+        "tests/runtime/test_p4_mandatory_runtime.py::test_unreadable_hot_entry_does_not_block_other_admissions",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_invalid_utf8_hot_request_is_disposed_once_without_candidate_failure",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_one_shot_hot_read_error_retries_without_discarding_valid_request"
+      ]
+    },
+    "M2": {
+      "disposition": "fixed",
+      "resolution": "Valid request history now stores the same newline-terminated canonical JSON bytes used by the content digest; invalid history remains raw-byte addressed.",
+      "tests": [
+        "tests/runtime/test_p4_mandatory_runtime.py::test_semantically_identical_valid_request_archives_canonical_bytes"
+      ]
+    },
+    "M3": {
+      "disposition": "fixed",
+      "resolution": "Disposition replay and the public reader share exact response/rejection decoders; admitted replay additionally requires the exact current pointer and its response digest before hot-request removal.",
+      "tests": [
+        "tests/runtime/test_p4_mandatory_runtime.py::test_disposition_replay_requires_consumer_valid_resume_and_current_pointer",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_disposition_replay_requires_exact_current_admission_pointer",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_disposition_replay_requires_consumer_valid_rejection_message"
+      ]
+    },
+    "L1": {
+      "disposition": "deferred-with-justification",
+      "owner": "P6-acceptance-final-review/G6",
+      "resolution_required_before_plan_completion": "Define and enforce a maximum hot-request size using both pre-read metadata and streaming limits; persist only a bounded diagnostic plus full digest for an oversized invalid request; add just-below/at/above-limit and mutation-during-read tests.",
+      "justification": "The issue is a bounded-resource hardening gap, not a P4 authorization or fencing correctness failure. P6 G6 is the already frozen owner of 10,000-cycle inode/byte/row bounds, so the protocol limit and its measured bound must be closed there and may not be waived at plan completion."
+    }
+  },
+  "claude": {
+    "H1": {
+      "disposition": "fixed",
+      "same_resolution_as": "codex.M1"
+    },
+    "H2": {
+      "disposition": "fixed",
+      "same_resolution_as": "codex.M1"
+    },
+    "M1": {
+      "disposition": "fixed",
+      "resolution": "Admission response paths are contributor-fence-specific and rejection paths are request-digest-specific; immutable conflicts are contained per observation.",
+      "tests": [
+        "tests/runtime/test_p4_mandatory_runtime.py::test_request_specific_rejections_do_not_collide_when_attempt_id_is_reused"
+      ]
+    },
+    "M2": {
+      "disposition": "fixed",
+      "resolution": "Response identity includes the full contributor fence, so an authorized replacement may reuse an old attempt ID without colliding with the former immutable response.",
+      "tests": [
+        "tests/runtime/test_p4_mandatory_runtime.py::test_authorized_replacement_can_reuse_an_old_attempt_id"
+      ]
+    },
+    "M3": {
+      "disposition": "fixed",
+      "resolution": "Admission command IDs are stable across leader epochs and an exact current binding takes an idempotent recovery path, repairing response/current/disposition state without emitting a false rejection.",
+      "tests": [
+        "tests/runtime/test_p4_mandatory_runtime.py::test_cross_epoch_admission_replay_preserves_committed_admitted_outcome"
+      ]
+    },
+    "M4": {
+      "disposition": "deferred-with-justification",
+      "owner": "P6-acceptance-final-review/G6",
+      "resolution_required_before_plan_completion": "Implement authority-aware retention/compaction for registration history, dispositions and consumed static replacement authorizations; retain live hot-request dependencies and audit identities; prove configured inode/byte bounds over 10,000 cycles and a negative no-live-reference-deletion case.",
+      "justification": "These immutable records are deliberate audit authority and cannot be deleted safely without the G6 live-reference and terminal-run model. P6 owns the frozen boundedness measurement and this item remains mandatory before plan completion."
+    },
+    "M5": {
+      "disposition": "fixed",
+      "resolution": "MODE-02 is now owned by P4, all P4 rows point to source-targeted structured evidence, and the Checker accepts only exact-source or source-equivalent evidence-only descendants.",
+      "tests": [
+        "tests/test_plan03_checker.py::test_plan03_requirement_checker_accepts_evidence_only_descendant_target",
+        "tests/test_plan03_checker.py::test_plan03_p4_gate_requirements_are_owned_by_the_p4_phase"
+      ],
+      "evidence": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-134700_p4-remediation-final-target-requirements_pass.json"
+    },
+    "L1": {
+      "disposition": "deferred-with-justification",
+      "owner": "P6-acceptance-final-review/G6",
+      "resolution_required_before_plan_completion": "Make current-admission control repair conditional on a missing or invalid exact response/current pointer and prove that an unchanged steady-state poll performs zero immutable publications.",
+      "justification": "The current path is byte-idempotent and correct but performs avoidable O(N) shared-filesystem metadata work; P6 G6 owns the steady-state metadata-operation and bounded-resource evidence."
+    },
+    "L2": {
+      "disposition": "rejected-with-evidence",
+      "resolution": "Malformed raw bytes do not have a trusted actor or attempt identity, so publishing an actor-addressed rejection from partially parsed hostile bytes would create a spoofable control. Valid schema-invalid requests with an exact trusted identity already receive request-specific learner-visible rejection; raw malformed observations retain content-addressed disposition/history and telemetry evidence.",
+      "evidence": [
+        "fs_diloco/protocol/admission_v4.py",
+        "tests/runtime/test_p4_mandatory_runtime.py::test_invalid_utf8_hot_request_is_disposed_once_without_candidate_failure"
+      ]
+    },
+    "L3": {
+      "disposition": "deferred-with-justification",
+      "same_resolution_as": "codex.L1"
+    },
+    "L4": {
+      "disposition": "deferred-with-justification",
+      "owner": "P6-acceptance-final-review",
+      "resolution_required_before_plan_completion": "Add a bounded, deadline-aware retry for transient current-pointer/response read failures at the second pre-torch admission validation while preserving immediate fail-closed behavior for a successfully observed mismatching fence; add one-shot and persistent-failure tests.",
+      "justification": "The second validation is fail closed and cannot authorize a stale actor; the remaining issue is transient-I/O liveness and belongs to the final filesystem fault matrix."
+    },
+    "L5": {
+      "disposition": "fixed",
+      "resolution": "Optimization-removable runtime asserts in control_v4 were replaced with explicit type checks."
+    },
+    "L6": {
+      "disposition": "rejected-with-evidence",
+      "resolution": "The migration lock is intentionally a persistent inode. Unlinking it after releasing flock permits a waiter holding the old inode and a newcomer locking a recreated inode to enter concurrently, which is the split-lock race the lock prevents. The empty lock file is bounded at one per migrated config and is not runtime state."
+    },
+    "L7": {
+      "disposition": "deferred-with-justification",
+      "owner": "P5-delete-classic-refactor",
+      "resolution_required_before_plan_completion": "Catch immutable authorization collisions in the operator CLI and print an actionable instruction to issue a fresh attempt ID; synchronize the operator documentation with that recovery rule and test the diagnostic exit path.",
+      "justification": "The immutable collision is fail closed and cannot alter authority. The deficiency is operator recovery guidance, and P5 already owns CLI/documentation cleanup before final acceptance."
+    },
+    "L8": {
+      "disposition": "fixed",
+      "resolution": "The static test signal is emitted only after the second admission revalidation and immediately before torch import; the specialty job pauses there and proves the resumed old generation makes zero commits after replacement.",
+      "evidence": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-134417_p4-remediation-final-target-static-rerun_pass.json"
+    }
+  },
+  "target_validation": {
+    "runtime": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-134500_p4-remediation-final-target-runtime_pass.json",
+    "requirements": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-134700_p4-remediation-final-target-requirements_pass.json",
+    "focused_tests": "78 passed",
+    "full_tests": "896 passed",
+    "specialty_jobs": ["2509855.opbs", "2509854.opbs", "2509857.opbs", "2509858.opbs", "2509853.opbs"]
+  }
+}
