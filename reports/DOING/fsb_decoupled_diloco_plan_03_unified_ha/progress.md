@@ -1066,3 +1066,9 @@
 
 - `check_plan03.py --phase P6-acceptance-final-review --mode staged --verification-target-ref 9b7e1dac...` retained the frozen boundary, P3 operational and P5 deletion/legacy-reader verifiers, resolved all eight current P6 matrix evidence bindings, and returned `PASS` with zero errors/differences. Artifact: `artifacts/20260810-082000_p6-requirements-plan-final-staged-pass.json`.
 - Its source identity is the clean formal target despite report/plan edits outside the canonical executable scopes. The next and final machine gate is to commit this evidence set, then repeat in completed mode with tracked-evidence enforcement; no source change or recursive product review is introduced by that evidence-only commit.
+
+## 2026-08-10 08:22 JST — plan-final completed tracked-evidence Checker PASS
+
+- Commit `885f9a5d0a7913d7253e0cafc7136aa09b3afe99` tracks the final remediation review, G0–G10, aggregate, quality/docs, cleanup, matrix and staged-check evidence while remaining source-equivalent to formal runtime target `9b7e1dacdecbea8951121b3f70a6caece481a380` over the canonical scopes.
+- Completed mode retained all current migration/removal, P3 operational and P5 deletion/legacy-reader checks and enabled `--require-tracked-evidence`. It resolved `requirements_source_commit=9b7e1dac...`, found all eight structured P6 evidence owners tracked, and returned `PASS` with zero errors/differences: `artifacts/20260810-082200_p6-requirements-plan-final-completed-pass.json`.
+- All 17 completion-definition groups are now satisfied: the all-tracked current-state review findings are closed, the final incremental Codex review approved the target, Claude is verifiably skipped only for its HTTP 429 session limit, every formal runtime/performance/documentation gate is final on one clean source identity, and no PBS job remains. The plan is complete after this terminal artifact and record are committed; the user-owned `plans/AGENTS.md` modification remains excluded.
