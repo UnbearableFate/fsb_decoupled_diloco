@@ -162,7 +162,7 @@ if [[ "$duplicate_status" -eq 0 ]]; then
   exit 1
 fi
 if [[ -e "$DUPLICATE_SIGNAL" ]]; then
-  echo "Unauthorized duplicate crossed the pre-torch admission signal" >&2
+  echo "Unauthorized duplicate crossed the post-revalidation pre-torch admission signal" >&2
   exit 1
 fi
 if ! rg -q 'AdmissionRejectedError.*active static replacement requires' \

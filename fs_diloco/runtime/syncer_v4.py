@@ -20,6 +20,7 @@ from ..observability.logging_utils import ActorTelemetryWriter
 from ..protocol.admission_v4 import (
     ADMISSION_RESPONSE_FORMAT_VERSION,
     AdmissionAuthorizationError,
+    AdmissionRequestObservation,
     admission_request_error,
     admission_request_sha256,
     archive_disposed_admission_request,
@@ -41,6 +42,7 @@ from ..protocol.cycle_receipt import (
     CycleReceiptV1,
     canonical_receipt_id,
     canonical_receipt_relative_path,
+    contributor_fence_namespace,
 )
 from ..protocol.data_cursor import ContributorResumeState
 from ..protocol.merge import normalized_update_weights, weighted_average_tensors
@@ -62,7 +64,17 @@ from ..storage.tensor_codec import (
 
 
 PLAN03_REQUIREMENTS = frozenset(
-    {"AUTH-02", "AUTH-03", "AUTH-04", "AUTH-05", "AUTH-07", "AUTH-09", "AUTH-10", "P4-MIGRATE"}
+    {
+        "AUTH-02",
+        "AUTH-03",
+        "AUTH-04",
+        "AUTH-05",
+        "AUTH-07",
+        "AUTH-09",
+        "AUTH-10",
+        "MODE-02",
+        "P4-MIGRATE",
+    }
 )
 
 
@@ -345,9 +357,42 @@ def _admit_requests(
     leader: LeaderSession,
     telemetry: ActorTelemetryWriter,
 ) -> None:
-    descriptor = loaded.descriptor
     _repair_current_admission_controls(loaded, authority, leader)
-    for path, request in iter_admission_requests(loaded.paths):
+    for observation in iter_admission_requests(loaded.paths):
+        if observation.original is None:
+            telemetry.event(
+                "admission_request_deferred",
+                request_path=str(observation.path),
+                error_type=observation.read_error_type,
+                error_errno=observation.read_errno,
+            )
+            continue
+        try:
+            _admit_observations_unprotected(loaded, authority, leader, telemetry, (observation,))
+        except (OSError, RuntimeError) as exc:
+            telemetry.event(
+                "admission_request_deferred",
+                request_path=str(observation.path),
+                error_type=type(exc).__name__,
+                error=str(exc)[:256],
+            )
+
+
+def _admit_observations_unprotected(
+    loaded: LoadedRunDescriptor,
+    authority: LeaderAuthority,
+    leader: LeaderSession,
+    telemetry: ActorTelemetryWriter,
+    observations: tuple[AdmissionRequestObservation, ...],
+) -> None:
+    descriptor = loaded.descriptor
+    for observation in observations:
+        path = observation.path
+        request = observation.payload
+        original = observation.original
+        identity = observation.identity
+        if original is None or identity is None:
+            raise RuntimeError("readable admission observation lost bytes or identity")
         invalid = (
             ("MalformedAdmissionRequest", "request is not a JSON object")
             if request is None
@@ -368,6 +413,8 @@ def _admit_requests(
                 owner_id=leader.token.owner_id,
                 error_type=error_type,
                 message=message,
+                original=original,
+                identity=identity,
             )
             telemetry.event(
                 "admission_request_discarded",
@@ -379,47 +426,58 @@ def _admit_requests(
         request_sha = admission_request_sha256(request)
         disposition_path = loaded.paths.registration_disposition_path(request_sha)
         if disposition_path.is_file():
-            archive_disposed_admission_request(loaded.paths, request_path=path, request=request)
+            archive_disposed_admission_request(
+                loaded.paths,
+                request_path=path,
+                request=request,
+                original=original,
+                identity=identity,
+            )
             continue
-        command_id = f"admit-e{leader.token.epoch}-{request_sha}"
+        command_id = f"admit-{request_sha}"
         try:
             if request.get("mode") == "static":
                 prior = authority.read.static_binding(str(request["learner_id"]))
-                authorization = None
-                if prior is not None and (
-                    prior.attempt_id != str(request["attempt_id"])
-                    or prior.logical_launch_id != str(request["logical_launch_id"])
+                if (
+                    prior is not None
+                    and prior.status == "active"
+                    and prior.logical_launch_id == str(request["logical_launch_id"])
+                    and prior.attempt_id == str(request["attempt_id"])
                 ):
-                    prior_fence = StaticContributorFence(
-                        kind="static",
-                        learner_id=prior.learner_id,
-                        logical_launch_id=prior.logical_launch_id,
-                        attempt_id=prior.attempt_id,
-                        binding_generation=prior.binding_generation,
-                    )
-                    if prior.status == "active" or (
-                        prior.logical_launch_id != str(request["logical_launch_id"])
-                    ):
-                        authorization = read_static_replacement_authorization(
-                            loaded.paths,
-                            request=request,
-                            current_fence=prior_fence,
+                    binding = prior
+                else:
+                    authorization = None
+                    if prior is not None:
+                        prior_fence = StaticContributorFence(
+                            kind="static",
+                            learner_id=prior.learner_id,
+                            logical_launch_id=prior.logical_launch_id,
+                            attempt_id=prior.attempt_id,
+                            binding_generation=prior.binding_generation,
                         )
-                binding = leader.bind_or_replace_static_attempt(
-                    command_id=command_id,
-                    learner_id=str(request["learner_id"]),
-                    logical_launch_id=str(request["logical_launch_id"]),
-                    attempt_id=str(request["attempt_id"]),
-                    expected_generation=request["expected_generation"],
-                    allow_logical_replacement=authorization is not None,
-                    replacement_reason=(
-                        f"operator_static_replacement:{authorization[1]}"
-                        if prior is not None
-                        and prior.status == "active"
-                        and authorization is not None
-                        else None
-                    ),
-                )
+                        if prior.status == "active" or (
+                            prior.logical_launch_id != str(request["logical_launch_id"])
+                        ):
+                            authorization = read_static_replacement_authorization(
+                                loaded.paths,
+                                request=request,
+                                current_fence=prior_fence,
+                            )
+                    binding = leader.bind_or_replace_static_attempt(
+                        command_id=command_id,
+                        learner_id=str(request["learner_id"]),
+                        logical_launch_id=str(request["logical_launch_id"]),
+                        attempt_id=str(request["attempt_id"]),
+                        expected_generation=request["expected_generation"],
+                        allow_logical_replacement=authorization is not None,
+                        replacement_reason=(
+                            f"operator_static_replacement:{authorization[1]}"
+                            if prior is not None
+                            and prior.status == "active"
+                            and authorization is not None
+                            else None
+                        ),
+                    )
                 fence = StaticContributorFence(
                     kind="static",
                     learner_id=binding.learner_id,
@@ -480,7 +538,13 @@ def _admit_requests(
                 control_path=rejection,
                 error_type=type(exc).__name__,
             )
-            archive_disposed_admission_request(loaded.paths, request_path=path, request=request)
+            archive_disposed_admission_request(
+                loaded.paths,
+                request_path=path,
+                request=request,
+                original=original,
+                identity=identity,
+            )
             telemetry.event(
                 "admission_rejected",
                 request_path=str(path),
@@ -518,7 +582,13 @@ def _admit_requests(
             control_path=response,
             fence=fence,
         )
-        archive_disposed_admission_request(loaded.paths, request_path=path, request=request)
+        archive_disposed_admission_request(
+            loaded.paths,
+            request_path=path,
+            request=request,
+            original=original,
+            identity=identity,
+        )
         telemetry.event("learner_admitted", request_path=str(path), response_path=str(response))
 
 
@@ -601,6 +671,7 @@ def _existing_admission_resume(
         leader.token.owner_id,
         actor_id,
         attempt_id,
+        contributor_fence_namespace(fence),
     )
     existing = safe_read_json(response_path)
     if existing is None:
@@ -633,15 +704,11 @@ def _existing_admission_resume(
         raise RuntimeError("existing admission response resume state is invalid")
     try:
         return ContributorResumeState(
-            cursor=int(resume_payload["cursor"]),
+            cursor=resume_payload["cursor"],
             last_receipt_id=resume_payload["last_receipt_id"],
             last_receipt_sha256=resume_payload["last_receipt_sha256"],
-            next_cycle_seq=int(resume_payload["next_cycle_seq"]),
-            stream_epoch=(
-                None
-                if resume_payload["stream_epoch"] is None
-                else int(resume_payload["stream_epoch"])
-            ),
+            next_cycle_seq=resume_payload["next_cycle_seq"],
+            stream_epoch=resume_payload["stream_epoch"],
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise RuntimeError("existing admission response resume state is invalid") from exc

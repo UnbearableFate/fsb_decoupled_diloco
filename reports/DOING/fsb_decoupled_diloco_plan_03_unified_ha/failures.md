@@ -548,3 +548,34 @@
 - Expected versus actual: identical malformed bytes at different hot paths should share one content-addressed archive/disposition and both be removed, but `original_path` made the archive payload differ under the same raw hash. A truncated disposition containing only `request_sha256` incorrectly authorized archival/removal of a valid unprocessed request. A response containing an extra field was accepted when the mutable current pointer carried its new hash.
 - Confirmed cause and next modification: make invalid-request history purely content-addressed, strictly validate every existing disposition before hot removal (identity, exact fields, outcome/fence consistency and exact epoch response/rejection path), and enforce exact response/resume fields in the learner reader. Evidence: `artifacts/20260809-114100_p4-admission-collision-validation-red_fail.json`; raw log `fsdiloco_plan03_p4.o2509478`.
 - Confirmed cause/next test: this is a stale validation diagnostic set, not a production defect. Add `AdmissionSupersededError` to the expected fail-closed alternatives, retain every unauthorized-duplicate and post-boundary SQL assertion, then rerun the same 10-minute gate.
+# 2026-08-09 P4 incremental review RED (job 2509636)
+
+- Target under review: `0e8b14ed08eacda710a0f1b4ebf3b19f921f31e4..d18fae055b5beec1887f38c3f2070f0bf6ec901b`.
+- Command: `qsub -l walltime=00:10:00 scripts/miyabi/run_plan03_phase4_tests.pbs` after the required repository-wide `bash -n` static validation.
+- Result: expected RED, `67 passed, 10 failed` in the focused P4 module. The failures independently reproduce unreadable/transient/invalid-UTF8 hot-entry handling, canonical-history collision, request-path rejection collision, attempt-ID response collision, weak disposition validation, and cross-epoch admission replay misclassification.
+- The job stopped before full pytest and runtime pipelines. No persistent run root was created; the scheduler-owned temporary directory required no manual cleanup.
+- Evidence: `artifacts/20260809-125540_p4-incremental-review-red_fail.json`; retained raw failure log `fsdiloco_plan03_p4.o2509636` until GREEN remediation is complete.
+# 2026-08-09 P4 incremental remediation attempt 1 (job 2509653)
+
+- Focused result: `76 passed, 1 failed`; all new hot-path, canonical-history, request-specific control-key, attempt-reuse, and strict disposition tests were GREEN.
+- Remaining failure: cross-epoch replay still produced `rejected` because the stable command ID was replayed with a different command payload: the original replacement had an authorization-derived reason, while the now-current exact binding no longer reconstructed that authorization. The command journal correctly raised `CommandConflictError`.
+- Fix: recognize an exact active static binding as the already committed admission before reconstructing authorization or issuing a mutation command. This preserves the committed outcome without weakening replacement authorization.
+- Evidence: `artifacts/20260809-130640_p4-incremental-remediation-attempt1_fail.json`; retained raw log `fsdiloco_plan03_p4.o2509653` until GREEN.
+# 2026-08-09 P4 incremental remediation attempt 2 (job 2509656)
+
+- P4 focused suite is GREEN: `77 passed`.
+- Full suite reached `893 passed, 1 failed`; the sole failure is an unrelated pre-existing clock-boundary flake in `test_source_identity_is_recorded_from_frozen_launcher_environment`: two consecutive default run IDs were generated at `13:08:34` and `13:08:35` while the test assumes the current second cannot change.
+- No admission, runtime, Checker, or review-remediation assertion failed. The unchanged validation will be rerun once; if this repeats, the test will freeze time explicitly.
+- Evidence: `artifacts/20260809-130855_p4-incremental-remediation-attempt2_fail.json`; retained raw log `fsdiloco_plan03_p4.o2509656`.
+# 2026-08-09 P4 incremental remediation attempt 3 (job 2509663)
+
+- Static validation and both test layers passed: `77 focused`, `894 full`; static v4 pipeline reached version 2 with 256 direct-weight tokens.
+- Dynamic pipeline timed out before torch import even though authority admitted the instance. The revised reader incorrectly used dynamic `actor_id` to locate the current pointer; dynamic pointers are keyed by stable stream ID (`0` in this run), unlike static mode where learner ID is both actor and stable key.
+- Fix: make the stable contributor key explicit in the reader contract and pass stream ID for dynamic learners. The reader validates the decoded fence against that key.
+- Evidence: `artifacts/20260809-131405_p4-incremental-remediation-attempt3_fail.json`; retained raw log `fsdiloco_plan03_p4.o2509663`.
+
+# 2026-08-09 13:26 JST — P4 static literal-group scan command failure
+
+- Experiment `p4-static-group-scan-command`, consecutive failure 1, ran on the `miyabi-g1` login node as a static-only pre-submit check. The command incorrectly used ripgrep `-L` as though it meant “files without a match”; for ripgrep it means `--follow`, so all matching PBS paths were printed and the wrapper intentionally exited 1.
+- This was a validation-command defect, not a source or PBS defect. The corrected explicit per-file `rg -q '^#PBS -W group_list=xg24i002$'` loop exited 0 with no missing files. `bash -n` for all required PBS/shell scopes had already passed.
+- Evidence: `artifacts/20260809-132601_p4-static-group-scan-command_fail.json`. Future scans use the explicit per-file loop; no code remediation is required.

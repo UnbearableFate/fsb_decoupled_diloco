@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import sys
 import time
@@ -12,6 +13,7 @@ from pathlib import Path
 
 from ..core.run_descriptor import load_run_descriptor
 from ..protocol.admission_v4 import (
+    admission_request_sha256,
     highest_static_generation,
     new_attempt_id,
     publish_dynamic_request,
@@ -71,7 +73,7 @@ def main(argv: list[str] | None = None) -> None:
         actor_id = f"learner_li_{uuid.uuid4()}"
         token_sha = hashlib.sha256(os.urandom(32)).hexdigest()
         prepare_learner_instance_dir(loaded.paths, str(stream_id))
-        publish_dynamic_request(
+        request_path = publish_dynamic_request(
             loaded.paths,
             run_id=str(descriptor["run_id"]),
             descriptor_sha256=str(descriptor["descriptor_sha256"]),
@@ -82,6 +84,7 @@ def main(argv: list[str] | None = None) -> None:
             replace_instance_id=args.replace_instance_id,
         )
         response_attempt_id = actor_id
+        response_stable_key = str(stream_id)
     else:
         if args.learner_id is None:
             raise ValueError("static learner requires --learner-id")
@@ -96,7 +99,7 @@ def main(argv: list[str] | None = None) -> None:
             learner_id=actor_id,
         )
         observed_generation = highest_static_generation(loaded.paths, actor_id)
-        publish_static_request(
+        request_path = publish_static_request(
             loaded.paths,
             run_id=str(descriptor["run_id"]),
             descriptor_sha256=str(descriptor["descriptor_sha256"]),
@@ -106,6 +109,9 @@ def main(argv: list[str] | None = None) -> None:
             expected_generation=observed_generation,
         )
         response_attempt_id = attempt_id
+        response_stable_key = actor_id
+    request_payload = json.loads(request_path.read_bytes())
+    request_sha256 = admission_request_sha256(request_payload)
     timeout = (
         shared.membership.initial_membership_deadline_seconds
         if dynamic and args.bootstrap_slot is not None
@@ -124,6 +130,8 @@ def main(argv: list[str] | None = None) -> None:
             descriptor_sha256=str(descriptor["descriptor_sha256"]),
             actor_id=actor_id,
             attempt_id=response_attempt_id,
+            stable_contributor_key=response_stable_key,
+            request_sha256=request_sha256,
             max_clock_skew_seconds=config.leader.max_clock_skew_seconds,
         )
         if admission is not None:
@@ -133,6 +141,20 @@ def main(argv: list[str] | None = None) -> None:
         raise TimeoutError(f"learner admission timed out before torch import: {actor_id}")
     if "torch" in sys.modules:
         raise RuntimeError("learner admission gate imported torch")
+    current_admission = read_admission_response(
+        loaded.paths,
+        run_id=str(descriptor["run_id"]),
+        descriptor_sha256=str(descriptor["descriptor_sha256"]),
+        actor_id=actor_id,
+        attempt_id=response_attempt_id,
+        stable_contributor_key=response_stable_key,
+        request_sha256=request_sha256,
+        max_clock_skew_seconds=config.leader.max_clock_skew_seconds,
+    )
+    if current_admission != admission:
+        raise RuntimeError("learner admission changed immediately before torch import")
+    if "torch" in sys.modules:
+        raise RuntimeError("learner admission revalidation imported torch")
     admission_signal = os.environ.get("FS_DILOCO_TEST_ADMISSION_SIGNAL_PATH")
     if admission_signal:
         from ..storage.atomic_io import atomic_write_json
@@ -147,18 +169,6 @@ def main(argv: list[str] | None = None) -> None:
                 "fence": admission.fence.as_dict(),
             },
         )
-    current_admission = read_admission_response(
-        loaded.paths,
-        run_id=str(descriptor["run_id"]),
-        descriptor_sha256=str(descriptor["descriptor_sha256"]),
-        actor_id=actor_id,
-        attempt_id=response_attempt_id,
-        max_clock_skew_seconds=config.leader.max_clock_skew_seconds,
-    )
-    if current_admission != admission:
-        raise RuntimeError("learner admission changed immediately before torch import")
-    if "torch" in sys.modules:
-        raise RuntimeError("learner admission revalidation imported torch")
     from .learner_v4 import run_admitted_learner
 
     run_admitted_learner(loaded, admission)

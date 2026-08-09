@@ -1,0 +1,16 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-static-group-scan-command",
+  "recorded_at": "2026-08-09T13:26:01+09:00",
+  "status": "FAIL",
+  "source_commit": "d18fae055b5beec1887f38c3f2070f0bf6ec901b",
+  "source_dirty": true,
+  "environment": "miyabi-g1 login node; static validation only",
+  "failed_command": "if rg -L '^#PBS -W group_list=xg24i002$' scripts/miyabi/*.pbs; then exit 1; fi",
+  "symptom": "ripgrep -L was mistakenly treated as files-without-match; in ripgrep it means --follow, so every matching PBS path was printed and the wrapper exited 1",
+  "root_cause": "validation command construction error, not a repository PBS group mismatch",
+  "corrected_command": "for f in scripts/miyabi/*.pbs; do if ! rg -q '^#PBS -W group_list=xg24i002$' \"$f\"; then echo \"$f\"; fi; done",
+  "corrected_result": "PASS; no paths printed and exit status 0",
+  "consecutive_failure_count": 1,
+  "errors": ["invalid literal-group scan invocation"]
+}

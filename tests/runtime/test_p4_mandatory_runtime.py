@@ -27,21 +27,31 @@ from fs_diloco.protocol._validation import identity as validate_identity
 from fs_diloco.protocol.admission_v4 import (
     AdmissionAuthorizationError,
     admission_request_sha256,
+    archive_disposed_admission_request,
     dynamic_placement_id,
+    publish_admission_disposition,
+    publish_admission_rejection,
     publish_admission_response,
     publish_static_replacement_authorization,
     publish_static_request,
     read_admission_response,
     read_static_replacement_authorization,
 )
-from fs_diloco.protocol.contributor import StaticContributorFence, StaticMembershipScope
+from fs_diloco.protocol.contributor import (
+    DynamicContributorFence,
+    StaticContributorFence,
+    StaticMembershipScope,
+)
 from fs_diloco.protocol.control_v4 import (
     V4ControlPublisher,
     read_current_control,
     wait_for_receipt_barrier,
 )
 from fs_diloco.protocol.data_cursor import ContributorResumeState, IndexedBlockCursor
-from fs_diloco.protocol.cycle_receipt import canonical_receipt_relative_path
+from fs_diloco.protocol.cycle_receipt import (
+    canonical_receipt_relative_path,
+    contributor_fence_namespace,
+)
 from fs_diloco.storage.atomic_io import atomic_write_json, sha256_file
 from fs_diloco.storage.authority import (
     AuthorityIdentity,
@@ -62,7 +72,17 @@ from tests.support.v4_protocol import receipt
 
 
 PLAN03_REQUIREMENTS = frozenset(
-    {"AUTH-02", "AUTH-03", "AUTH-04", "AUTH-05", "AUTH-07", "AUTH-09", "AUTH-10", "P4-MIGRATE"}
+    {
+        "AUTH-02",
+        "AUTH-03",
+        "AUTH-04",
+        "AUTH-05",
+        "AUTH-07",
+        "AUTH-09",
+        "AUTH-10",
+        "MODE-02",
+        "P4-MIGRATE",
+    }
 )
 
 
@@ -607,6 +627,227 @@ def test_identical_malformed_requests_share_archive_without_hot_path_collision(
         authority.close()
 
 
+def test_unreadable_hot_entry_does_not_block_other_admissions(tmp_path: Path) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    poison = paths.registration_requests / "static" / "learner_000" / "000-poison.json"
+    poison.mkdir(parents=True)
+    publish_static_request(
+        paths,
+        run_id="run-v4",
+        descriptor_sha256="d" * 64,
+        learner_id="learner_000",
+        logical_launch_id="logical-1",
+        attempt_id="attempt-1",
+        expected_generation=None,
+    )
+    try:
+        _admit_requests(loaded, authority, leader, telemetry)
+
+        binding = authority.read.static_binding("learner_000")
+        assert binding is not None and binding.attempt_id == "attempt-1"
+        assert poison.is_dir()
+    finally:
+        authority.close()
+
+
+def test_invalid_utf8_hot_request_is_disposed_once_without_candidate_failure(
+    tmp_path: Path,
+) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    invalid = paths.registration_requests / "static" / "learner_000" / "invalid-utf8.json"
+    invalid.parent.mkdir(parents=True, exist_ok=True)
+    invalid.write_bytes(b'{"format_version":"\xff\xfe\xfa"}')
+    try:
+        _admit_requests(loaded, authority, leader, telemetry)
+        _admit_requests(loaded, authority, leader, telemetry)
+
+        assert not invalid.exists()
+        dispositions = tuple(paths.registration_dispositions_v4.rglob("*.json"))
+        assert len(dispositions) == 1
+        assert json.loads(dispositions[0].read_bytes())["error_type"] == (
+            "MalformedAdmissionRequest"
+        )
+    finally:
+        authority.close()
+
+
+def test_one_shot_hot_read_error_retries_without_discarding_valid_request(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    request_path = publish_static_request(
+        paths,
+        run_id="run-v4",
+        descriptor_sha256="d" * 64,
+        learner_id="learner_000",
+        logical_launch_id="logical-1",
+        attempt_id="attempt-1",
+        expected_generation=None,
+    )
+    from fs_diloco.protocol import admission_v4
+
+    original_read = admission_v4._read_hot_request
+    injected = False
+
+    def fail_once(path: Path):
+        nonlocal injected
+        if path == request_path and not injected:
+            injected = True
+            raise OSError(5, "injected shared-filesystem read failure")
+        return original_read(path)
+
+    monkeypatch.setattr(admission_v4, "_read_hot_request", fail_once)
+    try:
+        _admit_requests(loaded, authority, leader, telemetry)
+        assert request_path.is_file()
+        assert authority.read.static_binding("learner_000") is None
+        assert not tuple(paths.registration_dispositions_v4.rglob("*.json"))
+
+        _admit_requests(loaded, authority, leader, telemetry)
+        binding = authority.read.static_binding("learner_000")
+        assert binding is not None and binding.attempt_id == "attempt-1"
+        assert not request_path.exists()
+    finally:
+        authority.close()
+
+
+def test_semantically_identical_valid_request_archives_canonical_bytes(
+    tmp_path: Path,
+) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    request_path = publish_static_request(
+        paths,
+        run_id="run-v4",
+        descriptor_sha256="d" * 64,
+        learner_id="learner_000",
+        logical_launch_id="logical-1",
+        attempt_id="attempt-1",
+        expected_generation=None,
+    )
+    request = json.loads(request_path.read_bytes())
+    try:
+        _admit_requests(loaded, authority, leader, telemetry)
+        history = paths.registration_history_path(admission_request_sha256(request))
+        first_bytes = history.read_bytes()
+
+        request_path.parent.mkdir(parents=True, exist_ok=True)
+        request_path.write_text(json.dumps(request, indent=2) + "\n", encoding="utf-8")
+        _admit_requests(loaded, authority, leader, telemetry)
+
+        assert not request_path.exists()
+        assert history.read_bytes() == first_bytes
+        assert json.loads(first_bytes) == request
+        assert hashlib.sha256(first_bytes).hexdigest() == admission_request_sha256(request)
+    finally:
+        authority.close()
+
+
+def test_request_specific_rejections_do_not_collide_when_attempt_id_is_reused(
+    tmp_path: Path,
+) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    try:
+        publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-0",
+            expected_generation=None,
+        )
+        _admit_requests(loaded, authority, leader, telemetry)
+
+        for expected_generation in (99, 1):
+            publish_static_request(
+                paths,
+                run_id="run-v4",
+                descriptor_sha256="d" * 64,
+                learner_id="learner_000",
+                logical_launch_id="logical-1",
+                attempt_id="attempt-1",
+                expected_generation=expected_generation,
+            )
+            _admit_requests(loaded, authority, leader, telemetry)
+
+        rejection_root = (
+            paths.epoch_membership_dir(leader.token.epoch, leader.token.owner_id)
+            / "admissions_v4"
+            / "rejections"
+        )
+        assert len(tuple(rejection_root.rglob("*.json"))) == 2
+        assert not tuple(paths.registration_requests.rglob("*.json"))
+    finally:
+        authority.close()
+
+
+def test_authorized_replacement_can_reuse_an_old_attempt_id(tmp_path: Path) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    try:
+        publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-1",
+            expected_generation=None,
+        )
+        _admit_requests(loaded, authority, leader, telemetry)
+        for old_attempt, new_attempt, generation in (
+            ("attempt-1", "attempt-2", 1),
+            ("attempt-2", "attempt-1", 2),
+        ):
+            binding = authority.read.static_binding("learner_000")
+            assert binding is not None and binding.attempt_id == old_attempt
+            old_fence = StaticContributorFence(
+                "static",
+                binding.learner_id,
+                binding.logical_launch_id,
+                binding.attempt_id,
+                binding.binding_generation,
+            )
+            publish_static_replacement_authorization(
+                paths,
+                run_id="run-v4",
+                descriptor_sha256="d" * 64,
+                old_fence=old_fence,
+                new_logical_launch_id="logical-1",
+                new_attempt_id=new_attempt,
+                reason=f"operator replacement generation {generation}",
+            )
+            publish_static_request(
+                paths,
+                run_id="run-v4",
+                descriptor_sha256="d" * 64,
+                learner_id="learner_000",
+                logical_launch_id="logical-1",
+                attempt_id=new_attempt,
+                expected_generation=generation,
+            )
+            _admit_requests(loaded, authority, leader, telemetry)
+
+        current = authority.read.static_binding("learner_000")
+        assert current is not None
+        assert (current.attempt_id, current.binding_generation) == ("attempt-1", 3)
+        pointer = json.loads(
+            paths.epoch_current_admission_path(
+                leader.token.epoch, leader.token.owner_id, "learner_000"
+            ).read_bytes()
+        )
+        assert pointer["fence"]["binding_generation"] == 3
+        assert not tuple(paths.registration_requests.rglob("*.json"))
+    finally:
+        authority.close()
+
+
 def test_incomplete_admission_disposition_cannot_remove_hot_request(tmp_path: Path) -> None:
     paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
     telemetry = _TelemetryProbe()
@@ -626,12 +867,11 @@ def test_incomplete_admission_disposition_cannot_remove_hot_request(tmp_path: Pa
         {"request_sha256": request_sha},
     )
     try:
-        with pytest.raises(RuntimeError, match="disposition"):
-            _admit_requests(loaded, authority, leader, telemetry)
+        _admit_requests(loaded, authority, leader, telemetry)
 
         assert request_path.is_file()
         assert authority.read.static_binding("learner_000") is None
-        assert telemetry.events == []
+        assert [name for name, _fields in telemetry.events] == ["admission_request_deferred"]
     finally:
         authority.close()
 
@@ -657,8 +897,7 @@ def test_admission_control_publication_failure_is_not_persisted_as_rejection(
 
     monkeypatch.setattr(syncer_runtime, "publish_admission_response", fail_response)
     try:
-        with pytest.raises(OSError, match="publication failure"):
-            _admit_requests(loaded, authority, leader, telemetry)
+        _admit_requests(loaded, authority, leader, telemetry)
 
         binding = authority.read.static_binding("learner_000")
         assert binding is not None and binding.attempt_id == "attempt-1"
@@ -670,7 +909,7 @@ def test_admission_control_publication_failure_is_not_persisted_as_rejection(
             / "rejections"
         )
         assert not tuple(rejection_root.rglob("*.json"))
-        assert telemetry.events == []
+        assert [name for name, _fields in telemetry.events] == ["admission_request_deferred"]
     finally:
         authority.close()
 
@@ -697,8 +936,7 @@ def test_admission_disposition_retry_reuses_published_resume_snapshot(
 
     monkeypatch.setattr(syncer_runtime, "publish_admission_disposition", fail_disposition)
     try:
-        with pytest.raises(OSError, match="disposition publication failure"):
-            _admit_requests(loaded, authority, leader, telemetry)
+        _admit_requests(loaded, authority, leader, telemetry)
         binding = authority.read.static_binding("learner_000")
         assert binding is not None
         fence = StaticContributorFence(
@@ -713,6 +951,7 @@ def test_admission_disposition_retry_reuses_published_resume_snapshot(
             leader.token.owner_id,
             fence.learner_id,
             fence.attempt_id,
+            contributor_fence_namespace(fence),
         )
         response_before = response_path.read_bytes()
         leader.ingest_cycle_receipt(
@@ -734,6 +973,221 @@ def test_admission_disposition_retry_reuses_published_resume_snapshot(
         assert response_path.read_bytes() == response_before
         assert not request_path.exists()
         assert len(tuple(paths.registration_dispositions_v4.rglob("*.json"))) == 1
+    finally:
+        authority.close()
+
+
+def test_disposition_replay_requires_consumer_valid_resume_and_current_pointer(
+    tmp_path: Path,
+) -> None:
+    paths = RunPaths(tmp_path)
+    request_path = publish_static_request(
+        paths,
+        run_id="run-v4",
+        descriptor_sha256="d" * 64,
+        learner_id="learner_000",
+        logical_launch_id="logical-1",
+        attempt_id="attempt-1",
+        expected_generation=None,
+    )
+    request = json.loads(request_path.read_bytes())
+    fence = StaticContributorFence("static", "learner_000", "logical-1", "attempt-1", 1)
+    response = publish_admission_response(
+        paths,
+        epoch=1,
+        owner_id="owner-1",
+        request=request,
+        fence=fence,
+        resume=ContributorResumeState(0, None, None, 1),
+    )
+    payload = json.loads(response.read_bytes())
+    payload["resume"]["cursor"] = -1
+    response.chmod(0o600)
+    atomic_write_json(response, payload)
+    pointer_path = paths.epoch_current_admission_path(1, "owner-1", "learner_000")
+    pointer = json.loads(pointer_path.read_bytes())
+    pointer["response_sha256"] = sha256_file(response)
+    atomic_write_json(pointer_path, pointer)
+    publish_admission_disposition(
+        paths,
+        request=request,
+        epoch=1,
+        owner_id="owner-1",
+        outcome="admitted",
+        control_path=response,
+        fence=fence,
+    )
+
+    with pytest.raises(RuntimeError, match="resume"):
+        archive_disposed_admission_request(
+            paths,
+            request_path=request_path,
+            request=request,
+        )
+    assert request_path.is_file()
+
+
+def test_disposition_replay_requires_exact_current_admission_pointer(tmp_path: Path) -> None:
+    paths = RunPaths(tmp_path)
+    request_path = publish_static_request(
+        paths,
+        run_id="run-v4",
+        descriptor_sha256="d" * 64,
+        learner_id="learner_000",
+        logical_launch_id="logical-1",
+        attempt_id="attempt-1",
+        expected_generation=None,
+    )
+    request = json.loads(request_path.read_bytes())
+    fence = StaticContributorFence("static", "learner_000", "logical-1", "attempt-1", 1)
+    response = publish_admission_response(
+        paths,
+        epoch=1,
+        owner_id="owner-1",
+        request=request,
+        fence=fence,
+        resume=ContributorResumeState(0, None, None, 1),
+    )
+    paths.epoch_current_admission_path(1, "owner-1", "learner_000").unlink()
+    publish_admission_disposition(
+        paths,
+        request=request,
+        epoch=1,
+        owner_id="owner-1",
+        outcome="admitted",
+        control_path=response,
+        fence=fence,
+    )
+
+    with pytest.raises(RuntimeError, match="current admission"):
+        archive_disposed_admission_request(
+            paths,
+            request_path=request_path,
+            request=request,
+        )
+    assert request_path.is_file()
+
+
+def test_disposition_replay_requires_consumer_valid_rejection_message(tmp_path: Path) -> None:
+    paths = RunPaths(tmp_path)
+    request_path = publish_static_request(
+        paths,
+        run_id="run-v4",
+        descriptor_sha256="d" * 64,
+        learner_id="learner_000",
+        logical_launch_id="logical-1",
+        attempt_id="attempt-1",
+        expected_generation=None,
+    )
+    request = json.loads(request_path.read_bytes())
+    rejection = publish_admission_rejection(
+        paths,
+        epoch=1,
+        owner_id="owner-1",
+        request=request,
+        error_type="MembershipFenceError",
+        message="rejected",
+    )
+    payload = json.loads(rejection.read_bytes())
+    payload["message"] = 7
+    rejection.chmod(0o600)
+    atomic_write_json(rejection, payload)
+    publish_admission_disposition(
+        paths,
+        request=request,
+        epoch=1,
+        owner_id="owner-1",
+        outcome="rejected",
+        control_path=rejection,
+        error_type="MembershipFenceError",
+    )
+
+    with pytest.raises(RuntimeError, match="rejected disposition"):
+        archive_disposed_admission_request(
+            paths,
+            request_path=request_path,
+            request=request,
+        )
+    assert request_path.is_file()
+
+
+def test_cross_epoch_admission_replay_preserves_committed_admitted_outcome(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths, authority, first_leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    original_disposition = syncer_runtime.publish_admission_disposition
+    try:
+        publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-1",
+            expected_generation=None,
+        )
+        _admit_requests(loaded, authority, first_leader, telemetry)
+        first = authority.read.static_binding("learner_000")
+        assert first is not None
+        old_fence = StaticContributorFence(
+            "static",
+            first.learner_id,
+            first.logical_launch_id,
+            first.attempt_id,
+            first.binding_generation,
+        )
+        publish_static_replacement_authorization(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            old_fence=old_fence,
+            new_logical_launch_id="logical-1",
+            new_attempt_id="attempt-2",
+            reason="operator replacement before injected crash",
+        )
+        request_path = publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-2",
+            expected_generation=1,
+        )
+        request = json.loads(request_path.read_bytes())
+
+        def fail_disposition(*_args: object, **_kwargs: object) -> Path:
+            raise OSError("injected post-admission disposition failure")
+
+        monkeypatch.setattr(syncer_runtime, "publish_admission_disposition", fail_disposition)
+        _admit_requests(loaded, authority, first_leader, telemetry)
+        committed = authority.read.static_binding("learner_000")
+        assert committed is not None and committed.attempt_id == "attempt-2"
+        assert request_path.is_file()
+
+        authority.fail_leader(first_leader.token)
+        successor_token = authority.acquire_leader(owner_id="owner-2", hostname="host", pid=2)
+        successor = authority.open_leader(successor_token)
+        monkeypatch.setattr(
+            syncer_runtime,
+            "publish_admission_disposition",
+            original_disposition,
+        )
+        _admit_requests(loaded, authority, successor, telemetry)
+
+        disposition = json.loads(
+            paths.registration_disposition_path(admission_request_sha256(request)).read_bytes()
+        )
+        assert disposition["outcome"] == "admitted"
+        rejection_root = (
+            paths.epoch_membership_dir(successor.token.epoch, successor.token.owner_id)
+            / "admissions_v4"
+            / "rejections"
+        )
+        assert not tuple(rejection_root.rglob("*.json"))
+        assert not request_path.exists()
     finally:
         authority.close()
 
@@ -766,6 +1220,7 @@ def test_same_epoch_admission_repair_reuses_immutable_resume_snapshot(tmp_path: 
             leader.token.owner_id,
             fence.learner_id,
             fence.attempt_id,
+            contributor_fence_namespace(fence),
         )
         initial_bytes = response.read_bytes()
         leader.ingest_cycle_receipt(
@@ -818,6 +1273,8 @@ def test_same_epoch_stale_admission_is_superseded_by_current_fence(tmp_path: Pat
             descriptor_sha256="d" * 64,
             actor_id="learner_000",
             attempt_id="attempt-1",
+            stable_contributor_key="learner_000",
+            request_sha256=admission_request_sha256(first_request),
             max_clock_skew_seconds=0.0,
         )
         is None
@@ -846,8 +1303,55 @@ def test_same_epoch_stale_admission_is_superseded_by_current_fence(tmp_path: Pat
             descriptor_sha256="d" * 64,
             actor_id="learner_000",
             attempt_id="attempt-1",
+            stable_contributor_key="learner_000",
+            request_sha256=admission_request_sha256(first_request),
             max_clock_skew_seconds=0.0,
         )
+
+
+def test_dynamic_admission_reader_uses_stable_stream_pointer_key(tmp_path: Path) -> None:
+    paths = RunPaths(tmp_path)
+    publisher = V4ControlPublisher(
+        paths,
+        LeaderToken(run_id="run-1", epoch=1, owner_id="owner-1"),
+    )
+    _publish_synthetic_heartbeat(publisher)
+    request = {
+        "mode": "dynamic",
+        "run_id": "run-1",
+        "descriptor_sha256": "d" * 64,
+        "instance_id": "learner_li_1",
+    }
+    fence = DynamicContributorFence(
+        kind="dynamic",
+        instance_id="learner_li_1",
+        placement_id="placement-1",
+        placement_epoch=1,
+        stream_id=0,
+        stream_epoch=1,
+        admission_generation=1,
+        admission_token_sha256="a" * 64,
+    )
+    publish_admission_response(
+        paths,
+        epoch=1,
+        owner_id="owner-1",
+        request=request,
+        fence=fence,
+        resume=ContributorResumeState(0, None, None, 1, stream_epoch=1),
+    )
+
+    admission = read_admission_response(
+        paths,
+        run_id="run-1",
+        descriptor_sha256="d" * 64,
+        actor_id="learner_li_1",
+        attempt_id="learner_li_1",
+        stable_contributor_key="0",
+        request_sha256=admission_request_sha256(request),
+        max_clock_skew_seconds=0.0,
+    )
+    assert admission is not None and admission.fence == fence
 
 
 def test_admission_response_rejects_extra_fields_even_with_matching_pointer_hash(
@@ -890,6 +1394,8 @@ def test_admission_response_rejects_extra_fields_even_with_matching_pointer_hash
             descriptor_sha256="d" * 64,
             actor_id="learner_000",
             attempt_id="attempt-1",
+            stable_contributor_key="learner_000",
+            request_sha256=admission_request_sha256(request),
             max_clock_skew_seconds=0.0,
         )
 
@@ -936,6 +1442,8 @@ def test_stale_epoch_admission_response_cannot_open_torch_gate(tmp_path: Path) -
             descriptor_sha256="d" * 64,
             actor_id="learner_000",
             attempt_id="attempt-1",
+            stable_contributor_key="learner_000",
+            request_sha256=admission_request_sha256(request),
             max_clock_skew_seconds=0.0,
         )
         is None
@@ -954,6 +1462,8 @@ def test_stale_epoch_admission_response_cannot_open_torch_gate(tmp_path: Path) -
         descriptor_sha256="d" * 64,
         actor_id="learner_000",
         attempt_id="attempt-1",
+        stable_contributor_key="learner_000",
+        request_sha256=admission_request_sha256(request),
         max_clock_skew_seconds=0.0,
     )
     assert admitted is not None and admitted.fence == fence

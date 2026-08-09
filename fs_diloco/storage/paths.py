@@ -272,14 +272,20 @@ class RunPaths:
         return self.epoch_membership_dir(epoch, owner_id) / "admissions" / f"{instance_id}.json"
 
     def epoch_admission_response_path(
-        self, epoch: int, owner_id: str, actor_id: str, attempt_id: str
+        self,
+        epoch: int,
+        owner_id: str,
+        actor_id: str,
+        attempt_id: str,
+        fence_namespace: str,
     ) -> Path:
         return (
             self.epoch_membership_dir(epoch, owner_id)
             / "admissions_v4"
             / "responses"
             / actor_id
-            / f"{attempt_id}.json"
+            / attempt_id
+            / f"{fence_namespace}.json"
         )
 
     def epoch_current_admission_path(
@@ -293,14 +299,20 @@ class RunPaths:
         )
 
     def epoch_admission_rejection_path(
-        self, epoch: int, owner_id: str, actor_id: str, attempt_id: str
+        self,
+        epoch: int,
+        owner_id: str,
+        actor_id: str,
+        attempt_id: str,
+        request_sha256: str,
     ) -> Path:
         return (
             self.epoch_membership_dir(epoch, owner_id)
             / "admissions_v4"
             / "rejections"
             / actor_id
-            / f"{attempt_id}.json"
+            / attempt_id
+            / f"{request_sha256}.json"
         )
 
     def registration_disposition_path(self, request_sha256: str) -> Path:

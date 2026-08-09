@@ -333,6 +333,100 @@ def test_plan03_requirement_checker_rejects_self_evidence_and_stale_source(
     assert checks["REQ-1"]["structured_evidence_paths"] == ["runtime.json"]
 
 
+def test_plan03_requirement_checker_accepts_evidence_only_descendant_target(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "fs_diloco").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "fs_diloco" / "owner.py").write_text(
+        'PLAN03_REQUIREMENTS = {"REQ-1"}\n', encoding="utf-8"
+    )
+    (tmp_path / "tests" / "test_owner.py").write_text(
+        'PLAN03_REQUIREMENTS = {"REQ-1"}\n', encoding="utf-8"
+    )
+    matrix = tmp_path / "matrix.csv"
+    matrix.write_text(
+        "invariant_id,phase,artifact_contract,status,evidence_path\n"
+        'REQ-1,P4,"checker requirements.REQ-1",complete,runtime.json\n',
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "init", "--quiet"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "plan03@example.invalid"], cwd=tmp_path, check=True
+    )
+    subprocess.run(["git", "config", "user.name", "Plan 03 Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "--quiet", "-m", "source"], cwd=tmp_path, check=True)
+    source = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    (tmp_path / "runtime.json").write_text(
+        json.dumps(
+            {
+                "status": "PASS",
+                "source_commit": source,
+                "requirements_covered": ["REQ-1"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "add", "runtime.json"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "--quiet", "-m", "evidence"], cwd=tmp_path, check=True)
+    evidence_target = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    checks, differences = verify_phase_requirements(
+        tmp_path,
+        matrix,
+        "P4",
+        expected_source_commit=evidence_target,
+    )
+    assert differences == []
+    assert checks["REQ-1"]["status"] == "PASS"
+
+    (tmp_path / "fs_diloco" / "owner.py").write_text(
+        'PLAN03_REQUIREMENTS = {"REQ-1"}\nCHANGED = True\n', encoding="utf-8"
+    )
+    subprocess.run(["git", "add", "fs_diloco/owner.py"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "--quiet", "-m", "source drift"], cwd=tmp_path, check=True)
+    drift_target = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    _checks, differences = verify_phase_requirements(
+        tmp_path,
+        matrix,
+        "P4",
+        expected_source_commit=drift_target,
+    )
+    assert differences == ["requirements.REQ-1.structured-checker-evidence"]
+
+
+def test_plan03_p4_gate_requirements_are_owned_by_the_p4_phase() -> None:
+    matrix = (
+        ROOT / "plans/DOING/plans/fsb_decoupled_diloco_plan_03_unified_ha-requirement-matrix.csv"
+    )
+    with matrix.open(newline="", encoding="utf-8") as handle:
+        rows = [row for row in csv.DictReader(handle) if row["gate"] == "P4 completed"]
+
+    assert rows
+    assert {row["phase"] for row in rows} == {"P4-mandatory-fenced-runtime"}
+    assert all(row["status"] == "complete" for row in rows)
+    assert all(row["evidence_path"] != "TBD" for row in rows)
+
+
 def test_plan03_triage_finding_ids_are_all_bound_to_matrix_requirements() -> None:
     triage = json.loads(
         (

@@ -1,0 +1,21 @@
+{
+  "status": "FAIL",
+  "experiment_id": "p4-incremental-remediation-attempt1",
+  "source_commit": "d18fae055b5beec1887f38c3f2070f0bf6ec901b",
+  "source_dirty": true,
+  "pbs_job_id": "2509653.opbs",
+  "host": "mg0024",
+  "queue": "debug-g",
+  "walltime": "00:10:00",
+  "command": "qsub -l walltime=00:10:00 scripts/miyabi/run_plan03_phase4_tests.pbs",
+  "focused_result": {
+    "collected": 77,
+    "passed": 76,
+    "failed": 1,
+    "failed_test": "test_cross_epoch_admission_replay_preserves_committed_admitted_outcome"
+  },
+  "root_cause": "The request-stable command ID still replayed a different authority command payload because replacement authorization is present before the original mutation but absent once the exact binding is current. The command journal therefore raised CommandConflictError and the request was rejected.",
+  "remediation": "Treat an exact active static binding as an idempotent committed admission before reconstructing replacement authorization or invoking the mutation command.",
+  "retained_log": "fsdiloco_plan03_p4.o2509653",
+  "cleanup": "PBS TMPDIR was scheduler-owned and no persistent runtime pipeline was created before the focused-test failure."
+}

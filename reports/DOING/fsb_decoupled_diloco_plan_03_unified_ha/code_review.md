@@ -211,3 +211,70 @@ Review trigger: `p4-plan01-v4-regression` jobs `2509229`, `2509238`, and `250924
 - Reintroducing `learner_submission`, weakening the ten-minute scheduler minimum, accepting a legacy `Config` at `initialize_run`, or skipping pytest to reach the smoke are rejected because each hides rather than migrates a removed boundary.
 - A repository-wide search found the singular key only in the two adjacent stale assertions; the production launcher and P4 mandatory launcher tests consistently use `learner_submissions`. Replace both assertions with `result['learner_submissions'][0]`, preserving the failed status and exact stderr checks.
 - Before attempt 4, rerun Ruff/format/compile, `bash -n` over every Miyabi PBS/shell script, and `git diff --check`. Attempt 4 passes only if all repository tests pass, the strict-v4 smoke completes, SQLite integrity/terminal/accounting assertions pass, and the completion marker is emitted. If the fourth attempt fails, record the new evidence and re-audit the entire failing boundary rather than restoring compatibility aliases.
+# 2026-08-09 comprehensive escalation review — P4 incremental admission remediation
+
+Trigger: three consecutive terminal failures of `run_plan03_phase4_tests.pbs` (`2509653`, `2509656`, `2509663`). Per `plans/AGENTS.md`, no fourth run is allowed until the failure chain and revised logic are reviewed end to end.
+
+## Failure chain and actual boundaries
+
+1. `2509653`: 76/77 focused tests passed. The remaining cross-epoch replacement replay used a stable command ID but reconstructed a different command payload after the binding became current, so the command journal correctly returned `CommandConflictError` and the runtime incorrectly persisted rejection.
+2. `2509656`: 77/77 focused passed; full pytest had one unrelated default-run-ID second-rollover flake (`13:08:34`→`13:08:35`). No P4 assertion failed.
+3. `2509663`: 77/77 focused, 894/894 full, and static runtime passed. Dynamic authority admitted the instance, but the learner timed out because the revised reader looked up `current/<actor_id>.json`; dynamic current pointers are intentionally keyed by stable stream ID (`current/0.json`).
+
+The failures are not repeated local patches to one unknown symptom. They expose two distinct identity layers that the first rewrite had not made explicit enough: request identity versus committed command identity, and physical actor identity versus stable contributor identity.
+
+## End-to-end producer/consumer review
+
+### Hot request discovery and disposal
+
+- Producer publishes an immutable regular JSON request at a bounded discovery path.
+- Discovery now returns an explicit observation containing exact bytes, `(device,inode)`, decoded payload, or an unreadable state. A read/open/stat failure is deferred and never converted into malformed content.
+- Successfully read invalid UTF-8/JSON is content-addressed by raw bytes and removed only with the observed inode identity. Valid JSON is content-addressed and archived using the same canonical bytes as its digest.
+- Each observation has its own runtime exception boundary. A corrupt/unreadable request can no longer terminate or starve the remaining admission scan.
+
+### Authority mutation and cross-epoch replay
+
+- New mutations use `admit-<canonical-request-sha>` so command identity is epoch-independent.
+- Static replay first checks whether the exact `(learner, logical launch, attempt)` is already the active binding. That is a read-only idempotent completion path; it does not bypass authorization for a different attempt or logical launch.
+- A non-current attempt still requires the exact immutable operator authorization before the authority mutation. The authorization-derived command payload is used only for the original mutation, not reconstructed after that mutation has already committed.
+- After any partial publication failure, a successor repairs controls for the exact current authority fence and completes disposition/history as `admitted`; it does not rerun a stale generation CAS and manufacture a rejection.
+
+### Filesystem control identities
+
+- Admission responses are immutable under a canonical contributor-fence namespace, so reusing an old attempt ID with a new binding generation cannot collide with the old response.
+- Rejections are immutable under canonical request SHA, so repeated attempt IDs with different request/rejection reasons cannot collide.
+- Current pointers remain one mutable cache per **stable contributor key**. This means static uses learner ID, while dynamic uses stream ID; actor/instance ID remains inside the exact pointer/response payload.
+- The learner now passes both identities explicitly: `actor_id` locates and validates the physical response/rejection identity; `stable_contributor_key` locates and validates the current-fence pointer. Dynamic obtains the stable key from its descriptor-validated stream ID before torch import.
+- The public reader validates request-specific rejection first, then exact current pointer, derived fence-namespaced response path, response digest, exact fields, typed fence, and typed resume state.
+- Disposition replay reuses those consumer-equivalent validators and additionally requires the exact current pointer before a valid hot request can be removed.
+
+## DB/filesystem ordering and crash windows
+
+The retained ordering is:
+
+`observe request → authority command commit/replay → immutable response or rejection → disposition → canonical history → inode-checked hot removal`.
+
+- Failure before authority commit leaves the request hot.
+- Failure after authority commit but before response leaves the request hot; retry/successor reconstructs response from current authority state.
+- Failure after response but before disposition reuses exact immutable response/resume bytes.
+- Failure after disposition but before history/removal validates response/rejection plus current pointer before retrying canonical history and inode-checked removal.
+- A changed hot inode is never removed on behalf of the old observation.
+
+SQLite remains the only writer authority. Filesystem controls are immutable facts or explicitly repairable current caches; no fixed cache can authorize a contributor. The changed path layout stays epoch/owner scoped, and no admission path is used as a DB mutation authority.
+
+## Scheduler, process, and timing interaction
+
+- The dynamic learner already knows the descriptor-bounded stream ID from bootstrap slot or replacement request; passing it as the stable key introduces no scheduler lookup or new trust source.
+- Rejected/waiting actors still complete all admission reads before importing torch or allocating CUDA.
+- Transient hot-request read failures now defer one poll and do not consume authority state. Unreadable poison entries emit telemetry but do not block healthy requests.
+- The full P4 PBS remains bounded by its existing 180-second process timeouts. The dynamic timeout in `2509663` is fully explained by the wrong pointer key and is locked by a new direct reader regression in addition to the real pipeline.
+
+## Test coverage required before the next run
+
+- Focused: unreadable entry alongside healthy request, invalid UTF-8, one-shot read error, canonical valid duplicate, request-specific rejection collision, old attempt-ID reuse, malformed resume/rejection/current pointer, cross-epoch partial-publication replay, and dynamic stream-key pointer lookup.
+- Checker: MODE-02 is owned by P4 and evidence-only descendant commits are accepted only when the tracked source/test/script/config tree is identical; real source drift remains blocked.
+- Complete: ruff/format, current-boundary Checker, full pytest, static pipeline, and dynamic pipeline in the same PBS job.
+
+## Review conclusion
+
+No unexplained failure remains. The revised API makes both identity distinctions explicit and preserves fail-closed authority semantics without allowing one filesystem entry to kill a candidate. A fourth validation run is authorized only after formatting, static compilation/lint, repository-wide `bash -n`, and confirmation that all reader call sites supply the stable contributor key.

@@ -18,6 +18,7 @@ from typing import Any
 from ._validation import identity as validate_identity
 from .contributor import ContributorFence, decode_contributor_fence
 from .control_v4 import read_current_control
+from .cycle_receipt import contributor_fence_namespace
 from .data_cursor import ContributorResumeState
 from ..storage.atomic_io import (
     atomic_write_json,
@@ -54,6 +55,16 @@ class AdmissionContext:
     attempt_id: str
     fence: ContributorFence
     resume: ContributorResumeState
+
+
+@dataclass(frozen=True)
+class AdmissionRequestObservation:
+    path: Path
+    original: bytes | None
+    identity: tuple[int, int] | None
+    payload: dict[str, Any] | None
+    read_error_type: str | None = None
+    read_errno: int | None = None
 
 
 def new_attempt_id() -> str:
@@ -139,20 +150,40 @@ def publish_dynamic_request(
     return target
 
 
-def iter_admission_requests(paths: RunPaths) -> tuple[tuple[Path, dict[str, Any] | None], ...]:
-    results: list[tuple[Path, dict[str, Any] | None]] = []
+def iter_admission_requests(paths: RunPaths) -> tuple[AdmissionRequestObservation, ...]:
+    results: list[AdmissionRequestObservation] = []
     root = paths.registration_requests
     if not root.is_dir():
         return ()
     for path in sorted(root.glob("*/*/*.json")) + sorted(root.glob("dynamic/*.json")):
         try:
-            original, _identity = _read_hot_request(path)
-            payload = json.loads(original)
+            original, identity = _read_hot_request(path)
         except FileNotFoundError:
             continue
-        except (OSError, json.JSONDecodeError):
+        except OSError as exc:
+            results.append(
+                AdmissionRequestObservation(
+                    path=path,
+                    original=None,
+                    identity=None,
+                    payload=None,
+                    read_error_type=type(exc).__name__,
+                    read_errno=exc.errno,
+                )
+            )
+            continue
+        try:
+            payload = json.loads(original)
+        except (UnicodeDecodeError, json.JSONDecodeError):
             payload = None
-        results.append((path, payload if isinstance(payload, dict) else None))
+        results.append(
+            AdmissionRequestObservation(
+                path=path,
+                original=original,
+                identity=identity,
+                payload=payload if isinstance(payload, dict) else None,
+            )
+        )
     return tuple(results)
 
 
@@ -260,21 +291,21 @@ def publish_admission_response(
         "leader_epoch": int(epoch),
         "leader_owner_id": owner_id,
     }
-    target = paths.epoch_admission_response_path(epoch, owner_id, actor_id, attempt_id)
+    namespace = contributor_fence_namespace(fence)
+    target = paths.epoch_admission_response_path(epoch, owner_id, actor_id, attempt_id, namespace)
     publication = _publish_json(target, payload)
-    current = {
-        "format_version": ADMISSION_CURRENT_FORMAT_VERSION,
-        "run_id": request["run_id"],
-        "descriptor_sha256": request["descriptor_sha256"],
-        "leader_epoch": int(epoch),
-        "leader_owner_id": owner_id,
-        "stable_contributor_key": fence.stable_contributor_key,
-        "actor_id": actor_id,
-        "attempt_id": attempt_id,
-        "fence": fence.as_dict(),
-        "response_path": paths.relative(target),
-        "response_sha256": publication.sha256,
-    }
+    current = _admission_current_payload(
+        paths,
+        run_id=str(request["run_id"]),
+        descriptor_sha256=str(request["descriptor_sha256"]),
+        epoch=epoch,
+        owner_id=owner_id,
+        actor_id=actor_id,
+        attempt_id=attempt_id,
+        fence=fence,
+        response_path=target,
+        response_sha256=publication.sha256,
+    )
     current_path = paths.epoch_current_admission_path(epoch, owner_id, fence.stable_contributor_key)
     if safe_read_json(current_path) != current:
         atomic_write_json(current_path, current)
@@ -302,7 +333,13 @@ def publish_admission_rejection(
         "error_type": error_type,
         "message": message,
     }
-    target = paths.epoch_admission_rejection_path(epoch, owner_id, actor_id, attempt_id)
+    target = paths.epoch_admission_rejection_path(
+        epoch,
+        owner_id,
+        actor_id,
+        attempt_id,
+        admission_request_sha256(request),
+    )
     _publish_json(target, payload)
     return target
 
@@ -314,6 +351,8 @@ def read_admission_response(
     descriptor_sha256: str,
     actor_id: str,
     attempt_id: str,
+    stable_contributor_key: str,
+    request_sha256: str,
     max_clock_skew_seconds: float,
 ) -> AdmissionContext | None:
     current = read_current_control(
@@ -325,51 +364,108 @@ def read_admission_response(
         return None
     if current.drain is not None or current.terminal is not None:
         raise AdmissionRejectedError("learner admission is closed by terminal control")
-    path = paths.epoch_admission_response_path(
-        current.epoch, current.owner_id, actor_id, attempt_id
+    rejection_path = paths.epoch_admission_rejection_path(
+        current.epoch,
+        current.owner_id,
+        actor_id,
+        attempt_id,
+        request_sha256,
     )
-    if not path.is_file():
-        rejection_path = paths.epoch_admission_rejection_path(
-            current.epoch, current.owner_id, actor_id, attempt_id
+    rejection = safe_read_json(rejection_path)
+    if rejection is not None:
+        _raise_valid_rejection(
+            rejection,
+            path=rejection_path,
+            run_id=run_id,
+            descriptor_sha256=descriptor_sha256,
+            actor_id=actor_id,
+            attempt_id=attempt_id,
+            epoch=current.epoch,
+            owner_id=current.owner_id,
         )
-        rejection = safe_read_json(rejection_path)
-        if rejection is not None:
-            _raise_valid_rejection(
-                rejection,
-                path=rejection_path,
-                run_id=run_id,
-                descriptor_sha256=descriptor_sha256,
-                actor_id=actor_id,
-                attempt_id=attempt_id,
-                epoch=current.epoch,
-                owner_id=current.owner_id,
-            )
+    pointer_path = paths.epoch_current_admission_path(
+        current.epoch, current.owner_id, stable_contributor_key
+    )
+    pointer = safe_read_json(pointer_path)
+    if pointer is None:
         return None
+    if pointer.get("kind") == "superseded":
+        raise AdmissionSupersededError("admission response was superseded by another fence")
+    try:
+        pointer_fence = decode_contributor_fence(pointer.get("fence"))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("current admission pointer fence is invalid") from exc
+    if (
+        pointer_fence.stable_contributor_key != stable_contributor_key
+        or pointer.get("actor_id") != actor_id
+        or pointer.get("attempt_id") != attempt_id
+    ):
+        raise AdmissionSupersededError("admission response was superseded by another fence")
+    path = paths.epoch_admission_response_path(
+        current.epoch,
+        current.owner_id,
+        actor_id,
+        attempt_id,
+        contributor_fence_namespace(pointer_fence),
+    )
+    if pointer.get("response_path") != paths.relative(path):
+        raise RuntimeError("current admission response path is invalid")
     try:
         response_bytes = path.read_bytes()
         payload = json.loads(response_bytes)
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"malformed admission response: {path}") from exc
-    if not isinstance(payload, dict):
-        raise RuntimeError(f"malformed admission response: {path}")
+    fence, resume = _decode_admission_response_control(
+        payload,
+        run_id=run_id,
+        descriptor_sha256=descriptor_sha256,
+        actor_id=actor_id,
+        attempt_id=attempt_id,
+        epoch=current.epoch,
+        owner_id=current.owner_id,
+    )
+    if fence != pointer_fence:
+        raise RuntimeError("current admission pointer fence does not match response")
+    expected_pointer = _admission_current_payload(
+        paths,
+        run_id=run_id,
+        descriptor_sha256=descriptor_sha256,
+        epoch=current.epoch,
+        owner_id=current.owner_id,
+        actor_id=actor_id,
+        attempt_id=attempt_id,
+        fence=fence,
+        response_path=path,
+        response_sha256=hashlib.sha256(response_bytes).hexdigest(),
+    )
+    if pointer != expected_pointer:
+        raise AdmissionSupersededError("admission response was superseded by another fence")
+    return AdmissionContext(actor_id=actor_id, attempt_id=attempt_id, fence=fence, resume=resume)
+
+
+def _decode_admission_response_control(
+    payload: Any,
+    *,
+    run_id: str,
+    descriptor_sha256: str,
+    actor_id: str,
+    attempt_id: str,
+    epoch: int,
+    owner_id: str,
+) -> tuple[ContributorFence, ContributorResumeState]:
     expected = {
         "format_version": ADMISSION_RESPONSE_FORMAT_VERSION,
         "run_id": run_id,
         "descriptor_sha256": descriptor_sha256,
         "actor_id": actor_id,
         "attempt_id": attempt_id,
-        "leader_epoch": current.epoch,
-        "leader_owner_id": current.owner_id,
+        "leader_epoch": epoch,
+        "leader_owner_id": owner_id,
     }
-    if set(payload) != {*expected, "fence", "resume"}:
+    if not isinstance(payload, dict) or set(payload) != {*expected, "fence", "resume"}:
         raise RuntimeError("admission response fields are invalid")
-    mismatches = {
-        key: (payload.get(key), value)
-        for key, value in expected.items()
-        if payload.get(key) != value
-    }
-    if mismatches:
-        raise RuntimeError(f"admission response identity mismatch: {mismatches}")
+    if any(payload.get(key) != value for key, value in expected.items()):
+        raise RuntimeError("admission response identity is invalid")
     resume_payload = payload.get("resume")
     if not isinstance(resume_payload, dict) or set(resume_payload) != {
         "cursor",
@@ -379,51 +475,76 @@ def read_admission_response(
         "stream_epoch",
     }:
         raise RuntimeError("admission response resume state is invalid")
-    fence = decode_contributor_fence(payload.get("fence"))
-    pointer_path = paths.epoch_current_admission_path(
-        current.epoch, current.owner_id, fence.stable_contributor_key
-    )
-    pointer = safe_read_json(pointer_path)
-    if not isinstance(pointer, dict):
-        return None
-    expected_pointer = {
+    try:
+        fence = decode_contributor_fence(payload.get("fence"))
+        resume = ContributorResumeState(
+            cursor=resume_payload["cursor"],
+            last_receipt_id=resume_payload["last_receipt_id"],
+            last_receipt_sha256=resume_payload["last_receipt_sha256"],
+            next_cycle_seq=resume_payload["next_cycle_seq"],
+            stream_epoch=resume_payload["stream_epoch"],
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError("admission response resume state is invalid") from exc
+    return fence, resume
+
+
+def _admission_current_payload(
+    paths: RunPaths,
+    *,
+    run_id: str,
+    descriptor_sha256: str,
+    epoch: int,
+    owner_id: str,
+    actor_id: str,
+    attempt_id: str,
+    fence: ContributorFence,
+    response_path: Path,
+    response_sha256: str,
+) -> dict[str, Any]:
+    return {
         "format_version": ADMISSION_CURRENT_FORMAT_VERSION,
         "run_id": run_id,
         "descriptor_sha256": descriptor_sha256,
-        "leader_epoch": current.epoch,
-        "leader_owner_id": current.owner_id,
+        "leader_epoch": int(epoch),
+        "leader_owner_id": owner_id,
         "stable_contributor_key": fence.stable_contributor_key,
         "actor_id": actor_id,
         "attempt_id": attempt_id,
         "fence": fence.as_dict(),
-        "response_path": paths.relative(path),
-        "response_sha256": hashlib.sha256(response_bytes).hexdigest(),
+        "response_path": paths.relative(response_path),
+        "response_sha256": response_sha256,
     }
-    if pointer != expected_pointer:
-        raise AdmissionSupersededError("admission response was superseded by another fence")
-    try:
-        return AdmissionContext(
-            actor_id=actor_id,
-            attempt_id=attempt_id,
-            fence=fence,
-            resume=ContributorResumeState(
-                cursor=int(resume_payload["cursor"]),
-                last_receipt_id=resume_payload["last_receipt_id"],
-                last_receipt_sha256=resume_payload["last_receipt_sha256"],
-                next_cycle_seq=int(resume_payload["next_cycle_seq"]),
-                stream_epoch=(
-                    None
-                    if resume_payload["stream_epoch"] is None
-                    else int(resume_payload["stream_epoch"])
-                ),
-            ),
-        )
-    except (KeyError, TypeError, ValueError) as exc:
-        raise RuntimeError("admission response resume state is invalid") from exc
 
 
 def _raise_valid_rejection(
     rejection: dict[str, Any],
+    *,
+    path: Path,
+    run_id: str,
+    descriptor_sha256: str,
+    actor_id: str,
+    attempt_id: str,
+    epoch: int,
+    owner_id: str,
+) -> None:
+    _validate_rejection_control(
+        rejection,
+        path=path,
+        run_id=run_id,
+        descriptor_sha256=descriptor_sha256,
+        actor_id=actor_id,
+        attempt_id=attempt_id,
+        epoch=epoch,
+        owner_id=owner_id,
+    )
+    raise AdmissionRejectedError(
+        f"learner admission rejected: {rejection['error_type']}: {rejection['message']}"
+    )
+
+
+def _validate_rejection_control(
+    rejection: Any,
     *,
     path: Path,
     run_id: str,
@@ -442,19 +563,18 @@ def _raise_valid_rejection(
         "leader_epoch": epoch,
         "leader_owner_id": owner_id,
     }
-    if set(rejection) != {*expected, "error_type", "message"} or any(
-        rejection.get(key) != value for key, value in expected.items()
+    if (
+        not isinstance(rejection, dict)
+        or set(rejection) != {*expected, "error_type", "message"}
+        or any(rejection.get(key) != value for key, value in expected.items())
     ):
         raise RuntimeError(f"malformed admission rejection: {path}")
     if not isinstance(rejection["error_type"], str) or not isinstance(rejection["message"], str):
         raise RuntimeError(f"malformed admission rejection: {path}")
-    raise AdmissionRejectedError(
-        f"learner admission rejected: {rejection['error_type']}: {rejection['message']}"
-    )
 
 
 def admission_request_sha256(request: dict[str, Any]) -> str:
-    return hashlib.sha256(_canonical_json_bytes(request, newline=False)).hexdigest()
+    return hashlib.sha256(_canonical_json_bytes(request, newline=True)).hexdigest()
 
 
 def publish_admission_disposition(
@@ -493,6 +613,8 @@ def archive_disposed_admission_request(
     *,
     request_path: Path,
     request: dict[str, Any],
+    original: bytes | None = None,
+    identity: tuple[int, int] | None = None,
 ) -> Path:
     request_sha = admission_request_sha256(request)
     disposition = safe_read_json(paths.registration_disposition_path(request_sha))
@@ -501,11 +623,12 @@ def archive_disposed_admission_request(
     resolved_parent = request_path.parent.resolve()
     if expected_root != resolved_parent and expected_root not in resolved_parent.parents:
         raise RuntimeError("admission request archive path escaped hot discovery root")
-    original, identity = _read_hot_request(request_path)
+    if original is None or identity is None:
+        original, identity = _read_hot_request(request_path)
     if json.loads(original) != request:
         raise RuntimeError("admission request changed before archival")
     target = paths.registration_history_path(request_sha)
-    publish_immutable_bytes(target, original)
+    publish_immutable_bytes(target, _canonical_json_bytes(request, newline=True))
     _remove_hot_request(request_path, identity=identity)
     return target
 
@@ -520,10 +643,13 @@ def dispose_invalid_admission_request(
     owner_id: str,
     error_type: str,
     message: str,
+    original: bytes | None = None,
+    identity: tuple[int, int] | None = None,
 ) -> Path:
     """Durably archive and remove one malformed or foreign hot request."""
 
-    original, identity = _read_hot_request(request_path)
+    if original is None or identity is None:
+        original, identity = _read_hot_request(request_path)
     request_sha = hashlib.sha256(original).hexdigest()
     history_payload = {
         "format_version": ADMISSION_REQUEST_FORMAT_VERSION,
@@ -593,59 +719,82 @@ def _validate_admission_disposition(
     ):
         raise RuntimeError("admission disposition authority or outcome is invalid")
     actor_id, attempt_id = _request_actor_attempt(request)
-    expected_control = (
-        paths.epoch_admission_response_path(epoch, owner_id, actor_id, attempt_id)
-        if outcome == "admitted"
-        else paths.epoch_admission_rejection_path(epoch, owner_id, actor_id, attempt_id)
-    )
-    if disposition.get("control_path") != paths.relative(expected_control):
-        raise RuntimeError("admission disposition control path is invalid")
-    control = safe_read_json(expected_control)
-    control_identity = {
-        "run_id": request["run_id"],
-        "descriptor_sha256": request["descriptor_sha256"],
-        "actor_id": actor_id,
-        "attempt_id": attempt_id,
-        "leader_epoch": epoch,
-        "leader_owner_id": owner_id,
-    }
-    if not isinstance(control, dict) or any(
-        control.get(key) != value for key, value in control_identity.items()
-    ):
-        raise RuntimeError("admission disposition control identity is invalid")
     if outcome == "admitted":
         try:
             fence = decode_contributor_fence(disposition.get("fence"))
-            control_fence = decode_contributor_fence(control.get("fence"))
         except (TypeError, ValueError) as exc:
             raise RuntimeError("admission disposition fence is invalid") from exc
-        if (
-            disposition.get("error_type") is not None
-            or fence != control_fence
-            or control.get("format_version") != ADMISSION_RESPONSE_FORMAT_VERSION
-            or set(control)
-            != {
-                "format_version",
-                *control_identity,
-                "fence",
-                "resume",
-            }
-        ):
+        expected_control = paths.epoch_admission_response_path(
+            epoch,
+            owner_id,
+            actor_id,
+            attempt_id,
+            contributor_fence_namespace(fence),
+        )
+        if disposition.get("error_type") is not None or disposition.get(
+            "control_path"
+        ) != paths.relative(expected_control):
             raise RuntimeError("admitted disposition control is invalid")
-    elif (
+        try:
+            control_bytes = expected_control.read_bytes()
+            control = json.loads(control_bytes)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("admitted disposition control is invalid") from exc
+        control_fence, _resume = _decode_admission_response_control(
+            control,
+            run_id=str(request["run_id"]),
+            descriptor_sha256=str(request["descriptor_sha256"]),
+            actor_id=actor_id,
+            attempt_id=attempt_id,
+            epoch=epoch,
+            owner_id=owner_id,
+        )
+        if control_fence != fence:
+            raise RuntimeError("admitted disposition control fence is invalid")
+        pointer_path = paths.epoch_current_admission_path(
+            epoch, owner_id, fence.stable_contributor_key
+        )
+        pointer = safe_read_json(pointer_path)
+        expected_pointer = _admission_current_payload(
+            paths,
+            run_id=str(request["run_id"]),
+            descriptor_sha256=str(request["descriptor_sha256"]),
+            epoch=epoch,
+            owner_id=owner_id,
+            actor_id=actor_id,
+            attempt_id=attempt_id,
+            fence=fence,
+            response_path=expected_control,
+            response_sha256=hashlib.sha256(control_bytes).hexdigest(),
+        )
+        if pointer != expected_pointer:
+            raise RuntimeError("current admission pointer is invalid")
+        return
+    expected_control = paths.epoch_admission_rejection_path(
+        epoch, owner_id, actor_id, attempt_id, request_sha
+    )
+    if (
         disposition.get("fence") is not None
         or not isinstance(disposition.get("error_type"), str)
         or not disposition["error_type"]
-        or disposition["error_type"] != control.get("error_type")
-        or control.get("format_version") != ADMISSION_REJECTION_FORMAT_VERSION
-        or set(control)
-        != {
-            "format_version",
-            *control_identity,
-            "error_type",
-            "message",
-        }
+        or disposition.get("control_path") != paths.relative(expected_control)
     ):
+        raise RuntimeError("rejected disposition control is invalid")
+    control = safe_read_json(expected_control)
+    try:
+        _validate_rejection_control(
+            control,
+            path=expected_control,
+            run_id=str(request["run_id"]),
+            descriptor_sha256=str(request["descriptor_sha256"]),
+            actor_id=actor_id,
+            attempt_id=attempt_id,
+            epoch=epoch,
+            owner_id=owner_id,
+        )
+    except RuntimeError as exc:
+        raise RuntimeError("rejected disposition control is invalid") from exc
+    if disposition["error_type"] != control["error_type"]:
         raise RuntimeError("rejected disposition control is invalid")
 
 
@@ -742,7 +891,7 @@ def highest_static_generation(paths: RunPaths, learner_id: str) -> int | None:
     if not paths.syncer_epochs.is_dir():
         return None
     for path in paths.syncer_epochs.glob(
-        f"e*_*/membership/admissions_v4/responses/{learner_id}/*.json"
+        f"e*_*/membership/admissions_v4/responses/{learner_id}/**/*.json"
     ):
         payload = safe_read_json(path)
         if not isinstance(payload, dict):
@@ -751,8 +900,7 @@ def highest_static_generation(paths: RunPaths, learner_id: str) -> int | None:
         if isinstance(fence, dict) and fence.get("kind") == "static":
             generation = int(fence["binding_generation"])
             highest = generation if highest is None else max(highest, generation)
-    # Current layout has exactly one attempt path level. Keep both patterns to
-    # read artifacts made by early P4 development snapshots.
+    # Keep the early P4 development layout readable for generation discovery.
     for path in paths.syncer_epochs.glob(f"e*_*/membership/admissions_v4/{learner_id}/*.json"):
         payload = safe_read_json(path)
         if isinstance(payload, dict) and isinstance(payload.get("fence"), dict):

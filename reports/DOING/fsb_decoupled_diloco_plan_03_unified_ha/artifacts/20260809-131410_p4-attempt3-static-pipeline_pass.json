@@ -1,0 +1,34 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-attempt3-static-pipeline",
+  "status": "PASS",
+  "errors": [],
+  "source_commit": "d18fae055b5beec1887f38c3f2070f0bf6ec901b",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_static_2509663",
+  "identity": {
+    "run_id": "plan03_p4_static_2509663",
+    "descriptor_sha256": "9ed915b947c6fc123395a0e989da3b0810c80544d46beee59dd6dc604838fbe9",
+    "source_fingerprint": "sha256:9092cd7287f0f85056775a9765c80fce1917cc58bdd4b843ee85b200317d08a5",
+    "git_dirty": true
+  },
+  "pbs": {
+    "job_id": "2509663.opbs",
+    "host": "mg0015",
+    "queue": "debug-g",
+    "requested_walltime": "00:10:00"
+  },
+  "checks": {
+    "focused_tests": "77 passed",
+    "full_tests": "894 passed",
+    "static_pipeline": "PASS"
+  },
+  "authority": {
+    "database_sha256_before_cleanup": "3ac964da2b7f9edb63c2d951096092b2f93683619bb695c6fca5783d6ba822f0",
+    "terminal": {
+      "run_id": "plan03_p4_static_2509663",
+      "final_version": 2,
+      "direct_weight_tokens_applied": 256,
+      "stop_reason": "configured_target"
+    }
+  }
+}

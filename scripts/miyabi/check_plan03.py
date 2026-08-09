@@ -439,6 +439,40 @@ def _declared_requirements(root: Path, prefix: str) -> dict[str, list[str]]:
     return {key: sorted(paths) for key, paths in sorted(owners.items())}
 
 
+def _evidence_source_matches_target(root: Path, source: Any, target: str | None) -> bool:
+    if target is None:
+        return True
+    if not isinstance(source, str) or not source:
+        return False
+    if source == target:
+        return True
+    ancestry = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", source, target],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if ancestry.returncode != 0:
+        return False
+    relevant_tree = (
+        "fs_diloco",
+        "tests",
+        "scripts",
+        "configs",
+        "pyproject.toml",
+        "uv.lock",
+    )
+    difference = subprocess.run(
+        ["git", "diff", "--quiet", source, target, "--", *relevant_tree],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return difference.returncode == 0
+
+
 def verify_phase_requirements(
     root: Path,
     matrix_path: Path,
@@ -460,6 +494,7 @@ def verify_phase_requirements(
     tests = _declared_requirements(root, "tests")
     checks: dict[str, Any] = {}
     differences: list[str] = []
+    source_match_cache: dict[str | None, bool] = {}
     for row in rows:
         requirement = row["invariant_id"]
         implementation_owners = implementation.get(requirement, [])
@@ -509,9 +544,12 @@ def verify_phase_requirements(
                 source_commit = (
                     payload["checks"].get("current_migration_boundaries", {}).get("source_commit")
                 )
-            source_matches = (
-                expected_source_commit is None or source_commit == expected_source_commit
-            )
+            cache_key = source_commit if isinstance(source_commit, str) else None
+            if cache_key not in source_match_cache:
+                source_match_cache[cache_key] = _evidence_source_matches_target(
+                    root, source_commit, expected_source_commit
+                )
+            source_matches = source_match_cache[cache_key]
             covered_requirements = payload.get("requirements_covered", [])
             runtime_evidence_pass = (
                 payload.get("status") == "PASS"

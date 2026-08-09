@@ -233,7 +233,8 @@ def read_current_control(
             max_clock_skew_seconds=max_clock_skew_seconds,
         ):
             continue
-        assert isinstance(heartbeat, dict)
+        if not isinstance(heartbeat, dict):
+            continue
         epoch = int(heartbeat["epoch"])
         owner = str(heartbeat["owner_id"])
         latest = _read_latest(paths, directory, run_id=run_id, epoch=epoch, owner_id=owner)
@@ -377,7 +378,8 @@ def _read_latest(
         version=version,
     ):
         return None
-    assert isinstance(payload, dict)
+    if not isinstance(payload, dict):
+        return None
     return payload
 
 

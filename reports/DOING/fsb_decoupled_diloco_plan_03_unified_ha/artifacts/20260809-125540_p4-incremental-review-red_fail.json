@@ -1,0 +1,32 @@
+{
+  "status": "FAIL",
+  "experiment_id": "p4-incremental-review-red",
+  "source_commit": "d18fae055b5beec1887f38c3f2070f0bf6ec901b",
+  "source_dirty": true,
+  "pbs_job_id": "2509636.opbs",
+  "host": "mg0024",
+  "queue": "debug-g",
+  "walltime": "00:10:00",
+  "command": "qsub -l walltime=00:10:00 scripts/miyabi/run_plan03_phase4_tests.pbs",
+  "static_presubmit": "bash -n scripts/miyabi/*.pbs scripts/miyabi/*.sh scripts/local/*.sh",
+  "focused_result": {
+    "collected": 77,
+    "passed": 67,
+    "failed": 10,
+    "failed_tests": [
+      "test_unreadable_hot_entry_does_not_block_other_admissions",
+      "test_invalid_utf8_hot_request_is_disposed_once_without_candidate_failure",
+      "test_one_shot_hot_read_error_retries_without_discarding_valid_request",
+      "test_semantically_identical_valid_request_archives_canonical_bytes",
+      "test_request_specific_rejections_do_not_collide_when_attempt_id_is_reused",
+      "test_authorized_replacement_can_reuse_an_old_attempt_id",
+      "test_disposition_replay_requires_consumer_valid_resume_and_current_pointer",
+      "test_disposition_replay_requires_exact_current_admission_pointer",
+      "test_disposition_replay_requires_consumer_valid_rejection_message",
+      "test_cross_epoch_admission_replay_preserves_committed_admitted_outcome"
+    ]
+  },
+  "failure_boundary": "The RED tests reproduce both independent reviewers' accepted H/M admission findings before the implementation fix. The job stopped before the full suite or runtime pipelines.",
+  "retained_log": "fsdiloco_plan03_p4.o2509636",
+  "cleanup": "PBS TMPDIR was scheduler-owned and no persistent run root was created before the focused-test failure."
+}

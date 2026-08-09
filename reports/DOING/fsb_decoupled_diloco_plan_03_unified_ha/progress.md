@@ -448,3 +448,39 @@
 
 - After evidence commit `52a098097cb4124b1adaa8e61a073c00afe93f04`, the full phase-final Checker was rerun with `--verify-boundaries --require-tracked-evidence --verification-target-ref 97b9868... --verify-phase-requirements P4-mandatory-fenced-runtime`. It returned `PASS`, with zero tracked-evidence, boundary, migration-contract or requirement differences and all eight P4 rows passing.
 - Compact evidence: `artifacts/20260809-121900_p4-final-tracked-evidence-gate_pass.json`; the complete temporary Checker JSON had SHA-256 `e1d184e69671585560efe0bfffc2c99b19d00d35af435ebb3e266fe82269f88c`. The frozen review increment will be `0e8b14ed08eacda710a0f1b4ebf3b19f921f31e4..<latest evidence target>`; ancestry and exact target are verified after this record is committed.
+# 2026-08-09 P4 incremental review findings accepted and RED-locked
+
+- Persisted the independent Codex report before invoking Claude for incremental target `0e8b14ed08eacda710a0f1b4ebf3b19f921f31e4..d18fae055b5beec1887f38c3f2070f0bf6ec901b`.
+- Claude invocation completed successfully as actual model `claude-opus-5`, session `90ee9fa3-3bf2-4179-bb77-1769a6e4a564`; both reports conclude `CHANGES_REQUIRED`.
+- Accepted for remediation: unreadable/transient hot-request separation, invalid UTF-8 disposal, canonical valid history, request-specific response/rejection keys, attempt-ID reuse, stable cross-epoch command replay, exact consumer-equivalent disposition validation/current pointer, MODE-02 phase/evidence binding, and final-target Checker evidence.
+- Deferred to P6 bounded-resource ownership: retained admission audit/authorization compaction and request-size limits, with G6 tests required before plan completion. Low operational findings remain recorded for later disposition.
+- RED job `2509636.opbs` produced the expected `67 passed, 10 failed`; evidence is `artifacts/20260809-125540_p4-incremental-review-red_fail.json`.
+# 2026-08-09 P4 incremental remediation narrowed to one replay defect
+
+- Job `2509653.opbs` moved the accepted review set from 10 RED failures to one: `76 passed, 1 failed`.
+- Implemented three-state hot observations with per-request failure isolation, canonical valid history, fence-namespaced responses, request-hash rejections, exact shared response/rejection validators, current-pointer validation, stable admission command identity, MODE-02 P4 ownership, and source-tree-equivalent evidence binding in the Checker.
+- The remaining cross-epoch conflict was traced to authorization-derived command payload reconstruction and was corrected with an exact-current-binding idempotent path.
+# 2026-08-09 P4 incremental remediation focused GREEN
+
+- Job `2509656.opbs` passed all 77 P4 focused tests, including the cross-epoch committed-admission replay regression.
+- The full suite's only failure was the independent current-second rollover flake in `tests/test_source_identity.py`; the source and test tree will be rerun unchanged before treating it as a product defect.
+# 2026-08-09 P4 incremental remediation tests and static runtime GREEN
+
+- Job `2509663.opbs` passed 77 focused tests, 894 full tests, and the static v4 pipeline.
+- The dynamic timeout exposed a stream-key/instance-key distinction in the revised current-pointer reader; the API now carries the stable contributor key explicitly.
+
+# 2026-08-09 13:21 JST — P4 incremental review remediation precommit gate PASS
+
+- Work unit `p4-incremental-remediation-precommit` passed on its fourth run after the mandatory three-failure comprehensive review. Job `2509702.opbs` ran on `mg0007`, one `debug-g` node/process, literal group `xg24i002`, and exited 0 in `00:01:36` under the evidence-based `00:10:00` limit.
+- Static gates passed repository Ruff, the 20-file format scope, and the frozen/current boundary Checker. The focused admission/runtime suite passed `78 passed in 6.76s`; the complete repository suite passed `896 passed in 66.63s`.
+- The real static pipeline finalized at v2 with 256 direct tokens, two acknowledged terminal fences, zero hard-crash gap and no pending/selected update. The dynamic pipeline finalized at v12 with 3,840 direct tokens, one acknowledged fence and the same zero-gap/empty-pending invariants. Both authority databases passed `PRAGMA integrity_check`.
+- This GREEN run falsifies all three preceding causes: committed cross-epoch admission replay is idempotent, the unrelated source-identity second-boundary test did not recur, and the dynamic reader resolves the stable stream-key pointer while validating the instance/fence response.
+- Evidence: `artifacts/20260809-132119_p4-incremental-remediation-precommit_pass.json`; joined stdout `fsdiloco_plan03_p4.o2509702` (SHA-256 `58e13f5dcf0ff5c5dbcbd4a9217e79c0c171989e13ef847428a72a2f5c0caedc`). This is dirty-worktree precommit evidence; clean frozen-target main and affected specialty gates remain required before phase-final.
+- After evidence persistence, `clean_run` dry-ran and deleted exactly 8 static plus 13 dynamic terminal proposal objects (150,817 bytes), retaining authority/configuration/control/history evidence. Immutable inventories are `artifacts/20260809-132200_p4-incremental-remediation-precommit-{static,dynamic}_cleanup.json`.
+
+# 2026-08-09 13:30 JST — P4 final dirty-tree remediation regression PASS
+
+- After aligning the valid history object bytes with their canonical digest and moving the static test admission signal after the final pre-torch revalidation, job `2509752.opbs` reran the complete P4 gate on `mg0007`. It exited 0 in `00:01:35` under the required `00:10:00` walltime.
+- Static gates passed Ruff, 20-file format, frozen/current Checker, focused `78 passed in 6.59s`, and full `896 passed in 66.11s`. The real static/dynamic pipelines finalized at v2/v12 with 192/3,840 direct tokens, 2/1 acknowledged fences, zero hard-crash gap, no pending/selected updates, and SQLite integrity `ok`.
+- Evidence: `artifacts/20260809-133021_p4-incremental-remediation-final-precommit_pass.json`; joined stdout SHA-256 `a9b6aafbc94c1eb2d9fc8a8da480cb9eec5f951a6c63be8aebb3ff492cfb0cde`. The changed MODE-02 pause boundary still requires the clean-target static-rerun specialty gate.
+- Evidence-bound cleanup deleted exactly 5 static plus 13 dynamic terminal proposal objects (126,001 bytes) after inventory, retaining the authority and control history. Manifests: `artifacts/20260809-133100_p4-incremental-remediation-final-precommit-{static,dynamic}_cleanup.json`.

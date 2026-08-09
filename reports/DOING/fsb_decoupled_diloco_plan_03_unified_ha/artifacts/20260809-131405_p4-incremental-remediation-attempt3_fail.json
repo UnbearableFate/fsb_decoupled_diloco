@@ -1,0 +1,31 @@
+{
+  "status": "FAIL",
+  "experiment_id": "p4-incremental-remediation-attempt3",
+  "source_commit": "d18fae055b5beec1887f38c3f2070f0bf6ec901b",
+  "source_dirty": true,
+  "pbs_job_id": "2509663.opbs",
+  "host": "mg0015",
+  "queue": "debug-g",
+  "walltime": "00:10:00",
+  "command": "qsub -l walltime=00:10:00 scripts/miyabi/run_plan03_phase4_tests.pbs",
+  "focused_result": {"collected": 77, "passed": 77, "failed": 0},
+  "full_result": {"collected": 894, "passed": 894, "failed": 0},
+  "static_pipeline": {
+    "status": "PASS",
+    "run_root": "runs/fs_diloco/plan03_p4_static_2509663",
+    "final_version": 2,
+    "direct_weight_tokens_applied": 256
+  },
+  "dynamic_pipeline": {
+    "status": "FAIL",
+    "run_root": "runs/fs_diloco/plan03_p4_dynamic_2509663",
+    "failure": "learner timed out before torch import after authority admitted it"
+  },
+  "root_cause": "Dynamic current-admission pointers are keyed by stable stream ID, while the revised reader initially looked them up by dynamic actor/instance ID. Static keys are identical and therefore did not expose the mismatch.",
+  "remediation": "Pass the known stable contributor key (stream ID for dynamic, learner ID for static) into the reader and validate the pointer fence against it.",
+  "retained_log": "fsdiloco_plan03_p4.o2509663",
+  "cleanup_pending": [
+    "runs/fs_diloco/plan03_p4_static_2509663",
+    "runs/fs_diloco/plan03_p4_dynamic_2509663"
+  ]
+}
