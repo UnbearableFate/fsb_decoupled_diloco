@@ -1,0 +1,34 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-final-review-remediation-target-runtime",
+  "recorded_at": "2026-08-09T15:54:00+09:00",
+  "status": "PASS",
+  "errors": [],
+  "source_commit": "fb4f067327818f3e29a44777447d0b2172c721a5",
+  "identity": {
+    "git_dirty": false,
+    "source_fingerprint": "sha256:a5739fd0049b90491c6e9c8085995a4adc4fdcbec6280e48dfb9024b83e8c5f6",
+    "review_target_worktree": "/work/xg24i002/x10041/fsb_decoupled_diloco_p4_fb4f067",
+    "static_descriptor_sha256": "552332b2be66e489e09649960aad798d80b154a0db24e3fc7e9295c0771e6362",
+    "dynamic_descriptor_sha256": "fe9204aa964d7441157b236e1d35c228860307e700b42b5497f290d991ff0a7f"
+  },
+  "requirements_covered": ["AUTH-02", "AUTH-03", "AUTH-04", "AUTH-05", "AUTH-07", "AUTH-09", "AUTH-10", "MODE-02", "P4-MIGRATE"],
+  "pbs": {"job_id": "2510588.opbs", "host": "mg0017", "queue": "debug-g", "requested_walltime": "00:10:00", "exit_status": 0, "stdout_sha256": "5e0e3fc723e12d961dea5e6d57931c1a021bee825ec44b530c30a451c1624e94"},
+  "checks": {"ruff": "PASS", "format_files": 20, "boundary_checker": "PASS", "focused_tests": "86 passed in 6.80s", "full_tests": "909 passed in 61.14s"},
+  "static": {
+    "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_static_2510588",
+    "descriptor_sha256": "552332b2be66e489e09649960aad798d80b154a0db24e3fc7e9295c0771e6362",
+    "authority_database_sha256_before_cleanup": "f32598c9fc72e32e07c9fa52de00766c42a2bdd01556b0b4ab4ad4264167c24e",
+    "summary": {"run_id": "plan03_p4_static_2510588", "final_version": 2, "direct_weight_tokens_applied": 256, "acked_terminal_fences": 2, "hard_crash_gap_tokens_upper_bound": 0, "pending_or_selected_updates": 0, "integrity_check": "ok"}
+  },
+  "dynamic": {
+    "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_dynamic_2510588",
+    "descriptor_sha256": "fe9204aa964d7441157b236e1d35c228860307e700b42b5497f290d991ff0a7f",
+    "authority_database_sha256_before_cleanup": "3eb1f036f5d6ee14daefd77f803e1568797a274730174e52ec3db14214a0f5fa",
+    "summary": {"run_id": "plan03_p4_dynamic_2510588", "final_version": 12, "direct_weight_tokens_applied": 3840, "acked_terminal_fences": 1, "hard_crash_gap_tokens_upper_bound": 0, "pending_or_selected_updates": 0, "integrity_check": "ok"}
+  },
+  "carry_forward_evidence": {
+    "justification": "The post-review source delta changes only malformed command-result error translation and its RED test. The clean main gate reruns all unit/integration tests and both real pipelines; the immediately preceding clean target retains specialty process-level fencing coverage.",
+    "specialty_matrix": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-153800_p4-third-remediation-target-runtime_pass.json"
+  }
+}
