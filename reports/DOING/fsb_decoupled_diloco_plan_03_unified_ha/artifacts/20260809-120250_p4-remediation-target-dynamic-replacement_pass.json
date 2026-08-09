@@ -1,0 +1,42 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-remediation-target-dynamic-replacement",
+  "recorded_at": "2026-08-09T12:02:50+09:00",
+  "status": "PASS",
+  "errors": [],
+  "source_commit": "97b98689123e081117501bd26bd68058589b78f2",
+  "run_root": "runs/fs_diloco/plan03_p4_dynamic_replace_2509526",
+  "identity": {
+    "git_dirty": false,
+    "source_fingerprint": "sha256:14322dff478e3e5c305d32e225e1f7c91bf3029ea36bbf8c9c006f08f5d643e1",
+    "run_id": "plan03_p4_dynamic_replace_2509526",
+    "descriptor_sha256": "11738f6f92199a6d7ce2ca120f2bc00f287c7b715fc8f89e319fecbec204b267"
+  },
+  "pbs": {
+    "job_id": "2509526.opbs",
+    "host": "mg0005",
+    "nodes": 1,
+    "queue": "debug-g",
+    "group_id": "xg24i002",
+    "requested_walltime": "00:10:00",
+    "actual_walltime": "00:00:16",
+    "exit_status": 0,
+    "stdout_path": "/work/xg24i002/x10041/fsb_decoupled_diloco_p4_97b9868/fsdiloco_p4_replace.o2509526",
+    "stdout_sha256": "7056d851220ca9b0bc4b0085dbac16ae66110761e01eb3b3a2a293bb45f3f834"
+  },
+  "terminal": {
+    "state": "finalized",
+    "final_version": 20,
+    "direct_weight_tokens_applied": 6400
+  },
+  "verified": {
+    "authority_database_sha256_before_cleanup": "27f884cc7194c05862c5719bb7b60e67f15c670d6a39108cffa602b662e6087e",
+    "integrity_check": "ok",
+    "old_instance_status": "revoked",
+    "replacement_instance_status": "stopped",
+    "old_instance_post_replacement_commits": 0,
+    "acked_terminal_fences": 1,
+    "hard_crash_gap_tokens_upper_bound": 0,
+    "outstanding_direct_weight_tokens": 0
+  }
+}

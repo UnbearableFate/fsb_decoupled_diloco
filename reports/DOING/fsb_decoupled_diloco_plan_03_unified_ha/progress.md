@@ -395,3 +395,51 @@
 - Both authority databases passed integrity, all 2/1 terminal fences were acknowledged and hard-crash gaps were zero. PBS exited 0 in `00:01:32` under `00:10:00`. Evidence: `artifacts/20260809-115240_p4-review-remediation-precommit_pass.json`; joined stdout SHA-256 `38a4d5385e2d297ce33af128f1ca8b2c7b627b1dbc47d8ec30b217a0141fb67c`.
 - This closes dirty-tree implementation validation but does not substitute for the clean frozen-target acceptance, target-bound requirement evidence or mandatory incremental review. Cleanup follows from the persisted PASS artifact before freezing the implementation commit.
 - Evidence-bound cleanup dry-ran and then removed exactly 8 static plus 13 dynamic terminal proposal objects (150,817 bytes), retaining authority/configuration/checkpoint/control/audit state. Inventories: `artifacts/20260809-115240_p4-review-remediation-precommit-{static,dynamic}_cleanup.json`.
+
+# 2026-08-09 11:57 JST — P4 frozen remediation target main gate PASS
+
+- Frozen implementation commit `97b98689123e081117501bd26bd68058589b78f2` was checked out in a detached clean worktree. Job `2509517.opbs` on `mg0006` captured `git_dirty=false` and source fingerprint `sha256:14322dff478e3e5c305d32e225e1f7c91bf3029ea36bbf8c9c006f08f5d643e1`, then passed Ruff, the 20-file format gate, Plan03 boundaries, `67` focused tests, `883` full tests and both real pipelines.
+- Static finalized v2/256 tokens with two acknowledged fences; dynamic finalized v12/3,840 with one. SQLite integrity and token fate checks passed and hard-crash gaps were zero. PBS exited 0 in `00:01:31` under `00:10:00`. Evidence: `artifacts/20260809-115733_p4-remediation-target-main_pass.json`; joined stdout SHA-256 `30c7ceb42960fb4517e6831c749822b7a8b022a77d240488643be61739632ab2`.
+- This target-bound main gate is one component of final P4 evidence; the specialty replacement/successor/takeover/compatibility gates and requirement aggregation remain before review-target freeze.
+- Evidence-bound cleanup dry-ran and removed 6 static plus 14 dynamic terminal proposal objects (142,545 bytes); immutable inventories are `artifacts/20260809-115733_p4-remediation-target-main-{static,dynamic}_cleanup.json`.
+
+# 2026-08-09 12:00 JST — P4 frozen-target static authorization/rerun gate PASS
+
+- Job `2509520.opbs` on `mg0005` first rejected the same-launch duplicate before admission (`UNAUTHORIZED_DUPLICATE_STATUS=1`) while generation 1 remained active, then accepted only the exact operator request naming the old and new attempt fences. The resumed old actor exited without post-replacement commits; generation 2 alone applied v1–v20 and finalized 1,280 tokens.
+- The old binding is durably `replaced`, the new binding reached terminal, the one terminal fence is `acked`, hard-crash gap is zero, token fates balance and SQLite integrity is `ok`. Clean target/source identity matches `97b9868...`; PBS exited 0 in `00:00:23` under `00:10:00`. Evidence: `artifacts/20260809-120000_p4-remediation-target-static-rerun_pass.json`; stdout SHA-256 `4494b9839b58ed54d8939becac4d24da2a119fe8ca1003deadd4ccff4d74af02`.
+- Evidence-bound cleanup dry-ran and removed 22 terminal proposal objects (174,275 bytes); inventory: `artifacts/20260809-120000_p4-remediation-target-static-rerun_cleanup.json`.
+
+# 2026-08-09 12:02 JST — P4 frozen-target dynamic replacement gate PASS
+
+- Job `2509526.opbs` on `mg0005` paused dynamic stream epoch 1 before any commit, admitted the exact replacement as stream epoch 2, then resumed the stale actor. The old instance committed nothing, finished `revoked`, and the replacement alone applied v1–v20 before reaching `stopped`.
+- The run finalized 6,400 direct tokens with one acknowledged terminal fence, zero hard-crash gap/outstanding tokens and SQLite integrity `ok`. Target identity is clean `97b9868...`; PBS exited 0 in `00:00:16` under `00:10:00`. Evidence: `artifacts/20260809-120250_p4-remediation-target-dynamic-replacement_pass.json`; stdout SHA-256 `7056d851220ca9b0bc4b0085dbac16ae66110761e01eb3b3a2a293bb45f3f834`.
+- Evidence-bound cleanup dry-ran and removed 23 terminal proposal objects (182,713 bytes); inventory: `artifacts/20260809-120250_p4-remediation-target-dynamic-replacement_cleanup.json`.
+
+# 2026-08-09 12:04 JST — P4 frozen-target candidate-error/manual-successor gate PASS
+
+- Job `2509532.opbs` on `mg0005` injected the candidate failure only after epoch 1 committed v2. The first candidate published immutable error control, fenced epoch 1 as `error` and exited nonzero; the explicit successor ignored/repaired the polluted convenience cache, acquired epoch 2 and resumed from authority at v3.
+- Version ownership is contiguous and unique: epoch 1 owns v0–v2, epoch 2 owns v3–v20 and ends `released`. The run finalized 1,280 direct tokens with an acknowledged terminal fence, zero hard-crash gap/outstanding tokens and integrity `ok`. Clean target identity is `97b9868...`; PBS exited 0 in `00:00:19`. Evidence: `artifacts/20260809-120450_p4-remediation-target-error-successor_pass.json`; stdout SHA-256 `9a3b6bfccf2ff16e82062ed84ee319c6662ae61d4d0bbf6519b7be72447782b3`.
+- Evidence-bound cleanup dry-ran and removed 22 terminal proposal objects (174,307 bytes); inventory: `artifacts/20260809-120450_p4-remediation-target-error-successor_cleanup.json`.
+
+# 2026-08-09 12:08 JST — P4 frozen-target two-host expired-lease takeover gate PASS
+
+- Job `2509537.opbs` ran independent candidates on `mg0255` and `mg0256`. Epoch 1 committed v0–v1 and was intentionally killed; only after the exact committed lease expired did the second host acquire epoch 2 and commit v2–v20. Epoch states are `expired` then `released`, with no overlap or duplicate version.
+- The run finalized 1,280 direct tokens, its terminal fence is acknowledged, hard-crash gap/outstanding token balance are zero and integrity is `ok`. The source descriptor attests clean target `97b9868...`. PBS routed the two-node request to `small-g`, exited 0 in `00:00:22` under `00:10:00`. Evidence: `artifacts/20260809-120830_p4-remediation-target-two-host-takeover_pass.json`; stdout SHA-256 `46ac813b35bcf95b11615e2c4eb545ebd2722c933f468c96a7be5072beac3e48`.
+- Evidence-bound cleanup dry-ran and removed 21 terminal proposal objects (166,042 bytes); inventory: `artifacts/20260809-120830_p4-remediation-target-two-host-takeover_cleanup.json`.
+
+# 2026-08-09 12:11 JST — P4 frozen-target Plan01 compatibility regression PASS
+
+- Job `2509546.opbs` on `mg0005` passed the complete repository suite (`883 passed in 64.55s`) from the clean remediation target, then passed the retained strict-v4 two-learner compatibility smoke.
+- The smoke finalized v2/256 direct tokens with two acknowledged terminal fences, zero hard-crash gap, no pending update, three actor attestations, three JSONL telemetry streams, no legacy CSV and SQLite integrity `ok`. The descriptor attests clean `97b9868...`; PBS exited 0 in `00:01:15` under the evidence-based `00:10:00` override. Evidence: `artifacts/20260809-121130_p4-remediation-target-plan01-regression_pass.json`; stdout SHA-256 `0df3c3eac3a9b1578b8c90043c435610da004b0f7365db6dc57ba466d4466198`.
+- Evidence-bound cleanup dry-ran and removed 7 terminal proposal objects (42,570 bytes); inventory: `artifacts/20260809-121130_p4-remediation-target-plan01-regression_cleanup.json`.
+
+# 2026-08-09 12:15 JST — P4 frozen remediation target aggregate PASS
+
+- Aggregate `artifacts/20260809-121510_p4-remediation-target-runtime_pass.json` binds all six clean-target jobs to implementation commit `97b98689123e081117501bd26bd68058589b78f2` and covers `AUTH-02/03/04/05/07/09/10`, `MODE-02` and `P4-MIGRATE`. Across the main, static/dynamic replacement, error-successor, two-host takeover and Plan01 gates, no stale actor/leader committed after its fence, versions stayed unique/contiguous, every terminal fence acknowledged with zero hard-crash gap, and every authority database passed integrity.
+- The original 111-entry migration matrix remains the exhaustive frozen-source→P4 inventory. A target delta (`artifacts/20260809-121500_p4-remediation-migration-delta_pass.json`) proves configs and local launchers are byte-identical to the earlier P4 target; only the Checker evidence rule and static authorization/rerun validation PBS changed under `scripts/miyabi`, both with explicit validation. Both archive tags still peel to the frozen source `a00a3d6...`.
+- All first-review findings are now `fixed-and-target-validated`; no finding is rejected or deferred. Remaining P4 completion gates are the source-targeted requirement Checker, evidence commit and mandatory incremental Codex/Claude review (Claude only skippable on an explicit session-limit response).
+
+# 2026-08-09 12:17 JST — P4 remediation target requirement binding PASS
+
+- `check_plan03.py` was run with the frozen P0 inventory, current-boundary and P4 migration verification, `--verification-target-ref 97b98689123e081117501bd26bd68058589b78f2`, and `--verify-phase-requirements P4-mandatory-fenced-runtime`. It returned `PASS`: zero frozen/current boundary or P4 semantic migration differences, and all eight P4 matrix rows have implementation owners, test owners and structured target-matching evidence.
+- Structured Checker evidence: `artifacts/20260809-121700_p4-remediation-target-requirements_pass.json` (SHA-256 `f45b52324864ed34695ef2105a89c45915c1afbfe9e03c943651d0ab098a69bb`). The Checker output path was intentionally excluded from self-reference during generation; after the evidence commit, a separate `--require-tracked-evidence` run must pass before the mandatory review begins.

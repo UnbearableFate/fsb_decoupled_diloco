@@ -6,8 +6,8 @@
   "review_target": "0e8b14ed08eacda710a0f1b4ebf3b19f921f31e4",
   "review": "reports/DOING/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P4-mandatory-fenced-runtime/gpt-5.6-sol_0e8b14ed08eacda710a0f1b4ebf3b19f921f31e4.md",
   "review_verdict": "CHANGES_REQUIRED",
-  "remediation_source_commit": null,
-  "status": "fixed-pending-frozen-target-validation",
+  "remediation_source_commit": "97b98689123e081117501bd26bd68058589b78f2",
+  "status": "fixed-and-target-validated",
   "findings": [
     {
       "id": "H1",
