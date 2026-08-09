@@ -1,0 +1,170 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-target-bound-runtime",
+  "recorded_at": "2026-08-09T10:02:00+09:00",
+  "status": "PASS",
+  "source_commit": "680ea94e9e1c718f519dc570d6922a5f9d1e6e20",
+  "source_identity": {
+    "git_dirty": false,
+    "source_fingerprint": "sha256:1e4aab424cecd6662db97d9f1809e7c9483f6d7ab5535dfcfe2f955f6e8ce8a2",
+    "review_target_worktree": "/work/xg24i002/x10041/fsb_decoupled_diloco_p4_680ea94"
+  },
+  "requirements_covered": [
+    "AUTH-02",
+    "AUTH-03",
+    "AUTH-04",
+    "AUTH-05",
+    "AUTH-07",
+    "AUTH-09",
+    "AUTH-10",
+    "MODE-02",
+    "P4-MIGRATE"
+  ],
+  "static_validation": {
+    "status": "PASS",
+    "commands": [
+      "bash -n scripts/miyabi/*.pbs scripts/miyabi/*.sh scripts/local/*.sh",
+      "literal #PBS -W group_list=xg24i002 scan"
+    ],
+    "walltime_basis": "all target-bound jobs previously completed in 1m32s or less; each submission used the repository minimum 00:10:00"
+  },
+  "compute_jobs": [
+    {
+      "job_id": "2509272.opbs",
+      "host": "mg0005",
+      "nodes": 1,
+      "walltime": "00:01:30",
+      "exit_status": 0,
+      "purpose": "Ruff, format, P4 boundary Checker, focused pytest, full pytest, and real static/dynamic pipelines",
+      "result": {
+        "ruff": "PASS",
+        "format_files": 20,
+        "boundary_checker": "PASS",
+        "focused_tests": "50 passed in 6.24s",
+        "full_tests": "866 passed in 60.56s",
+        "static": {
+          "run_id": "plan03_p4_static_2509272",
+          "descriptor_sha256": "252e285dd79e41b5d58ce76079f646369cbb8306bc3964dcfbf059236f0a85ff",
+          "final_version": 2,
+          "direct_weight_tokens_applied": 256,
+          "acked_terminal_fences": 2,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "pending_or_selected": 0,
+          "integrity_check": "ok"
+        },
+        "dynamic": {
+          "run_id": "plan03_p4_dynamic_2509272",
+          "descriptor_sha256": "d199d4dae2f95fb20855caec5b487639c85365dfbaf5e30f1fae16077c891989",
+          "final_version": 12,
+          "direct_weight_tokens_applied": 3840,
+          "acked_terminal_fences": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "pending_or_selected": 0,
+          "integrity_check": "ok"
+        }
+      }
+    },
+    {
+      "job_id": "2509281.opbs",
+      "host": "mg0008",
+      "nodes": 1,
+      "walltime": "00:00:17",
+      "exit_status": 0,
+      "purpose": "dynamic incarnation replacement and stale-process fence",
+      "run_id": "plan03_p4_dynamic_replace_2509281",
+      "descriptor_sha256": "d9692551bca0ec855836874d894c459eeed64a7be5cf415336e4ab13e3be16f0",
+      "result": {
+        "initial_instance_status": "revoked",
+        "replacement_instance_status": "stopped",
+        "stream_epochs": [1, 2],
+        "stale_learner_exit_status": 0,
+        "stale_post_replacement_commits": 0,
+        "final_version": 20,
+        "direct_weight_tokens_applied": 6400,
+        "integrity_check": "ok"
+      }
+    },
+    {
+      "job_id": "2509280.opbs",
+      "host": "mg0007",
+      "nodes": 1,
+      "walltime": "00:00:19",
+      "exit_status": 0,
+      "purpose": "same logical static launch rerun, generation replacement, and resumed-old-process fence",
+      "run_id": "plan03_p4_static_rerun_2509280",
+      "descriptor_sha256": "c9cfd55ef646f34f228d6ade52a3d426962861031fb62e8088d0701b7f86dc35",
+      "result": {
+        "old_attempt_id": "attempt-old-2509280",
+        "new_attempt_id": "attempt-new-2509280",
+        "version_at_replacement": 0,
+        "stale_old_exit_status": 0,
+        "old_post_replacement_commits": 0,
+        "final_version": 20,
+        "direct_weight_tokens_applied": 1280,
+        "integrity_check": "ok"
+      }
+    },
+    {
+      "job_id": "2509277.opbs",
+      "host": "mg0006",
+      "nodes": 1,
+      "walltime": "00:00:18",
+      "exit_status": 0,
+      "purpose": "candidate error terminal, polluted fixed cache, recovery submission disabled, and manual successor",
+      "run_id": "plan03_p4_error_successor_2509277",
+      "descriptor_sha256": "aae7f1bf9232faf442b564a086fd0b82328d391e737b99b7a7a832f55f6c56d0",
+      "result": {
+        "failed_candidate_exit_status": 1,
+        "automatic_recovery_submission": false,
+        "epoch_1": {"final_state": "error", "versions": [0, 2]},
+        "epoch_2": {"final_state": "released", "versions": [3, 20]},
+        "fixed_cache_repaired_from_authority": true,
+        "final_version": 20,
+        "direct_weight_tokens_applied": 1280,
+        "integrity_check": "ok"
+      }
+    },
+    {
+      "job_id": "2509279.opbs",
+      "host": "mg0843+mg0550",
+      "nodes": 2,
+      "walltime": "00:00:22",
+      "exit_status": 0,
+      "purpose": "two-host active-candidate failure and fenced successor takeover",
+      "run_id": "20260809_100010_fs_diloco_2node_resume",
+      "descriptor_sha256": "cda51d9ec1d633fc6a84bf66293c38197c38d4fe11371007fbc4a13610da7340",
+      "result": {
+        "epoch_1": {"final_state": "expired", "versions": [0, 1]},
+        "epoch_2": {"final_state": "released", "versions": [2, 20]},
+        "stale_leader_commits": 0,
+        "duplicate_versions": 0,
+        "final_version": 20,
+        "direct_weight_tokens_applied": 1280,
+        "integrity_check": "ok"
+      }
+    },
+    {
+      "job_id": "2509278.opbs",
+      "host": "mg0005",
+      "nodes": 1,
+      "walltime": "00:01:13",
+      "exit_status": 0,
+      "purpose": "Plan01 regression anchor on mandatory v4 runtime",
+      "run_id": "plan01_regression_2509278",
+      "descriptor_sha256": "05d1c6e1cc98909fa29ea97d9e5e8356502b9a1c08b1f94d6331f2a810524d1b",
+      "result": {
+        "full_tests": "866 passed in 63.20s",
+        "authority": "full_protocol_v4",
+        "telemetry_files": 3,
+        "shared_metrics_csv_files": 0,
+        "final_version": 2,
+        "direct_weight_tokens_applied": 256,
+        "acked_terminal_fences": 2,
+        "hard_crash_gap_tokens_upper_bound": 0,
+        "integrity_check": "ok"
+      }
+    }
+  ],
+  "migration_matrix": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-095600_p4-config-migration-matrix_pass.json",
+  "errors": []
+}

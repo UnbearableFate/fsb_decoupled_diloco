@@ -465,10 +465,14 @@ def verify_phase_requirements(
         implementation_owners = implementation.get(requirement, [])
         test_owners = tests.get(requirement, [])
         evidence_paths = [item.strip() for item in row["evidence_path"].split(";") if item.strip()]
+        artifact_contracts = [
+            item.strip() for item in row["artifact_contract"].split(";") if item.strip()
+        ]
+        checker_contract = f"checker requirements.{requirement}"
         requirement_differences: list[str] = []
         if row["status"] != "complete":
             requirement_differences.append("status")
-        if row["artifact_contract"] != f"checker requirements.{requirement}":
+        if checker_contract not in artifact_contracts:
             requirement_differences.append("artifact-contract")
         if not implementation_owners:
             requirement_differences.append("implementation")
@@ -522,7 +526,7 @@ def verify_phase_requirements(
                 )
             ):
                 structured_evidence.append(item)
-        if row["artifact_contract"].startswith("checker requirements.") and not structured_evidence:
+        if checker_contract in artifact_contracts and not structured_evidence:
             requirement_differences.append("structured-checker-evidence")
         checks[requirement] = {
             "status": "PASS" if not requirement_differences else "BLOCKED",

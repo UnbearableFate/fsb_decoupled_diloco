@@ -291,7 +291,8 @@ def test_plan03_requirement_checker_rejects_self_evidence_and_stale_source(
     matrix = tmp_path / "matrix.csv"
     matrix.write_text(
         "invariant_id,phase,artifact_contract,status,evidence_path\n"
-        "REQ-1,P3,checker requirements.REQ-1,complete,self.json;runtime.json\n",
+        'REQ-1,P3,"checker requirements.REQ-1; artifacts/<ts>_runtime.json",'
+        "complete,self.json;runtime.json\n",
         encoding="utf-8",
     )
     self_artifact = {

@@ -1,0 +1,21 @@
+{
+  "artifact_schema_version": 1,
+  "authority": "full_protocol_v4",
+  "errors": [],
+  "experiment_id": "p4-target-plan01-regression-cleanup-evidence",
+  "identity": {
+    "descriptor_sha256": "05d1c6e1cc98909fa29ea97d9e5e8356502b9a1c08b1f94d6331f2a810524d1b",
+    "run_id": "plan01_regression_2509278",
+    "source_fingerprint": "sha256:1e4aab424cecd6662db97d9f1809e7c9483f6d7ab5535dfcfe2f955f6e8ce8a2"
+  },
+  "recorded_at": "2026-08-09T10:03:00+09:00",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan01_regression_2509278",
+  "source_commit": "680ea94e9e1c718f519dc570d6922a5f9d1e6e20",
+  "status": "PASS",
+  "terminal": {
+    "direct_weight_tokens_applied": 256,
+    "final_version": 2,
+    "state": "finalized",
+    "stop_reason": "configured_target"
+  }
+}
