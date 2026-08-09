@@ -926,3 +926,9 @@
 - Experiment ID `P6-G3-generated-attempt1`，该正式门禁目标连续失败次数 1。PBS job `2512713.opbs` 中pure profile `1000x300`通过；SQLite profile在fixture构造阶段失败，G4按fail-fast未启动。
 - `_SQLiteAdapter` 把static和dynamic SQLite文件放在同一目录。fresh authority的READY marker按run-root目录命名，static初始化后dynamic初始化正确看到该目录已有authority marker并拒绝覆盖，抛出 `FileExistsError`。这不是production双authority拓扑。
 - 修复只把生成式adapter的static/dynamic authority放进两个独立run-root子目录，并使checkpoint/proposal路径继续相对各自run root；不放宽fresh initializer的marker防覆盖保护。随后完整重跑组合G3/G4。
+
+## 2026-08-09 23:50 JST — P6 G3 attempt 2 generated mismatched receipt/proposal retention
+
+- Experiment ID `P6-G3-generated-attempt2`，该正式门禁目标连续失败次数 2。PBS job `2512718.opbs` 的pure profile再次通过；SQLite Hypothesis以deterministic counterexample发现第二次ingest时proposal与其cycle receipt的 `retained_tokens_since_base` 不同，G4仍按fail-fast未启动。
+- Adapter先由共享fixture生成随cycle累计的receipt retention，随后又把proposal字段硬改成常数6；authority正确拒绝这组不可能的immutable pair。修复为删除该错误override，让proposal保留fixture中与receipt完全相同的值；不改变production validation。
+- Counterexample和解释保留在state-machine log；下一次仍完整运行pure+SQLite而非只跑失败输入。若第三次同一G3目标仍失败，按三连失败规则先做Codex+GPT全面审查并重写方案，不能直接第四次提交。

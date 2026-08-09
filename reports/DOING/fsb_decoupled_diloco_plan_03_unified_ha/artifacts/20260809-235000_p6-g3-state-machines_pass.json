@@ -1,0 +1,33 @@
+{
+  "artifact_version": 1,
+  "environment": {
+    "pbs_job_id": "2512718.opbs"
+  },
+  "errors": [
+    "pytest returned 1"
+  ],
+  "evidence_paths": [
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/qsub_plan03_p6_g3_g4_2512718/state-machines.log"
+  ],
+  "gate": "G3-generated-state-machines",
+  "metrics": {
+    "action_count": 13,
+    "elapsed_seconds": 26.45513956999639,
+    "pure_examples": 1000,
+    "pure_max_transitions": 300,
+    "sqlite_examples": 200,
+    "sqlite_max_transitions": 150
+  },
+  "phase_id": "P6-acceptance-final-review",
+  "plan_id": "fsb_decoupled_diloco_plan_03_unified_ha",
+  "requirements_covered": [
+    "P6-ACCEPTANCE"
+  ],
+  "source_commit": "12f5b64df08effde87f370c8617e22b389b70d81",
+  "source_identity": {
+    "git_commit": "12f5b64df08effde87f370c8617e22b389b70d81",
+    "git_dirty": false,
+    "source_fingerprint": "sha256:5ea99b6cbb2e820b73cc0646d7d17d69ff4e002f0af84dd4e8a2b3acb9ec44b1"
+  },
+  "status": "BLOCKED"
+}

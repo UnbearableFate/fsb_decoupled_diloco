@@ -300,7 +300,6 @@ class _SQLiteAdapter:
             run_id="p6-static",
         )
         proposal_data["base_global_version"] = latest.version
-        proposal_data["retained_tokens_since_base"] = 6
         proposal = FullUpdateProposalV2.from_dict(proposal_data)
         publish_proposal_payload(self.static_database.parent, proposal)
         self.static_leader.ingest_proposal(
