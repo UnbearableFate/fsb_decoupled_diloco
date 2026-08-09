@@ -349,7 +349,7 @@ def orchestrate(
         time.sleep(explicit_termination_after)
         if (inside / "successor.json").exists():
             raise RuntimeError("inside-transaction successor bypassed the held SQLite writer lock")
-        _remote_signal(str(paused["hostname"]), int(paused["pid"]), signal.SIGTERM)
+        _remote_signal(str(paused["hostname"]), int(paused["pid"]), signal.SIGKILL)
         old_status = old.wait(timeout=20.0)
         if old_status == 0:
             raise RuntimeError("explicitly terminated inside writer exited successfully")

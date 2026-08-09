@@ -982,3 +982,9 @@
 - Experiment ID `P6-G10-performance-attempt1`。PBS job `2513331.opbs`在单个`debug-g`节点以30分钟walltime启动；current隔离venv的frozen sync和classic detached worktree创建成功，但classic依赖安装在任何paired arm运行前exit 1，因此没有G10 comparison artifact、没有可解释为性能结果的样本。
 - Runner用`uv export --no-emit-project`生成requirements后再调用裸`uv pip sync`。导出文件保留`torch==2.13.0+cu132`及hash，却没有携带`pyproject.toml`中explicit `pytorch-cu132` index；resolver只查默认index并精确报“no version of torch==2.13.0+cu132”。这是隔离环境构造错误，不是lockfile不可解或性能门禁失败。
 - 下一次让classic环境直接从current frozen project/lock以独立`UV_PROJECT_ENVIRONMENT`同步依赖，再以`--no-deps -e`安装classic source；这样两臂仍是不同venv/worktree/run root，同时复用lock中的source/index/hash契约。先做shell/静态检查，并在compute上验证两个解释器路径不同且torch/依赖版本一致，再重新开始固定20 pairs；不得删除PyTorch或放宽workload equivalence/non-inferiority门禁。
+
+## 2026-08-10 01:37 JST — P6 G7 attempt 1 sent a catchable signal to a stopped writer
+
+- Experiment ID `P6-G7-two-node-attempt1`。PBS job `2513329.opbs`在`small-g`使用2节点、10分钟walltime；11个supplemental contracts和transaction外takeover均通过，随后transaction内场景按预期证明successor不能绕过held writer lock，但orchestrator在约26秒后exit 1。Raw log：`fsdiloco_p6_g7_2n.o2513329`；完整失败现场：`runs/fs_diloco/plan03_p6_g7_2513329/`。
+- Old writer `pid=1128295`在`mg0149`持有`BEGIN IMMEDIATE`后处于SIGSTOP。Orchestrator发送SIGTERM后等待mpirun 20秒超时；现场仍有SQLite journal且没有successor artifact。POSIX stopped进程不会因catchable SIGTERM自动继续，信号保持pending，因而旧进程既未退出也未释放writer lock。这与生产fencing无关，是fault-injection teardown错误。
+- 下一轮把这个已证明处于transaction内且必须强制终止的test actor改为SIGKILL，使停止态进程立即死亡并由SQLite rollback释放lock；仍要求mpirun非零、successor等待至少3秒、uncommitted reason为NULL、integrity=`ok`。先跑静态/G2，再重跑完整2-node G7；不得用SIGCONT让旧writer执行任何post-stop代码，也不得缩短held-lock观察窗口。
