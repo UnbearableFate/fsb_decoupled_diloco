@@ -908,3 +908,9 @@
 - Experiment ID `P6-G0-G1-formal-attempt1`，该正式门禁目标连续失败次数 1。Artifact `artifacts/20260809-232800_p6-g0-g1-freeze-static_pass.json` 保留原始 `BLOCKED` 结果；lint、format、compile、shell syntax 和 literal group scan均通过。
 - Harness错误一：对 `.venv/bin/python` 调用 `Path.resolve()` 解引用到uv基础解释器，丢失venv site-packages，Checker因此以 `ModuleNotFoundError: yaml` 退出。错误二：冻结matrix断言遗漏同属P6的既有 `AUTH-11` 行，把完整八行误判为缺行集合不相等。
 - 修复限定为保持传入venv executable路径（不解引用symlink）并把 `AUTH-11` 加入G0精确集合；不改变Checker逻辑、requirement matrix或任何runtime行为。随后从完整正式G0/G1门禁重跑。
+
+## 2026-08-09 23:33 JST — P6 G2 attempt 1 maintenance test used an expired leader
+
+- Experiment ID `P6-G2-tests-attempt1`，该正式门禁目标连续失败次数 1。PBS job `2512684.opbs` 的focused suite结果为 `610 passed, 2 skipped, 1 failed`；失败仅在 `test_fenced_maintenance_archives_history_and_successor_reclaims_artifact_gc`。
+- Test fixture把手工wall clock直接推进 `publication_orphan_grace_seconds + 1`，超过当前leader的lease safety boundary，却随后用该过期leader调用 `claim_orphan_gc`；authority正确抛出 `StaleLeaderTokenError`。这是新test的时序错误，不是GC实现接受stale writer。
+- 待本job完整suite和artifact结束后，修复会在推进clock前先续租current token，或在推进后显式由合法successor claim；保留“stale leader不得claim、successor可reclaim”的生产不变量，然后完整重跑G2。

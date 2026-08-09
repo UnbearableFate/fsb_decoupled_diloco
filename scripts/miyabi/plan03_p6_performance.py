@@ -455,7 +455,7 @@ def run(
     if comparison == "classic":
         if classic_root is None or classic_python is None:
             raise ValueError("classic comparison requires classic root/python")
-        if classic_python.resolve() == current_python.resolve():
+        if classic_python.absolute() == current_python.absolute():
             raise RuntimeError("classic and current arms must use independent virtualenvs")
         classic_commit = _git(classic_root, "rev-parse", "HEAD")
         if _git(classic_root, "status", "--porcelain=v1"):
@@ -663,9 +663,9 @@ def main() -> None:
     payload = run(
         comparison=args.comparison,
         current_root=args.current_root.resolve(),
-        current_python=args.current_python.resolve(),
+        current_python=args.current_python.absolute(),
         classic_root=None if args.classic_root is None else args.classic_root.resolve(),
-        classic_python=(None if args.classic_python is None else args.classic_python.resolve()),
+        classic_python=(None if args.classic_python is None else args.classic_python.absolute()),
         shared_parent=args.shared_parent.resolve(),
     )
     _write_json(args.output.resolve(), payload)

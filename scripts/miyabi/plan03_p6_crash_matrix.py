@@ -188,7 +188,7 @@ def main() -> None:
     try:
         payload = run(
             args.project_root.resolve(),
-            args.python.resolve(),
+            args.python.absolute(),
             args.log.resolve(),
         )
     except Exception as exc:

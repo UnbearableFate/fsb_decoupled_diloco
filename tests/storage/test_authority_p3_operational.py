@@ -1508,7 +1508,9 @@ def test_fenced_maintenance_archives_history_and_successor_reclaims_artifact_gc(
             (tmp_path / str(version_one[field])).is_file()
             for field in ("weight_relative_path", "optim_relative_path")
         )
-        clock.now += config.publication_orphan_grace_seconds + 1.0
+        clock.now += 60.0
+        authority.renew_leader(token)
+        clock.now += config.publication_orphan_grace_seconds - 59.0
         claimed = leader.claim_orphan_gc(command_id="old-leader-claim")
         assert {item["relative_path"] for item in claimed} == old_paths
         authority.release_leader(token)

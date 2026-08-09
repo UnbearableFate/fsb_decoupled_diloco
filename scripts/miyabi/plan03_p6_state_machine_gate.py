@@ -50,7 +50,7 @@ def main() -> None:
     args.log.parent.mkdir(parents=True, exist_ok=True)
     environment = os.environ.copy()
     environment["FS_DILOCO_RUN_P6_FORMAL_GATES"] = "1"
-    command = [str(args.python.resolve()), "-m", "pytest", "-q", *NODEIDS]
+    command = [str(args.python.absolute()), "-m", "pytest", "-q", *NODEIDS]
     started = time.monotonic()
     with args.log.open("w", encoding="utf-8") as log:
         result = subprocess.run(
