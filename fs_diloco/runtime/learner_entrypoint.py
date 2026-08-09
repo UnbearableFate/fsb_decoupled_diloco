@@ -133,7 +133,12 @@ def main(argv: list[str] | None = None) -> None:
         )
         if admission is not None:
             break
-        time.sleep(float(shared.membership.registration_scan_interval_seconds))
+        time.sleep(
+            min(
+                float(shared.membership.registration_scan_interval_seconds),
+                float(shared.sync.scan_interval_seconds),
+            )
+        )
     if admission is None:
         raise TimeoutError(f"learner admission timed out before torch import: {actor_id}")
     if "torch" in sys.modules:

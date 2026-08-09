@@ -79,6 +79,7 @@ def test_classic_summary_joins_archived_history_with_hot_authority(tmp_path: Pat
         CREATE TABLE updates (
             update_id TEXT PRIMARY KEY,
             learner_id TEXT NOT NULL,
+            local_step_start INTEGER NOT NULL,
             local_step_end INTEGER NOT NULL,
             tokens_this_update INTEGER NOT NULL,
             applied_version INTEGER,
@@ -113,6 +114,7 @@ def test_classic_summary_joins_archived_history_with_hot_authority(tmp_path: Pat
         {
             "update_id": f"u{version}-{learner}",
             "learner_id": f"learner_{learner:03d}",
+            "local_step_start": (version - 1) * 2,
             "local_step_end": version * 2,
             "tokens_this_update": 64,
             "applied_version": version,
@@ -128,6 +130,20 @@ def test_classic_summary_joins_archived_history_with_hot_authority(tmp_path: Pat
     (metrics / "update_history.jsonl").write_text(
         "".join(json.dumps(row) + "\n" for row in archived_updates), encoding="utf-8"
     )
+    heartbeats = tmp_path / "heartbeats"
+    heartbeats.mkdir()
+    for learner in range(2):
+        (heartbeats / f"learner_{learner:03d}.json").write_text(
+            json.dumps(
+                {
+                    "learner_id": f"learner_{learner:03d}",
+                    "last_local_step": 4,
+                    "status": "stopped",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
     summary = module._classic_summary(tmp_path)
 
@@ -137,8 +153,45 @@ def test_classic_summary_joins_archived_history_with_hot_authority(tmp_path: Pat
         "direct_weight_tokens": 256,
         "selected_count": 4,
         "cursor_identity": [4, 4],
+        "selected_processed_tokens": 256,
+        "selected_cursor_identity": [4, 4],
         "active_protocol_seconds": 2.0,
     }
+
+
+def test_workload_identity_uses_terminal_work_not_only_selected_updates() -> None:
+    module = _load_harness()
+    selected = {
+        "final_version": 2,
+        "processed_tokens": 320,
+        "direct_weight_tokens": 256,
+        "selected_count": 4,
+        "cursor_identity": [4, 6],
+        "selected_processed_tokens": 256,
+        "selected_cursor_identity": [4, 4],
+    }
+
+    workload = module._workload_object(selected)
+
+    assert workload["processed_tokens"] == 320
+    assert workload["cursor_identity"] == [4, 6]
+    assert workload["selected_processed_tokens"] == 256
+    assert workload["selected_cursor_identity"] == [4, 4]
+
+
+def test_actor_event_tape_is_harvested_before_run_cleanup(tmp_path: Path) -> None:
+    module = _load_harness()
+    event_path = tmp_path / "metrics/syncer/owner/attempt.jsonl"
+    event_path.parent.mkdir(parents=True)
+    rows = [
+        {"timestamp": 1.0, "event_type": "leadership_acquired"},
+        {"timestamp": 2.0, "event_type": "terminal_finalized"},
+    ]
+    event_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+    tape = module._actor_event_tape(tmp_path)
+
+    assert tape == {"metrics/syncer/owner/attempt.jsonl": rows}
 
 
 def test_classic_and_current_configs_share_post_publish_barrier(tmp_path: Path) -> None:

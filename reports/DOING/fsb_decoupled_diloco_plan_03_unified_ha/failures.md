@@ -1030,3 +1030,24 @@
 - Formal G10 attempt 5，PBS job `2513629.opbs`，在单个`debug-g`节点以30分钟walltime运行clean target `df52256fa40da412f5d5df50769162e6ebb9c6a1`。双venv/source preflight与classic warmup archive投影均通过，classic-vs-unified完成warmup和固定20-pair执行后，在统计前报`measured workload identity varied between paired repeats`并exit 1；第二组static-vs-dynamic尚未开始。未生成comparison artifact；raw log为`fsdiloco_p6_g10.o2513629`，job-owned scratch按现有`finally`删除。
 - 已确认两臂配置都保留`learner.post_publish_latest_wait_seconds=0`。Learner proposal只保证receipt已ingest，不保证该proposal已经进入下一版；因此它可立即消费下一段数据并发布同base的更新，`most_recent_per_learner`最终选择哪个`data_cursor_end`会受actor/syncer时序影响。G10把组合authority的selected cursor纳入workload identity，正确拒绝了这种pair间数据样本漂移。其他identity字段由summary强制为final v2、4 selected updates和256 tokens，故该故障不是性能结论。现有异常又只报告集合基数并删除trial records，未保留具体variant，这是独立的失败可观测性缺口。
 - 下一轮在两臂都显式设置相同的有界post-publish newer-global wait，并把classic遗漏的`training.completion_mode=global_only`与current对齐；这样每个learner在开始下一cycle前必须看到下一版或terminal，冻结两版 workload为每人cursor 4。RED回归从冻结tag生成classic config，要求classic/current两臂wait与completion相同；异常路径同时写`BLOCKED` artifact并保留canonical workload variants。完整G2通过后才可提交attempt 6；20 pairs、AB/BA、timer、10% margin和bootstrap CI均不变。若attempt 6再次失败，将构成attempts 4–6第二个三连窗口，attempt 7前必须再次全面审查。
+
+## 2026-08-10 02:49 JST — P6 G10 attempt 6 proved a real 64% classic performance regression
+
+- Formal G10 attempt 6，PBS job `2513663.opbs`，在`mg0001`以30分钟walltime运行clean target `4e21a95b0561f534e9aa66040c205d448d052667`。Classic-vs-unified完成全部warmup和20个AB/BA pairs；两臂每次都保持final v2、4 updates、256 processed/direct tokens及cursor `[4,4]`，证明attempt 5的数据漂移修复有效。Structured artifact为`artifacts/20260810-024200_p6-g10-classic-performance-pass.json`（内容status=`BLOCKED`）；第二组static-vs-dynamic因第一硬门禁失败而未开始，raw log为`fsdiloco_p6_g10.o2513663`。
+- 这是性能门禁的真实失败而非harness错误：candidate end-to-end约`13.00–13.46s`，classic约`7.83–9.18s`，paired median signed overhead `64.001%`、one-sided 95% bootstrap upper `65.842%`，超过10% margin且absolute median超过20% workload-audit阈值，comparison正确为`INCOMPARABLE`；未clipping。Secondary active protocol同样由classic约`3.04–4.19s`增至candidate约`8.09–8.44s`，说明主要差异在协议生命周期而非initializer单独启动开销。
+- Attempts 4–6构成第二个连续三失败窗口。Attempt 7前停止提交，必须在`code_review.md`完成Codex+GPT全面审查：按actor lifecycle分解v4的固定等待、scan/grace、terminal drain/ack/finalize、maintenance与进程退出，核对SQLite/file publication顺序和两臂等价配置；从trial timing与actor event timestamps定位可安全消除的固定延迟，新增RED timing/lifecycle测试并保持所有correctness/terminal门禁。不得改变20 pairs、timer anchor、10% margin、bootstrap CI或以删除terminal correctness换取性能。
+
+## 2026-08-10 03:04 JST — login-node Torch-free import probe used the unsupported system Python
+
+- Experiment ID `P6-G10-remediation-static-import-probe-attempt1`. Command `python -c "import sys; import fs_diloco.runtime.syncer_v4; assert 'torch' not in sys.modules"` ran on the login node with `/usr/lib64/python3.9`, before any pytest or Torch import. It failed while importing `typing.TypeAlias`, which this repository requires but Python 3.9 does not provide; the new syncer module itself had already passed `python -m py_compile` and the failure did not reach the Torch-boundary assertion.
+- This is an environment-selection error, not evidence that the module imports Torch. The formal regression uses the frozen project environment on PBS and the new unit probe uses `sys.executable`, so it will execute with that supported interpreter. No production relaxation follows. The next verification will run through G2 PBS; login-node runtime import is not retried with system Python.
+
+## 2026-08-10 03:08 JST — G10 remediation focused Ruff attempt 1 found an annotation-only local import
+
+- Experiment ID `P6-G10-remediation-focused-static-attempt1`. Focused `.venv/bin/ruff check` failed with one `F401`: `_initialize_v0()` locally imported `torch`, but postponed annotations obtain their type name from the module's `TYPE_CHECKING` import and the function body does not otherwise reference the local binding. Compile and `git diff --check` had passed; no runtime test was run on the login node.
+- Remove only the redundant function-local `import torch`; retain the `TYPE_CHECKING` annotation import and the real lazy Torch import at `run_fenced_syncer()` entry. Then rerun the complete focused Ruff/format group. This does not move Torch ahead of admission.
+
+## 2026-08-10 03:09 JST — G10 remediation focused static attempt 2 required canonical formatting
+
+- The repeated focused group passed Ruff lint, then `ruff format --check` reported three newly edited files (`learner_control.py`, `plan03_p6_performance.py`, and `test_syncer_startup_admission.py`) would be reformatted. No semantic or runtime failure occurred.
+- Apply the repository formatter mechanically to those files and rerun the same lint/format group. The performance method and protocol logic remain unchanged.

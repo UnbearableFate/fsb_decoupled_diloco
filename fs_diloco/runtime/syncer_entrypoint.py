@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..core.run_descriptor import LoadedRunDescriptor, load_run_descriptor
+from ..observability.logging_utils import ActorTelemetryWriter
 
 
 class _LeaseRenewer:
@@ -89,6 +90,59 @@ def _scope(loaded: LoadedRunDescriptor) -> Any:
     return StaticMembershipScope(tuple(loaded.descriptor["static_learner_ids"]))
 
 
+def _initial_admission_ready(loaded: LoadedRunDescriptor, authority: Any) -> bool:
+    fences = authority.read.current_contributor_fences()
+    if loaded.config.shared.membership.mode == "static":
+        return {fence.stable_contributor_key for fence in fences} == set(
+            loaded.descriptor["static_learner_ids"]
+        )
+    return len(fences) >= int(loaded.descriptor["bootstrap_slots"])
+
+
+def _admit_before_runtime_import(
+    loaded: LoadedRunDescriptor,
+    authority: Any,
+    leader: Any,
+    telemetry: ActorTelemetryWriter,
+    *,
+    admit: Callable[..., None],
+    monotonic_clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """Briefly admit initial peers before the syncer imports Torch/model code.
+
+    This is only a startup overlap window.  The main loop keeps scanning the
+    same durable request directory, so late requests are neither required here
+    nor lost when the bounded window expires.
+    """
+
+    shared = loaded.config.shared
+    poll_seconds = min(
+        float(shared.sync.scan_interval_seconds),
+        float(shared.membership.registration_scan_interval_seconds),
+    )
+    window_seconds = min(5.0, max(1.0, poll_seconds * 5.0))
+    deadline = monotonic_clock() + window_seconds
+    while True:
+        admit(loaded, authority, leader, telemetry)
+        if _initial_admission_ready(loaded, authority):
+            telemetry.event(
+                "initial_admission_ready_before_runtime_import",
+                admitted_count=len(authority.read.current_contributor_fences()),
+                waited_seconds=window_seconds - max(0.0, deadline - monotonic_clock()),
+            )
+            return
+        remaining = deadline - monotonic_clock()
+        if remaining <= 0.0:
+            telemetry.event(
+                "initial_admission_window_expired",
+                admitted_count=len(authority.read.current_contributor_fences()),
+                window_seconds=window_seconds,
+            )
+            return
+        sleep(min(poll_seconds, remaining))
+
+
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     loaded = load_run_descriptor(
@@ -152,10 +206,28 @@ def main(argv: list[str] | None = None) -> None:
             interval_seconds=config.leader.renew_interval_seconds,
         )
         renewer.start()
-        from .syncer_v4 import run_fenced_syncer
-
         attempt_id = f"attempt-{uuid.uuid4()}"
+        telemetry = ActorTelemetryWriter(
+            loaded.paths.actor_metrics_path("syncer", token.owner_id, attempt_id),
+            actor_kind="syncer",
+            actor_id=token.owner_id,
+            attempt_id=attempt_id,
+        )
+        telemetry.event("leadership_acquired", epoch=token.epoch)
+        from .syncer_v4 import _admit_requests, run_fenced_syncer
+
         try:
+            if config.shared.membership.mode == "dynamic":
+                leader.initialize_dynamic_membership(
+                    command_id=f"initialize-dynamic-membership-e{token.epoch}"
+                )
+            _admit_before_runtime_import(
+                loaded,
+                authority,
+                leader,
+                telemetry,
+                admit=_admit_requests,
+            )
             run_fenced_syncer(
                 loaded,
                 authority,
@@ -163,6 +235,7 @@ def main(argv: list[str] | None = None) -> None:
                 control,
                 attempt_id=attempt_id,
                 renewer=renewer,
+                telemetry=telemetry,
             )
         except BaseException as exc:
             try:

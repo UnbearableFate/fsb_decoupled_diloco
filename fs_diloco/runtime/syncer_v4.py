@@ -9,14 +9,9 @@ from pathlib import Path
 import signal
 import time
 import uuid
-from typing import Any
-
-import torch
+from typing import TYPE_CHECKING, Any
 
 from ..core.run_descriptor import LoadedRunDescriptor, write_actor_attestation
-from ..modeling.hf_model import load_causal_lm_and_tokenizer
-from ..modeling.outer_optim import init_outer_state
-from ..modeling.param_index import build_param_index, flatten_trainable_params
 from ..observability.logging_utils import ActorTelemetryWriter
 from ..storage.admission import (
     ADMISSION_RESPONSE_FORMAT_VERSION,
@@ -57,21 +52,10 @@ from ..storage.authority import (
     MembershipFenceError,
 )
 from ..storage.leader_lease import StaleLeaderTokenError
-from ..storage.tensor_codec import (
-    dtype_from_name,
-    encode_global_weights,
-    encode_outer_state,
-    load_outer_state,
-)
 from .pbs_scheduler import PBSScheduler
-from .services import (
-    DynamicCapacityService,
-    MaintenanceService,
-    MergeAttemptStatus,
-    MergeService,
-    TerminalService,
-    terminal_close_reason,
-)
+
+if TYPE_CHECKING:
+    import torch
 
 
 PLAN03_REQUIREMENTS = frozenset(
@@ -172,17 +156,24 @@ def run_fenced_syncer(
     *,
     attempt_id: str,
     renewer: Any,
+    telemetry: ActorTelemetryWriter,
 ) -> None:
+    import torch
+
+    from ..storage.tensor_codec import dtype_from_name, load_outer_state
+    from .services import (
+        DynamicCapacityService,
+        MaintenanceService,
+        MergeAttemptStatus,
+        MergeService,
+        TerminalService,
+        terminal_close_reason,
+    )
+
     config_v4 = loaded.config
     config = config_v4.shared
     paths = loaded.paths
     token = leader.token
-    telemetry = ActorTelemetryWriter(
-        paths.actor_metrics_path("syncer", token.owner_id, attempt_id),
-        actor_kind="syncer",
-        actor_id=token.owner_id,
-        attempt_id=attempt_id,
-    )
     device = torch.device(
         "cuda"
         if config.syncer.device == "cuda"
@@ -208,13 +199,9 @@ def run_fenced_syncer(
         scheduler_job_id=os.environ.get("PBS_JOBID"),
         accelerator_identity=os.environ.get("CUDA_VISIBLE_DEVICES") or str(device),
     )
-    telemetry.event("leadership_acquired", epoch=token.epoch, device=str(device))
+    telemetry.event("syncer_runtime_ready", epoch=token.epoch, device=str(device))
     renewer.raise_if_failed()
     leader.reconcile_publications(command_id=f"reconcile-publications-e{token.epoch}")
-    if config.membership.mode == "dynamic":
-        leader.initialize_dynamic_membership(
-            command_id=f"initialize-dynamic-membership-e{token.epoch}"
-        )
     latest = authority.read.latest_committed_version()
     if latest is None:
         latest, theta, outer_state, param_index = _initialize_v0(loaded, leader, device=device)
@@ -335,6 +322,16 @@ def _initialize_v0(
     *,
     device: torch.device,
 ) -> tuple[Any, torch.Tensor, dict[str, torch.Tensor], dict[str, Any]]:
+    from ..modeling.hf_model import load_causal_lm_and_tokenizer
+    from ..modeling.outer_optim import init_outer_state
+    from ..modeling.param_index import build_param_index, flatten_trainable_params
+    from ..storage.tensor_codec import (
+        dtype_from_name,
+        encode_global_weights,
+        encode_outer_state,
+        load_outer_state,
+    )
+
     config = loaded.config.shared
     model, _tokenizer = load_causal_lm_and_tokenizer(config.model)
     model.to(device)

@@ -161,7 +161,8 @@ def _current_summary(run_root: Path) -> dict[str, Any]:
             "SELECT acquired_at, final_at FROM syncer_epochs ORDER BY epoch"
         ).fetchall()
         progress = connection.execute(
-            "SELECT data_cursor FROM contributor_progress ORDER BY stable_contributor_key"
+            "SELECT stable_contributor_key, data_cursor FROM contributor_progress "
+            "ORDER BY stable_contributor_key"
         ).fetchall()
         hot_updates = [
             dict(row)
@@ -190,18 +191,21 @@ def _current_summary(run_root: Path) -> dict[str, Any]:
         cursor_by_contributor[key] = max(
             cursor_by_contributor.get(key, 0), int(row["data_cursor_end"])
         )
-    processed = sum(int(row["processed_tokens_this_cycle"]) for row in applied)
+    selected_processed = sum(int(row["processed_tokens_this_cycle"]) for row in applied)
     direct = sum(int(row["effective_tokens_this_update"]) for row in applied)
     if direct != int(rollup["direct_applied"]):
         raise RuntimeError("current applied-update projection disagrees with the token rollup")
+    terminal_cursor = [int(row["data_cursor"]) for row in progress]
     return {
         "final_version": int(terminal["final_version"]),
-        "processed_tokens": processed,
+        "processed_tokens": int(rollup["adjudicated_processed"]),
         "direct_weight_tokens": direct,
         "selected_count": len(applied),
-        "cursor_identity": [cursor_by_contributor[key] for key in sorted(cursor_by_contributor)],
-        "adjudicated_processed_tokens": int(rollup["adjudicated_processed"]),
-        "terminal_progress_cursor": [int(row["data_cursor"]) for row in progress],
+        "cursor_identity": terminal_cursor,
+        "selected_processed_tokens": selected_processed,
+        "selected_cursor_identity": [
+            cursor_by_contributor[key] for key in sorted(cursor_by_contributor)
+        ],
         "active_protocol_seconds": (
             max(float(row["final_at"]) for row in epochs)
             - min(float(row["acquired_at"]) for row in epochs)
@@ -270,11 +274,11 @@ def _classic_summary(run_root: Path) -> dict[str, Any]:
             int(row["tokens_this_update"]) for row in applied
         ) != int(version["total_update_tokens"]):
             raise RuntimeError("classic per-version update projection disagrees")
-    processed = sum(int(row["tokens_this_update"]) for row in updates)
-    direct = processed
+    selected_processed = sum(int(row["tokens_this_update"]) for row in updates)
+    direct = selected_processed
     if (
-        processed != int(versions[-1]["total_seen_tokens"])
-        or sum(int(row["total_update_tokens"]) for row in versions) != processed
+        selected_processed != int(versions[-1]["total_seen_tokens"])
+        or sum(int(row["total_update_tokens"]) for row in versions) != selected_processed
     ):
         raise RuntimeError("classic applied-update projection disagrees with global token total")
     cursor_by_contributor: dict[str, int] = {}
@@ -283,12 +287,42 @@ def _classic_summary(run_root: Path) -> dict[str, Any]:
         cursor_by_contributor[key] = max(
             cursor_by_contributor.get(key, 0), int(row["local_step_end"])
         )
+    learners: list[dict[str, Any]] = []
+    for path in sorted((run_root / "heartbeats").glob("learner_*.json")):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict) or payload.get("learner_id") != path.stem:
+            raise RuntimeError(f"classic terminal heartbeat identity is invalid: {path}")
+        if payload.get("status") != "stopped":
+            raise RuntimeError(f"classic learner did not publish stopped progress: {path}")
+        learners.append(payload)
+    if [str(row["learner_id"]) for row in learners] != sorted(cursor_by_contributor):
+        raise RuntimeError("classic terminal progress does not cover measured contributors")
+    tokens_per_step: dict[str, int] = {}
+    for row in updates:
+        learner_id = str(row["learner_id"])
+        step_count = int(row["local_step_end"]) - int(row.get("local_step_start", 0))
+        token_count = int(row["tokens_this_update"])
+        if step_count <= 0 or token_count <= 0 or token_count % step_count:
+            raise RuntimeError("classic update cannot establish an integral token rate")
+        rate = token_count // step_count
+        if learner_id in tokens_per_step and tokens_per_step[learner_id] != rate:
+            raise RuntimeError("classic per-step token rate varied within one contributor")
+        tokens_per_step[learner_id] = rate
+    terminal_cursor = [int(row["last_local_step"] or 0) for row in learners]
+    processed = sum(
+        int(row["last_local_step"] or 0) * tokens_per_step[str(row["learner_id"])]
+        for row in learners
+    )
     return {
         "final_version": int(versions[-1]["version"]),
         "processed_tokens": processed,
         "direct_weight_tokens": direct,
         "selected_count": selected_count,
-        "cursor_identity": [cursor_by_contributor[key] for key in sorted(cursor_by_contributor)],
+        "cursor_identity": terminal_cursor,
+        "selected_processed_tokens": selected_processed,
+        "selected_cursor_identity": [
+            cursor_by_contributor[key] for key in sorted(cursor_by_contributor)
+        ],
         "active_protocol_seconds": (
             float(versions[-1]["created_at"]) - float(versions[0]["created_at"])
         ),
@@ -342,6 +376,30 @@ def _audit_table_rows(run_root: Path, table: str) -> list[dict[str, Any]]:
                     raise RuntimeError(f"conflicting archived {table} row: {key}")
                 rows[key] = row
     return list(rows.values())
+
+
+def _actor_event_tape(run_root: Path) -> dict[str, list[dict[str, Any]]]:
+    """Read actor JSONL before benchmark cleanup so lifecycle evidence survives."""
+
+    tape: dict[str, list[dict[str, Any]]] = {}
+    for actor_kind in ("syncer", "learner"):
+        root = run_root / "metrics" / actor_kind
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*.jsonl")):
+            relative = path.relative_to(run_root).as_posix()
+            rows: list[dict[str, Any]] = []
+            for line_number, line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), start=1
+            ):
+                if not line.strip():
+                    continue
+                payload = json.loads(line)
+                if not isinstance(payload, dict):
+                    raise RuntimeError(f"actor event is not an object: {relative}:{line_number}")
+                rows.append(payload)
+            tape[relative] = rows
+    return tape
 
 
 def _wait_processes(
@@ -469,6 +527,7 @@ def _run_arm(
     summary = (
         _classic_summary(run_root) if implementation == "classic" else _current_summary(run_root)
     )
+    actor_event_tape = _actor_event_tape(run_root)
     tails = {
         role: (log_root / f"{role}.log")
         .read_text(encoding="utf-8", errors="replace")
@@ -489,6 +548,7 @@ def _run_arm(
         "workload": summary,
         "process_returncodes": {role: process.returncode for role, process, _ in processes},
         "output_tails": tails,
+        "actor_event_tape": actor_event_tape,
     }
     shutil.rmtree(run_root)
     shutil.rmtree(log_root)
@@ -519,6 +579,8 @@ def _workload_object(summary: dict[str, Any]) -> dict[str, Any]:
         "outer_target": summary["final_version"],
         "processed_tokens": summary["processed_tokens"],
         "direct_weight_tokens": summary["direct_weight_tokens"],
+        "selected_processed_tokens": summary["selected_processed_tokens"],
+        "selected_cursor_identity": summary["selected_cursor_identity"],
         "carried_ancestry_tokens": 0,
         "selected_count": summary["selected_count"],
         "failure_tape": [],
