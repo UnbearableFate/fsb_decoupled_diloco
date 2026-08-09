@@ -38,6 +38,7 @@ BOUNDARY_COUNT_KEYS = (
 )
 P1_BASELINE_COMPOSITION_MIGRATION = "fs_diloco/baselines/train.py"
 P5_BASELINE_PROTOCOL_MIGRATION = "fs_diloco/baselines/protocol.py"
+P5_BASELINE_PROTOCOL_SHA256 = "4919f2e26c8d6da22028f26d66286cff7f2f51004d230672bc51c0ad9bbc1fc9"
 P5_ADDITIONAL_REMOVED_FULL_CONFIGS = frozenset(
     {"configs/fs_diloco_gpt2_wikitext2_8l_5000steps_terminal_capture.yaml"}
 )
@@ -470,6 +471,11 @@ def verify_boundaries(actual: dict[str, Any], expected: dict[str, Any]) -> list[
     for label, actual_value, expected_value in comparisons:
         if actual_value != expected_value:
             differences.append(label)
+    if (
+        actual["manifest_sha256"].get(P5_BASELINE_PROTOCOL_MIGRATION) != P5_BASELINE_PROTOCOL_SHA256
+        and "boundary_manifest_sha256" not in differences
+    ):
+        differences.append("boundary_manifest_sha256")
     return differences
 
 

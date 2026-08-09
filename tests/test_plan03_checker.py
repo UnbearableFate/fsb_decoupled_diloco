@@ -109,7 +109,7 @@ def test_plan03_boundary_allows_p1_baseline_composition_but_not_protocol_drift()
 
     protocol_drift = copy.deepcopy(actual)
     protocol_drift["manifest_sha256"][protocol] = "0" * 64
-    assert verify_boundaries(protocol_drift, expected) == []
+    assert verify_boundaries(protocol_drift, expected) == ["boundary_manifest_sha256"]
 
     retained_drift = copy.deepcopy(actual)
     retained_drift["manifest_sha256"][retained_boundary] = "0" * 64

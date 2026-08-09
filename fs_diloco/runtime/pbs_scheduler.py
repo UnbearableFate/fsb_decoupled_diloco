@@ -56,6 +56,17 @@ def parse_qstat_jobs(output: str) -> list[tuple[str, dict[str, str]]]:
     return jobs
 
 
+def parse_qstat_job_ids(output: str) -> tuple[str, ...]:
+    """Extract PBS job IDs from the supported summary form of ``qstat``."""
+
+    identifiers: list[str] = []
+    for line in output.splitlines():
+        first = line.split(maxsplit=1)[0] if line.split() else ""
+        if re.fullmatch(r"[0-9]+(?:\[[0-9]+\])?(?:\.[A-Za-z0-9_.-]+)?", first):
+            identifiers.append(first)
+    return tuple(identifiers)
+
+
 def classify_scheduler_state(fields: dict[str, str] | None) -> str:
     if fields is None:
         return "query_failed"
@@ -99,10 +110,18 @@ class PBSScheduler:
         qsub_binary: str = "qsub",
         qstat_binary: str = "qstat",
         timeout_seconds: float = 30.0,
+        request_scan_limit: int = 256,
     ) -> None:
         self.qsub_binary = qsub_binary
         self.qstat_binary = qstat_binary
         self.timeout_seconds = float(timeout_seconds)
+        if (
+            isinstance(request_scan_limit, bool)
+            or not isinstance(request_scan_limit, int)
+            or request_scan_limit < 1
+        ):
+            raise ValueError("request_scan_limit must be a positive integer")
+        self.request_scan_limit = request_scan_limit
 
     def query(self, job_id: str, *, historical: bool = False) -> PBSJobObservation:
         command = [self.qstat_binary]
@@ -218,13 +237,12 @@ class PBSScheduler:
     def find_by_launch_request(
         self, launch_request_id: str, *, historical: bool = False
     ) -> PBSJobObservation | None:
-        command = [self.qstat_binary]
+        listing_command = [self.qstat_binary]
         if historical:
-            command.append("-H")
-        command.append("-f")
+            listing_command.append("-H")
         try:
             completed = subprocess.run(
-                command,
+                listing_command,
                 check=False,
                 capture_output=True,
                 text=True,
@@ -234,7 +252,12 @@ class PBSScheduler:
             return None
         if completed.returncode != 0:
             return None
-        for job_id, fields in parse_qstat_jobs(completed.stdout):
+        job_ids = parse_qstat_job_ids(completed.stdout)
+        for job_id in reversed(job_ids[-self.request_scan_limit :]):
+            observation = self.query(job_id, historical=historical)
+            fields = observation.fields
+            if fields is None:
+                continue
             variables = {
                 key: value
                 for item in fields.get("Variable_List", "").split(",")
@@ -243,11 +266,5 @@ class PBSScheduler:
             }
             if variables.get("FS_DILOCO_LAUNCH_REQUEST_ID") != launch_request_id:
                 continue
-            return PBSJobObservation(
-                job_id=normalize_job_id(job_id),
-                classification=classify_scheduler_state(fields),
-                fields=fields,
-                returncode=0,
-                stderr="",
-            )
+            return observation
         return None

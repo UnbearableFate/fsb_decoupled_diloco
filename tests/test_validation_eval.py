@@ -207,6 +207,39 @@ learner:
     assert projected.learner.prediction.reconcile_timeout_seconds == 17.0
 
 
+def test_query_config_projection_reads_p4_v4_envelope_after_strict_rejection(tmp_path):
+    snapshot = tmp_path / "p4-resolved.yaml"
+    snapshot.write_text(
+        """config_schema_version: 1
+run:
+  name: p4-evidence
+model:
+  name_or_path: synthetic-tiny
+data:
+  dataset_name: synthetic
+coordination:
+  leader:
+    lease_duration_seconds: 10.0
+  recovery_submission:
+    enabled: false
+maintenance: {}
+failure_sim:
+  enabled: false
+sync:
+  capture_terminal_predecessor_for_eval: true
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="移除|removed"):
+        load_resolved_config_snapshot(snapshot)
+    projected = load_query_config_snapshot(snapshot)
+
+    assert projected.run.name == "p4-evidence"
+    assert projected.model.name_or_path == "synthetic-tiny"
+    assert projected.data.dataset_name == "synthetic"
+
+
 @pytest.mark.parametrize(
     "leader_yaml",
     [

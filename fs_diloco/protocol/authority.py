@@ -67,6 +67,7 @@ class LaunchState(str, Enum):
 
 class TerminalState(str, Enum):
     OPEN = "open"
+    PRECLOSING = "preclosing"
     CLOSING = "closing"
     DRAINING = "draining"
     FINALIZED = "finalized"

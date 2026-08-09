@@ -18,6 +18,14 @@ def test_historical_request_scan_uses_qstat_history_and_matches_exact_variable(
 
     def run(command, **_kwargs):
         commands.append(command)
+        if command == ["qstat-safe", "-H"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=("JOB_ID JOB_NAME STATUS\n122 other FINISH\n123 target FINISH\n"),
+                stderr="",
+            )
+        assert command == ["qstat-safe", "-H", "-f", "123"]
         return subprocess.CompletedProcess(
             command,
             0,
@@ -34,10 +42,23 @@ def test_historical_request_scan_uses_qstat_history_and_matches_exact_variable(
         "launch-exact", historical=True
     )
 
-    assert commands == [["qstat-safe", "-H", "-f"]]
+    assert commands == [
+        ["qstat-safe", "-H"],
+        ["qstat-safe", "-H", "-f", "123"],
+    ]
     assert observation is not None
     assert observation.job_id == "123"
     assert observation.classification == "finished"
+
+
+def test_request_scan_fails_closed_when_job_listing_is_not_supported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def run(command, **_kwargs):
+        return subprocess.CompletedProcess(command, 2, stdout="", stderr="job listing failed")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    assert PBSScheduler().find_by_launch_request("launch-exact") is None
 
 
 def test_submit_passes_exact_environment_as_one_argument_and_rejects_unsafe_values(

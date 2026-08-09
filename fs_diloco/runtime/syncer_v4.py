@@ -60,7 +60,13 @@ from ..storage.tensor_codec import (
     publish_outer_state_immutable,
 )
 from .pbs_scheduler import PBSScheduler
-from .services import DynamicCapacityService, MergeService, TerminalService, terminal_close_reason
+from .services import (
+    DynamicCapacityService,
+    MergeAttemptStatus,
+    MergeService,
+    TerminalService,
+    terminal_close_reason,
+)
 
 
 PLAN03_REQUIREMENTS = frozenset(
@@ -222,23 +228,26 @@ def run_fenced_syncer(
             control.publish_terminal(terminal)
             telemetry.event("terminal_finalized", terminal=terminal)
             return
-        if capacity_service is not None:
-            actions = capacity_service.tick(
-                global_version=latest.version,
-                eligible_contributors=len(authority.read.current_contributor_fences()),
-                selected_contributors=0,
-            )
-            for action in actions:
-                telemetry.event("dynamic_capacity_action", action=action)
-        committed = merge_service.merge_once(
+        outcome = merge_service.merge_once(
             quorum_min=config.sync.quorum_min,
             quorum_max=config.sync.quorum_max,
             purpose="normal",
         )
-        if committed is not None:
-            _raise_injected_candidate_failure(committed.version)
+        if capacity_service is not None:
+            current = authority.read.latest_committed_version()
+            assert current is not None
+            actions = capacity_service.tick(
+                global_version=current.version,
+                eligible_contributors=len(authority.read.current_contributor_fences()),
+                selected_contributors=merge_service.last_selected_contributors,
+            )
+            for action in actions:
+                telemetry.event("dynamic_capacity_action", action=action)
+        if isinstance(outcome, MergeAttemptStatus):
+            if outcome is MergeAttemptStatus.NO_BATCH:
+                time.sleep(poll_seconds)
         else:
-            time.sleep(poll_seconds)
+            _raise_injected_candidate_failure(outcome.version)
 
 
 def _initialize_v0(
@@ -311,6 +320,14 @@ def _admit_requests(
 ) -> None:
     authority.committed_leader_lease(leader.token)
     _repair_current_admission_controls(loaded, authority, leader)
+    if created_at_lte is not None:
+        controller = authority.read.controller_status()
+        if (
+            controller["state"] != "preclosing"
+            or controller["requested_at"] is None
+            or float(controller["requested_at"]) != created_at_lte
+        ):
+            raise AdmissionInvariantError("preclose scan cutoff is not the durable close intent")
     for observation in iter_admission_requests(loaded.paths):
         if observation.original is None:
             telemetry.event(
@@ -320,15 +337,6 @@ def _admit_requests(
                 error_errno=observation.read_errno,
             )
             continue
-        if created_at_lte is not None:
-            request = observation.payload
-            created_at = None if request is None else request.get("created_at")
-            if (
-                isinstance(created_at, bool)
-                or not isinstance(created_at, (int, float))
-                or float(created_at) > created_at_lte
-            ):
-                continue
         authority.committed_leader_lease(leader.token)
         try:
             _admit_observations_unprotected(loaded, authority, leader, telemetry, (observation,))
@@ -465,6 +473,7 @@ def _admit_observations_unprotected(
                             if prior_was_active and replay_authorization is not None
                             else None
                         ),
+                        registration_created_at=float(request["created_at"]),
                     )
                     if binding is None or binding != prior:
                         raise MembershipFenceError(
@@ -502,6 +511,7 @@ def _admit_observations_unprotected(
                             and authorization is not None
                             else None
                         ),
+                        registration_created_at=float(request["created_at"]),
                     )
                 fence = StaticContributorFence(
                     kind="static",
@@ -537,6 +547,7 @@ def _admit_observations_unprotected(
                         if request.get("replace_instance_id") is not None
                         else None
                     ),
+                    registration_created_at=float(request["created_at"]),
                 )
                 fence = admission.fence
                 resume = admission.resume

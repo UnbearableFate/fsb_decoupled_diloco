@@ -836,3 +836,34 @@
 
 - Ruff lint 通过；随后 `ruff format --check fs_diloco tests scripts/miyabi/check_plan03.py` 报告 13 个本轮未修改、且不属于 P5 显式 format scope 的既有文件需要格式化，因此组合命令在进入 `bash -n` 和 Checker 前停止；未运行 pytest 或 runtime workload。
 - 这是静态门禁调用范围错误，不是本轮源码格式回归。下一步严格复用 `run_plan03_phase5_tests.pbs` 中列明的修改/邻接文件 format scope，再继续执行 PBS 静态语法和 P3/P4/P5/boundary Checker；不机械改写无关文件。
+
+## 2026-08-09 20:12 JST — P5 clean target 双模型增量审查要求继续修订
+
+- Review base/target 为 `d2dbfed19eb5e9e0835167c13da40a80bc15273a..eb56219e13817b1f659921ea093c2dfdfa473abd`。clean detached target 的 PBS job `2511495.opbs` 在 `mg0006` exit 0，Ruff/45-file format/P3+boundary+P5 Checker 通过，focused `434 passed in 39.64s`、full `605 passed in 39.56s`；这证明 target 可复现，但不覆盖审查新找到的 adversarial path。
+- Codex 独立报告已先保存为 `code_review/.../P5-delete-classic-refactor/gpt-5.6-sol_eb56219e13817b1f659921ea093c2dfdfa473abd.md`，判定 `CHANGES_REQUIRED`：Miyabi 实测 `qstat -f` 无 job ID 返回 `SIM4550`，receipt-loss request scan 不可用；terminal preclose cutoff、跨 successor deadline 和 terminal merge budget 未持久化；ack/proposal loop 可越过期限；legacy CSV guard 信任 manifest 自报 protocol。
+- fresh Claude session `c450fcac-fb45-4d07-ade7-e6cd05dfdb54` 实际模型为 `claude-opus-5`；它在写出 `claude-opus-5_eb56219e13817b1f659921ea093c2dfdfa473abd.md` 后以 HTTP 429 明确报告 `You've hit your session limit · resets 10:20pm (Asia/Tokyo)`。按用户规则本次 Claude gate 记为 `skipped-session-limit`、不重试且不阻断；已经落盘的只读 finding 仍作为额外缺陷证据处理。
+- Claude 额外复现：manual reason 被拼进 command ID 会 crash-loop；pending budget>1 会重复选择同一 reserved stream并抛 fence error；scheduler 状态抖动会因 command-journal ID 重用而静默返回旧结果；P4-era config projection 不可读；旧 P4 dynamic replacement PBS 伪造 launch request；valid operator request 每 tick 重放；selected contributor observation 恒 0；merge conflict 与 no-batch 混淆。phase evidence/matrix 尚未收敛属于预期未完成 gate。
+- 下一轮先新增/加强对应 RED regressions，再修：使用 Miyabi 支持的 qstat list→detail scan；用 current row version形成可重放但不跨状态周期冲突的 transition ID；排除 reserved stream；解耦 terminal command ID/reason；把 preclose cutoff、跨进程期限和 terminal merge count纳入 fenced authority；merge 返回三态；历史 projection 严格判定后完整剥离 v4 envelope；operator disposition有界；生产记录真实 selection 宽度；legacy CSV重新分类 source；旧 P4 replacement 场景由可验证 successor 取代。所有 Critical/High/Medium 完成后创建新 review target并重跑 clean compute focused/full 与 phase Checker。
+
+## 2026-08-09 20:41 JST — P5 增量审查修订首次显式 format gate 未通过
+
+- Experiment ID `P5-review-remediation-static-format-attempt1`，同一静态格式目标连续失败次数 1。登录节点命令为 `.venv/bin/ruff format --check` 加本轮 23 个修改/新增 Python 文件；此前同一源码的 `py_compile`、Ruff lint 和 `git diff --check` 均通过，未运行 pytest、Torch 或 runtime workload。
+- 预期所有本轮文件已符合 Ruff formatter；实际报告 9 个文件需要机械格式化：`runtime/services/{dynamic_capacity,terminal}.py`、`storage/{authority,terminal_request}.py`、`tools/request_terminal_close.py`、`scripts/miyabi/check_plan03.py` 及 3 个对应 runtime tests。
+- 已确认原因是新增持久化/API参数、长条件和断言的换行尚未由 formatter 规范化，不是语法或行为失败。下一轮只对报告列出的 9 个文件运行 Ruff formatter，再重跑同一显式 scope 的 lint/format/compile、PBS语法和 Checker；format 前不做其他源码逻辑修改。
+
+## 2026-08-09 20:45 JST — P5 增量审查修订 compute attempt 1 在测试收集期失败
+
+- Experiment ID `P5-review-remediation-compute-attempt1`，该行为验证目标连续失败次数 1。命令 `qsub -l walltime=00:10:00 scripts/miyabi/run_plan03_phase5_tests.pbs`；PBS job `2511887.opbs`，compute host `mg0004`，申请1节点/1进程/100 GiB/10分钟，实际 walltime 10秒，exit status 2。原始日志 `fsdiloco_plan03_p5.o2511887`。
+- 预期 Ruff/format/Checker 后运行 focused 与 full pytest；实际静态门禁全部通过、Checker `PASS`，但 focused collection 的3个runtime模块共同在 import `MergeService` 时失败，症状为 `ImportError: cannot import name 'CommittedVersion' from fs_diloco.protocol.authority`，pytest在收集期以3 errors终止，full suite未运行。
+- 已确认根因：三态 merge refactor 给返回类型新增了 `CommittedVersion` 注解，却从 protocol authority 导入；该 dataclass 的唯一 owner 实际是 `fs_diloco.storage.authority`，`py_compile`/Ruff不会执行 import 因而未捕获。下一轮只把 type import并入既有 storage authority import，保留 `MergeFenceConflict` 的 protocol owner；先重跑静态门禁，再提交相同 focused/full compute目标以证伪。`qstat -H -f 2511887.opbs`保存了终态资源/exit证据；Miyabi不支持误试的`qstat -xf`组合，未将该命令用作结果判断。
+
+## 2026-08-09 20:47 JST — P5 增量审查修订 compute attempt 2 的三个回归 fixture 未同步API语义
+
+- Experiment ID `P5-review-remediation-compute-attempt2`，同一行为验证目标连续失败次数 2。命令仍为 `qsub -l walltime=00:10:00 scripts/miyabi/run_plan03_phase5_tests.pbs`；PBS job `2511905.opbs`，compute host `mg0001`，申请1节点/1进程/100 GiB/10分钟，实际 walltime 44秒，exit status 1。原始日志 `fsdiloco_plan03_p5.o2511905`。
+- Ruff、45文件format和P3/boundary/P5 Checker均通过；focused结果 `448 passed, 3 failed in 39.49s`，full suite未运行。两个新legacy反例把 keyword-only `results_to_csv(*, lm_eval_output=...)` 的首参误作positional，实际停在测试自身 `TypeError`，未到达要验证的source reclassification。另一个既有terminal test在close后仍调用普通 `_commit_next(...)`，新authority正确以 `normal merge is closed by terminal intent` 拒绝；同文件另一个delayed-final-proposal场景已经正确使用`terminal=True`。
+- 下一轮只修测试调用边界：legacy两例显式传 `lm_eval_output=results`；close/drain内的final update使用 `_commit_next(..., terminal=True)`。不放宽 production 的 keyword-only API 或 terminal normal-merge fence。修订后先静态检查，再以同一 focused/full PBS验证；若第三次仍失败，按规则在第四次前启动同目标全面Codex审查。
+
+## 2026-08-09 20:53 JST — P5 review-target cached whitespace gate 报告生成文件尾部空行
+
+- 新target提交前的 `git diff --cached --check` 唯一报告 `gpt-5.6-sol_eb56219....md:58: new blank line at EOF`；production/source/test diff均无whitespace问题，尚未创建commit，也未重跑runtime。
+- 原因是只读Codex审查报告生成时保留了一个多余空白尾行。下一步只删除该报告末尾空行并重新stage，随后重跑cached diff gate；报告正文、finding和审查身份不变。

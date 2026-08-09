@@ -22,12 +22,15 @@ def main(argv: list[str] | None = None) -> None:
     )
     if loaded.config.shared.terminal.admission_close_policy != "manual":
         raise RuntimeError("manual close requires terminal.admission_close_policy=manual")
-    payload = publish_manual_terminal_request(
-        loaded.paths,
-        run_id=loaded.identity.run_id,
-        descriptor_sha256=str(loaded.descriptor["descriptor_sha256"]),
-        reason=args.reason,
-    )
+    try:
+        payload = publish_manual_terminal_request(
+            loaded.paths,
+            run_id=loaded.identity.run_id,
+            descriptor_sha256=str(loaded.descriptor["descriptor_sha256"]),
+            reason=args.reason,
+        )
+    except FileExistsError:
+        parser.error("a different immutable manual-close request already exists for this run")
     print(json.dumps(payload, sort_keys=True))
 
 

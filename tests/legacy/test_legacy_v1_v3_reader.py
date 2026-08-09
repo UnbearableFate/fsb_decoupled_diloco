@@ -224,3 +224,28 @@ def test_resolve_checkpoint_manifest_cannot_write_into_legacy_source_root(
             ]
         )
     assert not target.exists()
+
+
+@pytest.mark.parametrize("declared_protocol", [None, "full-protocol-v4"])
+def test_results_csv_reclassifies_legacy_source_instead_of_trusting_manifest(
+    tmp_path: Path,
+    declared_protocol: str | None,
+) -> None:
+    root = tmp_path / "legacy"
+    _legacy_fixture(root, fragment=False)
+    results = tmp_path / "lm-eval"
+    results.mkdir()
+    (results / "results.json").write_text('{"results": {}}', encoding="utf-8")
+    manifest_payload = {"source_run_root": str(root)}
+    if declared_protocol is not None:
+        manifest_payload["source_protocol"] = declared_protocol
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps(manifest_payload), encoding="utf-8")
+
+    expected = "does not match authority" if declared_protocol else "outside the legacy run root"
+    with pytest.raises(ValueError, match=expected):
+        eval_lm_harness.results_to_csv(
+            lm_eval_output=results,
+            output_csv=root / "metrics" / "lm-eval.csv",
+            manifest=manifest,
+        )

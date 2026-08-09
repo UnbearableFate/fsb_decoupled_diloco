@@ -301,9 +301,13 @@ def results_to_csv(
     if manifest is not None and manifest.exists():
         manifest_payload = _read_json(manifest)
         source_run_root = manifest_payload.get("source_run_root")
-        source_protocol = manifest_payload.get("source_protocol")
-        if isinstance(source_run_root, str) and source_protocol == "legacy-v1-v3":
-            from ..legacy.reader import validate_query_output_path
+        declared_protocol = manifest_payload.get("source_protocol")
+        if isinstance(source_run_root, str):
+            from ..legacy.reader import query_run_protocol, validate_query_output_path
+
+            source_protocol = query_run_protocol(source_run_root)
+            if declared_protocol is not None and declared_protocol != source_protocol:
+                raise ValueError("evaluation manifest source protocol does not match authority")
 
             output_csv = validate_query_output_path(
                 source_run_root,

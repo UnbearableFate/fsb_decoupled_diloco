@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import time
 from pathlib import Path
 from typing import Any, Protocol
 
 from ...core.config import MembershipSection, ScalingSection
 from ...protocol.scheduler import SchedulerOperatorRequest
-from ...storage.atomic_io import safe_read_json
-from ...storage.authority import LeaderAuthority, LeaderSession
+from ...storage.atomic_io import fsync_directory, publish_immutable_bytes
+from ...storage.authority import LeaderAuthority, LeaderSession, MembershipFenceError
 from ...storage.paths import RunPaths
 from ..pbs_scheduler import PBSJobObservation
 
@@ -134,11 +135,18 @@ class DynamicCapacityService:
             and total_capacity < self.scaling.desired_contributors
             and self._cooldown_elapsed(launches, now=now)
         ):
+            reserved_streams = {
+                int(row["stream_id"])
+                for row in launches
+                if row["role"] != "bootstrap" and row["reservation_released_at"] is None
+            }
             available = next(
                 (
                     row
                     for row in self.authority.read.dynamic_streams()
-                    if row["state"] == "available" and row["current_instance_id"] is None
+                    if row["state"] == "available"
+                    and row["current_instance_id"] is None
+                    and int(row["stream_id"]) not in reserved_streams
                 ),
                 None,
             )
@@ -228,6 +236,8 @@ class DynamicCapacityService:
                 max_total_requests=self.scaling.max_total_launch_requests,
                 expected_scheduler_job_id=expected_scheduler_job_id,
             )
+        except MembershipFenceError:
+            return False
         except RuntimeError as exc:
             if "budget is exhausted" in str(exc):
                 return False
@@ -396,23 +406,122 @@ class DynamicCapacityService:
         if not root.is_dir():
             return ()
         for path in sorted(root.glob("*.json")):
+            relative_path = path.name
             if path.is_symlink():
-                actions.append("invalid_operator_request")
+                raw = f"symlink:{relative_path}".encode()
+                rejection_reason = "scheduler operator request must not be a symlink"
+            else:
+                try:
+                    raw = path.read_bytes()
+                except OSError:
+                    actions.append("operator_request_transient_io")
+                    continue
+                rejection_reason = None
+            content_sha256 = hashlib.sha256(raw).hexdigest()
+            if (
+                self.authority.read.scheduler_operator_file_disposition(
+                    relative_path, content_sha256
+                )
+                is not None
+            ):
+                self._archive_operator_file(
+                    path=path,
+                    raw=raw,
+                    content_sha256=content_sha256,
+                    was_symlink=path.is_symlink(),
+                )
                 continue
-            payload = safe_read_json(path)
+            request: SchedulerOperatorRequest | None = None
             try:
-                if payload is None:
-                    raise ValueError("scheduler operator request is not valid JSON")
+                if rejection_reason is not None:
+                    raise ValueError(rejection_reason)
+                if len(raw) > 1_048_576:
+                    raise ValueError("scheduler operator request exceeds 1 MiB")
+                payload = json.loads(raw)
                 request = SchedulerOperatorRequest.from_dict(payload)
-            except (TypeError, ValueError):
+            except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
+                reason = str(exc) or type(exc).__name__
+                self._record_operator_file_disposition(
+                    relative_path=relative_path,
+                    content_sha256=content_sha256,
+                    disposition="rejected",
+                    reason=reason,
+                )
+                if not self._archive_operator_file(
+                    path=path,
+                    raw=raw,
+                    content_sha256=content_sha256,
+                    was_symlink=rejection_reason is not None,
+                ):
+                    actions.append("operator_request_archive_deferred")
                 actions.append("invalid_operator_request")
                 continue
+            assert request is not None
             result = self.leader.apply_scheduler_operator_request(
                 command_id=f"apply-{request.immutable_sha256()}",
                 operator_request=request,
             )
+            self._record_operator_file_disposition(
+                relative_path=relative_path,
+                content_sha256=content_sha256,
+                disposition="applied",
+                reason=str(result["request_state"]),
+            )
+            if not self._archive_operator_file(
+                path=path,
+                raw=raw,
+                content_sha256=content_sha256,
+                was_symlink=False,
+            ):
+                actions.append("operator_request_archive_deferred")
             actions.append(f"operator_{result['request_state']}")
         return tuple(actions)
+
+    @staticmethod
+    def _archive_operator_file(
+        *,
+        path: Path,
+        raw: bytes,
+        content_sha256: str,
+        was_symlink: bool,
+    ) -> bool:
+        """Move a disposed request out of the hot scan without losing its bytes."""
+
+        archive = path.parent / "processed"
+        archive.mkdir(parents=True, exist_ok=True)
+        suffix = ".symlink" if was_symlink else ""
+        target = archive / f"{content_sha256}-{path.name}{suffix}"
+        publish_immutable_bytes(target, raw)
+        try:
+            if was_symlink:
+                if not path.is_symlink():
+                    return False
+            elif (
+                path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != content_sha256
+            ):
+                return False
+            path.unlink()
+            fsync_directory(path.parent)
+        except FileNotFoundError:
+            pass
+        return True
+
+    def _record_operator_file_disposition(
+        self,
+        *,
+        relative_path: str,
+        content_sha256: str,
+        disposition: str,
+        reason: str,
+    ) -> None:
+        identity = hashlib.sha256(f"{relative_path}\0{content_sha256}".encode()).hexdigest()
+        self.leader.record_scheduler_operator_file_disposition(
+            command_id=f"operator-file-{identity}",
+            relative_path=relative_path,
+            content_sha256=content_sha256,
+            disposition=disposition,
+            reason=reason[:512],
+        )
 
     def _find_by_launch_request(self, request_id: str) -> PBSJobObservation | None:
         live = self.scheduler.find_by_launch_request(request_id)
@@ -463,11 +572,24 @@ class DynamicCapacityService:
         last_error: str | None = None,
     ) -> None:
         uncertain = state in {"submission_unknown", "terminal_uncertain"}
+        transition_identity = json.dumps(
+            {
+                "request_id": row["request_id"],
+                "expected_state": row["state"],
+                "expected_updated_at": row["updated_at"],
+                "state": state,
+                "job_id": job_id,
+                "scheduler_state": scheduler_state,
+                "evidence": evidence,
+                "terminal_evidence": terminal_evidence,
+                "last_error": last_error,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
         self.leader.transition_dynamic_launch_request(
-            command_id=(
-                f"launch-{row['request_id']}-{row['state']}-{state}-"
-                f"{hashlib.sha256((evidence + scheduler_state).encode()).hexdigest()[:12]}"
-            ),
+            command_id="launch-transition-"
+            + hashlib.sha256(transition_identity.encode()).hexdigest(),
             request_id=str(row["request_id"]),
             expected_state=str(row["state"]),
             state=state,

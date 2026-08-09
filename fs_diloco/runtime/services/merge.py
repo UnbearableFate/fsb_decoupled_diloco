@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from enum import Enum
 from typing import Any
 
 import torch
@@ -11,7 +12,7 @@ from ...core.run_descriptor import LoadedRunDescriptor
 from ...modeling.outer_optim import outer_optimizer_step
 from ...protocol.authority import MergeFenceConflict
 from ...protocol.merge import normalized_update_weights, weighted_average_tensors
-from ...storage.authority import LeaderAuthority, LeaderSession
+from ...storage.authority import CommittedVersion, LeaderAuthority, LeaderSession
 from ...storage.control import V4ControlPublisher
 from ...storage.tensor_codec import (
     dtype_from_name,
@@ -23,6 +24,11 @@ from ...storage.tensor_codec import (
 
 
 PLAN03_REQUIREMENTS = frozenset({"DMB-06", "P5-ARCH", "PUB-01", "TERM-03"})
+
+
+class MergeAttemptStatus(str, Enum):
+    NO_BATCH = "no_batch"
+    FENCE_CONFLICT = "fence_conflict"
 
 
 class MergeService:
@@ -49,22 +55,26 @@ class MergeService:
         self.param_index = param_index
         self.device = device
         self.sequence = 0
+        self.last_selected_contributors = 0
 
-    def merge_once(self, *, quorum_min: int, quorum_max: int, purpose: str) -> Any | None:
+    def merge_once(
+        self, *, quorum_min: int, quorum_max: int, purpose: str
+    ) -> CommittedVersion | MergeAttemptStatus:
+        if purpose not in {"normal", "terminal"}:
+            raise ValueError("merge purpose must be normal or terminal")
         config = self.loaded.config.shared
         paths = self.loaded.paths
         self.sequence += 1
         selection = self.leader.try_select_batch(
-            command_id=(
-                f"select-{purpose}-e{self.leader.token.epoch}-n{self.sequence}-"
-                f"{uuid.uuid4().hex[:12]}"
-            ),
+            command_id=f"select-{purpose}-e{self.leader.token.epoch}-n{self.sequence}",
             quorum_min=quorum_min,
             quorum_max=quorum_max,
         )
         if selection.batch is None:
-            return None
+            self.last_selected_contributors = 0
+            return MergeAttemptStatus.NO_BATCH
         batch = selection.batch
+        self.last_selected_contributors = len(batch.candidates)
         latest = self.authority.read.latest_committed_version()
         assert latest is not None
         updates = [
@@ -135,8 +145,17 @@ class MergeService:
             weight_theta_sha256=weight_theta_sha,
             optim_theta_sha256=optim_theta_sha,
         )
+        terminal_arguments: dict[str, int] = {}
+        if purpose == "terminal":
+            controller = self.authority.read.controller_status()
+            terminal_arguments = {
+                "terminal_generation": int(controller["generation"]),
+                "terminal_merge_limit": int(config.terminal.max_terminal_merges),
+            }
         committed = self.leader.commit_merge(
-            command_id=f"commit-{publication_id}", publication_id=publication_id
+            command_id=f"commit-{publication_id}",
+            publication_id=publication_id,
+            **terminal_arguments,
         )
         if isinstance(committed, MergeFenceConflict):
             self.telemetry.event(
@@ -151,7 +170,7 @@ class MergeService:
                 device=self.device,
                 dtype=dtype_from_name(config.syncer.compute_dtype),
             )
-            return None
+            return MergeAttemptStatus.FENCE_CONFLICT
         self.theta, self.outer_state = load_outer_state(
             paths.shared_root / committed.optim_relative_path,
             device=self.device,

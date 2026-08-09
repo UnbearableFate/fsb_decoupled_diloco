@@ -60,4 +60,4 @@ sync:
 
 旧 in-progress run state 不迁移。迁移配置只用于创建 fresh v4 attempt；不要把 v4 resolved config 写回旧 run root。
 
-authority schema 7 为 dynamic `launch_requests` 增加 exact stream/replacement identity，并删除已不可达的 classic candidate launch outbox。当前没有 in-place v4 schema 6→7 migration；旧 completed v4 evidence 保持原提交只读，新的执行必须初始化 fresh schema 7 run。
+authority schema 8 在 schema 7 的 exact dynamic launch identity 之上，增加 durable preclose cutoff、跨 successor terminal deadlines 和 terminal merge accounting。当前没有 in-place v4 schema 6/7→8 migration；旧 completed v4 evidence 保持原提交只读，新的执行必须初始化 fresh schema 8 run。

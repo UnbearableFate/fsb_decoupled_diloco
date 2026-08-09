@@ -23,8 +23,8 @@ def publish_manual_terminal_request(
     reason: str,
     created_at: float | None = None,
 ) -> dict[str, Any]:
-    if not reason or len(reason) > 256:
-        raise ValueError("manual terminal reason must contain 1..256 characters")
+    if not reason or len(reason) > 256 or not reason.isprintable():
+        raise ValueError("manual terminal reason must contain 1..256 printable characters")
     timestamp = float(time.time() if created_at is None else created_at)
     if not math.isfinite(timestamp):
         raise ValueError("manual terminal request timestamp must be finite")
@@ -76,6 +76,7 @@ def read_manual_terminal_request(
         or not isinstance(reason, str)
         or not reason
         or len(reason) > 256
+        or not reason.isprintable()
         or isinstance(created_at, bool)
         or not isinstance(created_at, (int, float))
         or not math.isfinite(float(created_at))

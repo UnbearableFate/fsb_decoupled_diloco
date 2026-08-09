@@ -4,8 +4,8 @@
 
 | 输入/运行形态 | 当前主线能力 |
 |---|---|
-| fresh Full Protocol v4 / authority schema 7 static | 初始化、训练、接管、终态、分析、评估 |
-| fresh Full Protocol v4 / authority schema 7 dynamic | 初始化、admission/scaling/replacement、训练、接管、终态、分析、评估 |
+| fresh Full Protocol v4 / authority schema 8 static | 初始化、训练、接管、终态、分析、评估 |
+| fresh Full Protocol v4 / authority schema 8 dynamic | 初始化、admission/scaling/replacement、训练、接管、终态、分析、评估 |
 | torch DDP / periodic-average baseline | 独立训练与 evidence/checker |
 | completed classic v1-v3 full | query-only inspect/export/eval |
 | completed Fragment V0 | query-only inspect；用已物化 full checkpoint export/eval |

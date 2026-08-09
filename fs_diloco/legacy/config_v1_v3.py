@@ -62,14 +62,16 @@ def _project_legacy_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     projected = copy.deepcopy(dict(payload))
     for key in _LEGACY_TOP_LEVEL_RUNTIME_KEYS:
         projected.pop(key, None)
+    # Eligibility is deliberately narrow, but once a historical v4 envelope is
+    # recognized these wrapper sections cannot be represented by shared Config.
+    projected.pop("coordination", None)
+    projected.pop("maintenance", None)
     for section_name, removed_keys in _LEGACY_NESTED_RUNTIME_KEYS.items():
         section = projected.get(section_name)
         if not isinstance(section, dict):
             continue
         for key in removed_keys:
             section.pop(key, None)
-        if section_name == "coordination" and not section:
-            projected.pop(section_name)
 
     learner = projected.get("learner")
     if isinstance(learner, dict) and "prediction_reconcile_timeout_seconds" in learner:

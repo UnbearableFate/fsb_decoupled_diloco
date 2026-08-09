@@ -188,7 +188,7 @@ def _ingest_static_cycle(
     return receipt, proposal
 
 
-def _commit_next(leader, run_root: Path, *, version: int) -> None:
+def _commit_next(leader, run_root: Path, *, version: int, terminal: bool = False) -> None:
     attempt = leader.try_select_batch(command_id=f"select-{version}", quorum_min=1, quorum_max=1)
     assert attempt.batch is not None
     leader.prepare_publication(
@@ -198,7 +198,12 @@ def _commit_next(leader, run_root: Path, *, version: int) -> None:
         selection_batch_id=attempt.batch.batch_id,
         **publish_checkpoint_pair(run_root, version=version),
     )
-    leader.commit_merge(command_id=f"commit-{version}", publication_id=f"publication-{version}")
+    leader.commit_merge(
+        command_id=f"commit-{version}",
+        publication_id=f"publication-{version}",
+        terminal_generation=1 if terminal else None,
+        terminal_merge_limit=1 if terminal else None,
+    )
 
 
 def test_authority_token_rollup_balances_receipt_only_and_applied_fates(tmp_path: Path) -> None:
@@ -549,6 +554,77 @@ def test_terminal_close_freezes_fence_blocks_admission_and_accounts_hard_crash(
         assert leader.finalize_terminal(command_id="finalize", reason="done").value == "finalized"
 
 
+def test_terminal_preclose_admits_only_static_requests_before_durable_cutoff(
+    tmp_path: Path,
+) -> None:
+    clock = Clock()
+    with _open_static(tmp_path, clock) as authority:
+        leader = authority.open_leader(
+            authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
+        )
+        leader.begin_terminal_preclose(
+            command_id="preclose",
+            reason="target reached",
+            registration_visibility_grace_seconds=10.0,
+        )
+        binding = leader.bind_or_replace_static_attempt(
+            command_id="admit-before-cutoff",
+            learner_id="learner-0",
+            logical_launch_id="launch-0",
+            attempt_id="attempt-before-cutoff",
+            registration_created_at=99.0,
+        )
+        assert binding.binding_generation == 1
+        with pytest.raises(MembershipFenceError, match="after the preclose cutoff"):
+            leader.bind_or_replace_static_attempt(
+                command_id="admit-after-cutoff",
+                learner_id="learner-0",
+                logical_launch_id="launch-0",
+                attempt_id="attempt-after-cutoff",
+                expected_generation=1,
+                replacement_reason="late replacement",
+                registration_created_at=100.1,
+            )
+
+
+def test_terminal_preclose_admits_only_dynamic_requests_before_durable_cutoff(
+    tmp_path: Path,
+) -> None:
+    clock = Clock()
+    with _open_dynamic(tmp_path, clock, pool_size=2) as authority:
+        leader = authority.open_leader(
+            authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
+        )
+        leader.initialize_dynamic_membership(command_id="init-membership")
+        leader.begin_terminal_preclose(
+            command_id="preclose",
+            reason="target reached",
+            registration_visibility_grace_seconds=10.0,
+        )
+        admitted = leader.admit_dynamic_incarnation(
+            command_id="admit-before-cutoff",
+            instance_id="instance-before-cutoff",
+            placement_id="placement-before-cutoff",
+            stream_id=0,
+            admission_token_sha256="1" * 64,
+            hostname="host",
+            pid=1,
+            registration_created_at=99.0,
+        )
+        assert admitted.fence.stream_id == 0
+        with pytest.raises(MembershipFenceError, match="after the preclose cutoff"):
+            leader.admit_dynamic_incarnation(
+                command_id="admit-after-cutoff",
+                instance_id="instance-after-cutoff",
+                placement_id="placement-after-cutoff",
+                stream_id=1,
+                admission_token_sha256="2" * 64,
+                hostname="host",
+                pid=2,
+                registration_created_at=100.1,
+            )
+
+
 def test_terminal_hard_crash_gap_is_summed_per_lost_incarnation(tmp_path: Path) -> None:
     clock = Clock()
     database = tmp_path / "authority.sqlite3"
@@ -878,7 +954,7 @@ def test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_u
             )
             == "acked"
         )
-        _commit_next(leader, tmp_path, version=1)
+        _commit_next(leader, tmp_path, version=1, terminal=True)
         assert leader.finalize_terminal(command_id="finalize", reason="done").value == "finalized"
 
 
@@ -1071,7 +1147,8 @@ def test_terminal_ack_can_precede_final_proposal_visibility_and_merge(tmp_path: 
         )
         publish_proposal_payload(tmp_path, proposal)
         leader.ingest_proposal(command_id="proposal-final-visible", proposal=proposal)
-        _commit_next(leader, tmp_path, version=1)
+        _commit_next(leader, tmp_path, version=1, terminal=True)
+        assert authority.read.controller_status()["terminal_merge_count"] == 1
         assert authority.read.update_status(update_id) == "applied"
         assert leader.finalize_terminal(command_id="finalize", reason="done").value == ("finalized")
 

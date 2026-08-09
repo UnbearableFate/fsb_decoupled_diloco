@@ -1,6 +1,6 @@
 CREATE TABLE schema_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-    schema_version INTEGER NOT NULL CHECK (schema_version = 7),
+    schema_version INTEGER NOT NULL CHECK (schema_version = 8),
     protocol_version INTEGER NOT NULL CHECK (protocol_version = 4),
     mode TEXT NOT NULL CHECK (mode IN ('static', 'dynamic')),
     features_json TEXT NOT NULL,
@@ -59,10 +59,16 @@ CREATE TABLE syncer_epochs (
 
 CREATE TABLE controller_state (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-    state TEXT NOT NULL CHECK (state IN ('open', 'closing', 'draining', 'finalized', 'error')),
+    state TEXT NOT NULL CHECK (state IN (
+        'open', 'preclosing', 'closing', 'draining', 'finalized', 'error'
+    )),
     generation INTEGER NOT NULL CHECK (generation >= 0),
     reason TEXT,
     requested_at REAL,
+    registration_visibility_deadline REAL,
+    drain_ack_deadline REAL,
+    proposal_visibility_deadline REAL,
+    terminal_merge_count INTEGER NOT NULL DEFAULT 0 CHECK (terminal_merge_count >= 0),
     hard_crash_cycle_token_budget INTEGER NOT NULL DEFAULT 0
         CHECK (hard_crash_cycle_token_budget >= 0),
     updated_by_epoch INTEGER,

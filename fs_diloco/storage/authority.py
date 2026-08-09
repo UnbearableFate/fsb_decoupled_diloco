@@ -661,6 +661,20 @@ class AuthorityReadModel:
             )
         )
 
+    def scheduler_operator_file_disposition(
+        self, relative_path: str, content_sha256: str
+    ) -> dict[str, Any] | None:
+        if not isinstance(self._authority._scope, DynamicMembershipScope):
+            return None
+        row = self._authority._fetchone(
+            """
+            SELECT * FROM scheduler_operator_file_dispositions
+            WHERE relative_path=? AND content_sha256=?
+            """,
+            (relative_path, content_sha256),
+        )
+        return None if row is None else dict(row)
+
     def v0_committed_at(self) -> float | None:
         row = self._authority._fetchone("SELECT committed_at FROM global_versions WHERE version=0")
         return None if row is None else float(row["committed_at"])
@@ -983,6 +997,7 @@ class LeaderSession:
         expected_generation: int | None = None,
         allow_logical_replacement: bool = False,
         replacement_reason: str | None = None,
+        registration_created_at: float | None = None,
     ) -> StaticBinding | None:
         """Replay only an exact committed static-binding command request."""
 
@@ -993,6 +1008,7 @@ class LeaderSession:
             expected_generation=expected_generation,
             allow_logical_replacement=allow_logical_replacement,
             replacement_reason=replacement_reason,
+            registration_created_at=registration_created_at,
         )
         try:
             payload = self._command_replay(
@@ -1018,6 +1034,7 @@ class LeaderSession:
         expected_generation: int | None = None,
         allow_logical_replacement: bool = False,
         replacement_reason: str | None = None,
+        registration_created_at: float | None = None,
     ) -> StaticBinding:
         request = _static_binding_command_request(
             learner_id=learner_id,
@@ -1026,6 +1043,7 @@ class LeaderSession:
             expected_generation=expected_generation,
             allow_logical_replacement=allow_logical_replacement,
             replacement_reason=replacement_reason,
+            registration_created_at=registration_created_at,
         )
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
@@ -1033,6 +1051,17 @@ class LeaderSession:
                 raise RuntimeError("static binding command requires static authority mode")
             if learner_id not in self._authority._scope.learner_ids:
                 raise MembershipFenceError(f"unknown static learner: {learner_id}")
+            controller = connection.execute(
+                "SELECT state, requested_at FROM controller_state WHERE singleton=1"
+            ).fetchone()
+            if controller is None or controller["state"] not in {"open", "preclosing"}:
+                raise MembershipFenceError("static admission is closed")
+            if controller["state"] == "preclosing" and (
+                registration_created_at is None
+                or controller["requested_at"] is None
+                or float(registration_created_at) > float(controller["requested_at"])
+            ):
+                raise MembershipFenceError("static registration is after the preclose cutoff")
             row = connection.execute(
                 "SELECT * FROM static_contributor_bindings WHERE learner_id=?", (learner_id,)
             ).fetchone()
@@ -2447,6 +2476,72 @@ class LeaderSession:
 
         return self._command(command_id, "apply_scheduler_operator_request", request, operation)
 
+    def record_scheduler_operator_file_disposition(
+        self,
+        *,
+        command_id: str,
+        relative_path: str,
+        content_sha256: str,
+        disposition: str,
+        reason: str,
+    ) -> dict[str, Any]:
+        """Record one immutable operator-file observation so scans stay bounded."""
+
+        path = PurePosixPath(relative_path)
+        if path.is_absolute() or len(path.parts) != 1 or path.name in {"", ".", ".."}:
+            raise ValueError("scheduler operator relative path must be one file name")
+        if len(content_sha256) != 64 or any(
+            item not in "0123456789abcdef" for item in content_sha256
+        ):
+            raise ValueError("scheduler operator content digest must be lowercase SHA-256")
+        if disposition not in {"applied", "rejected"}:
+            raise ValueError("scheduler operator disposition must be applied or rejected")
+        if not reason:
+            raise ValueError("scheduler operator disposition reason must not be empty")
+        request = {
+            "relative_path": relative_path,
+            "content_sha256": content_sha256,
+            "disposition": disposition,
+            "reason": reason,
+        }
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            if not isinstance(self._authority._scope, DynamicMembershipScope):
+                raise RuntimeError("scheduler operator dispositions require dynamic membership")
+            now = float(self._authority._wall_clock())
+            connection.execute(
+                """
+                INSERT INTO scheduler_operator_file_dispositions(
+                    relative_path, content_sha256, disposition, reason,
+                    processed_by_epoch, processed_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    relative_path,
+                    content_sha256,
+                    disposition,
+                    reason,
+                    self.token.epoch,
+                    now,
+                ),
+            )
+            row = connection.execute(
+                """
+                SELECT * FROM scheduler_operator_file_dispositions
+                WHERE relative_path=? AND content_sha256=?
+                """,
+                (relative_path, content_sha256),
+            ).fetchone()
+            assert row is not None
+            return dict(row)
+
+        return self._command(
+            command_id,
+            "record_scheduler_operator_file_disposition",
+            request,
+            operation,
+        )
+
     def admit_dynamic_incarnation(
         self,
         *,
@@ -2462,6 +2557,7 @@ class LeaderSession:
         launch_request_id: str | None = None,
         replace_instance_id: str | None = None,
         replacement_reason: str | None = None,
+        registration_created_at: float | None = None,
     ) -> DynamicAdmission:
         """Admit one current dynamic incarnation, optionally replacing one exact owner."""
 
@@ -2478,6 +2574,12 @@ class LeaderSession:
             raise ValueError("stream_id must be a non-negative integer")
         if isinstance(pid, bool) or not isinstance(pid, int) or pid < 0:
             raise ValueError("pid must be a non-negative integer")
+        if registration_created_at is not None and (
+            isinstance(registration_created_at, bool)
+            or not isinstance(registration_created_at, (int, float))
+            or not float("-inf") < float(registration_created_at) < float("inf")
+        ):
+            raise ValueError("registration_created_at must be a finite timestamp")
         if bootstrap_slot is not None and (
             isinstance(bootstrap_slot, bool)
             or not isinstance(bootstrap_slot, int)
@@ -2509,16 +2611,23 @@ class LeaderSession:
             "launch_request_id": launch_request_id,
             "replace_instance_id": replace_instance_id,
             "replacement_reason": replacement_reason,
+            "registration_created_at": registration_created_at,
         }
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
             if not isinstance(self._authority._scope, DynamicMembershipScope):
                 raise RuntimeError("dynamic admission requires dynamic authority mode")
             controller = connection.execute(
-                "SELECT state FROM controller_state WHERE singleton=1"
+                "SELECT state, requested_at FROM controller_state WHERE singleton=1"
             ).fetchone()
-            if controller is None or controller["state"] != "open":
+            if controller is None or controller["state"] not in {"open", "preclosing"}:
                 raise MembershipFenceError("dynamic admission is closed")
+            if controller["state"] == "preclosing" and (
+                registration_created_at is None
+                or controller["requested_at"] is None
+                or float(registration_created_at) > float(controller["requested_at"])
+            ):
+                raise MembershipFenceError("dynamic registration is after the preclose cutoff")
             if stream_id >= self._authority._scope.stream_pool_size:
                 raise MembershipFenceError("stream_id is outside the configured pool")
             stream = connection.execute(
@@ -3075,9 +3184,32 @@ class LeaderSession:
         return _decode_publication_intent(result)
 
     def commit_merge(
-        self, *, command_id: str, publication_id: str
+        self,
+        *,
+        command_id: str,
+        publication_id: str,
+        terminal_generation: int | None = None,
+        terminal_merge_limit: int | None = None,
     ) -> CommittedVersion | MergeFenceConflict:
-        request = {"publication_id": publication_id}
+        if (terminal_generation is None) != (terminal_merge_limit is None):
+            raise ValueError("terminal commit requires generation and merge limit together")
+        if terminal_generation is not None and (
+            isinstance(terminal_generation, bool)
+            or not isinstance(terminal_generation, int)
+            or terminal_generation < 1
+        ):
+            raise ValueError("terminal_generation must be a positive integer")
+        if terminal_merge_limit is not None and (
+            isinstance(terminal_merge_limit, bool)
+            or not isinstance(terminal_merge_limit, int)
+            or terminal_merge_limit < 0
+        ):
+            raise ValueError("terminal_merge_limit must be a non-negative integer")
+        request = {
+            "publication_id": publication_id,
+            "terminal_generation": terminal_generation,
+            "terminal_merge_limit": terminal_merge_limit,
+        }
         self._authority._verify_token(self.token)
         self._verify_prepared_publication_artifacts(publication_id)
 
@@ -3114,6 +3246,23 @@ class LeaderSession:
             expected = 0 if latest is None else int(latest) + 1
             if target != expected:
                 raise ValueError(f"commit target must be the next version {expected}")
+            controller = connection.execute(
+                "SELECT * FROM controller_state WHERE singleton=1"
+            ).fetchone()
+            if controller is None:
+                raise AuthoritySchemaError("controller state is missing")
+            terminal_commit = terminal_generation is not None
+            if terminal_commit:
+                assert terminal_merge_limit is not None
+                if (
+                    controller["state"] not in {"closing", "draining"}
+                    or int(controller["generation"]) != terminal_generation
+                ):
+                    raise MembershipFenceError("terminal merge generation is not current")
+                if int(controller["terminal_merge_count"]) >= terminal_merge_limit:
+                    raise RuntimeError("terminal merge budget is exhausted")
+            elif target > 0 and controller["state"] != "open":
+                raise MembershipFenceError("normal merge is closed by terminal intent")
             batch_id = intent["selection_batch_id"]
             selected_rows: list[sqlite3.Row] = []
             if target > 0:
@@ -3241,6 +3390,16 @@ class LeaderSession:
                         now=now,
                         applied_version=target,
                     )
+            if terminal_commit:
+                connection.execute(
+                    """
+                    UPDATE controller_state
+                    SET terminal_merge_count=terminal_merge_count+1,
+                        updated_by_epoch=?, updated_by_owner_id=?
+                    WHERE singleton=1 AND generation=?
+                    """,
+                    (self.token.epoch, self.token.owner_id, terminal_generation),
+                )
             result = connection.execute(
                 "SELECT * FROM global_versions WHERE version=?", (target,)
             ).fetchone()
@@ -3820,12 +3979,75 @@ class LeaderSession:
         result = self._command(command_id, "complete_audit_gc", request, operation)
         return tuple(str(item) for item in result["relative_paths"])
 
+    def begin_terminal_preclose(
+        self,
+        *,
+        command_id: str,
+        reason: str,
+        registration_visibility_grace_seconds: float,
+        hard_crash_cycle_token_budget: int = 0,
+    ) -> TerminalState:
+        """Durably freeze the admission cutoff before scanning filesystem visibility."""
+
+        if not reason:
+            raise ValueError("terminal close reason must not be empty")
+        if (
+            isinstance(registration_visibility_grace_seconds, bool)
+            or not isinstance(registration_visibility_grace_seconds, (int, float))
+            or registration_visibility_grace_seconds < 0.0
+            or not float("-inf") < float(registration_visibility_grace_seconds) < float("inf")
+        ):
+            raise ValueError("registration visibility grace must be a finite non-negative value")
+        if (
+            isinstance(hard_crash_cycle_token_budget, bool)
+            or not isinstance(hard_crash_cycle_token_budget, int)
+            or hard_crash_cycle_token_budget < 0
+        ):
+            raise ValueError("hard crash cycle token budget must be a non-negative integer")
+        request = {
+            "reason": reason,
+            "registration_visibility_grace_seconds": float(registration_visibility_grace_seconds),
+            "hard_crash_cycle_token_budget": hard_crash_cycle_token_budget,
+        }
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            row = connection.execute("SELECT * FROM controller_state WHERE singleton=1").fetchone()
+            assert row is not None
+            if row["state"] != "open":
+                raise RuntimeError("terminal preclose requires an open controller")
+            now = float(self._authority._wall_clock())
+            generation = int(row["generation"]) + 1
+            connection.execute(
+                """
+                UPDATE controller_state SET state='preclosing', generation=?, reason=?,
+                    requested_at=?, registration_visibility_deadline=?,
+                    drain_ack_deadline=NULL, proposal_visibility_deadline=NULL,
+                    terminal_merge_count=0, hard_crash_cycle_token_budget=?,
+                    updated_by_epoch=?, updated_by_owner_id=?
+                WHERE singleton=1 AND state='open'
+                """,
+                (
+                    generation,
+                    reason,
+                    now,
+                    now + float(registration_visibility_grace_seconds),
+                    hard_crash_cycle_token_budget,
+                    self.token.epoch,
+                    self.token.owner_id,
+                ),
+            )
+            return {"state": "preclosing"}
+
+        result = self._command(command_id, "begin_terminal_preclose", request, operation)
+        return TerminalState(result["state"])
+
     def begin_terminal_close(
         self,
         *,
         command_id: str,
         reason: str,
         hard_crash_cycle_token_budget: int = 0,
+        drain_ack_timeout_seconds: float = 0.0,
     ) -> TerminalState:
         if not reason:
             raise ValueError("terminal close reason must not be empty")
@@ -3835,18 +4057,34 @@ class LeaderSession:
             or hard_crash_cycle_token_budget < 0
         ):
             raise ValueError("hard crash cycle token budget must be a non-negative integer")
+        if (
+            isinstance(drain_ack_timeout_seconds, bool)
+            or not isinstance(drain_ack_timeout_seconds, (int, float))
+            or drain_ack_timeout_seconds < 0.0
+            or not float("-inf") < float(drain_ack_timeout_seconds) < float("inf")
+        ):
+            raise ValueError("drain ack timeout must be a finite non-negative value")
         request = {
             "reason": reason,
             "hard_crash_cycle_token_budget": hard_crash_cycle_token_budget,
+            "drain_ack_timeout_seconds": float(drain_ack_timeout_seconds),
         }
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
             row = connection.execute("SELECT * FROM controller_state WHERE singleton=1").fetchone()
             assert row is not None
-            if row["state"] != "open":
+            if row["state"] not in {"open", "preclosing"}:
                 raise RuntimeError("terminal close is already active or authority is terminal")
-            generation = int(row["generation"]) + 1
             now = float(self._authority._wall_clock())
+            if row["state"] == "preclosing":
+                if (
+                    row["reason"] != reason
+                    or int(row["hard_crash_cycle_token_budget"]) != hard_crash_cycle_token_budget
+                ):
+                    raise RuntimeError("terminal preclose intent changed before contributor freeze")
+                generation = int(row["generation"])
+            else:
+                generation = int(row["generation"]) + 1
             if isinstance(self._authority._scope, StaticMembershipScope):
                 contributors = connection.execute(
                     """
@@ -3909,8 +4147,12 @@ class LeaderSession:
             connection.execute(
                 """
                 UPDATE controller_state
-                SET state='closing', generation=?, reason=?, requested_at=?,
-                    hard_crash_cycle_token_budget=?,
+                SET state='closing', generation=?, reason=?, requested_at=COALESCE(requested_at, ?),
+                    registration_visibility_deadline=COALESCE(
+                        registration_visibility_deadline, ?
+                    ),
+                    drain_ack_deadline=?, proposal_visibility_deadline=NULL,
+                    terminal_merge_count=0, hard_crash_cycle_token_budget=?,
                     updated_by_epoch=?, updated_by_owner_id=?
                 WHERE singleton=1
                 """,
@@ -3918,6 +4160,8 @@ class LeaderSession:
                     generation,
                     reason,
                     now,
+                    now,
+                    now + float(drain_ack_timeout_seconds),
                     hard_crash_cycle_token_budget,
                     self.token.epoch,
                     self.token.owner_id,
@@ -3927,6 +4171,57 @@ class LeaderSession:
 
         result = self._command(command_id, "begin_terminal_close", request, operation)
         return TerminalState(result["state"])
+
+    def begin_terminal_proposal_visibility(
+        self,
+        *,
+        command_id: str,
+        generation: int,
+        proposal_visibility_grace_seconds: float,
+    ) -> float:
+        if isinstance(generation, bool) or not isinstance(generation, int) or generation < 1:
+            raise ValueError("terminal generation must be a positive integer")
+        if (
+            isinstance(proposal_visibility_grace_seconds, bool)
+            or not isinstance(proposal_visibility_grace_seconds, (int, float))
+            or proposal_visibility_grace_seconds < 0.0
+            or not float("-inf") < float(proposal_visibility_grace_seconds) < float("inf")
+        ):
+            raise ValueError("proposal visibility grace must be a finite non-negative value")
+        request = {
+            "generation": generation,
+            "proposal_visibility_grace_seconds": float(proposal_visibility_grace_seconds),
+        }
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            row = connection.execute("SELECT * FROM controller_state WHERE singleton=1").fetchone()
+            if (
+                row is None
+                or row["state"] not in {"closing", "draining"}
+                or int(row["generation"]) != generation
+            ):
+                raise RuntimeError("proposal visibility requires the current terminal generation")
+            now = float(self._authority._wall_clock())
+            deadline = row["proposal_visibility_deadline"]
+            if deadline is None:
+                deadline = now + float(proposal_visibility_grace_seconds)
+                connection.execute(
+                    """
+                    UPDATE controller_state SET proposal_visibility_deadline=?,
+                        updated_by_epoch=?, updated_by_owner_id=?
+                    WHERE singleton=1 AND generation=?
+                    """,
+                    (deadline, self.token.epoch, self.token.owner_id, generation),
+                )
+            return {"deadline": float(deadline)}
+
+        result = self._command(
+            command_id,
+            "begin_terminal_proposal_visibility",
+            request,
+            operation,
+        )
+        return float(result["deadline"])
 
     def acknowledge_terminal_contributor(
         self,
@@ -4987,7 +5282,7 @@ class LeaderSession:
         ).fetchone()
         if controller is None:
             raise AuthoritySchemaError("controller state is missing")
-        if controller["state"] == "open":
+        if controller["state"] in {"open", "preclosing"}:
             return
         if controller["state"] not in {"closing", "draining"}:
             raise MembershipFenceError("terminal authority no longer accepts contributor input")
@@ -5354,6 +5649,7 @@ def _static_binding_command_request(
     expected_generation: int | None,
     allow_logical_replacement: bool,
     replacement_reason: str | None,
+    registration_created_at: float | None,
 ) -> dict[str, Any]:
     validate_identity(learner_id, name="learner_id")
     validate_identity(logical_launch_id, name="logical_launch_id")
@@ -5368,6 +5664,12 @@ def _static_binding_command_request(
         raise ValueError("allow_logical_replacement must be a boolean")
     if replacement_reason is not None and not replacement_reason:
         raise ValueError("replacement_reason must not be empty")
+    if registration_created_at is not None and (
+        isinstance(registration_created_at, bool)
+        or not isinstance(registration_created_at, (int, float))
+        or not float("-inf") < float(registration_created_at) < float("inf")
+    ):
+        raise ValueError("registration_created_at must be a finite timestamp")
     return {
         "learner_id": learner_id,
         "logical_launch_id": logical_launch_id,
@@ -5375,6 +5677,7 @@ def _static_binding_command_request(
         "expected_generation": expected_generation,
         "allow_logical_replacement": allow_logical_replacement,
         "replacement_reason": replacement_reason,
+        "registration_created_at": registration_created_at,
     }
 
 

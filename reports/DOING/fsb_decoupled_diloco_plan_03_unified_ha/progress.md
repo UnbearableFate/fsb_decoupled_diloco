@@ -629,3 +629,17 @@
 - 自审补齐 scheduler 最短 `00:10:00` walltime、resolve-checkpoint legacy manifest guard、preclose grace 最终边界扫描、historical lost-qsub recovery、operator request runtime ingestion、full replay identity、duplicate reservation与 delayed final proposal 反例。authority schema revision 7 只在 dynamic feature DDL 创建 scheduler launch/operator表，static不创建假的 scheduler state。
 - PBS job `2511463.opbs` 在 `mg0006` 通过 Ruff、45文件 format scope、P3/boundary/P5 Checker、focused `434 passed in 38.41s` 和 full `605 passed in 53.73s`，core xfail=0，exit 0且completion marker存在。申请 `00:10:00`、实际 `00:01:39`；raw log SHA-256 `6b5065755c2edf874138ec576171ea6be98674ce36f86f37acdfca735055ad4f`。
 - Evidence：`artifacts/20260809-191200_p5-review-remediation-precommit_pass.json`。该证据明确绑定未提交 remediation tree；下一工作单元是创建 clean incremental review target、从clean source重跑同一门禁并完成 `d2dbfed..new-target` 独立 Codex/Claude review，P5仍未complete。
+
+## 2026-08-09 20:44 JST — P5 增量审查修订静态门禁 PASS
+
+- 当前未冻结 worktree 已完成审查发现对应的 authority schema 8、durable terminal cutoff/deadline/merge budget、scheduler list→detail recovery、stream reservation、operator hot-file disposition、merge三态、legacy source reclassification及其反例；过时且已不能通过 exact launch authorization 的 P4 单次 replacement PBS 已删除，正式 replacement successor 由 P6 G9 场景承担。
+- 登录节点只运行静态验证：全 `fs_diloco tests scripts/miyabi` Ruff lint、48文件显式 format scope、修改文件 `py_compile`、`git diff --check`、所有 Miyabi/local shell `bash -n`、literal PBS group placeholder扫描均通过；未运行 pytest、Torch 或 runtime workload。
+- `check_plan03.py --verify-boundaries --verify-p3-operational-contracts --verify-p5-contracts` 对冻结P0 inventory返回 `PASS`；baseline protocol 的已授权P5字节也由新固定SHA守卫，不能再借迁移豁免漂移。临时 inventory 仅写入 `/tmp`，无需要保留的runtime artifact。
+- 尚未覆盖：全部行为测试必须在新的 clean target 上由 compute-node PBS 重跑；新公共/persistence/concurrency边界还必须冻结为 review target 并执行新的增量 Codex review，Claude若仍明确触发账户会话限额则按用户规则记录为非阻断 skip。
+
+## 2026-08-09 20:51 JST — P5 增量审查修订 precommit compute gate PASS
+
+- PBS job `2511921.opbs` 在 `mg0046` 完成同一 P5 focused/full门禁：Ruff、45文件format scope、P3/current-boundary/P5 Checker均PASS；focused `451 passed in 38.98s`，full `622 passed in 54.81s`，completion marker存在，exit 0。申请10分钟、实际1分40秒。
+- 本组验证覆盖 scheduler list→detail recovery、distinct stream reservations、flapping rearm、operator request disposition/hot-file移出、terminal durable cutoff/deadline/merge budget、normal-vs-terminal merge fence、manual close reason、legacy config/CSV重分类、schema 8及现存 P5 deletion/architecture回归。前两次失败的import owner和三个fixture调用错误均由本次完整同目标通过证伪，连续失败计数归零。
+- Evidence：`artifacts/20260809-205134_p5-incremental-review-remediation-precommit_pass.json`；raw log `fsdiloco_plan03_p5.o2511921`，SHA-256 `04cacc99e271eaeaf051adb26170a0db9ddfbcd169cc61128e416b097f0c8f78`，2053 bytes。该artifact明确标记 `git_dirty=true`，只证明precommit tree，不可冒充clean phase evidence。
+- 下一工作单元是排除用户自有 `plans/AGENTS.md` 后冻结新review target commit，在clean detached worktree重跑相同门禁并完成 `eb56219..new-target` 的独立Codex审查；Claude session-limit仍按已记录规则处理。

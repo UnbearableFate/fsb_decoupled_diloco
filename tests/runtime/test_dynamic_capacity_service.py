@@ -129,6 +129,70 @@ def test_persistent_low_windows_plan_and_submit_exact_stream(tmp_path: Path) -> 
         authority.close()
 
 
+def test_multiple_pending_scale_outs_reserve_distinct_streams(tmp_path: Path) -> None:
+    clock = Clock()
+    authority, _leader, _scheduler, service = _runtime(tmp_path, clock, streams=2)
+    service.scaling.max_pending_launch_requests = 2
+    try:
+        service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
+        clock.now += 1.1
+        service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
+        clock.now += 1.1
+        service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
+
+        active = [
+            row
+            for row in authority.read.dynamic_launch_requests()
+            if row["role"] != "bootstrap" and row["reservation_released_at"] is None
+        ]
+        assert len(active) == 2
+        assert {int(row["stream_id"]) for row in active} == {0, 1}
+
+        clock.now += 1.1
+        service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
+        assert (
+            len(
+                [
+                    row
+                    for row in authority.read.dynamic_launch_requests()
+                    if row["role"] != "bootstrap"
+                ]
+            )
+            == 2
+        )
+    finally:
+        authority.close()
+
+
+def test_scheduler_state_flapping_rearms_with_each_new_row_version(tmp_path: Path) -> None:
+    clock = Clock()
+    authority, _leader, scheduler, service = _runtime(tmp_path, clock)
+    try:
+        service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
+        clock.now += 1.1
+        service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
+        launch = [
+            row for row in authority.read.dynamic_launch_requests() if row["role"] != "bootstrap"
+        ][0]
+        job_id = str(launch["pbs_job_id"])
+
+        for classification, expected_state in (
+            ("query_failed", "terminal_uncertain"),
+            ("running", "started"),
+            ("query_failed", "terminal_uncertain"),
+            ("running", "started"),
+        ):
+            clock.now += 1.1
+            scheduler.queue_query(job_id, _observation(job_id, classification))
+            service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
+            current = authority.read.dynamic_launch_requests()[-1]
+            assert current["state"] == expected_state
+            if expected_state == "started":
+                assert current["uncertainty_deadline"] is None
+    finally:
+        authority.close()
+
+
 def test_lost_qsub_result_never_resubmits_and_ends_in_manual_review(tmp_path: Path) -> None:
     class LostResultPBS(FakePBS):
         def submit_learner(self, **kwargs):
@@ -201,6 +265,32 @@ def test_lost_qsub_result_never_resubmits_and_ends_in_manual_review(tmp_path: Pa
         assert resolved["state"] == "failed"
         assert resolved["reservation_released_at"] == clock.now
         assert len(scheduler.submissions) == 1
+        replay_actions = successor_service.tick(
+            global_version=0,
+            eligible_contributors=0,
+            selected_contributors=0,
+        )
+        assert not any(item.startswith("operator_") for item in replay_actions)
+        assert not target.exists()
+        assert len(list((target.parent / "processed").iterdir())) == 1
+    finally:
+        authority.close()
+
+
+def test_invalid_operator_file_is_disposed_once(tmp_path: Path) -> None:
+    clock = Clock()
+    authority, _leader, _scheduler, service = _runtime(tmp_path, clock)
+    request_path = RunPaths(tmp_path).scheduler_operator_requests / "invalid.json"
+    request_path.parent.mkdir(parents=True)
+    request_path.write_text("not-json", encoding="utf-8")
+    try:
+        first = service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
+        second = service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
+
+        assert "invalid_operator_request" in first
+        assert "invalid_operator_request" not in second
+        assert not request_path.exists()
+        assert len(list((request_path.parent / "processed").iterdir())) == 1
     finally:
         authority.close()
 

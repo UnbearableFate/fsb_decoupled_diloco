@@ -116,6 +116,16 @@ CREATE TABLE scheduler_operator_requests (
         OR (action <> 'confirm_job_id' AND scheduler_job_id IS NULL))
 );
 
+CREATE TABLE scheduler_operator_file_dispositions (
+    relative_path TEXT NOT NULL,
+    content_sha256 TEXT NOT NULL CHECK (length(content_sha256) = 64),
+    disposition TEXT NOT NULL CHECK (disposition IN ('applied', 'rejected')),
+    reason TEXT NOT NULL,
+    processed_by_epoch INTEGER NOT NULL CHECK (processed_by_epoch >= 1),
+    processed_at REAL NOT NULL,
+    PRIMARY KEY(relative_path, content_sha256)
+);
+
 CREATE TABLE capacity_observations (
     observation_key TEXT PRIMARY KEY,
     observation_seq INTEGER NOT NULL UNIQUE CHECK (observation_seq >= 1),

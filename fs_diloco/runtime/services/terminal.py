@@ -13,7 +13,7 @@ from ...protocol.contributor import decode_contributor_fence
 from ...storage.authority import LeaderAuthority, LeaderSession
 from ...storage.control import V4ControlPublisher, iter_terminal_acks
 from ...storage.terminal_request import read_manual_terminal_request
-from .merge import MergeService
+from .merge import MergeAttemptStatus, MergeService
 
 
 PLAN03_REQUIREMENTS = frozenset({"DMB-09", "P5-ARCH", "TERM-01", "TERM-02", "TERM-03"})
@@ -30,7 +30,7 @@ def terminal_close_reason(
 
     config = loaded.config
     controller = authority.read.controller_status()
-    if controller["state"] in {"closing", "draining"}:
+    if controller["state"] in {"preclosing", "closing", "draining"}:
         return str(controller.get("reason") or "resumed_terminal_close")
     policy = config.shared.terminal.admission_close_policy
     target = config.shared.sync.stop_after_outer_steps
@@ -113,32 +113,46 @@ class TerminalService:
             * int(self.loaded.config.shared.training.micro_batch_size)
             * int(self.loaded.config.shared.training.block_size)
         )
-        if controller["state"] == "open":
-            close_intent_at = float(self.wall_clock())
-            if terminal_config.allow_preclose_admission_during_drain:
-                visibility_deadline = self.monotonic_clock() + float(
-                    terminal_config.registration_visibility_grace_seconds
-                )
-                while True:
-                    self.admit_preclose(close_intent_at)
-                    remaining = visibility_deadline - self.monotonic_clock()
-                    if remaining <= 0.0:
-                        break
-                    self.sleep(
-                        min(
-                            remaining,
-                            float(self.loaded.config.shared.sync.scan_interval_seconds),
-                        )
-                    )
-            self.leader.begin_terminal_close(
-                command_id=f"terminal-close-{reason}",
+        close_command = self._command_id("terminal-close", reason)
+        preclose_command = self._command_id("terminal-preclose", reason)
+        if controller["state"] == "open" and (
+            terminal_config.allow_preclose_admission_during_drain
+        ):
+            self.leader.begin_terminal_preclose(
+                command_id=preclose_command,
                 reason=reason,
+                registration_visibility_grace_seconds=float(
+                    terminal_config.registration_visibility_grace_seconds
+                ),
                 hard_crash_cycle_token_budget=cycle_token_budget,
             )
             controller = self.authority.read.controller_status()
+        if controller["state"] == "preclosing":
+            close_intent_at = float(controller["requested_at"])
+            visibility_deadline = float(controller["registration_visibility_deadline"])
+            while True:
+                self.admit_preclose(close_intent_at)
+                remaining = visibility_deadline - float(self.wall_clock())
+                if remaining <= 0.0:
+                    break
+                self.sleep(
+                    min(
+                        remaining,
+                        float(self.loaded.config.shared.sync.scan_interval_seconds),
+                    )
+                )
+            controller = self.authority.read.controller_status()
+        if controller["state"] in {"open", "preclosing"}:
+            self.leader.begin_terminal_close(
+                command_id=close_command,
+                reason=reason,
+                hard_crash_cycle_token_budget=cycle_token_budget,
+                drain_ack_timeout_seconds=float(terminal_config.drain_ack_timeout_seconds),
+            )
+            controller = self.authority.read.controller_status()
         self.control.publish_drain(controller)
-        ack_deadline = self.monotonic_clock() + float(terminal_config.drain_ack_timeout_seconds)
-        while self.monotonic_clock() < ack_deadline:
+        ack_deadline = float(controller["drain_ack_deadline"])
+        while float(self.wall_clock()) < ack_deadline:
             self.ingest()
             self._ingest_acks(controller)
             if not any(
@@ -146,33 +160,63 @@ class TerminalService:
                 for row in self.authority.read.terminal_contributor_fences()
             ):
                 break
-            self.sleep(float(self.loaded.config.shared.sync.scan_interval_seconds))
+            remaining = ack_deadline - float(self.wall_clock())
+            if remaining <= 0.0:
+                break
+            self.sleep(min(remaining, float(self.loaded.config.shared.sync.scan_interval_seconds)))
         self._adjudicate_hard_crashes(cycle_token_budget)
 
-        proposal_deadline = self.monotonic_clock() + float(
-            terminal_config.proposal_visibility_grace_seconds
+        controller = self.authority.read.controller_status()
+        generation = int(controller["generation"])
+        proposal_deadline = self.leader.begin_terminal_proposal_visibility(
+            command_id=f"terminal-proposal-visibility-g{generation}",
+            generation=generation,
+            proposal_visibility_grace_seconds=float(
+                terminal_config.proposal_visibility_grace_seconds
+            ),
         )
-        while self.monotonic_clock() < proposal_deadline:
+        while float(self.wall_clock()) < proposal_deadline:
             self.ingest()
             if self._all_declared_final_updates_visible():
                 break
-            self.sleep(float(self.loaded.config.shared.sync.scan_interval_seconds))
-        for _ in range(int(terminal_config.max_terminal_merges)):
+            remaining = proposal_deadline - float(self.wall_clock())
+            if remaining <= 0.0:
+                break
+            self.sleep(min(remaining, float(self.loaded.config.shared.sync.scan_interval_seconds)))
+        maximum = int(terminal_config.max_terminal_merges)
+        controller = self.authority.read.controller_status()
+        remaining_merges = maximum - int(controller["terminal_merge_count"])
+        conflict_budget = max(1, len(self.authority.read.current_contributor_fences()) + 1)
+        while remaining_merges > 0:
             self.ingest()
-            committed = self.merge.merge_once(
+            outcome = self.merge.merge_once(
                 quorum_min=1,
                 quorum_max=self.loaded.config.shared.sync.quorum_max,
                 purpose="terminal",
             )
-            if committed is None:
+            if outcome is MergeAttemptStatus.NO_BATCH:
                 break
+            if outcome is MergeAttemptStatus.FENCE_CONFLICT:
+                if conflict_budget <= 0:
+                    raise RuntimeError("terminal merge conflicts exceeded the bounded retry budget")
+                conflict_budget -= 1
+                continue
+            controller = self.authority.read.controller_status()
+            remaining_merges = maximum - int(controller["terminal_merge_count"])
         state = self.authority.read.controller_status()["state"]
         if state not in {"finalized", "error"}:
-            self.leader.finalize_terminal(command_id=f"terminal-finalize-{reason}", reason=reason)
+            self.leader.finalize_terminal(
+                command_id=self._command_id("terminal-finalize", reason),
+                reason=reason,
+            )
         terminal = self.authority.read.terminal_record()
         if terminal is None:
             raise RuntimeError("terminal record was not committed")
         return terminal
+
+    @staticmethod
+    def _command_id(prefix: str, reason: str) -> str:
+        return f"{prefix}-{hashlib.sha256(reason.encode('utf-8')).hexdigest()}"
 
     def _ingest_acks(self, controller: dict[str, Any]) -> None:
         for path, payload, fence in iter_terminal_acks(self.loaded.paths):

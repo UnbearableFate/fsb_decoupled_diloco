@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,6 +13,7 @@ from fs_diloco.core.run_descriptor import (
     LoadedRunDescriptor,
 )
 from fs_diloco.protocol.contributor import StaticMembershipScope
+from fs_diloco.runtime.services.merge import MergeAttemptStatus
 from fs_diloco.runtime.services.terminal import TerminalService, terminal_close_reason
 from fs_diloco.storage.authority import (
     AuthorityIdentity,
@@ -37,12 +39,14 @@ class Telemetry:
 
 
 class MergeProbe:
-    def __init__(self, result=None) -> None:
+    def __init__(self, result=MergeAttemptStatus.NO_BATCH) -> None:
         self.calls: list[dict[str, object]] = []
         self.result = result
 
     def merge_once(self, **kwargs):
         self.calls.append(dict(kwargs))
+        if isinstance(self.result, list):
+            return self.result.pop(0)
         return self.result
 
 
@@ -59,6 +63,12 @@ def _runtime(tmp_path: Path, clock: VirtualClock, *, max_terminal_merges: int):
         command_id="v0",
         publication_id="publication-v0",
         **publish_checkpoint_pair(tmp_path, version=0),
+    )
+    leader.bind_or_replace_static_attempt(
+        command_id="bind-learner",
+        learner_id="learner-0",
+        logical_launch_id="logical-0",
+        attempt_id="attempt-0",
     )
     shared = Config()
     shared.sync.scan_interval_seconds = 0.1
@@ -142,7 +152,153 @@ def test_terminal_preclose_visibility_uses_one_frozen_wall_cutoff(tmp_path: Path
         service.finalize(reason="manual")
 
         assert cutoffs == [100.0, 100.0, 100.0, 100.0]
-        assert authority.read.controller_status()["requested_at"] == pytest.approx(100.25)
+        controller = authority.read.controller_status()
+        assert controller["requested_at"] == pytest.approx(100.0)
+        assert controller["registration_visibility_deadline"] == pytest.approx(100.25)
+    finally:
+        authority.close()
+
+
+def test_terminal_wait_does_not_sleep_past_durable_ack_deadline(tmp_path: Path) -> None:
+    clock = VirtualClock(monotonic_seconds=0.0, wall_seconds=100.0)
+    authority, leader, loaded = _runtime(tmp_path, clock, max_terminal_merges=0)
+    loaded.config.shared.sync.scan_interval_seconds = 10.0
+    loaded.config.shared.terminal.drain_ack_timeout_seconds = 0.25
+    try:
+        service = TerminalService(
+            loaded=loaded,
+            authority=authority,
+            leader=leader,
+            control=V4ControlPublisher(loaded.paths, leader.token),
+            telemetry=Telemetry(),
+            merge=MergeProbe(),
+            ingest=lambda: None,
+            admit_preclose=lambda _cutoff: None,
+            monotonic_clock=clock.monotonic,
+            wall_clock=clock.wall,
+            sleep=clock.advance,
+        )
+
+        service.finalize(reason="configured_target")
+
+        assert clock.wall() == pytest.approx(100.25)
+    finally:
+        authority.close()
+
+
+def test_terminal_merge_conflict_does_not_consume_terminal_budget(tmp_path: Path) -> None:
+    clock = VirtualClock(monotonic_seconds=0.0, wall_seconds=100.0)
+    authority, leader, loaded = _runtime(tmp_path, clock, max_terminal_merges=1)
+    merge = MergeProbe([MergeAttemptStatus.FENCE_CONFLICT, MergeAttemptStatus.NO_BATCH])
+    try:
+        service = TerminalService(
+            loaded=loaded,
+            authority=authority,
+            leader=leader,
+            control=V4ControlPublisher(loaded.paths, leader.token),
+            telemetry=Telemetry(),
+            merge=merge,
+            ingest=lambda: None,
+            admit_preclose=lambda _cutoff: None,
+            monotonic_clock=clock.monotonic,
+            wall_clock=clock.wall,
+            sleep=clock.advance,
+        )
+
+        service.finalize(reason="configured_target")
+
+        assert len(merge.calls) == 2
+    finally:
+        authority.close()
+
+
+def test_manual_reason_is_not_used_as_a_protocol_command_identity(tmp_path: Path) -> None:
+    clock = VirtualClock(monotonic_seconds=0.0, wall_seconds=100.0)
+    authority, leader, loaded = _runtime(tmp_path, clock, max_terminal_merges=0)
+    loaded.config.shared.terminal.admission_close_policy = "manual"
+    request = publish_manual_terminal_request(
+        loaded.paths,
+        run_id="run-v4",
+        descriptor_sha256="d" * 64,
+        reason="operator maintenance: 日本語",
+        created_at=100.0,
+    )
+    try:
+        reason = terminal_close_reason(loaded, authority, version=0, now=100.0)
+        assert reason == f"manual:{request['request_id']}:operator maintenance: 日本語"
+        service = TerminalService(
+            loaded=loaded,
+            authority=authority,
+            leader=leader,
+            control=V4ControlPublisher(loaded.paths, leader.token),
+            telemetry=Telemetry(),
+            merge=MergeProbe(),
+            ingest=lambda: None,
+            admit_preclose=lambda _cutoff: None,
+            monotonic_clock=clock.monotonic,
+            wall_clock=clock.wall,
+            sleep=clock.advance,
+        )
+
+        assert service.finalize(reason=str(reason))["state"] == "finalized"
+    finally:
+        authority.close()
+
+
+def test_preclose_cutoff_and_deadline_survive_successor_takeover(tmp_path: Path) -> None:
+    clock = VirtualClock(monotonic_seconds=0.0, wall_seconds=100.0)
+    authority, leader, loaded = _runtime(tmp_path, clock, max_terminal_merges=0)
+    loaded.config.shared.terminal.allow_preclose_admission_during_drain = True
+    first_cutoffs: list[float] = []
+
+    def crash_after_first_sleep(seconds: float) -> None:
+        clock.advance(seconds)
+        raise RuntimeError("injected preclose crash")
+
+    first = TerminalService(
+        loaded=loaded,
+        authority=authority,
+        leader=leader,
+        control=V4ControlPublisher(loaded.paths, leader.token),
+        telemetry=Telemetry(),
+        merge=MergeProbe(),
+        ingest=lambda: None,
+        admit_preclose=first_cutoffs.append,
+        monotonic_clock=clock.monotonic,
+        wall_clock=clock.wall,
+        sleep=crash_after_first_sleep,
+    )
+    try:
+        with pytest.raises(RuntimeError, match="injected preclose crash"):
+            first.finalize(reason="configured_target")
+        frozen = authority.read.controller_status()
+        assert frozen["state"] == "preclosing"
+        assert frozen["requested_at"] == 100.0
+        deadline = frozen["registration_visibility_deadline"]
+
+        authority.release_leader(leader.token)
+        successor = authority.open_leader(
+            authority.acquire_leader(owner_id="successor", hostname="host", pid=2)
+        )
+        resumed_cutoffs: list[float] = []
+        resumed = TerminalService(
+            loaded=loaded,
+            authority=authority,
+            leader=successor,
+            control=V4ControlPublisher(loaded.paths, successor.token),
+            telemetry=Telemetry(),
+            merge=MergeProbe(),
+            ingest=lambda: None,
+            admit_preclose=resumed_cutoffs.append,
+            monotonic_clock=clock.monotonic,
+            wall_clock=clock.wall,
+            sleep=clock.advance,
+        )
+        resumed.finalize(reason="configured_target")
+
+        assert resumed_cutoffs and set(resumed_cutoffs) == {100.0}
+        assert frozen["requested_at"] == 100.0
+        assert deadline == pytest.approx(100.25)
     finally:
         authority.close()
 
@@ -177,6 +333,59 @@ def test_terminal_close_reason_consumes_global_target_and_deadline_policy(
         )
         assert terminal_close_reason(loaded, authority, version=0, now=105.0) == (
             f"manual:{request['request_id']}:operator maintenance"
+        )
+    finally:
+        authority.close()
+
+
+@pytest.mark.parametrize(
+    ("reservation_released_at", "productive", "reserved", "expected"),
+    [
+        (None, 0, 1, None),
+        (101.0, 1, 0, None),
+        (101.0, 0, 0, "launch_budget_exhausted"),
+    ],
+)
+def test_launch_budget_close_requires_released_reservations_and_low_capacity(
+    tmp_path: Path,
+    reservation_released_at: float | None,
+    productive: int,
+    reserved: int,
+    expected: str | None,
+) -> None:
+    clock = VirtualClock(monotonic_seconds=0.0, wall_seconds=100.0)
+    authority, _leader, loaded = _runtime(tmp_path, clock, max_terminal_merges=0)
+    loaded.config.shared.terminal.admission_close_policy = "global_target_or_launch_budget"
+    loaded.config.shared.sync.stop_after_outer_steps = None
+    loaded.config.shared.stop_after_direct_weight_tokens_applied = None
+    loaded.config.shared.scaling.enabled = True
+    loaded.config.shared.scaling.max_total_launch_requests = 1
+    read = SimpleNamespace(
+        controller_status=lambda: {"state": "open"},
+        token_ledger_summary=lambda: SimpleNamespace(direct_applied=0),
+        dynamic_launch_requests=lambda: (
+            {
+                "role": "scale_out",
+                "reservation_released_at": reservation_released_at,
+            },
+        ),
+        capacity_observations=lambda: (
+            {
+                "productive_instances": productive,
+                "reserved_launch_capacity": reserved,
+                "desired_contributors": 1,
+            },
+        ),
+    )
+    try:
+        assert (
+            terminal_close_reason(
+                loaded,
+                SimpleNamespace(read=read),
+                version=0,
+                now=100.0,
+            )
+            == expected
         )
     finally:
         authority.close()
