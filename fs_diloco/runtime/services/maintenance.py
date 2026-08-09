@@ -108,7 +108,15 @@ class MaintenanceService:
             cutoff = latest.version - 1
             records = self.authority.read.audit_history_records(cutoff_version=cutoff)
             if records and (force or len(records) >= self.config.archive_batch_rows):
-                batch_id = f"authority-through-v{cutoff}"
+                archive_identity = hashlib.sha256(
+                    json.dumps(
+                        {"cutoff_version": cutoff, "records": records},
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        allow_nan=False,
+                    ).encode("utf-8")
+                ).hexdigest()[:32]
+                batch_id = f"authority-through-v{cutoff}-{archive_identity}"
                 payload = build_audit_batch(
                     batch_id=batch_id,
                     record_kind="authority_history",

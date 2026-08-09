@@ -1241,10 +1241,11 @@ def test_immutable_audit_batch_precedes_exact_history_prune_and_preserves_rollup
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
         fence = _static_fence(leader)
+        version_zero = publish_checkpoint_pair(tmp_path, version=0)
         leader.initialize_v0(
             command_id="v0",
             publication_id="publication-v0",
-            **publish_checkpoint_pair(tmp_path, version=0),
+            **version_zero,
         )
         first, _ = _ingest_static_cycle(leader, tmp_path, fence, sequence=1, previous=None)
         _commit_next(leader, tmp_path, version=1)
@@ -1286,14 +1287,14 @@ def test_immutable_audit_batch_precedes_exact_history_prune_and_preserves_rollup
         replayed_v0 = leader.initialize_v0(
             command_id="v0",
             publication_id="publication-v0",
-            **publish_checkpoint_pair(tmp_path, version=0),
+            **version_zero,
         )
         assert replayed_v0.version == 0
         with pytest.raises(CommandConflictError, match="different kind or request"):
             leader.initialize_v0(
                 command_id="v0",
                 publication_id="different-publication-v0",
-                **publish_checkpoint_pair(tmp_path, version=0),
+                **version_zero,
             )
 
 

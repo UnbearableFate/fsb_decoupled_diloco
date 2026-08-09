@@ -914,3 +914,9 @@
 - Experiment ID `P6-G2-tests-attempt1`，该正式门禁目标连续失败次数 1。PBS job `2512684.opbs` 的focused suite结果为 `610 passed, 2 skipped, 1 failed`；失败仅在 `test_fenced_maintenance_archives_history_and_successor_reclaims_artifact_gc`。
 - Test fixture把手工wall clock直接推进 `publication_orphan_grace_seconds + 1`，超过当前leader的lease safety boundary，却随后用该过期leader调用 `claim_orphan_gc`；authority正确抛出 `StaleLeaderTokenError`。这是新test的时序错误，不是GC实现接受stale writer。
 - 待本job完整suite和artifact结束后，修复会在推进clock前先续租current token，或在推进后显式由合法successor claim；保留“stale leader不得claim、successor可reclaim”的生产不变量，然后完整重跑G2。
+
+## 2026-08-09 23:38 JST — P6 G2 attempt 2 exposed immutable replay test misuse and archive ID collision
+
+- Experiment ID `P6-G2-tests-attempt2`，该正式门禁目标连续失败次数 2。PBS job `2512694.opbs` 的focused/full分别为 `609 passed, 2 failed` 和 `717 passed, 2 skipped, 2 failed`；两个suite均只报告同一对失败。
+- `test_immutable_audit_batch_precedes_exact_history_prune_and_preserves_rollup` 为构造command conflict再次调用safetensors writer写入既有 `v0` 名称；safetensors metadata header不承诺逐字节稳定，该做法违反immutable exact-replay前提。测试应复用第一次已提交的 `version_zero` identity，让command request conflict在任何重复外部I/O前被拒绝。
+- `MaintenanceService.tick()` 使用仅含cutoff的 `authority-through-v0` 作为batch ID。首次archive自身会留下新的command receipt，successor在同一cutoff看到不同records却复用旧ID/path，正确触发immutable collision。这是生产维护逻辑缺陷：batch identity必须同时绑定cutoff和exact records content。修复为从canonical cutoff+records派生稳定hash后缀；同内容重试仍同ID，不同增量history获得新ID并可由既有partition compaction折叠。
