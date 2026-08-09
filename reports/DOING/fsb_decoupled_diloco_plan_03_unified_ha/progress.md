@@ -781,3 +781,13 @@
 - Completed the mandatory attempts 4–6 comprehensive review and implemented the first static-verifiable slice: workload identity now uses terminal/adjudicated work while retaining selected-work diagnostics; classic terminal cursors come from stopped learner heartbeats; actor JSONL is harvested before cleanup; learners enter a sticky await-close state after a configured target latest; syncer admission is performed in a bounded Torch-free startup window and remains active in the normal loop.
 - Commands: `python -m py_compile` over all changed production/harness/test modules; `git diff --check`; then focused `.venv/bin/ruff check` and `.venv/bin/ruff format --check` over the nine affected Python files after canonical formatting. Result: compile/diff PASS; Ruff lint PASS; all nine files format-clean.
 - Runtime behavior is not yet claimed: pytest and actor timing remain restricted to PBS G2/diagnostic allocations. The unsupported login system-Python probe and two focused static corrections are retained in `failures.md`; no Torch/pytest workload ran on the login node.
+
+## 2026-08-10 03:12 JST — G10 remediation target `8aaa7b7` G0/G1 PASS
+
+- Clean executable target `8aaa7b7f48c6edb955178fa618a37759bd7527b0` passed the full static gate: diff, compileall, repository-wide Ruff lint, exact modified-file format, all PBS/shell syntax, literal Miyabi group IDs, Checker boundaries and P6 requirement inventory. Source identity reports `git_dirty=false`; the user-owned `plans/AGENTS.md` edit remains outside executable source scope and unstaged.
+- Artifact: `artifacts/20260810-031200_p6-g0-g1-freeze-static-pass.json`; logs: `logs/plan03_p6_g0_20260810_031200/`. This freezes the workload-oracle, target-await and startup-overlap source before PBS G2; it is not runtime or performance evidence.
+
+## 2026-08-10 03:16 JST — authority lazy-verification focused static group PASS
+
+- Moved the two tensor/object verification imports from `storage.authority` module scope to the exact proposal-ingest and prepared-publication verification paths. Admission, leadership and membership APIs can now load without Torch, while proposal/publication verification remains before its original transaction/commit boundary. The fresh-process test now covers authority, syncer entrypoint and syncer runtime modules together.
+- Focused Ruff lint/format, py_compile and `git diff --check` all passed for the authority/test change. Runtime import and the complete regression remain unverified until a new clean target passes G2; the failed `2513720` result is not reused.

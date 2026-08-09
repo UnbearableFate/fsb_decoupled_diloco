@@ -112,12 +112,17 @@ def test_bounded_startup_window_leaves_late_requests_for_main_loop() -> None:
     )
 
 
-def test_syncer_admission_module_loads_without_torch() -> None:
+def test_syncer_admission_modules_load_without_torch() -> None:
     probe = subprocess.run(
         [
             sys.executable,
             "-c",
-            ("import sys; import fs_diloco.runtime.syncer_v4; assert 'torch' not in sys.modules"),
+            (
+                "import sys; import fs_diloco.storage.authority; "
+                "import fs_diloco.runtime.syncer_entrypoint; "
+                "import fs_diloco.runtime.syncer_v4; "
+                "assert 'torch' not in sys.modules"
+            ),
         ],
         cwd=PROJECT_ROOT,
         capture_output=True,

@@ -67,7 +67,6 @@ from .leader_lease import (
     LeaseUnavailableError,
     StaleLeaderTokenError,
 )
-from .object_store import verify_proposal_payload, verify_publication_artifact
 from .paths import RunPaths
 
 
@@ -1381,6 +1380,8 @@ class LeaderSession:
         replay = self._command_replay(command_id, "ingest_proposal", request)
         if replay is not None:
             return ProposalDisposition(replay["disposition"])
+        from .object_store import verify_proposal_payload
+
         verification = verify_proposal_payload(self._authority._run_root, proposal)
         if verification.status is not ReadStatus.OK or verification.value is None:
             raise ProposalPayloadError(verification)
@@ -5544,6 +5545,8 @@ class LeaderSession:
         return True
 
     def _verify_prepared_publication_artifacts(self, publication_id: str) -> None:
+        from .object_store import verify_publication_artifact
+
         intent = self._authority._fetchone(
             "SELECT * FROM publication_intents WHERE publication_id=?", (publication_id,)
         )
