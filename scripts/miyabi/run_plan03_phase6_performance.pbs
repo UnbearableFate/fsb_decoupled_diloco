@@ -39,12 +39,12 @@ UV_PROJECT_ENVIRONMENT="$CLASSIC_VENV" "$UV_BIN" sync \
 "$UV_BIN" pip install --python "$CLASSIC_VENV/bin/python" \
   --no-deps --reinstall -e "$CLASSIC_ROOT"
 test "$CURRENT_VENV/bin/python" != "$CLASSIC_VENV/bin/python"
-CURRENT_PACKAGE="$("$CURRENT_VENV/bin/python" -c 'from pathlib import Path; import fs_diloco; print(Path(fs_diloco.__file__).resolve())')"
-CLASSIC_PACKAGE="$("$CLASSIC_VENV/bin/python" -c 'from pathlib import Path; import fs_diloco; print(Path(fs_diloco.__file__).resolve())')"
+CURRENT_PACKAGE="$(cd "$TMPDIR" && "$CURRENT_VENV/bin/python" -c 'from pathlib import Path; import fs_diloco; print(Path(fs_diloco.__file__).resolve())')"
+CLASSIC_PACKAGE="$(cd "$TMPDIR" && "$CLASSIC_VENV/bin/python" -c 'from pathlib import Path; import fs_diloco; print(Path(fs_diloco.__file__).resolve())')"
 test "$CURRENT_PACKAGE" = "$PROJECT_ROOT/fs_diloco/__init__.py"
 test "$CLASSIC_PACKAGE" = "$CLASSIC_ROOT/fs_diloco/__init__.py"
-CURRENT_TORCH="$("$CURRENT_VENV/bin/python" -c 'import torch; print(torch.__version__)')"
-CLASSIC_TORCH="$("$CLASSIC_VENV/bin/python" -c 'import torch; print(torch.__version__)')"
+CURRENT_TORCH="$(cd "$TMPDIR" && "$CURRENT_VENV/bin/python" -c 'import torch; print(torch.__version__)')"
+CLASSIC_TORCH="$(cd "$TMPDIR" && "$CLASSIC_VENV/bin/python" -c 'import torch; print(torch.__version__)')"
 test "$CURRENT_TORCH" = "$CLASSIC_TORCH"
 
 "$CURRENT_VENV/bin/python" scripts/miyabi/plan03_p6_performance.py \

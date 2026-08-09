@@ -988,3 +988,15 @@
 - Experiment ID `P6-G7-two-node-attempt1`。PBS job `2513329.opbs`在`small-g`使用2节点、10分钟walltime；11个supplemental contracts和transaction外takeover均通过，随后transaction内场景按预期证明successor不能绕过held writer lock，但orchestrator在约26秒后exit 1。Raw log：`fsdiloco_p6_g7_2n.o2513329`；完整失败现场：`runs/fs_diloco/plan03_p6_g7_2513329/`。
 - Old writer `pid=1128295`在`mg0149`持有`BEGIN IMMEDIATE`后处于SIGSTOP。Orchestrator发送SIGTERM后等待mpirun 20秒超时；现场仍有SQLite journal且没有successor artifact。POSIX stopped进程不会因catchable SIGTERM自动继续，信号保持pending，因而旧进程既未退出也未释放writer lock。这与生产fencing无关，是fault-injection teardown错误。
 - 下一轮把这个已证明处于transaction内且必须强制终止的test actor改为SIGKILL，使停止态进程立即死亡并由SQLite rollback释放lock；仍要求mpirun非零、successor等待至少3秒、uncommitted reason为NULL、integrity=`ok`。先跑静态/G2，再重跑完整2-node G7；不得用SIGCONT让旧writer执行任何post-stop代码，也不得缩短held-lock观察窗口。
+
+## 2026-08-10 01:41 JST — P6 G9 attempt 1 omitted source identity before dynamic bootstrap
+
+- Experiment ID `P6-G9-dynamic-9node-attempt1`。Parent PBS job `2513386.opbs`使用1-node `small-g`、30分钟walltime，尚未提交任何八个learner child便exit 1；raw log为`fsdiloco_p6_g9_dynamic.o2513386`，partial staging/reservation现场保留在`runs/fs_diloco/plan03_p6_g9_dynamic_2513386*`和对应`logs/qsub_plan03_p6_g9_dynamic_2513386/`。
+- Supervisor直接调用`fs_diloco.tools.init_run`，但不像已经通过G8的`run_v4_allocation.sh`那样先运行唯一source-identity helper并注入`FS_DILOCO_GIT_COMMIT/FS_DILOCO_SOURCE_FINGERPRINT/FS_DILOCO_GIT_DIRTY`。Formal initializer因`run.git_commit`为空正确fail closed；这发生在allocation topology、failure injection和training之前。
+- 下一轮让dynamic supervisor在init前调用同一`capture_source_identity.py`，保存JSON/env证据，拒绝dirty source，并用捕获值构造initializer和后续actor共同environment。然后重跑完整G9，仍要求八bootstrap jobs、最多9 live allocations、真实loss/replacement/duplicate actor/syncer successor和120+ versions；不得在acceptance YAML硬编码某个commit。
+
+## 2026-08-10 01:41 JST — P6 G10 attempt 2 package-origin check was shadowed by the caller cwd
+
+- Experiment ID `P6-G10-performance-attempt2`，该目标连续失败次数2。PBS job `2513381.opbs`在单个`debug-g`节点成功从current frozen lock分别构造两个独立venv，classic环境也成功把editable project从current root替换为detached tag worktree，且locked `torch==2.13.0+cu132`完整安装；随后在任何warmup/pair前由PBS line 45的classic package-origin assertion exit 1。Raw log：`fsdiloco_p6_g10.o2513381`；没有comparison artifact或性能样本。
+- Origin probe以`python -c`运行时仍处在`$PROJECT_ROOT`，Python的空路径entry先解析当前工作目录中的`fs_diloco/`，遮蔽了已经正确安装的classic editable path。因此断言观察的是probe cwd，不是classic environment provenance；uv的uninstall/install回执已明确显示classic worktree成为installed project。
+- 下一轮只让两个origin/version probe在共同中立`$TMPDIR`工作目录执行；仍精确要求current import来自current root、classic import来自detached worktree、venv路径不同且torch版本相同，随后才进入固定warmup和20 AB/BA pairs。不得删除origin断言或用`PYTHONPATH`强行伪造结果。

@@ -52,6 +52,28 @@ def _descriptor(init_output: str) -> dict[str, Any]:
     return descriptor
 
 
+def _capture_source_identity(*, python: Path, project_root: Path, log_root: Path) -> dict[str, Any]:
+    output = _run(
+        [
+            str(python),
+            str(project_root / "scripts/miyabi/capture_source_identity.py"),
+            "--project-root",
+            str(project_root),
+            "--output-json",
+            str(log_root / "source_identity.json"),
+            "--output-env",
+            str(log_root / "source_identity.env"),
+        ]
+    )
+    identity = json.loads(output)
+    if identity.get("git_dirty") is not False:
+        raise RuntimeError("formal dynamic run requires a clean source target")
+    for name in ("git_commit", "source_fingerprint"):
+        if not isinstance(identity.get(name), str) or not identity[name]:
+            raise RuntimeError(f"source identity is missing {name}")
+    return identity
+
+
 def _qsub_learners(
     *,
     project_root: Path,
@@ -169,6 +191,18 @@ def supervise(
 ) -> None:
     python = project_root / ".venv/bin/python"
     log_root.mkdir(parents=True, exist_ok=False)
+    source_identity = _capture_source_identity(
+        python=python,
+        project_root=project_root,
+        log_root=log_root,
+    )
+    init_environment = os.environ.copy()
+    init_environment.update(
+        FS_DILOCO_GIT_COMMIT=str(source_identity["git_commit"]),
+        FS_DILOCO_SOURCE_FINGERPRINT=str(source_identity["source_fingerprint"]),
+        FS_DILOCO_GIT_DIRTY="0",
+        FS_DILOCO_REQUIRE_SOURCE_IDENTITY="1",
+    )
     init_output = _run(
         [
             str(python),
@@ -182,7 +216,8 @@ def supervise(
             str(shared_root),
             "--project-root",
             str(project_root),
-        ]
+        ],
+        environment=init_environment,
     )
     (log_root / "init_run.json").write_text(init_output + "\n", encoding="utf-8")
     descriptor = _descriptor(init_output)
@@ -200,7 +235,7 @@ def supervise(
         json.dumps({"job_ids": initial_job_ids}, sort_keys=True, indent=2) + "\n",
         encoding="utf-8",
     )
-    base_environment = os.environ.copy()
+    base_environment = dict(init_environment)
     base_environment.update(
         FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=str(descriptor["descriptor_sha256"]),
         FS_DILOCO_EXPECTED_GIT_COMMIT=str(descriptor["git_commit"]),
