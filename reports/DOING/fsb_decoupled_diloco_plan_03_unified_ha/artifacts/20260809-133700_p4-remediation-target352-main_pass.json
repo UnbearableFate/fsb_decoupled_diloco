@@ -1,0 +1,43 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-remediation-target352-main",
+  "recorded_at": "2026-08-09T13:37:00+09:00",
+  "status": "PASS",
+  "errors": [],
+  "source_commit": "352318fa67115b64a3ddfb38145ca1dc20bf253f",
+  "identity": {
+    "git_dirty": false,
+    "source_fingerprint": "sha256:c9a6c8fdf417810741cc128a8784aa755cac25825295487fbc82dfa0a0774b78",
+    "static_descriptor_sha256": "1cdecedf39b62ac636a2ca63a77f43e0785ddaad9260ed955518c74cf649a0a2",
+    "dynamic_descriptor_sha256": "596ed2135fc43984028a97020057e5b11ca367e45f0575b023a12620b57fd200"
+  },
+  "pbs": {
+    "job_id": "2509827.opbs",
+    "host": "mg0010",
+    "queue": "debug-g",
+    "requested_walltime": "00:10:00",
+    "actual_walltime": "00:01:32",
+    "exit_status": 0,
+    "stdout_sha256": "2db07b7eae928a39fe70a5714df62b304d5e0bcc7ada5da492416f7bdc719e6f"
+  },
+  "checks": {
+    "ruff": "PASS",
+    "format_files": 20,
+    "boundary_checker": "PASS",
+    "focused_tests": "78 passed in 6.82s",
+    "full_tests": "896 passed in 60.77s"
+  },
+  "static": {
+    "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco_p4_352318f/runs/fs_diloco/plan03_p4_static_2509827",
+    "descriptor_sha256": "1cdecedf39b62ac636a2ca63a77f43e0785ddaad9260ed955518c74cf649a0a2",
+    "authority_database_sha256_before_cleanup": "683fe02b517c844d86c0047ed44a203216a96699fdd4ba456a4a106397b0c4f9",
+    "summary": {"run_id": "plan03_p4_static_2509827", "final_version": 2, "direct_weight_tokens_applied": 256, "acked_terminal_fences": 2, "hard_crash_gap_tokens_upper_bound": 0, "integrity_check": "ok"}
+  },
+  "dynamic": {
+    "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco_p4_352318f/runs/fs_diloco/plan03_p4_dynamic_2509827",
+    "descriptor_sha256": "596ed2135fc43984028a97020057e5b11ca367e45f0575b023a12620b57fd200",
+    "authority_database_sha256_before_cleanup": "eec7f8fe8aac6301a02b7cbd082b7895adfebdc344e9f53ad5d382cfc3851222",
+    "summary": {"run_id": "plan03_p4_dynamic_2509827", "final_version": 12, "direct_weight_tokens_applied": 3840, "acked_terminal_fences": 1, "hard_crash_gap_tokens_upper_bound": 0, "integrity_check": "ok"}
+  },
+  "scope_note": "retained component evidence; replacement specialty gates found a pending-pointer classification defect in this target"
+}

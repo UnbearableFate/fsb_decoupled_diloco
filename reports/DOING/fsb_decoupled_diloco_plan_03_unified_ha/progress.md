@@ -484,3 +484,16 @@
 - Static gates passed Ruff, 20-file format, frozen/current Checker, focused `78 passed in 6.59s`, and full `896 passed in 66.11s`. The real static/dynamic pipelines finalized at v2/v12 with 192/3,840 direct tokens, 2/1 acknowledged fences, zero hard-crash gap, no pending/selected updates, and SQLite integrity `ok`.
 - Evidence: `artifacts/20260809-133021_p4-incremental-remediation-final-precommit_pass.json`; joined stdout SHA-256 `a9b6aafbc94c1eb2d9fc8a8da480cb9eec5f951a6c63be8aebb3ff492cfb0cde`. The changed MODE-02 pause boundary still requires the clean-target static-rerun specialty gate.
 - Evidence-bound cleanup deleted exactly 5 static plus 13 dynamic terminal proposal objects (126,001 bytes) after inventory, retaining the authority and control history. Manifests: `artifacts/20260809-133100_p4-incremental-remediation-final-precommit-{static,dynamic}_cleanup.json`.
+
+# 2026-08-09 13:37 JST — P4 clean target 352318f unaffected component gates PASS
+
+- Clean target `352318fa67115b64a3ddfb38145ca1dc20bf253f` passed four target-bound components while its two replacement specialty gates independently exposed the pending-pointer defect recorded in `failures.md`.
+- Main job `2509827.opbs` passed Ruff/format/Checker, focused `78`, full `896`, and real static/dynamic pipelines in `00:01:32`. Plan01 compatibility job `2509825.opbs` passed full `896` plus strict-v4 smoke in `00:01:13`. Error/manual-successor job `2509828.opbs` passed in `00:00:20`; two-host expiry takeover job `2509826.opbs` passed on `mg0843+mg0075` in `00:00:23`.
+- Every run attested `git_dirty=false`, source fingerprint `sha256:c9a6c8f...`, finalized with acknowledged terminal fences, zero hard-crash gap and SQLite integrity `ok`. Evidence: `artifacts/20260809-133700_p4-remediation-target352-{main,plan01-regression,error-successor,two-host-takeover}_pass.json`.
+- These results remain auditable component evidence but do not make target 352318f phase-final. The one-line pending-pointer fix changes the source tree, so the final aggregate will be bound to the successor target and rerun the affected main/static/dynamic gates.
+
+# 2026-08-09 13:40 JST — P4 pending-pointer remediation precommit gate PASS
+
+- Job `2509843.opbs` validated the direct RED-to-GREEN correction: a nonmatching current pointer now keeps an unprocessed request pending instead of manufacturing `AdmissionSupersededError`; request-specific rejection and exact matching response remain the only successful exits from initial admission polling.
+- On `mg0007`, Ruff/format/Checker passed, focused `78 passed in 6.51s`, full `896 passed in 67.13s`, and real static/dynamic pipelines finalized v2/v12 with 256/3,840 direct tokens, acknowledged fences, zero hard-crash gap and integrity `ok`. PBS exited 0 in `00:01:37` under `00:10:00`.
+- Evidence: `artifacts/20260809-134020_p4-pending-pointer-remediation-precommit_pass.json`; stdout SHA-256 `bc40128bf02a365ff0fa7774fc8885f2f0c378a153caa56787ab7b2b1d0837a5`. Clean-target static and dynamic replacement gates remain the decisive falsification tests.

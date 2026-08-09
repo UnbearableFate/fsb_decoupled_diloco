@@ -1,0 +1,13 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-remediation-target352-two-host-takeover",
+  "recorded_at": "2026-08-09T13:37:00+09:00",
+  "status": "PASS",
+  "errors": [],
+  "source_commit": "352318fa67115b64a3ddfb38145ca1dc20bf253f",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/20260809_133447_fs_diloco_2node_resume",
+  "identity": {"run_id": "20260809_133447_fs_diloco_2node_resume", "git_dirty": false, "source_fingerprint": "sha256:c9a6c8fdf417810741cc128a8784aa755cac25825295487fbc82dfa0a0774b78", "descriptor_sha256": "07a998b32d0089c34e71e23380f32cc0b552891ac87d2ff753207b75f9aca949"},
+  "pbs": {"job_id": "2509826.opbs", "hosts": ["mg0843", "mg0075"], "queue": "small-g", "requested_walltime": "00:10:00", "actual_walltime": "00:00:23", "exit_status": 0, "stdout_sha256": "a3d26730f2a3bc778b3a4bd1d132e3874d488aa6e97a375dd9b04a6aa35393be"},
+  "authority": {"database_sha256_before_cleanup": "7d612e03ba7532316ff25c449ec54da720023685149f02ffd26e95f7116270f9", "final_version": 20, "direct_weight_tokens_applied": 1280, "acked_terminal_fences": 1, "hard_crash_gap_tokens_upper_bound": 0, "integrity_check": "ok", "epoch_states": ["expired", "released"]},
+  "scope_note": "retained takeover component evidence; not the final target aggregate"
+}

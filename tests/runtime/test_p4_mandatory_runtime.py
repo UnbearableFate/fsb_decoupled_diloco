@@ -1239,7 +1239,7 @@ def test_same_epoch_admission_repair_reuses_immutable_resume_snapshot(tmp_path: 
         authority.close()
 
 
-def test_same_epoch_stale_admission_is_superseded_by_current_fence(tmp_path: Path) -> None:
+def test_nonmatching_current_fence_keeps_unprocessed_request_pending(tmp_path: Path) -> None:
     paths = RunPaths(tmp_path)
     publisher = V4ControlPublisher(
         paths,
@@ -1296,7 +1296,7 @@ def test_same_epoch_stale_admission_is_superseded_by_current_fence(tmp_path: Pat
         resume=resume,
     )
 
-    with pytest.raises(RuntimeError, match="superseded"):
+    assert (
         read_admission_response(
             paths,
             run_id="run-1",
@@ -1307,6 +1307,8 @@ def test_same_epoch_stale_admission_is_superseded_by_current_fence(tmp_path: Pat
             request_sha256=admission_request_sha256(first_request),
             max_clock_skew_seconds=0.0,
         )
+        is None
+    )
 
 
 def test_dynamic_admission_reader_uses_stable_stream_pointer_key(tmp_path: Path) -> None:

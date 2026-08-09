@@ -400,7 +400,12 @@ def read_admission_response(
         or pointer.get("actor_id") != actor_id
         or pointer.get("attempt_id") != attempt_id
     ):
-        raise AdmissionSupersededError("admission response was superseded by another fence")
+        # A current pointer for another actor/attempt is also the normal state
+        # while this request is waiting to be processed.  The polling reader
+        # has not yet captured a fence and therefore cannot classify it as a
+        # superseded admission.  Request-specific rejection or an exact
+        # matching pointer/response is required to leave the pending state.
+        return None
     path = paths.epoch_admission_response_path(
         current.epoch,
         current.owner_id,

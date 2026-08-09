@@ -1,0 +1,66 @@
+{
+  "artifact_policy_sha256": "fd2c50a29b25f908fe092d3a92589687954ac0417beb1e51fa2ad79d14862cdf",
+  "candidate_bytes": 34298,
+  "candidate_count": 6,
+  "candidates": [
+    {
+      "device": 743766374,
+      "inode": 270219125920384040,
+      "mtime_ns": 1786250112000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_000.json",
+      "size_bytes": 605
+    },
+    {
+      "device": 743766374,
+      "inode": 270219125920384041,
+      "mtime_ns": 1786250112000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_001.json",
+      "size_bytes": 605
+    },
+    {
+      "device": 743766374,
+      "inode": 270219125920384030,
+      "mtime_ns": 1786250112000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/03c56a24-2d54-49f5-bb98-c9135538d60a.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219125920383994,
+      "mtime_ns": 1786250112000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/eb14d4c9-1562-4e1e-b1b8-717f87df974a.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219125920383993,
+      "mtime_ns": 1786250112000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_001/09726bd4-1aae-4b89-8e72-095f67fdee27.safetensors",
+      "size_bytes": 8272
+    },
+    {
+      "device": 743766374,
+      "inode": 270219125920384032,
+      "mtime_ns": 1786250112000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_001/7f2f2f94-b9ac-4c1d-b71a-108f8181121f.safetensors",
+      "size_bytes": 8272
+    }
+  ],
+  "completion_evidence": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-133700_p4-remediation-target352-plan01-regression_pass.json",
+  "completion_evidence_sha256": "4924b2ddfaaf8752b88ee210cab7b5e5fe60c3ee8dd0d517b14a33e21b0dd297",
+  "deleted_bytes": 34298,
+  "deleted_count": 6,
+  "format_version": 1,
+  "legacy_policy_override": false,
+  "retained_representative_learner_log": null,
+  "run_id": "plan01_regression_2509825",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan01_regression_2509825",
+  "status": "complete",
+  "tool": "fs_diloco.tools.clean_run"
+}
