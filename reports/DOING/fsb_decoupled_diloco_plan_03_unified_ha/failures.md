@@ -1117,3 +1117,9 @@
 
 - Experiment ID `P6-G0-G7-aggregate-focused-static-attempt1`. Ruff lint passed for the aggregate validator and its new exact-set regression; `ruff format --check` then reported only `tests/gates/test_plan03_p6_acceptance_aggregate.py` would be reformatted. No runtime test ran on the login node.
 - Apply canonical formatting to that test and rerun the focused lint/format/compile/diff group. The eight-ID exact inventory and aggregate acceptance logic are unchanged.
+
+## 2026-08-10 04:36 JST — P6 staged requirement Checker attempt 1 lacked AUTH-11 coverage metadata
+
+- Experiment ID `P6-REQUIREMENTS-staged-attempt1`. `check_plan03.py --phase P6-acceptance-final-review --mode staged --verification-target-ref 320d74d...` evaluated the completed eight-row matrix and returned `BLOCKED`; retained output `artifacts/20260810-043600_p6-requirements-staged-pass.json` has exactly one difference: `requirements.AUTH-11.structured-checker-evidence`. All seven `P6-*` rows passed owner, test, evidence and clean-source checks.
+- G7 itself is PASS on the exact formal source and proves both transaction-outside takeover and transaction-inside safe wait/explicit-kill recovery, but its generic gate artifact declares only `requirements_covered=['P6-ACCEPTANCE']`. Editing that immutable experiment artifact would be incorrect; the matrix binding therefore lacks machine-readable AUTH-11 coverage even though the facts are present.
+- Preserve this attempt as a `fail` artifact. Add a small immutable disposition artifact with source/fingerprint `320d74d...`, `requirements_covered=['AUTH-11']`, the exact G7 artifact/log reference and the checked wait/integrity/stale-commit facts. Bind AUTH-11 to that artifact and rerun the unchanged staged Checker; no runtime or test rerun is needed.

@@ -1,0 +1,41 @@
+{
+  "artifact_version": 1,
+  "phase_id": "P6-acceptance-final-review",
+  "plan_id": "fsb_decoupled_diloco_plan_03_unified_ha",
+  "gate": "AUTH-11-G7-disposition",
+  "status": "PASS",
+  "requirements_covered": [
+    "AUTH-11"
+  ],
+  "source_commit": "320d74d0fee41ddf0c8f6a6634f7b1db34fb00a6",
+  "source_identity": {
+    "git_commit": "320d74d0fee41ddf0c8f6a6634f7b1db34fb00a6",
+    "git_dirty": false,
+    "source_fingerprint": "sha256:4fcb609101e12f022a3124e9483700f44339fb7c772140cc499e276f38526386"
+  },
+  "primary_evidence": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260810-035600_p6-g7-final-pass.json",
+  "pbs_job_id": "2513861.opbs",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p6_g7_2513861",
+  "checked_facts": {
+    "outside_transaction": {
+      "successor_epoch": 2,
+      "successor_wait_seconds": 1.3897450959775597,
+      "old_resumed_error": "StaleLeaderTokenError",
+      "stale_successful_commits": 0,
+      "integrity": [
+        "ok"
+      ]
+    },
+    "inside_transaction": {
+      "sqlite_transaction_active_at_pause": true,
+      "explicit_termination_after_seconds": 3.1,
+      "successor_wait_seconds": 3.280124678974971,
+      "old_process_returncode": 137,
+      "integrity": [
+        "ok"
+      ]
+    }
+  },
+  "disposition": "The transaction-outside predecessor was fenced after lease expiry. The transaction-inside predecessor retained SQLite mutual exclusion until the supervisor explicitly terminated it; only then did the successor acquire the writer lock and progress. No lease timeout bypass, automatic qdel claim, stale commit or integrity failure occurred.",
+  "errors": []
+}

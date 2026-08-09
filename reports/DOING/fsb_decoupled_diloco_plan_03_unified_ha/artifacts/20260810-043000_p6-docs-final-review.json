@@ -1,0 +1,52 @@
+{
+  "artifact_version": 1,
+  "phase_id": "P6-acceptance-final-review",
+  "plan_id": "fsb_decoupled_diloco_plan_03_unified_ha",
+  "status": "PASS",
+  "requirements_covered": [
+    "P6-DOCS"
+  ],
+  "documentation_target_commit": "5493c2da31f05381778d484f918a210e59500303",
+  "runtime_evidence_source_commit": "320d74d0fee41ddf0c8f6a6634f7b1db34fb00a6",
+  "source_commit": "320d74d0fee41ddf0c8f6a6634f7b1db34fb00a6",
+  "source_identity": {
+    "git_commit": "320d74d0fee41ddf0c8f6a6634f7b1db34fb00a6",
+    "git_dirty": false,
+    "source_fingerprint": "sha256:4fcb609101e12f022a3124e9483700f44339fb7c772140cc499e276f38526386"
+  },
+  "updated": [
+    "README.md",
+    "docs/01-overview.md",
+    "docs/03-runtime-flow.md",
+    "docs/04-data-flow.md",
+    "docs/06-configuration.md",
+    "docs/08-compatibility-and-migration.md",
+    "docs/modules/runtime-learner.md",
+    "docs/modules/runtime-syncer.md",
+    "docs/modules/storage.md"
+  ],
+  "verified_behavior_evidence": {
+    "static_9node": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260810-035600_p6-g8-final-pass.json",
+    "dynamic_9node": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260810-035600_p6-g9-final-pass.json",
+    "qualification": "both formal runs use 9 nodes and 60 local steps per cycle, exceeding the 50-local-step x 10-global-step documentation baseline"
+  },
+  "synchronized_contracts": [
+    "authority schema 9 and no in-place schema 6/7/8 migration",
+    "bounded Torch-free initial admission before syncer model initialization",
+    "target-aware learner await-close and final drain acknowledgement",
+    "online dependency-closed audit archive, partition compaction and durable command replay",
+    "identity-checked fenced artifact/audit GC",
+    "verified static FP32 and dynamic BF16-publish/CPU-FP32-compute acceptance boundaries"
+  ],
+  "checks": {
+    "g0_g1_artifact": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260810-042700_p6-g0-g1-doc-cleanup-fix-pass.json",
+    "g0_g1_status": "PASS",
+    "relative_markdown_links_exist": true,
+    "authority_version_matches_fs_diloco_core_versions": 9,
+    "stable_docs_contain_pbs_job_ids": false,
+    "stable_docs_contain_performance_timings": false,
+    "verified_g8_g9_behavior_synchronized": true,
+    "new_duplicate_protocol_chapter_added": false
+  },
+  "errors": []
+}
