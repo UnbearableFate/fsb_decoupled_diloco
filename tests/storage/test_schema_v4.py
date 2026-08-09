@@ -38,19 +38,21 @@ def test_fresh_v4_schema_initializes_reopens_and_is_integral(
         tables = set(authority.read.table_names())
         assert authority.read.integrity_check() == ("ok",)
         assert metadata.ddl_sha256 == ddl_bundle_sha256(metadata.mode)
-        assert AUTHORITY_SCHEMA_VERSION == 6
-        assert metadata.schema_version == 6
+        assert AUTHORITY_SCHEMA_VERSION == 7
+        assert metadata.schema_version == 7
         assert ("learner_instances" in tables) is dynamic_expected
         assert "static_contributor_bindings" in tables
         assert "publication_intents" in tables
-        assert "candidate_launch_outbox" in tables
-        launch_table = "launch_requests" if dynamic_expected else "candidate_launch_outbox"
-        with sqlite3.connect(database) as connection:
-            columns = {
-                str(row[1])
-                for row in connection.execute(f"PRAGMA table_info({launch_table})").fetchall()
-            }
-        assert "reservation_released_at" in columns
+        assert "candidate_launch_outbox" not in tables
+        assert ("launch_requests" in tables) is dynamic_expected
+        assert ("scheduler_operator_requests" in tables) is dynamic_expected
+        if dynamic_expected:
+            with sqlite3.connect(database) as connection:
+                columns = {
+                    str(row[1])
+                    for row in connection.execute("PRAGMA table_info(launch_requests)").fetchall()
+                }
+            assert {"reservation_released_at", "stream_id", "replace_instance_id"} <= columns
         assert not (tables & {"fragments", "fragment_updates", "fragment_versions"})
     marker = database.with_name("authority_v4_bootstrap_complete.json")
     assert marker.stat().st_mode & 0o222 == 0

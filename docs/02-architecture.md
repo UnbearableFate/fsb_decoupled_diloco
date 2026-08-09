@@ -42,6 +42,10 @@ initializer 在 final 同 parent 建 staging：先 fsync immutable inputs，再�
 - shared-FS collision：create-no-replace 的唯一 winner 可重放，different bytes/identity fail closed。
 - telemetry 丢失：不影响 token ledger、terminal 或 publication authority。
 
+dynamic capacity service 只在连续低容量窗口后为 available stream 创建 durable launch reservation。每个 reservation 先进入 `submitting`，再执行 qsub；successor 先按 request ID 查 live scheduler，绝不从 `submitting` 直接重提。只有 progress 已超过 dead timeout且同一 PBS job 有 terminal live/history evidence 时，authority 才原子 retire exact old instance 并授权 replacement。paused、query failure、no-record 和 manual-review 都继续占 reservation。
+
+terminal service 先按 policy 决定 close，冻结 contributor fence 并关闭 admission，再使用独立 ack/visibility grace drain。ack 后最多执行 `terminal.max_terminal_merges` 次与正常路径完全相同的 merge/publication；其余 pending proposal 由 authority 统一 terminalize。manual close request 是 descriptor-bound create-no-replace object，不直接写 SQLite。
+
 ## GC 与审计
 
 publication orphan 只有在 successor reconcile、lease-safe grace 和 fenced claim 后才可删除。authority history 先发布不可变 audit batch/partition，再在单事务中删除其精确依赖闭包；latest、current control、pending/selected proposal、publication intent、terminal 和 audit 引用不能被 generic cleanup 删除。

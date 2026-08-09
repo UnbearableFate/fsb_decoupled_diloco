@@ -13,6 +13,7 @@ from typing import Any, TypeVar, Union, get_args, get_origin, get_type_hints
 
 import yaml
 
+from .adoption_rules import validate_global_adoption_config
 from .constants import DEFAULT_RUNS_DIR
 from .versions import CONFIG_SCHEMA_VERSION
 
@@ -460,29 +461,6 @@ def _environment_flag(name: str, *, default: bool = False) -> bool:
     raise ValueError(f"{name} must be a boolean flag")
 
 
-def _validate_global_adoption_config(config: Config) -> None:
-    strategy = config.learner.global_adoption_strategy
-    if strategy == "replace":
-        return
-    if strategy not in {"rebase_post_publish_delta", "predict_post_publish_global"}:
-        raise ValueError(f"unsupported learner.global_adoption_strategy: {strategy}")
-    if (
-        not config.learner.adopt_global_after_upload
-        or not config.learner.poll_latest_during_inner_steps
-    ):
-        raise ValueError(
-            f"{strategy} requires adopt_global_after_upload=true and "
-            "poll_latest_during_inner_steps=true"
-        )
-    if strategy == "predict_post_publish_global":
-        if config.outer_optimizer.name.lower() != "nesterov":
-            raise ValueError("predict_post_publish_global currently requires outer nesterov")
-        if config.outer_optimizer.weight_decay != 0.0:
-            raise ValueError("predict_post_publish_global currently requires outer weight_decay=0")
-        if config.learner.prediction.reconcile_timeout_seconds <= 0.0:
-            raise ValueError("learner.prediction.reconcile_timeout_seconds must be > 0")
-
-
 def resolve_config(
     path: str | Path | None = None,
     *,
@@ -700,6 +678,9 @@ def resolve_config(
                 "scaling.learner_walltime must be an explicit estimated HH:MM:SS "
                 "value when scaling is enabled"
             )
+        walltime_seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+        if walltime_seconds < 600:
+            raise ValueError("scaling.learner_walltime must be at least 00:10:00")
         if scaling.learner_queue is not None and (
             not scaling.learner_queue
             or any(
@@ -727,11 +708,7 @@ def resolve_config(
         raise ValueError("unsupported terminal.admission_close_policy")
     if terminal.deadline_seconds is not None and terminal.deadline_seconds <= 0.0:
         raise ValueError("terminal.deadline_seconds must be > 0 when set")
-    if (
-        dynamic
-        and terminal.admission_close_policy == "deadline"
-        and terminal.deadline_seconds is None
-    ):
+    if terminal.admission_close_policy == "deadline" and terminal.deadline_seconds is None:
         raise ValueError("terminal.deadline_seconds is required for deadline close policy")
     has_global_target = config.sync.stop_after_outer_steps is not None
     if dynamic and terminal.admission_close_policy == "global_target" and not has_global_target:
@@ -761,7 +738,7 @@ def resolve_config(
     config.io.checkpoint_digest_mode = config.io.checkpoint_digest_mode.lower()
     if config.io.checkpoint_digest_mode not in {"off", "checker", "always"}:
         raise ValueError("io.checkpoint_digest_mode must be one of: off, checker, always")
-    _validate_global_adoption_config(config)
+    validate_global_adoption_config(config)
     if config.learner.post_publish_latest_wait_seconds < 0.0:
         raise ValueError("learner.post_publish_latest_wait_seconds must be >= 0")
     if config.learner.post_publish_latest_poll_seconds <= 0.0:

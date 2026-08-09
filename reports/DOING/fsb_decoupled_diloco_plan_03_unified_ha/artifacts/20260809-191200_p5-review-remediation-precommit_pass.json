@@ -1,0 +1,61 @@
+{
+  "artifact_version": 1,
+  "phase": "P5-delete-classic-refactor",
+  "status": "PASS",
+  "source_base": "d2dbfed19eb5e9e0835167c13da40a80bc15273a",
+  "source_tree": "review-remediation worktree before incremental target commit",
+  "pbs": {
+    "job_id": "2511463.opbs",
+    "compute_host": "mg0006",
+    "queue": "debug-g",
+    "nodes": 1,
+    "walltime_requested": "00:10:00",
+    "walltime_used": "00:01:39",
+    "exit_status": 0
+  },
+  "checks": {
+    "ruff_lint": "PASS",
+    "ruff_format_modified_scope": {
+      "status": "PASS",
+      "files": 45
+    },
+    "p3_boundary_p5_checker": "PASS",
+    "focused_pytest": {
+      "collected": 434,
+      "passed": 434,
+      "failed": 0,
+      "xfail": 0,
+      "duration_seconds": 38.41
+    },
+    "full_pytest": {
+      "collected": 605,
+      "passed": 605,
+      "failed": 0,
+      "xfail": 0,
+      "duration_seconds": 53.73
+    },
+    "completion_marker": "PLAN03_PHASE5_TESTS_COMPLETE=2511463.opbs"
+  },
+  "requirements_covered": [
+    "P5-FRAGMENT",
+    "P5-ARCH",
+    "LEGACY-01",
+    "SCHED-01",
+    "SCHED-02",
+    "SCHED-03",
+    "SCHED-04",
+    "TERM-01",
+    "TERM-02",
+    "TERM-03"
+  ],
+  "raw_log": {
+    "path": "fsdiloco_plan03_p5.o2511463",
+    "sha256": "6b5065755c2edf874138ec576171ea6be98674ce36f86f37acdfca735055ad4f",
+    "size_bytes": 2053
+  },
+  "modules": [
+    "nvidia/25.9",
+    "nv-hpcx/25.9"
+  ],
+  "remaining_gate": "freeze clean incremental review target, rerun source-bound evidence, and complete independent Codex/Claude review"
+}

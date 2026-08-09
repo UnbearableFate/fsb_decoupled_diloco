@@ -68,6 +68,8 @@ CREATE TABLE launch_requests (
     bootstrap_slot INTEGER UNIQUE,
     role TEXT NOT NULL,
     reason TEXT NOT NULL,
+    stream_id INTEGER NOT NULL REFERENCES streams(stream_id),
+    replace_instance_id TEXT REFERENCES learner_instances(instance_id),
     requested_by_epoch INTEGER NOT NULL CHECK (requested_by_epoch >= 1),
     state TEXT NOT NULL CHECK (state IN (
         'planned', 'submitting', 'submission_unknown', 'submitted', 'started',
@@ -92,6 +94,26 @@ CREATE TABLE launch_requests (
     last_error TEXT,
     authorized_placement_id TEXT,
     authorized_placement_epoch INTEGER
+);
+
+CREATE TABLE scheduler_operator_requests (
+    request_id TEXT PRIMARY KEY,
+    launch_request_id TEXT NOT NULL REFERENCES launch_requests(request_id),
+    action TEXT NOT NULL CHECK (action IN (
+        'confirm_job_id', 'mark_failed', 'mark_expired',
+        'record_external_cancel_evidence'
+    )),
+    expected_state_sha256 TEXT NOT NULL CHECK (length(expected_state_sha256) = 64),
+    reason TEXT NOT NULL,
+    scheduler_job_id TEXT,
+    evidence_source TEXT,
+    request_sha256 TEXT NOT NULL CHECK (length(request_sha256) = 64),
+    state TEXT NOT NULL CHECK (state IN ('applied', 'stale_rejected')),
+    result_state TEXT NOT NULL,
+    processed_by_epoch INTEGER NOT NULL CHECK (processed_by_epoch >= 1),
+    processed_at REAL NOT NULL,
+    CHECK ((action = 'confirm_job_id' AND scheduler_job_id IS NOT NULL)
+        OR (action <> 'confirm_job_id' AND scheduler_job_id IS NULL))
 );
 
 CREATE TABLE capacity_observations (

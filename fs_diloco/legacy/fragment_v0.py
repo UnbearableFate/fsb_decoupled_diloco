@@ -8,6 +8,7 @@ from typing import Any, Mapping
 
 
 FRAGMENT_INDEX_FORMAT_VERSION = 1
+PLAN03_REQUIREMENTS = frozenset({"P5-FRAGMENT"})
 
 
 def validate_fragment_index(

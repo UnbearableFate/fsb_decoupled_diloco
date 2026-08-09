@@ -4,7 +4,7 @@
 
 `authority.py` 提供 `initialize_authority_v4`、`LeaderAuthority`、只读 model 和绑定 token 的 `LeaderSession`。公开 mutation 是有限命名 command；command journal 绑定 canonical request digest。每个业务事务取得 SQLite write lock 后重新检查 leader 和 contributor fence。
 
-schema 分为 `schema_v4.sql`（static）和 `schema_v4_dynamic.sql`（dynamic）。两者共享 proposal/receipt/token/selection/publication/terminal/audit 域，fresh DDL 不含 Fragment V0 表。
+schema 7 分为 `schema_v4.sql`（static）和 `schema_v4_dynamic.sql`（dynamic）。两者共享 proposal/receipt/token/selection/publication/terminal/audit 域，fresh DDL 不含 Fragment V0 表。dynamic feature 另外保存 stream-bound `launch_requests`、capacity observations 和 one-use bootstrap reservation；static schema 不创建假的 scheduler 表。
 
 ## Lease 与 object I/O
 
@@ -17,6 +17,7 @@ schema 分为 `schema_v4.sql`（static）和 `schema_v4_dynamic.sql`（dynamic�
 
 - `admission.py`：static/dynamic request、operator authorization、response/rejection/disposition archive。request identity 与 committed command identity分开；hot inode 在处理前后精确核对。
 - `control.py`：epoch heartbeat/latest/admission/receipt ack/drain/terminal publisher/reader。fixed cache 不授权 learner。
+- `terminal_request.py`：descriptor-bound、create-no-replace manual close request reader/publisher。
 - `paths.py`：唯一 current run path definition；不包含 fragment directory/method。
 
 ## 初始化、审计和清理策略

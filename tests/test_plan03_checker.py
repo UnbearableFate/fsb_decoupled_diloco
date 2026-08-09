@@ -8,11 +8,13 @@ import subprocess
 import sys
 
 import pytest
+import yaml
 
 from scripts.miyabi.check_plan03 import (
     inventory,
     verify_boundaries,
     verify_inventory,
+    verify_p3_operational_contracts,
     verify_p5_contracts,
     verify_phase_requirements,
     verify_p4_migration_contracts,
@@ -84,22 +86,22 @@ def test_plan03_checker_blocks_real_tracked_fragment_boundary_drift(tmp_path: Pa
         ["git", "clone", "--quiet", "--no-hardlinks", str(ROOT), str(clone)],
         check=True,
     )
-    source = clone / "configs/fs_diloco_gpt2_wikitext2_8l_fragment_50x10.yaml"
     drift = clone / "configs/plan03-unexpected-fragment.yaml"
-    drift.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    drift.write_text("fragments:\n  enabled: true\n", encoding="utf-8")
     subprocess.run(["git", "add", str(drift.relative_to(clone))], cwd=clone, check=True)
 
     differences = verify_boundaries(inventory(clone), _expected())
 
     assert "boundary_counts" in differences
-    assert "migration_boundaries" in differences
+    assert differences == ["boundary_counts", "migration_boundaries"]
 
 
 def test_plan03_boundary_allows_p1_baseline_composition_but_not_protocol_drift() -> None:
     expected = _expected()
-    actual = inventory(ROOT, source_ref=str(expected["source_identity"]["commit"]))
+    actual = inventory(ROOT)
     train = "fs_diloco/baselines/train.py"
     protocol = "fs_diloco/baselines/protocol.py"
+    retained_boundary = "fs_diloco/baselines/artifacts.py"
 
     composition_only = copy.deepcopy(actual)
     composition_only["manifest_sha256"][train] = "0" * 64
@@ -107,15 +109,27 @@ def test_plan03_boundary_allows_p1_baseline_composition_but_not_protocol_drift()
 
     protocol_drift = copy.deepcopy(actual)
     protocol_drift["manifest_sha256"][protocol] = "0" * 64
-    assert verify_boundaries(protocol_drift, expected) == ["boundary_manifest_sha256"]
+    assert verify_boundaries(protocol_drift, expected) == []
+
+    retained_drift = copy.deepcopy(actual)
+    retained_drift["manifest_sha256"][retained_boundary] = "0" * 64
+    assert verify_boundaries(retained_drift, expected) == ["boundary_manifest_sha256"]
+
+
+def test_plan03_current_boundaries_accept_only_the_declared_p5_deletion() -> None:
+    assert verify_boundaries(inventory(ROOT), _expected()) == []
+
+
+def test_plan03_p3_operational_contracts_survive_p5_module_deletion() -> None:
+    assert verify_p3_operational_contracts(ROOT) == []
 
 
 def test_plan03_boundary_allows_p3_store_implementation_but_not_mutator_surface_drift() -> None:
     expected = _expected()
-    actual = inventory(ROOT, source_ref=str(expected["source_identity"]["commit"]))
+    actual = inventory(ROOT)
 
     implementation_only = copy.deepcopy(actual)
-    implementation_only["manifest_sha256"]["fs_diloco/storage/fenced_store.py"] = "0" * 64
+    implementation_only["manifest_sha256"]["fs_diloco/storage/authority.py"] = "0" * 64
     assert verify_boundaries(implementation_only, expected) == []
 
     mutator_drift = copy.deepcopy(actual)
@@ -123,12 +137,62 @@ def test_plan03_boundary_allows_p3_store_implementation_but_not_mutator_surface_
     assert verify_boundaries(mutator_drift, expected) == ["inventory.bound_mutators"]
 
 
-def test_plan03_p4_semantic_migration_still_detects_post_p4_config_changes() -> None:
+def test_plan03_p4_semantic_migration_accepts_p5_deletions() -> None:
     expected = _expected()
     frozen = str(expected["source_identity"]["commit"])
-    differences = verify_p4_migration_contracts(ROOT, frozen)
-    assert "config-migration.fragment-path-inventory" in differences
-    assert "config-migration.historical-path-inventory" in differences
+    assert verify_p4_migration_contracts(ROOT, frozen) == []
+
+
+@pytest.mark.parametrize(
+    ("relative", "difference"),
+    [
+        (
+            "configs/fs_diloco_tiny_ha_static.yaml",
+            "config-migration.full-semantic:configs/fs_diloco_tiny_ha_static.yaml",
+        ),
+        (
+            "configs/torch_baseline_tiny_2rank.yaml",
+            "config-migration.baseline-semantic:configs/torch_baseline_tiny_2rank.yaml",
+        ),
+    ],
+)
+def test_plan03_p4_semantic_migration_rejects_retained_config_drift(
+    tmp_path: Path,
+    relative: str,
+    difference: str,
+) -> None:
+    clone = tmp_path / "clone"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--no-hardlinks", str(ROOT), str(clone)],
+        check=True,
+    )
+    path = clone / relative
+    payload = path.read_text(encoding="utf-8")
+    path.write_text(payload + "\n# semantic drift\ntraining:\n  seed: 999999\n", encoding="utf-8")
+
+    frozen = str(_expected()["source_identity"]["commit"])
+    assert difference in verify_p4_migration_contracts(clone, frozen)
+
+
+def test_plan03_p4_semantic_migration_only_allows_the_reviewed_p5_walltime_change(
+    tmp_path: Path,
+) -> None:
+    clone = tmp_path / "clone"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--no-hardlinks", str(ROOT), str(clone)],
+        check=True,
+    )
+    relative = "configs/fs_diloco_tiny_ha_dynamic_2node.yaml"
+    path = clone / relative
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    payload["scaling"]["learner_walltime"] = "00:10:00"
+    payload["scaling"]["cooldown_seconds"] = 999.0
+    path.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    frozen = str(_expected()["source_identity"]["commit"])
+    assert f"config-migration.full-semantic:{relative}" in verify_p4_migration_contracts(
+        clone, frozen
+    )
 
 
 def test_plan03_checker_guards_p5_removal_and_compatibility_contracts() -> None:

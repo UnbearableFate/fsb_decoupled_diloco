@@ -517,6 +517,13 @@ class AuthorityReadModel:
         )
         return None if row is None else _decode_progress(row)
 
+    def update_status(self, update_id: str) -> str | None:
+        validate_identity(update_id, name="update_id")
+        row = self._authority._fetchone(
+            "SELECT status FROM updates WHERE update_id=?", (update_id,)
+        )
+        return None if row is None else str(row["status"])
+
     def controller_status(self) -> dict[str, Any]:
         row = self._authority._fetchone("SELECT * FROM controller_state WHERE singleton = 1")
         if row is None:
@@ -615,6 +622,48 @@ class AuthorityReadModel:
     def syncer_epochs(self) -> tuple[dict[str, Any], ...]:
         rows = self._authority._fetchall("SELECT * FROM syncer_epochs ORDER BY epoch")
         return tuple(dict(row) for row in rows)
+
+    def dynamic_streams(self) -> tuple[dict[str, Any], ...]:
+        if not isinstance(self._authority._scope, DynamicMembershipScope):
+            return ()
+        return tuple(
+            dict(row)
+            for row in self._authority._fetchall("SELECT * FROM streams ORDER BY stream_id")
+        )
+
+    def dynamic_instances(self) -> tuple[dict[str, Any], ...]:
+        if not isinstance(self._authority._scope, DynamicMembershipScope):
+            return ()
+        return tuple(
+            dict(row)
+            for row in self._authority._fetchall(
+                "SELECT * FROM learner_instances ORDER BY registered_at, instance_id"
+            )
+        )
+
+    def dynamic_launch_requests(self) -> tuple[dict[str, Any], ...]:
+        if not isinstance(self._authority._scope, DynamicMembershipScope):
+            return ()
+        return tuple(
+            dict(row)
+            for row in self._authority._fetchall(
+                "SELECT * FROM launch_requests ORDER BY created_at, request_id"
+            )
+        )
+
+    def capacity_observations(self) -> tuple[dict[str, Any], ...]:
+        if not isinstance(self._authority._scope, DynamicMembershipScope):
+            return ()
+        return tuple(
+            dict(row)
+            for row in self._authority._fetchall(
+                "SELECT * FROM capacity_observations ORDER BY observation_seq"
+            )
+        )
+
+    def v0_committed_at(self) -> float | None:
+        row = self._authority._fetchone("SELECT committed_at FROM global_versions WHERE version=0")
+        return None if row is None else float(row["committed_at"])
 
     def audit_history_records(self, *, cutoff_version: int) -> tuple[dict[str, Any], ...]:
         if isinstance(cutoff_version, bool) or not isinstance(cutoff_version, int):
@@ -1880,141 +1929,346 @@ class LeaderSession:
         result = self._command(command_id, "initialize_dynamic_membership", request, operation)
         return tuple(int(item) for item in result["stream_ids"])
 
-    def record_candidate_launch_request(
+    def record_capacity_observation(
+        self,
+        *,
+        command_id: str,
+        observation_key: str,
+        global_version: int,
+        eligible_contributors: int,
+        selected_contributors: int,
+        productive_instances: int,
+        reserved_launch_capacity: int,
+        desired_contributors: int,
+        action: str,
+        retention_count: int,
+    ) -> dict[str, Any]:
+        """Persist one leader-fenced capacity sample and bound its recovery hot set."""
+
+        validate_identity(observation_key, name="observation_key")
+        numeric = {
+            "global_version": global_version,
+            "eligible_contributors": eligible_contributors,
+            "selected_contributors": selected_contributors,
+            "productive_instances": productive_instances,
+            "reserved_launch_capacity": reserved_launch_capacity,
+            "desired_contributors": desired_contributors,
+        }
+        for name, value in numeric.items():
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"{name} must be a non-negative integer")
+        if isinstance(retention_count, bool) or not isinstance(retention_count, int):
+            raise ValueError("retention_count must be an integer")
+        if retention_count < 1:
+            raise ValueError("retention_count must be positive")
+        if not action:
+            raise ValueError("capacity action must not be empty")
+        request = {
+            "observation_key": observation_key,
+            **numeric,
+            "action": action,
+            "retention_count": retention_count,
+        }
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            if not isinstance(self._authority._scope, DynamicMembershipScope):
+                raise RuntimeError("capacity observations require dynamic membership")
+            sequence = int(
+                connection.execute(
+                    "SELECT COALESCE(MAX(observation_seq), 0) + 1 FROM capacity_observations"
+                ).fetchone()[0]
+            )
+            now = float(self._authority._wall_clock())
+            connection.execute(
+                """
+                INSERT INTO capacity_observations(
+                    observation_key, observation_seq, kind, global_version, observed_at,
+                    eligible_contributors, selected_contributors, productive_instances,
+                    reserved_launch_capacity, desired_contributors, action, command_epoch
+                ) VALUES (?, ?, 'scheduler_window', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    observation_key,
+                    sequence,
+                    global_version,
+                    now,
+                    eligible_contributors,
+                    selected_contributors,
+                    productive_instances,
+                    reserved_launch_capacity,
+                    desired_contributors,
+                    action,
+                    self.token.epoch,
+                ),
+            )
+            connection.execute(
+                """
+                DELETE FROM capacity_observations
+                WHERE observation_seq <= (
+                    SELECT COALESCE(MAX(observation_seq), 0) - ? FROM capacity_observations
+                )
+                """,
+                (retention_count,),
+            )
+            row = connection.execute(
+                "SELECT * FROM capacity_observations WHERE observation_key=?",
+                (observation_key,),
+            ).fetchone()
+            assert row is not None
+            return dict(row)
+
+        return self._command(command_id, "record_capacity_observation", request, operation)
+
+    def plan_dynamic_launch_request(
         self,
         *,
         command_id: str,
         request_id: str,
         observation_key: str,
-        request_sha256: str,
+        stream_id: int,
+        replace_instance_id: str | None,
+        reason: str,
+        expires_at: float,
+        max_pending_requests: int,
+        max_total_requests: int,
+        expected_scheduler_job_id: str | None = None,
     ) -> dict[str, Any]:
+        """Reserve one stream and, for proven loss, fence its old incarnation."""
+
         validate_identity(request_id, name="request_id")
         validate_identity(observation_key, name="observation_key")
-        if len(request_sha256) != 64:
-            raise ValueError("request_sha256 must be a SHA-256 digest")
+        if isinstance(stream_id, bool) or not isinstance(stream_id, int) or stream_id < 0:
+            raise ValueError("stream_id must be a non-negative integer")
+        if replace_instance_id is not None:
+            validate_identity(replace_instance_id, name="replace_instance_id")
+        if expected_scheduler_job_id is not None:
+            validate_identity(expected_scheduler_job_id, name="expected_scheduler_job_id")
+        if not reason:
+            raise ValueError("launch reason must not be empty")
+        if not isinstance(expires_at, (int, float)) or isinstance(expires_at, bool):
+            raise ValueError("expires_at must be a finite timestamp")
+        if not (float("-inf") < float(expires_at) < float("inf")):
+            raise ValueError("expires_at must be a finite timestamp")
+        for name, value in (
+            ("max_pending_requests", max_pending_requests),
+            ("max_total_requests", max_total_requests),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"{name} must be a non-negative integer")
         request = {
             "request_id": request_id,
             "observation_key": observation_key,
-            "request_sha256": request_sha256,
+            "stream_id": stream_id,
+            "replace_instance_id": replace_instance_id,
+            "reason": reason,
+            "expires_at": float(expires_at),
+            "max_pending_requests": max_pending_requests,
+            "max_total_requests": max_total_requests,
+            "expected_scheduler_job_id": expected_scheduler_job_id,
         }
+        request_sha256 = hashlib.sha256(_canonical_json(request).encode("utf-8")).hexdigest()
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            if not isinstance(self._authority._scope, DynamicMembershipScope):
+                raise RuntimeError("dynamic launch requests require dynamic membership")
+            controller = connection.execute(
+                "SELECT state FROM controller_state WHERE singleton=1"
+            ).fetchone()
+            if controller is None or controller["state"] != "open":
+                raise RuntimeError("dynamic launch planning requires an open controller")
+            if (
+                connection.execute(
+                    "SELECT 1 FROM capacity_observations WHERE observation_key=?",
+                    (observation_key,),
+                ).fetchone()
+                is None
+            ):
+                raise RuntimeError("capacity observation is missing")
+            total = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM launch_requests WHERE role<>'bootstrap'"
+                ).fetchone()[0]
+            )
+            pending = int(
+                connection.execute(
+                    """
+                    SELECT COUNT(*) FROM launch_requests
+                    WHERE role<>'bootstrap' AND reservation_released_at IS NULL
+                    """
+                ).fetchone()[0]
+            )
+            if total >= max_total_requests or pending >= max_pending_requests:
+                raise RuntimeError("dynamic launch request budget is exhausted")
+            if (
+                connection.execute(
+                    """
+                SELECT 1 FROM launch_requests
+                WHERE role<>'bootstrap' AND stream_id=?
+                    AND reservation_released_at IS NULL
+                """,
+                    (stream_id,),
+                ).fetchone()
+                is not None
+            ):
+                raise MembershipFenceError("dynamic stream already has a launch reservation")
+            stream = connection.execute(
+                "SELECT * FROM streams WHERE stream_id=?", (stream_id,)
+            ).fetchone()
+            if stream is None:
+                raise RuntimeError("dynamic launch stream is missing")
             now = float(self._authority._wall_clock())
+            if float(expires_at) <= now:
+                raise RuntimeError("dynamic launch request is already expired")
+            role = "scale_out"
+            if replace_instance_id is None:
+                if stream["state"] != "available" or stream["current_instance_id"] is not None:
+                    raise MembershipFenceError("scale-out stream is not available")
+            else:
+                role = "replacement"
+                if stream["current_instance_id"] != replace_instance_id:
+                    raise MembershipFenceError("replacement does not name the current stream owner")
+                instance = connection.execute(
+                    "SELECT * FROM learner_instances WHERE instance_id=?",
+                    (replace_instance_id,),
+                ).fetchone()
+                if instance is None or instance["status"] != "admitted":
+                    raise MembershipFenceError("replacement source is not an admitted instance")
+                if expected_scheduler_job_id is None or (
+                    instance["pbs_job_id"] != expected_scheduler_job_id
+                ):
+                    raise MembershipFenceError(
+                        "replacement requires exact terminal scheduler job evidence"
+                    )
+                self._retire_dynamic_in_transaction(
+                    connection,
+                    fence=self._dynamic_fence_from_instance(instance),
+                    reason=reason,
+                    final_status="expired",
+                )
             connection.execute(
                 """
-                INSERT INTO candidate_launch_outbox(
-                    request_id, observation_key, request_sha256, state, owner_epoch,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, 'planned', ?, ?, ?)
+                INSERT INTO launch_requests(
+                    request_id, observation_key, bootstrap_slot, role, reason, stream_id,
+                    replace_instance_id, requested_by_epoch, state, request_sha256,
+                    created_at, updated_at, not_before, submission_attempts, expires_at
+                ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, 'planned', ?, ?, ?, ?, 0, ?)
                 """,
                 (
                     request_id,
                     observation_key,
-                    request_sha256,
+                    role,
+                    reason,
+                    stream_id,
+                    replace_instance_id,
                     self.token.epoch,
+                    request_sha256,
                     now,
                     now,
+                    now,
+                    float(expires_at),
                 ),
             )
             row = connection.execute(
-                "SELECT * FROM candidate_launch_outbox WHERE request_id=?", (request_id,)
+                "SELECT * FROM launch_requests WHERE request_id=?", (request_id,)
             ).fetchone()
             assert row is not None
             return dict(row)
 
-        return self._command(command_id, "record_candidate_launch_request", request, operation)
+        return self._command(command_id, "plan_dynamic_launch_request", request, operation)
 
-    def transition_candidate_launch_request(
+    def transition_dynamic_launch_request(
         self,
         *,
         command_id: str,
         request_id: str,
         expected_state: str,
         state: str,
-        scheduler_job_id: str | None = None,
+        pbs_job_id: str | None,
+        scheduler_state: str | None,
         evidence_source: str,
         uncertainty_timeout_seconds: float | None = None,
+        terminal_evidence: bool = False,
+        last_error: str | None = None,
     ) -> dict[str, Any]:
+        """CAS one scheduler transition while preserving uncertainty reservations."""
+
         validate_identity(request_id, name="request_id")
-        allowed = {
-            "planned",
-            "submitting",
-            "submission_unknown",
-            "submitted",
-            "started",
-            "terminal_uncertain",
-            "admitted",
-            "failed",
-            "expired",
-            "manual_review",
-        }
-        if expected_state not in allowed or state not in allowed:
-            raise ValueError("invalid scheduler launch state")
         transitions = {
-            "planned": {"submitting"},
+            "planned": {"submitting", "expired"},
             "submitting": {"submission_unknown", "submitted", "failed"},
             "submission_unknown": {"submitted", "terminal_uncertain", "failed"},
-            "submitted": {"started", "terminal_uncertain", "admitted", "failed"},
-            "started": {"terminal_uncertain", "admitted", "failed"},
+            "submitted": {"started", "terminal_uncertain", "failed"},
+            "started": {"terminal_uncertain", "failed"},
             "terminal_uncertain": {
                 "submitted",
                 "started",
-                "admitted",
                 "failed",
                 "expired",
                 "manual_review",
             },
+            "manual_review": set(),
             "admitted": set(),
             "failed": set(),
             "expired": set(),
-            "manual_review": set(),
         }
-        if state not in transitions[expected_state]:
+        if expected_state not in transitions or state not in transitions[expected_state]:
             raise ValueError(f"invalid scheduler transition: {expected_state} -> {state}")
-        if scheduler_job_id is not None:
-            validate_identity(scheduler_job_id, name="scheduler_job_id")
+        if pbs_job_id is not None:
+            validate_identity(pbs_job_id, name="pbs_job_id")
         if not evidence_source:
             raise ValueError("scheduler evidence_source must not be empty")
-        if uncertainty_timeout_seconds is not None and uncertainty_timeout_seconds <= 0.0:
-            raise ValueError("scheduler uncertainty timeout must be positive")
-        if state in {"submission_unknown", "terminal_uncertain"} and (
-            uncertainty_timeout_seconds is None
+        uncertain = state in {"submission_unknown", "terminal_uncertain"}
+        if uncertain and (
+            uncertainty_timeout_seconds is None or uncertainty_timeout_seconds <= 0.0
         ):
-            raise ValueError("scheduler uncertainty transitions require a persistent timeout")
+            raise ValueError("scheduler uncertainty requires a positive persistent timeout")
+        if terminal_evidence and state != "failed":
+            raise ValueError("terminal scheduler evidence may only prove a failed launch")
         request = {
             "request_id": request_id,
             "expected_state": expected_state,
             "state": state,
-            "scheduler_job_id": scheduler_job_id,
+            "pbs_job_id": pbs_job_id,
+            "scheduler_state": scheduler_state,
             "evidence_source": evidence_source,
             "uncertainty_timeout_seconds": uncertainty_timeout_seconds,
+            "terminal_evidence": terminal_evidence,
+            "last_error": last_error,
         }
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            if not isinstance(self._authority._scope, DynamicMembershipScope):
+                raise RuntimeError("scheduler transitions require dynamic membership")
             row = connection.execute(
-                "SELECT * FROM candidate_launch_outbox WHERE request_id=?", (request_id,)
+                "SELECT * FROM launch_requests WHERE request_id=?", (request_id,)
             ).fetchone()
             if row is None or row["state"] != expected_state:
-                raise RuntimeError("candidate launch request state changed")
+                raise RuntimeError("dynamic launch request state changed")
             now = float(self._authority._wall_clock())
             if state in {"failed", "expired", "manual_review"} and expected_state in {
                 "submission_unknown",
                 "terminal_uncertain",
             }:
-                if row["uncertainty_deadline"] is None or now < float(row["uncertainty_deadline"]):
+                if not terminal_evidence and (
+                    row["uncertainty_deadline"] is None or now < float(row["uncertainty_deadline"])
+                ):
                     raise RuntimeError("scheduler uncertainty deadline has not elapsed")
-            uncertain = state in {"submission_unknown", "terminal_uncertain"}
+            if state == "expired" and row["expires_at"] is not None:
+                if now < float(row["expires_at"]):
+                    raise RuntimeError("launch request TTL has not elapsed")
+            positive = state in {"submitted", "started"}
             deadline = (
                 now + float(uncertainty_timeout_seconds)
                 if uncertain and uncertainty_timeout_seconds is not None
                 else None
             )
-            positive = state in {"submitted", "started", "admitted"}
-            releases_reservation = state in {"admitted", "failed", "expired"}
+            releases_reservation = state in {"failed", "expired"}
             connection.execute(
                 """
-                UPDATE candidate_launch_outbox SET state=?,
-                    scheduler_job_id=COALESCE(?, scheduler_job_id),
+                UPDATE launch_requests SET state=?,
+                    submission_attempts=submission_attempts + ?,
+                    pbs_job_id=COALESCE(?, pbs_job_id), scheduler_state=?,
+                    scheduler_observed_at=?,
                     first_uncertain_at=CASE WHEN ? THEN NULL
                         WHEN ? THEN COALESCE(first_uncertain_at, ?)
                         ELSE first_uncertain_at END,
@@ -2025,12 +2279,15 @@ class LeaderSession:
                         ELSE uncertainty_deadline END,
                     reservation_released_at=CASE WHEN ?
                         THEN COALESCE(reservation_released_at, ?) ELSE reservation_released_at END,
-                    evidence_source=?, owner_epoch=?, updated_at=?
+                    evidence_source=?, last_error=?, requested_by_epoch=?, updated_at=?
                 WHERE request_id=? AND state=?
                 """,
                 (
                     state,
-                    scheduler_job_id,
+                    int(expected_state == "planned" and state == "submitting"),
+                    pbs_job_id,
+                    scheduler_state,
+                    now,
                     int(positive),
                     int(uncertain),
                     now,
@@ -2042,6 +2299,7 @@ class LeaderSession:
                     int(releases_reservation),
                     now,
                     evidence_source,
+                    last_error,
                     self.token.epoch,
                     now,
                     request_id,
@@ -2049,12 +2307,12 @@ class LeaderSession:
                 ),
             )
             result = connection.execute(
-                "SELECT * FROM candidate_launch_outbox WHERE request_id=?", (request_id,)
+                "SELECT * FROM launch_requests WHERE request_id=?", (request_id,)
             ).fetchone()
             assert result is not None
             return dict(result)
 
-        return self._command(command_id, "transition_candidate_launch_request", request, operation)
+        return self._command(command_id, "transition_dynamic_launch_request", request, operation)
 
     def apply_scheduler_operator_request(
         self,
@@ -2065,19 +2323,14 @@ class LeaderSession:
         request = operator_request.as_dict()
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
-            table = "candidate_launch_outbox"
+            if not isinstance(self._authority._scope, DynamicMembershipScope):
+                raise RuntimeError("scheduler launch requests require dynamic membership")
+            table = "launch_requests"
             row = connection.execute(
-                "SELECT * FROM candidate_launch_outbox WHERE request_id=?",
+                "SELECT * FROM launch_requests WHERE request_id=?",
                 (operator_request.launch_request_id,),
             ).fetchone()
-            job_column = "scheduler_job_id"
-            if row is None and isinstance(self._authority._scope, DynamicMembershipScope):
-                table = "launch_requests"
-                row = connection.execute(
-                    "SELECT * FROM launch_requests WHERE request_id=?",
-                    (operator_request.launch_request_id,),
-                ).fetchone()
-                job_column = "pbs_job_id"
+            job_column = "pbs_job_id"
             if row is None:
                 raise RuntimeError("operator request names an unknown launch request")
             state_row = dict(row)
@@ -2204,6 +2457,8 @@ class LeaderSession:
         admission_token_sha256: str,
         hostname: str,
         pid: int,
+        pbs_job_id: str | None = None,
+        bootstrap_slot: int | None = None,
         launch_request_id: str | None = None,
         replace_instance_id: str | None = None,
         replacement_reason: str | None = None,
@@ -2215,12 +2470,20 @@ class LeaderSession:
         validate_identity(hostname, name="hostname")
         if launch_request_id is not None:
             validate_identity(launch_request_id, name="launch_request_id")
+        if pbs_job_id is not None:
+            validate_identity(pbs_job_id, name="pbs_job_id")
         if replace_instance_id is not None:
             validate_identity(replace_instance_id, name="replace_instance_id")
         if isinstance(stream_id, bool) or not isinstance(stream_id, int) or stream_id < 0:
             raise ValueError("stream_id must be a non-negative integer")
         if isinstance(pid, bool) or not isinstance(pid, int) or pid < 0:
             raise ValueError("pid must be a non-negative integer")
+        if bootstrap_slot is not None and (
+            isinstance(bootstrap_slot, bool)
+            or not isinstance(bootstrap_slot, int)
+            or bootstrap_slot < 0
+        ):
+            raise ValueError("bootstrap_slot must be a non-negative integer")
         if len(admission_token_sha256) != 64 or any(
             item not in "0123456789abcdef" for item in admission_token_sha256
         ):
@@ -2229,6 +2492,11 @@ class LeaderSession:
             raise ValueError("replacement_reason must not be empty")
         if replace_instance_id is not None and launch_request_id is None:
             raise ValueError("dynamic replacement requires an explicit launch request ID")
+        if launch_request_id is not None and bootstrap_slot is not None:
+            raise ValueError("dynamic admission cannot be both bootstrap and launch-authorized")
+        effective_bootstrap_slot = (
+            stream_id if launch_request_id is None and bootstrap_slot is None else bootstrap_slot
+        )
         request = {
             "instance_id": instance_id,
             "placement_id": placement_id,
@@ -2236,6 +2504,8 @@ class LeaderSession:
             "admission_token_sha256": admission_token_sha256,
             "hostname": hostname,
             "pid": pid,
+            "pbs_job_id": pbs_job_id,
+            "bootstrap_slot": effective_bootstrap_slot,
             "launch_request_id": launch_request_id,
             "replace_instance_id": replace_instance_id,
             "replacement_reason": replacement_reason,
@@ -2266,9 +2536,54 @@ class LeaderSession:
                     fence.placement_id != placement_id
                     or fence.stream_id != stream_id
                     or fence.admission_token_sha256 != admission_token_sha256
+                    or existing_instance["launch_request_id"] != launch_request_id
+                    or existing_instance["hostname"] != hostname
+                    or int(existing_instance["pid"]) != pid
+                    or ((existing_instance["pbs_job_id"] is None) != (pbs_job_id is None))
+                    or (
+                        existing_instance["pbs_job_id"] is not None
+                        and str(existing_instance["pbs_job_id"]).split(".", 1)[0]
+                        != str(pbs_job_id).split(".", 1)[0]
+                    )
                 ):
                     raise MembershipFenceError("instance ID was replayed with different admission")
                 return self._dynamic_admission_result(connection, fence=fence)
+            launch_row = None
+            if launch_request_id is not None:
+                launch_row = connection.execute(
+                    "SELECT * FROM launch_requests WHERE request_id=?",
+                    (launch_request_id,),
+                ).fetchone()
+                if launch_row is None:
+                    raise MembershipFenceError("dynamic launch authorization is missing")
+                if (
+                    int(launch_row["stream_id"]) != stream_id
+                    or launch_row["replace_instance_id"] != replace_instance_id
+                    or launch_row["state"]
+                    not in {
+                        "submitting",
+                        "submission_unknown",
+                        "submitted",
+                        "started",
+                        "terminal_uncertain",
+                    }
+                ):
+                    raise MembershipFenceError("dynamic launch authorization does not match")
+                if launch_row["pbs_job_id"] is None:
+                    raise RuntimeError("dynamic launch scheduler job evidence is pending")
+                if pbs_job_id is None or (
+                    str(launch_row["pbs_job_id"]).split(".", 1)[0] != pbs_job_id.split(".", 1)[0]
+                ):
+                    raise MembershipFenceError("dynamic launch scheduler job does not match")
+            else:
+                if effective_bootstrap_slot != stream_id:
+                    raise MembershipFenceError("bootstrap slot must equal its stream ID")
+                prior_bootstrap = connection.execute(
+                    "SELECT * FROM launch_requests WHERE bootstrap_slot=?",
+                    (effective_bootstrap_slot,),
+                ).fetchone()
+                if prior_bootstrap is not None:
+                    raise MembershipFenceError("bootstrap slot was already consumed")
             placement = connection.execute(
                 "SELECT * FROM placements WHERE placement_id=?", (placement_id,)
             ).fetchone()
@@ -2350,9 +2665,9 @@ class LeaderSession:
                 INSERT INTO learner_instances(
                     instance_id, placement_id, placement_epoch, stream_id, stream_epoch,
                     admission_generation, admission_token_sha256, launch_request_id,
-                    hostname, pid, status, registered_at, admitted_at, last_seen,
+                    pbs_job_id, hostname, pid, status, registered_at, admitted_at, last_seen,
                     admitted_by_epoch
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'admitted', ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'admitted', ?, ?, ?, ?)
                 """,
                 (
                     instance_id,
@@ -2363,6 +2678,7 @@ class LeaderSession:
                     generation,
                     admission_token_sha256,
                     launch_request_id,
+                    pbs_job_id,
                     hostname,
                     pid,
                     now,
@@ -2396,6 +2712,61 @@ class LeaderSession:
                     now,
                 ),
             )
+            if launch_row is None:
+                bootstrap_request_id = f"bootstrap-{effective_bootstrap_slot}"
+                bootstrap_request = {
+                    "bootstrap_slot": effective_bootstrap_slot,
+                    "stream_id": stream_id,
+                    "instance_id": instance_id,
+                    "pbs_job_id": pbs_job_id,
+                }
+                connection.execute(
+                    """
+                    INSERT INTO launch_requests(
+                        request_id, observation_key, bootstrap_slot, role, reason, stream_id,
+                        replace_instance_id, requested_by_epoch, state, request_sha256,
+                        created_at, updated_at, not_before, submission_attempts, pbs_job_id,
+                        scheduler_state, scheduler_observed_at, last_positive_evidence_at,
+                        reservation_released_at, evidence_source, admitted_instance_id, expires_at
+                    ) VALUES (?, NULL, ?, 'bootstrap', 'initial_bootstrap', ?, NULL, ?,
+                        'admitted', ?, ?, ?, ?, 0, ?, 'admitted', ?, ?, ?,
+                        'registration', ?, NULL)
+                    """,
+                    (
+                        bootstrap_request_id,
+                        effective_bootstrap_slot,
+                        stream_id,
+                        self.token.epoch,
+                        hashlib.sha256(
+                            _canonical_json(bootstrap_request).encode("utf-8")
+                        ).hexdigest(),
+                        now,
+                        now,
+                        now,
+                        pbs_job_id,
+                        now,
+                        now,
+                        now,
+                        instance_id,
+                    ),
+                )
+            else:
+                connection.execute(
+                    """
+                    UPDATE launch_requests SET state='admitted', admitted_instance_id=?,
+                        scheduler_state='admitted', scheduler_observed_at=?,
+                        first_uncertain_at=NULL, uncertainty_deadline=NULL,
+                        last_positive_evidence_at=?, reservation_released_at=?,
+                        evidence_source='registration', updated_at=?
+                    WHERE request_id=? AND state IN (
+                        'submitting', 'submission_unknown', 'submitted', 'started',
+                        'terminal_uncertain'
+                    )
+                    """,
+                    (instance_id, now, now, now, now, launch_request_id),
+                )
+                if connection.execute("SELECT changes()").fetchone()[0] != 1:
+                    raise MembershipFenceError("dynamic launch admission lost its authorization")
             fence = DynamicContributorFence(
                 kind="dynamic",
                 instance_id=instance_id,
@@ -3690,9 +4061,8 @@ class LeaderSession:
                     update = connection.execute(
                         "SELECT * FROM updates WHERE update_id=?", (final_update_id,)
                     ).fetchone()
-                    if (
-                        update is None
-                        or int(update["cycle_seq"]) != final_cycle_seq
+                    if update is not None and (
+                        int(update["cycle_seq"]) != final_cycle_seq
                         or update["fence_json"] != _canonical_json(fence.as_dict())
                     ):
                         raise MembershipFenceError("final update does not match the frozen cycle")
@@ -4628,16 +4998,17 @@ class LeaderSession:
             """,
             (int(controller["generation"]), fence.stable_contributor_key),
         ).fetchone()
-        if (
-            frozen is None
-            or frozen["state"] != "awaiting_ack"
-            or frozen["fence_json"] != _canonical_json(fence.as_dict())
-        ):
+        if frozen is None or frozen["fence_json"] != _canonical_json(fence.as_dict()):
+            raise MembershipFenceError("input does not match an awaiting pre-close fence")
+        declared_update = frozen["final_update_id"]
+        state_allows_input = frozen["state"] == "awaiting_ack" or (
+            frozen["state"] == "acked" and update_id is not None and declared_update == update_id
+        )
+        if not state_allows_input:
             raise MembershipFenceError("input does not match an awaiting pre-close fence")
         close_sequence = int(frozen["close_last_cycle_seq"])
         if cycle_seq not in {close_sequence, close_sequence + 1}:
             raise MembershipFenceError("terminal input exceeds the frozen current-cycle bound")
-        declared_update = frozen["final_update_id"]
         if declared_update is not None and update_id != declared_update:
             raise MembershipFenceError("terminal proposal does not match the declared final update")
 

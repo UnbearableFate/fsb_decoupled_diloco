@@ -1,1 +1,1 @@
-"""Structured logs, CSV metrics, and experiment telemetry."""
+"""Structured logs, JSONL metrics, and resource telemetry."""

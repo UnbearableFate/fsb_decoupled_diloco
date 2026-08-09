@@ -27,8 +27,8 @@ sync:
 - `syncer`：device、compute/publish dtype 和 checkpoint write policy。
 - `learner`：global adoption strategy 与 prediction timing。
 - `membership`：`static|dynamic`、stream pool、bootstrap count、admission/heartbeat timeouts。
-- `scaling`：dynamic scheduler policy/budgets；启用时 learner walltime 必须是显式合法 `HH:MM:SS`。
-- `terminal`：close policy、deadline、ack/visibility grace 和 terminal merge bound。
+- `scaling`：dynamic scheduler policy/budgets。连续低容量、productive/startup grace、cooldown、pending/total budget、launch TTL、observation retention、reconcile/uncertainty timeout 和 learner PBS script/walltime/queue 都由 runtime service 使用；启用时 walltime 必须是显式合法且不少于 `00:10:00` 的 `HH:MM:SS`。
+- `terminal`：`global_target_or_launch_budget|global_target|deadline|manual` close policy、deadline、pre-close registration visibility、drain ack/proposal visibility grace 和 bounded terminal merge。
 - `liveness`：heartbeat/stale/dead/no-progress timeouts。
 - `coordination.leader`：lease、renew、clock skew、busy timeout、candidate/recovery wait。
 - `maintenance`：audit/visibility/quarantine retention 与 publication orphan grace。
@@ -59,3 +59,5 @@ sync:
 `tools.migrate_config_v3_to_v4` 默认 dry-run。输出路径 create-no-replace；repository-owned in-place migration 同时要求 `--in-place` 和原文件 `--expected-sha256`，publication 前再次核对 source identity。Fragment config 或语义不明确的旧 token stop 不自动迁移。
 
 旧 in-progress run state 不迁移。迁移配置只用于创建 fresh v4 attempt；不要把 v4 resolved config 写回旧 run root。
+
+authority schema 7 为 dynamic `launch_requests` 增加 exact stream/replacement identity，并删除已不可达的 classic candidate launch outbox。当前没有 in-place v4 schema 6→7 migration；旧 completed v4 evidence 保持原提交只读，新的执行必须初始化 fresh schema 7 run。

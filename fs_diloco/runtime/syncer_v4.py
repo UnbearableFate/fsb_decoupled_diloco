@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import time
@@ -12,9 +11,8 @@ from typing import Any
 import torch
 
 from ..core.run_descriptor import LoadedRunDescriptor, write_actor_attestation
-from ..core.versions import CONTROL_FORMAT_VERSION
 from ..modeling.hf_model import load_causal_lm_and_tokenizer
-from ..modeling.outer_optim import init_outer_state, outer_optimizer_step
+from ..modeling.outer_optim import init_outer_state
 from ..modeling.param_index import build_param_index, flatten_trainable_params
 from ..observability.logging_utils import ActorTelemetryWriter
 from ..storage.admission import (
@@ -32,8 +30,7 @@ from ..storage.admission import (
     repair_rejected_admission_control,
     read_static_replacement_authorization,
 )
-from ..protocol.authority import MergeFenceConflict
-from ..storage.control import V4ControlPublisher, iter_terminal_acks
+from ..storage.control import V4ControlPublisher
 from ..protocol.contributor import (
     ContributorFence,
     StaticContributorFence,
@@ -46,7 +43,6 @@ from ..protocol.cycle_receipt import (
     contributor_fence_namespace,
 )
 from ..protocol.data_cursor import ContributorResumeState
-from ..protocol.merge import normalized_update_weights, weighted_average_tensors
 from ..protocol.proposal import FullUpdateProposalV2
 from ..storage.atomic_io import atomic_write_json, publish_immutable_bytes, safe_read_json
 from ..storage.authority import (
@@ -60,10 +56,11 @@ from ..storage.leader_lease import StaleLeaderTokenError
 from ..storage.tensor_codec import (
     dtype_from_name,
     load_outer_state,
-    load_update_vector,
     publish_global_weights_immutable,
     publish_outer_state_immutable,
 )
+from .pbs_scheduler import PBSScheduler
+from .services import DynamicCapacityService, MergeService, TerminalService, terminal_close_reason
 
 
 PLAN03_REQUIREMENTS = frozenset(
@@ -173,129 +170,75 @@ def run_fenced_syncer(
         control.publish_terminal(terminal)
         return
     poll_seconds = float(config.sync.scan_interval_seconds)
-    selection_sequence = 0
+    merge_service = MergeService(
+        loaded=loaded,
+        authority=authority,
+        leader=leader,
+        control=control,
+        telemetry=telemetry,
+        theta=theta,
+        outer_state=outer_state,
+        param_index=param_index,
+        device=device,
+    )
+    capacity_service = (
+        DynamicCapacityService(
+            authority=authority,
+            leader=leader,
+            scheduler=PBSScheduler(),
+            scaling=config.scaling,
+            membership=config.membership,
+            shared_root=paths.shared_root,
+            descriptor_sha256=str(loaded.descriptor["descriptor_sha256"]),
+        )
+        if config.membership.mode == "dynamic" and config.scaling.enabled
+        else None
+    )
     while True:
         renewer.raise_if_failed()
         _admit_requests(loaded, authority, leader, telemetry)
         _ingest_proposals(loaded, authority, leader, control, telemetry)
         latest = authority.read.latest_committed_version()
         assert latest is not None
-        if _stop_reached(loaded, authority, latest.version):
-            terminal = _finalize(
-                loaded,
-                authority,
-                leader,
+        close_reason = terminal_close_reason(loaded, authority, version=latest.version)
+        if close_reason is not None:
+            terminal_service = TerminalService(
+                loaded=loaded,
+                authority=authority,
+                leader=leader,
                 control=control,
                 telemetry=telemetry,
-                reason="configured_target",
+                merge=merge_service,
+                ingest=lambda: _ingest_proposals(loaded, authority, leader, control, telemetry),
+                admit_preclose=lambda cutoff: _admit_requests(
+                    loaded,
+                    authority,
+                    leader,
+                    telemetry,
+                    created_at_lte=cutoff,
+                ),
             )
+            terminal = terminal_service.finalize(reason=close_reason)
             control.publish_terminal(terminal)
             telemetry.event("terminal_finalized", terminal=terminal)
             return
-        selection_sequence += 1
-        selection = leader.try_select_batch(
-            command_id=(f"select-e{token.epoch}-n{selection_sequence}"),
+        if capacity_service is not None:
+            actions = capacity_service.tick(
+                global_version=latest.version,
+                eligible_contributors=len(authority.read.current_contributor_fences()),
+                selected_contributors=0,
+            )
+            for action in actions:
+                telemetry.event("dynamic_capacity_action", action=action)
+        committed = merge_service.merge_once(
             quorum_min=config.sync.quorum_min,
             quorum_max=config.sync.quorum_max,
+            purpose="normal",
         )
-        if selection.batch is None:
+        if committed is not None:
+            _raise_injected_candidate_failure(committed.version)
+        else:
             time.sleep(poll_seconds)
-            continue
-        batch = selection.batch
-        updates = [
-            {
-                "update_id": item.proposal.update_id,
-                "tokens_this_update": item.proposal.effective_tokens_this_update,
-                "base_global_version": item.proposal.base_global_version,
-            }
-            for item in batch.candidates
-        ]
-        weights_by_id = normalized_update_weights(
-            updates,
-            current_version=latest.version,
-            staleness_lambda=config.sync.staleness_lambda,
-        )
-        vectors = [
-            load_update_vector(
-                paths.shared_root / item.proposal.payload_relative_path,
-                device=device,
-                dtype=dtype_from_name(config.syncer.compute_dtype),
-            )
-            for item in batch.candidates
-        ]
-        p_bar = weighted_average_tensors(
-            vectors,
-            [weights_by_id[item.proposal.update_id] for item in batch.candidates],
-        )
-        gradient = theta - p_bar
-        next_theta, next_outer = outer_optimizer_step(
-            theta, gradient, outer_state, config.outer_optimizer
-        )
-        publication_id = str(uuid.uuid4())
-        target_version = batch.target_version
-        weight_path = paths.epoch_weight_path(
-            token.epoch, token.owner_id, target_version, publication_id
-        )
-        optim_path = paths.epoch_outer_optim_path(
-            token.epoch, token.owner_id, target_version, publication_id
-        )
-        weight, weight_theta_sha = publish_global_weights_immutable(
-            weight_path,
-            next_theta,
-            param_index,
-            dtype=dtype_from_name(config.syncer.publish_dtype),
-        )
-        optim, optim_theta_sha = publish_outer_state_immutable(
-            optim_path,
-            next_theta,
-            next_outer,
-            dtype=dtype_from_name(config.syncer.publish_dtype),
-        )
-        leader.prepare_publication(
-            command_id=f"prepare-{publication_id}",
-            publication_id=publication_id,
-            target_version=target_version,
-            selection_batch_id=batch.batch_id,
-            weight_relative_path=paths.relative(weight.path),
-            weight_size=weight.size_bytes,
-            weight_sha256=weight.sha256,
-            optim_relative_path=paths.relative(optim.path),
-            optim_size=optim.size_bytes,
-            optim_sha256=optim.sha256,
-            weight_theta_sha256=weight_theta_sha,
-            optim_theta_sha256=optim_theta_sha,
-        )
-        committed = leader.commit_merge(
-            command_id=f"commit-{publication_id}", publication_id=publication_id
-        )
-        if isinstance(committed, MergeFenceConflict):
-            telemetry.event(
-                "merge_fence_conflict",
-                publication_id=publication_id,
-                invalid_update_ids=committed.invalid_update_ids,
-            )
-            latest = authority.read.latest_committed_version()
-            assert latest is not None
-            theta, outer_state = load_outer_state(
-                paths.shared_root / latest.optim_relative_path,
-                device=device,
-                dtype=dtype_from_name(config.syncer.compute_dtype),
-            )
-            continue
-        latest = committed
-        theta, outer_state = load_outer_state(
-            paths.shared_root / committed.optim_relative_path,
-            device=device,
-            dtype=dtype_from_name(config.syncer.compute_dtype),
-        )
-        control.publish_latest(committed)
-        telemetry.event(
-            "version_committed",
-            version=committed.version,
-            publication_id=committed.publication_id,
-            selected_update_ids=[item.proposal.update_id for item in batch.candidates],
-        )
-        _raise_injected_candidate_failure(committed.version)
 
 
 def _initialize_v0(
@@ -363,6 +306,8 @@ def _admit_requests(
     authority: LeaderAuthority,
     leader: LeaderSession,
     telemetry: ActorTelemetryWriter,
+    *,
+    created_at_lte: float | None = None,
 ) -> None:
     authority.committed_leader_lease(leader.token)
     _repair_current_admission_controls(loaded, authority, leader)
@@ -375,6 +320,15 @@ def _admit_requests(
                 error_errno=observation.read_errno,
             )
             continue
+        if created_at_lte is not None:
+            request = observation.payload
+            created_at = None if request is None else request.get("created_at")
+            if (
+                isinstance(created_at, bool)
+                or not isinstance(created_at, (int, float))
+                or float(created_at) > created_at_lte
+            ):
+                continue
         authority.committed_leader_lease(leader.token)
         try:
             _admit_observations_unprotected(loaded, authority, leader, telemetry, (observation,))
@@ -574,6 +528,8 @@ def _admit_observations_unprotected(
                     admission_token_sha256=str(request["admission_token_sha256"]),
                     hostname=str(request["hostname"]),
                     pid=int(request["pid"]),
+                    pbs_job_id=request.get("pbs_job_id"),
+                    bootstrap_slot=request.get("bootstrap_slot"),
                     launch_request_id=request.get("launch_request_id"),
                     replace_instance_id=request.get("replace_instance_id"),
                     replacement_reason=(
@@ -863,129 +819,3 @@ def _ingest_proposals(
                     error_type=type(exc).__name__,
                     error=str(exc),
                 )
-
-
-def _stop_reached(
-    loaded: LoadedRunDescriptor,
-    authority: LeaderAuthority,
-    version: int,
-) -> bool:
-    config = loaded.config
-    outer_target = config.shared.sync.stop_after_outer_steps
-    if outer_target is not None and version >= outer_target:
-        return True
-    token_target = config.stop_after_direct_weight_tokens_applied
-    if token_target is not None:
-        return authority.read.token_ledger_summary().direct_applied >= token_target
-    return False
-
-
-def _finalize(
-    loaded: LoadedRunDescriptor,
-    authority: LeaderAuthority,
-    leader: LeaderSession,
-    *,
-    control: V4ControlPublisher,
-    telemetry: ActorTelemetryWriter,
-    reason: str,
-) -> dict[str, Any]:
-    controller = authority.read.controller_status()
-    cycle_token_budget = (
-        int(loaded.config.shared.training.inner_steps)
-        * int(loaded.config.shared.training.gradient_accumulation_steps)
-        * int(loaded.config.shared.training.micro_batch_size)
-        * int(loaded.config.shared.training.block_size)
-    )
-    if controller["state"] == "open":
-        leader.begin_terminal_close(
-            command_id=f"terminal-close-{reason}",
-            reason=reason,
-            hard_crash_cycle_token_budget=cycle_token_budget,
-        )
-        controller = authority.read.controller_status()
-    control.publish_drain(controller)
-    deadline = time.monotonic() + loaded.config.leader.learner_recovery_wait_seconds
-    while time.monotonic() < deadline:
-        _ingest_proposals(loaded, authority, leader, control, telemetry)
-        for path, payload, fence in iter_terminal_acks(loaded.paths):
-            try:
-                generation = payload.get("generation")
-                final_cycle_seq = payload.get("final_cycle_seq")
-                if (
-                    payload.get("format_version") != CONTROL_FORMAT_VERSION
-                    or payload.get("kind") != "terminal_ack"
-                    or payload.get("run_id") != loaded.descriptor["run_id"]
-                    or payload.get("descriptor_sha256") != loaded.descriptor["descriptor_sha256"]
-                    or isinstance(generation, bool)
-                    or not isinstance(generation, int)
-                    or generation != int(controller["generation"])
-                    or isinstance(final_cycle_seq, bool)
-                    or not isinstance(final_cycle_seq, int)
-                    or final_cycle_seq < 0
-                    or not isinstance(payload.get("actor_id"), str)
-                    or not isinstance(payload.get("attempt_id"), str)
-                    or not (
-                        payload.get("final_update_id") is None
-                        or isinstance(payload.get("final_update_id"), str)
-                    )
-                ):
-                    continue
-                actor_id = payload["actor_id"]
-                attempt_id = payload["attempt_id"]
-                if fence.kind == "static":
-                    if actor_id != fence.learner_id or attempt_id != fence.attempt_id:
-                        continue
-                elif actor_id != fence.instance_id or attempt_id != fence.instance_id:
-                    continue
-                ack_digest = hashlib.sha256(path.read_bytes()).hexdigest()
-                leader.acknowledge_terminal_contributor(
-                    command_id=f"terminal-ack-{ack_digest}",
-                    fence=fence,
-                    final_cycle_seq=final_cycle_seq,
-                    final_update_id=payload.get("final_update_id"),
-                )
-                telemetry.event(
-                    "terminal_ack_ingested",
-                    actor_id=actor_id,
-                    final_cycle_seq=final_cycle_seq,
-                )
-            except Exception as exc:
-                telemetry.event(
-                    "terminal_ack_rejected",
-                    path=str(path),
-                    error_type=type(exc).__name__,
-                    error=str(exc),
-                )
-        awaiting = tuple(
-            row
-            for row in authority.read.terminal_contributor_fences()
-            if row["state"] == "awaiting_ack"
-        )
-        if not awaiting:
-            break
-        time.sleep(float(loaded.config.shared.sync.scan_interval_seconds))
-    for row in authority.read.terminal_contributor_fences():
-        if row["state"] != "awaiting_ack":
-            continue
-        fence = decode_contributor_fence(json.loads(str(row["fence_json"])))
-        ack_digest = hashlib.sha256(
-            json.dumps(fence.as_dict(), sort_keys=True).encode("utf-8")
-        ).hexdigest()
-        leader.acknowledge_terminal_contributor(
-            command_id=f"terminal-hard-crash-{ack_digest}",
-            fence=fence,
-            final_cycle_seq=None,
-            hard_crash_gap_tokens_upper_bound=cycle_token_budget,
-        )
-        telemetry.event(
-            "terminal_hard_crash_adjudicated",
-            stable_contributor_key=fence.stable_contributor_key,
-            hard_crash_gap_tokens_upper_bound=cycle_token_budget,
-        )
-    state = authority.read.controller_status()["state"]
-    if state not in {"finalized", "error"}:
-        leader.finalize_terminal(command_id=f"terminal-finalize-{reason}", reason=reason)
-    terminal = authority.read.terminal_record()
-    if terminal is None:
-        raise RuntimeError("terminal record was not committed")
-    return terminal

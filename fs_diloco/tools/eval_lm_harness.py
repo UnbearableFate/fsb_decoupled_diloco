@@ -160,6 +160,24 @@ def resolve_checkpoint(
     }
 
 
+def validate_query_manifest_output(
+    manifest: dict[str, Any], output_path: str | Path, *, label: str
+) -> tuple[Path, str]:
+    """Classify the source and keep legacy-derived manifests outside its run root."""
+
+    from ..legacy.reader import query_run_protocol, validate_query_output_path
+
+    source_run_root = Path(str(manifest["source_run_root"])).resolve(strict=True)
+    source_protocol = query_run_protocol(source_run_root)
+    output = validate_query_output_path(
+        source_run_root,
+        output_path,
+        source_protocol=source_protocol,
+        label=label,
+    )
+    return output, source_protocol
+
+
 def export_checkpoint(
     *,
     project_root: Path,
@@ -191,8 +209,14 @@ def export_checkpoint(
         run_root=run_root,
         config=config,
     )
+    export_dir, source_protocol = validate_query_manifest_output(
+        manifest,
+        export_dir,
+        label="model export",
+    )
     manifest["eval_id"] = eval_id
     manifest["export_dir"] = str(export_dir)
+    manifest["source_protocol"] = source_protocol
 
     config_obj = load_query_config_snapshot(manifest["config_path"])
     model, tokenizer = load_causal_lm_and_tokenizer(config_obj.model)
@@ -215,6 +239,13 @@ def export_checkpoint(
     manifest["exported_at"] = time.time()
     if manifest_output is not None:
         manifest_path = _coerce_path(manifest_output, base=project_root)
+        manifest_path, manifest_source_protocol = validate_query_manifest_output(
+            manifest,
+            manifest_path,
+            label="export manifest",
+        )
+        if manifest_source_protocol != source_protocol:
+            raise RuntimeError("source protocol classification changed during model export")
         manifest["manifest_path"] = str(manifest_path)
         atomic_write_json(manifest_path, manifest)
     return manifest
@@ -269,6 +300,17 @@ def results_to_csv(
     manifest_payload: dict[str, Any] = {}
     if manifest is not None and manifest.exists():
         manifest_payload = _read_json(manifest)
+        source_run_root = manifest_payload.get("source_run_root")
+        source_protocol = manifest_payload.get("source_protocol")
+        if isinstance(source_run_root, str) and source_protocol == "legacy-v1-v3":
+            from ..legacy.reader import validate_query_output_path
+
+            output_csv = validate_query_output_path(
+                source_run_root,
+                output_csv,
+                source_protocol=source_protocol,
+                label="evaluation CSV",
+            )
 
     rows: list[dict[str, Any]] = []
     for json_path in _result_json_files(lm_eval_output):
@@ -379,7 +421,12 @@ def main(argv: list[str] | None = None) -> None:
         if args.manifest_output:
             from ..storage.atomic_io import atomic_write_json
 
-            output_path = _coerce_path(args.manifest_output, base=Path.cwd())
+            output_path, source_protocol = validate_query_manifest_output(
+                manifest,
+                _coerce_path(args.manifest_output, base=Path.cwd()),
+                label="checkpoint manifest",
+            )
+            manifest["source_protocol"] = source_protocol
             manifest["manifest_path"] = str(output_path)
             atomic_write_json(output_path, manifest)
         _print_json(manifest)

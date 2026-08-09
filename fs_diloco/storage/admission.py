@@ -143,6 +143,7 @@ def publish_dynamic_request(
     instance_id: str,
     stream_id: int,
     admission_token_sha256: str,
+    bootstrap_slot: int | None = None,
     launch_request_id: str | None = None,
     replace_instance_id: str | None = None,
 ) -> Path:
@@ -153,6 +154,7 @@ def publish_dynamic_request(
         instance_id=instance_id,
         stream_id=stream_id,
         admission_token_sha256=admission_token_sha256,
+        bootstrap_slot=bootstrap_slot,
         launch_request_id=launch_request_id,
         replace_instance_id=replace_instance_id,
     )
@@ -167,6 +169,7 @@ def publish_dynamic_request_with_sha256(
     instance_id: str,
     stream_id: int,
     admission_token_sha256: str,
+    bootstrap_slot: int | None = None,
     launch_request_id: str | None = None,
     replace_instance_id: str | None = None,
 ) -> tuple[Path, str]:
@@ -179,6 +182,7 @@ def publish_dynamic_request_with_sha256(
         "descriptor_sha256": descriptor_sha256,
         "instance_id": instance_id,
         "stream_id": int(stream_id),
+        "bootstrap_slot": bootstrap_slot,
         "launch_request_id": launch_request_id,
         "replace_instance_id": replace_instance_id,
         "placement_id": dynamic_placement_id(
@@ -261,6 +265,7 @@ def admission_request_error(
         | {
             "instance_id",
             "stream_id",
+            "bootstrap_slot",
             "launch_request_id",
             "replace_instance_id",
             "placement_id",
@@ -291,8 +296,19 @@ def admission_request_error(
             _require_identity(request["instance_id"], name="instance_id")
             _require_identity(request["placement_id"], name="placement_id")
             _require_nonnegative_integer(request["stream_id"], name="stream_id")
+            if request["bootstrap_slot"] is not None:
+                _require_nonnegative_integer(request["bootstrap_slot"], name="bootstrap_slot")
             _require_optional_identity(request["launch_request_id"], name="launch_request_id")
             _require_optional_identity(request["replace_instance_id"], name="replace_instance_id")
+            if (request["bootstrap_slot"] is None) == (request["launch_request_id"] is None):
+                raise ValueError(
+                    "dynamic request requires exactly one bootstrap or launch authorization"
+                )
+            if request["bootstrap_slot"] is not None and (
+                request["bootstrap_slot"] != request["stream_id"]
+                or request["replace_instance_id"] is not None
+            ):
+                raise ValueError("bootstrap authorization does not match the requested stream")
             digest = request["admission_token_sha256"]
             if (
                 not isinstance(digest, str)

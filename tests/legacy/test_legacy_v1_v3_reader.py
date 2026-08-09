@@ -7,7 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from fs_diloco.legacy.reader import LegacyRunReader, export_legacy_summary
+from fs_diloco.legacy.reader import (
+    LegacyRunReader,
+    export_legacy_summary,
+    query_run_protocol,
+    validate_query_output_path,
+)
+from fs_diloco.tools import eval_lm_harness
 
 
 FRAGMENT_TABLES = (
@@ -16,6 +22,7 @@ FRAGMENT_TABLES = (
     "fragment_versions",
     "fragment_updates",
 )
+PLAN03_REQUIREMENTS = frozenset({"LEGACY-01", "P5-FRAGMENT"})
 
 
 def _sha256(path: Path) -> str:
@@ -136,3 +143,84 @@ def test_legacy_export_must_be_outside_source_root_and_keeps_legacy_labels(
     assert json.loads(output.read_text(encoding="utf-8")) == payload
     assert "total_seen_tokens" not in payload
     assert payload["legacy_total_seen_tokens"] == 32
+
+
+def test_legacy_reader_quotes_uri_paths_and_classifies_old_schema(tmp_path: Path) -> None:
+    root = tmp_path / "legacy#query?source"
+    database = _legacy_fixture(root, fragment=False)
+
+    with LegacyRunReader(root, database_path=database) as reader:
+        assert reader.summary()["latest_global_version"] == 1
+    assert query_run_protocol(root) == "legacy-v1-v3"
+
+
+def test_query_protocol_classifies_current_v4_schema(tmp_path: Path) -> None:
+    root = tmp_path / "v4"
+    (root / "control").mkdir(parents=True)
+    connection = sqlite3.connect(root / "control" / "syncer_metadata.sqlite3")
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE schema_meta(
+                singleton INTEGER PRIMARY KEY,
+                protocol_version INTEGER NOT NULL
+            );
+            INSERT INTO schema_meta VALUES (1, 4);
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    assert query_run_protocol(root) == "full-protocol-v4"
+
+
+@pytest.mark.parametrize("relative", ["eval.json", "exports/model", "manifest.json"])
+def test_every_legacy_query_output_must_be_outside_source_root(
+    tmp_path: Path,
+    relative: str,
+) -> None:
+    root = tmp_path / "legacy"
+    _legacy_fixture(root, fragment=False)
+
+    with pytest.raises(ValueError, match="outside the legacy run root"):
+        validate_query_output_path(
+            root,
+            root / relative,
+            source_protocol=query_run_protocol(root),
+            label="test output",
+        )
+
+    outside = validate_query_output_path(
+        root,
+        tmp_path / "outside" / relative,
+        source_protocol=query_run_protocol(root),
+        label="test output",
+    )
+    assert outside == (tmp_path / "outside" / relative).resolve()
+
+
+def test_resolve_checkpoint_manifest_cannot_write_into_legacy_source_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "legacy"
+    _legacy_fixture(root, fragment=False)
+    target = root / "control" / "derived-manifest.json"
+    monkeypatch.setattr(
+        eval_lm_harness,
+        "resolve_checkpoint",
+        lambda **_kwargs: {"source_run_root": str(root)},
+    )
+
+    with pytest.raises(ValueError, match="outside the legacy run root"):
+        eval_lm_harness.main(
+            [
+                "resolve-checkpoint",
+                "--run-root",
+                str(root),
+                "--manifest-output",
+                str(target),
+            ]
+        )
+    assert not target.exists()

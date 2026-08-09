@@ -1,4 +1,4 @@
-"""Small auditable PBS query/submission adapter for recovery candidates."""
+"""Small auditable PBS query/submission adapter for dynamic learners."""
 
 from __future__ import annotations
 
@@ -17,6 +17,13 @@ OUTSTANDING_CLASSIFICATIONS = {
     "suspended",
     "submission_unknown",
 }
+
+
+def _pbs_variable_value(value: str | Path, *, name: str) -> str:
+    result = str(value)
+    if not result or any(character in result for character in ",=\n\r"):
+        raise ValueError(f"{name} contains an unsafe PBS variable character")
+    return result
 
 
 def normalize_job_id(value: str) -> str:
@@ -127,126 +134,39 @@ class PBSScheduler:
             stderr=completed.stderr.strip(),
         )
 
-    def submit_candidate(
-        self,
-        *,
-        script: str | Path,
-        request_fingerprint: str,
-        shared_root: str | Path,
-        descriptor_sha256: str,
-        walltime: str,
-    ) -> dict[str, Any]:
-        if not request_fingerprint or any(
-            character in request_fingerprint for character in ",=\n\r"
-        ):
-            raise ValueError("request_fingerprint contains an unsafe PBS variable character")
-        variables = ",".join(
-            (
-                f"FS_DILOCO_SHARED_ROOT={Path(shared_root).resolve()}",
-                f"FS_DILOCO_RECOVERY_REQUEST={request_fingerprint}",
-                f"FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256={descriptor_sha256}",
-            )
-        )
-        name = f"diloco_s_{request_fingerprint[-10:]}"
-        command = [
-            self.qsub_binary,
-            "-N",
-            name,
-            "-l",
-            f"walltime={walltime}",
-            "-v",
-            variables,
-            str(Path(script)),
-        ]
-        try:
-            completed = subprocess.run(
-                command,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout_seconds,
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            return {
-                "returncode": -1,
-                "stdout": "",
-                "stderr": repr(exc),
-                "job_name": name,
-                "request_fingerprint": request_fingerprint,
-            }
-        stdout = completed.stdout.strip()
-        result: dict[str, Any] = {
-            "returncode": completed.returncode,
-            "stdout": stdout,
-            "stderr": completed.stderr.strip(),
-            "job_name": name,
-            "request_fingerprint": request_fingerprint,
-        }
-        if completed.returncode == 0 and stdout:
-            raw = stdout.splitlines()[-1]
-            result["job_id_raw"] = raw
-            result["job_id_normalized"] = normalize_job_id(raw)
-        return result
-
-    def find_by_request_fingerprint(self, request_fingerprint: str) -> PBSJobObservation | None:
-        try:
-            completed = subprocess.run(
-                [self.qstat_binary, "-f"],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout_seconds,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            return None
-        if completed.returncode != 0:
-            return None
-        for job_id, fields in parse_qstat_jobs(completed.stdout):
-            variables = {
-                key: value
-                for item in fields.get("Variable_List", "").split(",")
-                for key, separator, value in (item.partition("="),)
-                if separator
-            }
-            if variables.get("FS_DILOCO_RECOVERY_REQUEST") != request_fingerprint:
-                continue
-            return PBSJobObservation(
-                job_id=normalize_job_id(job_id),
-                classification=classify_scheduler_state(fields),
-                fields=fields,
-                returncode=0,
-                stderr="",
-            )
-        return None
-
     def submit_learner(
         self,
         *,
         script: str | Path,
         launch_request_id: str,
+        stream_id: int,
+        replace_instance_id: str | None,
         shared_root: str | Path,
         descriptor_sha256: str,
         walltime: str,
         queue: str | None = None,
     ) -> dict[str, Any]:
-        if not launch_request_id or any(
-            character in launch_request_id for character in ",=\n\r"
-        ):
-            raise ValueError("launch_request_id contains an unsafe PBS variable character")
-        variables = ",".join(
-            (
-                f"FS_DILOCO_SHARED_ROOT={Path(shared_root).resolve()}",
-                f"FS_DILOCO_LAUNCH_REQUEST_ID={launch_request_id}",
-                f"FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256={descriptor_sha256}",
+        launch_request_id = _pbs_variable_value(launch_request_id, name="launch_request_id")
+        if isinstance(stream_id, bool) or not isinstance(stream_id, int) or stream_id < 0:
+            raise ValueError("stream_id must be a non-negative integer")
+        resolved_root = _pbs_variable_value(Path(shared_root).resolve(), name="shared_root")
+        descriptor_sha256 = _pbs_variable_value(descriptor_sha256, name="descriptor_sha256")
+        if replace_instance_id is not None:
+            replace_instance_id = _pbs_variable_value(
+                replace_instance_id, name="replace_instance_id"
             )
-        )
+        variable_items = [
+            f"FS_DILOCO_SHARED_ROOT={resolved_root}",
+            f"FS_DILOCO_LAUNCH_REQUEST_ID={launch_request_id}",
+            f"FS_DILOCO_STREAM_ID={stream_id}",
+            f"FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256={descriptor_sha256}",
+        ]
+        if replace_instance_id is not None:
+            variable_items.append(f"FS_DILOCO_REPLACE_INSTANCE_ID={replace_instance_id}")
+        variables = ",".join(variable_items)
         name = f"diloco_l_{launch_request_id[-10:]}"
         if queue is not None and (
-            not queue
-            or any(
-                not (character.isalnum() or character in "_.-")
-                for character in queue
-            )
+            not queue or any(not (character.isalnum() or character in "_.-") for character in queue)
         ):
             raise ValueError("learner queue contains unsafe PBS characters")
         command = [
@@ -295,10 +215,16 @@ class PBSScheduler:
             result["job_id_normalized"] = normalize_job_id(raw)
         return result
 
-    def find_by_launch_request(self, launch_request_id: str) -> PBSJobObservation | None:
+    def find_by_launch_request(
+        self, launch_request_id: str, *, historical: bool = False
+    ) -> PBSJobObservation | None:
+        command = [self.qstat_binary]
+        if historical:
+            command.append("-H")
+        command.append("-f")
         try:
             completed = subprocess.run(
-                [self.qstat_binary, "-f"],
+                command,
                 check=False,
                 capture_output=True,
                 text=True,

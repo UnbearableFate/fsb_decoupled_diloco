@@ -14,7 +14,7 @@
 - `fs_diloco/core/`：严格 v4 配置、版本和不可变 run descriptor。
 - `fs_diloco/protocol/`：不做 I/O 的 typed proposal、receipt、fence、selection 和 accounting 对象。
 - `fs_diloco/storage/`：SQLite authority、leader lease、文件发布、admission/control adapter 和 initializer。
-- `fs_diloco/runtime/`：learner/syncer v4 composition 与训练循环。
+- `fs_diloco/runtime/`：learner/syncer v4 composition；`services/` 复用唯一的 merge/publication、dynamic capacity/PBS reconcile 和 terminal drain 实现。
 - `fs_diloco/modeling/`：模型、数据、参数索引和优化器帮助函数。
 - `fs_diloco/observability/`：每 actor/attempt 单写者 JSONL telemetry 与资源观测。
 - `fs_diloco/legacy/`：已完成 v1-v3/full 与 Fragment V0 run 的 query-only reader/decoder。
@@ -31,6 +31,8 @@ python -m fs_diloco.tools.launch_independent_run \
   --syncer-walltime 00:10:00 \
   --learner-walltime 00:10:00
 ```
+
+dynamic scaling 启用后由 leader 持久化 capacity window 和 launch reservation，再经 `run_dynamic_learner.pbs` 扩容或替换；scheduler 不确定时不会重复 qsub。使用 manual terminal policy 的 run 可通过 `python -m fs_diloco.cli close --shared-root ... --reason ...` 发布一次不可变 close request。
 
 Miyabi 上通常从 PBS 脚本调用相同入口；提交前按仓库 `AGENTS.md` 运行 `bash -n`、确认字面 group ID，并根据 workload 选择最短实用 walltime。不要在 login node 运行 torch/pytest/GPU workload。
 

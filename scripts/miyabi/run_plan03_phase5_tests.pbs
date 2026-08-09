@@ -17,7 +17,7 @@ module list 2>&1 | cat
 PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 RUFF_BIN="${RUFF_BIN:-$PROJECT_ROOT/.venv/bin/ruff}"
-TEST_TARGET="${TEST_TARGET:-tests/architecture tests/legacy tests/tools/test_authorize_static_replacement.py tests/runtime/test_p4_mandatory_runtime.py tests/storage tests/test_config.py tests/test_torch_baseline_artifacts_and_data.py tests/test_torch_baseline_health.py tests/test_torch_baseline_protocol.py tests/test_fragment_analysis.py tests/test_validation_eval.py}"
+TEST_TARGET="${TEST_TARGET:-tests/architecture tests/legacy tests/tools/test_authorize_static_replacement.py tests/runtime/test_dynamic_capacity_service.py tests/runtime/test_pbs_scheduler.py tests/runtime/test_p4_mandatory_runtime.py tests/runtime/test_terminal_service.py tests/storage tests/test_config.py tests/test_torch_baseline_artifacts_and_data.py tests/test_torch_baseline_health.py tests/test_torch_baseline_protocol.py tests/test_fragment_analysis.py tests/test_plan03_checker.py tests/test_validation_eval.py}"
 RUN_FULL_SUITE="${RUN_FULL_SUITE:-1}"
 cd "$PROJECT_ROOT"
 
@@ -36,6 +36,7 @@ read -r -a targets <<<"$TEST_TARGET"
   fs_diloco/legacy/reader.py \
   fs_diloco/modeling/training.py \
   fs_diloco/protocol/merge.py \
+  fs_diloco/runtime/services \
   fs_diloco/runtime/learner_entrypoint.py \
   fs_diloco/runtime/learner_v4.py \
   fs_diloco/runtime/syncer_entrypoint.py \
@@ -45,16 +46,24 @@ read -r -a targets <<<"$TEST_TARGET"
   fs_diloco/storage/leader_lease.py \
   fs_diloco/storage/paths.py \
   fs_diloco/storage/run_initializer.py \
+  fs_diloco/storage/terminal_request.py \
   fs_diloco/tools/analysis.py \
   fs_diloco/tools/authorize_static_replacement.py \
   fs_diloco/tools/eval_lm_harness.py \
   fs_diloco/tools/publish_quality_gate.py \
+  fs_diloco/tools/request_terminal_close.py \
   fs_diloco/tools/validation_eval.py \
   scripts/miyabi/build_plan03_p5_test_accounting.py \
   scripts/miyabi/check_plan03.py \
   tests/architecture/test_p5_removed_runtime.py \
   tests/legacy/test_legacy_v1_v3_reader.py \
+  tests/runtime/test_dynamic_capacity_service.py \
+  tests/runtime/test_pbs_scheduler.py \
   tests/runtime/test_p4_mandatory_runtime.py \
+  tests/runtime/test_terminal_service.py \
+  tests/storage/test_dynamic_admission_request.py \
+  tests/storage/test_dynamic_launch_authorization.py \
+  tests/storage/test_terminal_request.py \
   tests/test_config.py \
   tests/test_fragment_analysis.py \
   tests/test_inner_scheduler.py \
@@ -64,6 +73,8 @@ read -r -a targets <<<"$TEST_TARGET"
 "$PYTHON_BIN" scripts/miyabi/check_plan03.py \
   --root "$PROJECT_ROOT" \
   --expect reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260808-223500_p0-runtime-surface-inventory_review.json \
+  --verify-boundaries \
+  --verify-p3-operational-contracts \
   --verify-p5-contracts \
   --inventory-output "${TMPDIR:?TMPDIR is required}/p5-current-boundary.json"
 "$PYTHON_BIN" -m pytest -q "${targets[@]}"

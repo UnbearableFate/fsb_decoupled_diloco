@@ -78,6 +78,7 @@ def main(argv: list[str] | None = None) -> None:
             instance_id=actor_id,
             stream_id=stream_id,
             admission_token_sha256=token_sha,
+            bootstrap_slot=args.bootstrap_slot,
             launch_request_id=args.launch_request_id,
             replace_instance_id=args.replace_instance_id,
         )

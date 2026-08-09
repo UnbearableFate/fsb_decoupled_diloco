@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from .authority import CommittedVersion
 
 
-PLAN03_REQUIREMENTS = frozenset({"AUTH-04", "AUTH-07", "P4-MIGRATE"})
+PLAN03_REQUIREMENTS = frozenset({"AUTH-04", "AUTH-07", "P4-MIGRATE", "P5-ARCH"})
 
 
 @dataclass(frozen=True)

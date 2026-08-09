@@ -44,6 +44,53 @@ def open_dynamic(tmp_path: Path, clock: Clock, *, streams: int = 2) -> LeaderAut
 
 
 def admit(leader, *, index: int, replace: str | None = None) -> DynamicContributorFence:
+    launch_request_id = None
+    if replace is not None:
+        launch_request_id = f"replacement-launch-{index}"
+        observation_key = f"capacity-replacement-{index}"
+        leader.record_capacity_observation(
+            command_id=f"observe-replacement-{index}",
+            observation_key=observation_key,
+            global_version=0,
+            eligible_contributors=0,
+            selected_contributors=0,
+            productive_instances=0,
+            reserved_launch_capacity=0,
+            desired_contributors=2,
+            action="replace",
+            retention_count=32,
+        )
+        old_index = int(replace.rsplit("-", 1)[1])
+        planned = leader.plan_dynamic_launch_request(
+            command_id=f"plan-replacement-{index}",
+            request_id=launch_request_id,
+            observation_key=observation_key,
+            stream_id=index % 2,
+            replace_instance_id=replace,
+            reason="scheduler_terminal",
+            expires_at=1000.0,
+            max_pending_requests=32,
+            max_total_requests=32,
+            expected_scheduler_job_id=f"{old_index}.opbs",
+        )
+        submitting = leader.transition_dynamic_launch_request(
+            command_id=f"submit-replacement-{index}",
+            request_id=launch_request_id,
+            expected_state=planned["state"],
+            state="submitting",
+            pbs_job_id=None,
+            scheduler_state="qsub_started",
+            evidence_source="qsub_started",
+        )
+        leader.transition_dynamic_launch_request(
+            command_id=f"submitted-replacement-{index}",
+            request_id=launch_request_id,
+            expected_state=submitting["state"],
+            state="submitted",
+            pbs_job_id=f"{index}.opbs",
+            scheduler_state="queued",
+            evidence_source="qsub_receipt",
+        )
     admission = leader.admit_dynamic_incarnation(
         command_id=f"admit-{index}",
         instance_id=f"instance-{index}",
@@ -52,7 +99,8 @@ def admit(leader, *, index: int, replace: str | None = None) -> DynamicContribut
         admission_token_sha256=hashlib.sha256(f"token-{index}".encode()).hexdigest(),
         hostname="host",
         pid=index + 1,
-        launch_request_id=(f"replacement-launch-{index}" if replace is not None else None),
+        pbs_job_id=f"{index}.opbs",
+        launch_request_id=launch_request_id,
         replace_instance_id=replace,
         replacement_reason="authorized_replacement" if replace is not None else None,
     )

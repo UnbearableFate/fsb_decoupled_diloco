@@ -1,6 +1,6 @@
 CREATE TABLE schema_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-    schema_version INTEGER NOT NULL CHECK (schema_version = 6),
+    schema_version INTEGER NOT NULL CHECK (schema_version = 7),
     protocol_version INTEGER NOT NULL CHECK (protocol_version = 4),
     mode TEXT NOT NULL CHECK (mode IN ('static', 'dynamic')),
     features_json TEXT NOT NULL,
@@ -528,44 +528,4 @@ CREATE TABLE gc_candidates (
     recorded_by_epoch INTEGER NOT NULL CHECK (recorded_by_epoch >= 1),
     recorded_at REAL NOT NULL,
     deleted_at REAL
-);
-
-CREATE TABLE candidate_launch_outbox (
-    request_id TEXT PRIMARY KEY,
-    observation_key TEXT NOT NULL UNIQUE,
-    request_sha256 TEXT NOT NULL CHECK (length(request_sha256) = 64),
-    state TEXT NOT NULL CHECK (state IN (
-        'planned', 'submitting', 'submission_unknown', 'submitted', 'started',
-        'terminal_uncertain', 'admitted', 'failed', 'expired', 'manual_review'
-    )),
-    owner_epoch INTEGER NOT NULL CHECK (owner_epoch >= 1),
-    scheduler_job_id TEXT,
-    first_uncertain_at REAL,
-    last_positive_evidence_at REAL,
-    uncertainty_deadline REAL,
-    reservation_released_at REAL,
-    evidence_source TEXT,
-    manual_reason TEXT,
-    created_at REAL NOT NULL,
-    updated_at REAL NOT NULL
-);
-
-CREATE TABLE scheduler_operator_requests (
-    request_id TEXT PRIMARY KEY,
-    launch_request_id TEXT NOT NULL,
-    action TEXT NOT NULL CHECK (action IN (
-        'confirm_job_id', 'mark_failed', 'mark_expired',
-        'record_external_cancel_evidence'
-    )),
-    expected_state_sha256 TEXT NOT NULL CHECK (length(expected_state_sha256) = 64),
-    reason TEXT NOT NULL,
-    scheduler_job_id TEXT,
-    evidence_source TEXT,
-    request_sha256 TEXT NOT NULL CHECK (length(request_sha256) = 64),
-    state TEXT NOT NULL CHECK (state IN ('applied', 'stale_rejected')),
-    result_state TEXT NOT NULL,
-    processed_by_epoch INTEGER NOT NULL CHECK (processed_by_epoch >= 1),
-    processed_at REAL NOT NULL,
-    CHECK ((action = 'confirm_job_id' AND scheduler_job_id IS NOT NULL)
-        OR (action <> 'confirm_job_id' AND scheduler_job_id IS NULL))
 );

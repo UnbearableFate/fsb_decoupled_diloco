@@ -205,3 +205,32 @@ learner:
     assert projected.model.name_or_path == "gpt2"
     assert projected.data.validation_split == "validation"
     assert projected.learner.prediction.reconcile_timeout_seconds == 17.0
+
+
+@pytest.mark.parametrize(
+    "leader_yaml",
+    [
+        "lease_duration_secondz: 90.0",
+        "lease_duration_seconds: 0.0",
+    ],
+)
+def test_query_config_loader_never_downgrades_invalid_v4_leader_config(
+    tmp_path,
+    leader_yaml,
+):
+    snapshot = tmp_path / "invalid-v4.yaml"
+    snapshot.write_text(
+        "config_schema_version: 1\n"
+        "coordination:\n"
+        "  leader:\n"
+        f"    {leader_yaml}\n"
+        "maintenance: {}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError) as strict_error:
+        load_resolved_config_snapshot(snapshot)
+    with pytest.raises(ValueError) as query_error:
+        load_query_config_snapshot(snapshot)
+
+    assert str(query_error.value) == str(strict_error.value)

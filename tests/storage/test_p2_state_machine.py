@@ -180,6 +180,52 @@ def test_dynamic_membership_state_machine_has_one_current_incarnation(
             previous_stream_epoch = 0
             for generation in range(replacements + 1):
                 instance_id = f"instance-{generation}"
+                launch_request_id = None
+                if current_instance is not None:
+                    launch_request_id = f"replacement-launch-{generation}"
+                    observation_key = f"capacity-replacement-{generation}"
+                    leader.record_capacity_observation(
+                        command_id=f"observe-replacement-{generation}",
+                        observation_key=observation_key,
+                        global_version=0,
+                        eligible_contributors=0,
+                        selected_contributors=0,
+                        productive_instances=0,
+                        reserved_launch_capacity=0,
+                        desired_contributors=1,
+                        action="replace",
+                        retention_count=16,
+                    )
+                    planned = leader.plan_dynamic_launch_request(
+                        command_id=f"plan-replacement-{generation}",
+                        request_id=launch_request_id,
+                        observation_key=observation_key,
+                        stream_id=0,
+                        replace_instance_id=current_instance,
+                        reason="scheduler_terminal",
+                        expires_at=1000.0,
+                        max_pending_requests=16,
+                        max_total_requests=16,
+                        expected_scheduler_job_id=f"{generation - 1}.opbs",
+                    )
+                    submitting = leader.transition_dynamic_launch_request(
+                        command_id=f"submit-replacement-{generation}",
+                        request_id=launch_request_id,
+                        expected_state=planned["state"],
+                        state="submitting",
+                        pbs_job_id=None,
+                        scheduler_state="qsub_started",
+                        evidence_source="qsub_started",
+                    )
+                    leader.transition_dynamic_launch_request(
+                        command_id=f"submitted-replacement-{generation}",
+                        request_id=launch_request_id,
+                        expected_state=submitting["state"],
+                        state="submitted",
+                        pbs_job_id=f"{generation}.opbs",
+                        scheduler_state="queued",
+                        evidence_source="qsub_receipt",
+                    )
                 admission = leader.admit_dynamic_incarnation(
                     command_id=f"admit-{generation}",
                     instance_id=instance_id,
@@ -190,9 +236,8 @@ def test_dynamic_membership_state_machine_has_one_current_incarnation(
                     ).hexdigest(),
                     hostname="host",
                     pid=generation + 1,
-                    launch_request_id=(
-                        None if current_instance is None else f"replacement-launch-{generation}"
-                    ),
+                    pbs_job_id=f"{generation}.opbs",
+                    launch_request_id=launch_request_id,
                     replace_instance_id=current_instance,
                     replacement_reason=(
                         None if current_instance is None else "state_machine_replacement"

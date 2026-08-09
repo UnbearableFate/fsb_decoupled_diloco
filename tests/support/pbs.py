@@ -32,9 +32,19 @@ class FakePBS:
     def bind_request(self, request_id: str, observation: PBSJobObservation) -> None:
         self._requests[request_id] = observation
 
-    def find_by_launch_request(self, request_id: str) -> PBSJobObservation | None:
-        return self._requests.get(request_id)
+    def find_by_launch_request(
+        self, request_id: str, *, historical: bool = False
+    ) -> PBSJobObservation | None:
+        return self._requests.get(f"historical:{request_id}" if historical else request_id)
+
+    def bind_historical_request(self, request_id: str, observation: PBSJobObservation) -> None:
+        self._requests[f"historical:{request_id}"] = observation
 
     def submit_learner(self, **kwargs: Any) -> dict[str, Any]:
         self.submissions.append(dict(kwargs))
-        return {"returncode": 0, "job_id_raw": f"fake-{len(self.submissions)}.opbs"}
+        job_id = f"fake-{len(self.submissions)}"
+        return {
+            "returncode": 0,
+            "job_id_raw": f"{job_id}.opbs",
+            "job_id_normalized": job_id,
+        }

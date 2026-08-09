@@ -94,6 +94,40 @@ def _open_static(tmp_path: Path, clock: Clock) -> LeaderAuthority:
     return LeaderAuthority(database, _identity(), scope, wall_clock=clock)
 
 
+def _open_dynamic(tmp_path: Path, clock: Clock, *, pool_size: int = 1) -> LeaderAuthority:
+    database = tmp_path / "authority.sqlite3"
+    scope = DynamicMembershipScope(pool_size)
+    initialize_authority_v4(database, _identity(), scope, wall_clock=clock)
+    return LeaderAuthority(database, _identity(), scope, wall_clock=clock)
+
+
+def _plan_dynamic_launch(leader, *, request_id: str = "learner-request-1"):
+    leader.initialize_dynamic_membership(command_id="initialize-dynamic-membership")
+    observation = leader.record_capacity_observation(
+        command_id="capacity-observation",
+        observation_key="capacity-window-1",
+        global_version=0,
+        eligible_contributors=0,
+        selected_contributors=0,
+        productive_instances=0,
+        reserved_launch_capacity=0,
+        desired_contributors=1,
+        action="low",
+        retention_count=4,
+    )
+    return leader.plan_dynamic_launch_request(
+        command_id="record-launch",
+        request_id=request_id,
+        observation_key=str(observation["observation_key"]),
+        stream_id=0,
+        replace_instance_id=None,
+        reason="persistent low capacity",
+        expires_at=1000.0,
+        max_pending_requests=1,
+        max_total_requests=2,
+    )
+
+
 def _static_fence(leader) -> dict[str, object]:
     binding = leader.bind_or_replace_static_attempt(
         command_id="bind-static",
@@ -380,6 +414,7 @@ def test_dynamic_replacement_returns_full_contiguous_resume_state(tmp_path: Path
             admission_token_sha256="1" * 64,
             hostname="host",
             pid=1,
+            pbs_job_id="1.opbs",
         )
         receipt = CycleReceiptV1.from_dict(
             receipt_payload(
@@ -389,6 +424,48 @@ def test_dynamic_replacement_returns_full_contiguous_resume_state(tmp_path: Path
             )
         )
         leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
+        leader.record_capacity_observation(
+            command_id="observe-replacement",
+            observation_key="capacity-replacement-2",
+            global_version=0,
+            eligible_contributors=0,
+            selected_contributors=0,
+            productive_instances=0,
+            reserved_launch_capacity=0,
+            desired_contributors=1,
+            action="replace",
+            retention_count=4,
+        )
+        planned = leader.plan_dynamic_launch_request(
+            command_id="plan-replacement-2",
+            request_id="replacement-launch-2",
+            observation_key="capacity-replacement-2",
+            stream_id=0,
+            replace_instance_id="instance-1",
+            reason="scheduler_terminal",
+            expires_at=1000.0,
+            max_pending_requests=1,
+            max_total_requests=2,
+            expected_scheduler_job_id="1.opbs",
+        )
+        submitting = leader.transition_dynamic_launch_request(
+            command_id="submit-replacement-2",
+            request_id="replacement-launch-2",
+            expected_state=planned["state"],
+            state="submitting",
+            pbs_job_id=None,
+            scheduler_state="qsub_started",
+            evidence_source="qsub_started",
+        )
+        leader.transition_dynamic_launch_request(
+            command_id="submitted-replacement-2",
+            request_id="replacement-launch-2",
+            expected_state=submitting["state"],
+            state="submitted",
+            pbs_job_id="2.opbs",
+            scheduler_state="queued",
+            evidence_source="qsub_receipt",
+        )
         second = leader.admit_dynamic_incarnation(
             command_id="admit-2",
             instance_id="instance-2",
@@ -397,6 +474,7 @@ def test_dynamic_replacement_returns_full_contiguous_resume_state(tmp_path: Path
             admission_token_sha256="2" * 64,
             hostname="host",
             pid=2,
+            pbs_job_id="2.opbs",
             launch_request_id="replacement-launch-2",
             replace_instance_id="instance-1",
             replacement_reason="authorized replacement",
@@ -806,52 +884,57 @@ def test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_u
 
 def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: Path) -> None:
     clock = Clock()
-    with _open_static(tmp_path, clock) as authority:
+    with _open_dynamic(tmp_path, clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        row = leader.record_candidate_launch_request(
-            command_id="record-launch",
-            request_id="candidate-request-1",
-            observation_key="heartbeat-1",
-            request_sha256="a" * 64,
-        )
+        row = _plan_dynamic_launch(leader)
         with pytest.raises(ValueError, match="invalid scheduler transition"):
-            leader.transition_candidate_launch_request(
+            leader.transition_dynamic_launch_request(
                 command_id="invalid-direct-admit",
                 request_id=row["request_id"],
                 expected_state="planned",
                 state="admitted",
+                pbs_job_id=None,
+                scheduler_state=None,
                 evidence_source="invalid",
             )
-        submitting = leader.transition_candidate_launch_request(
+        submitting = leader.transition_dynamic_launch_request(
             command_id="submitting",
             request_id=row["request_id"],
             expected_state="planned",
             state="submitting",
+            pbs_job_id=None,
+            scheduler_state="qsub_started",
             evidence_source="qsub_started",
         )
         with pytest.raises(ValueError, match="persistent timeout"):
-            leader.transition_candidate_launch_request(
+            leader.transition_dynamic_launch_request(
                 command_id="missing-deadline",
                 request_id=submitting["request_id"],
                 expected_state="submitting",
                 state="submission_unknown",
+                pbs_job_id=None,
+                scheduler_state="no_record",
                 evidence_source="qsub_receipt_missing",
             )
-        unknown = leader.transition_candidate_launch_request(
+        unknown = leader.transition_dynamic_launch_request(
             command_id="submission-unknown",
             request_id=submitting["request_id"],
             expected_state="submitting",
             state="submission_unknown",
+            pbs_job_id=None,
+            scheduler_state="no_record",
             evidence_source="qsub_receipt_missing",
             uncertainty_timeout_seconds=30.0,
         )
-        uncertain = leader.transition_candidate_launch_request(
+        uncertain = leader.transition_dynamic_launch_request(
             command_id="uncertain",
             request_id=unknown["request_id"],
             expected_state="submission_unknown",
             state="terminal_uncertain",
+            pbs_job_id=None,
+            scheduler_state="no_record",
             evidence_source="live+historical:no_record",
             uncertainty_timeout_seconds=30.0,
         )
@@ -876,7 +959,7 @@ def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: 
             connection.row_factory = sqlite3.Row
             submitted = dict(
                 connection.execute(
-                    "SELECT * FROM candidate_launch_outbox WHERE request_id=?",
+                    "SELECT * FROM launch_requests WHERE request_id=?",
                     (row["request_id"],),
                 ).fetchone()
             )
@@ -900,20 +983,24 @@ def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: 
         assert rejected["launch_state"] == "submitted"
 
         clock.now = 110.0
-        second_uncertain = leader.transition_candidate_launch_request(
+        second_uncertain = leader.transition_dynamic_launch_request(
             command_id="second-uncertain",
             request_id=row["request_id"],
             expected_state="submitted",
             state="terminal_uncertain",
+            pbs_job_id="123.opbs",
+            scheduler_state="no_record",
             evidence_source="live+historical:no_record",
             uncertainty_timeout_seconds=30.0,
         )
         clock.now = 141.0
-        reviewed = leader.transition_candidate_launch_request(
+        reviewed = leader.transition_dynamic_launch_request(
             command_id="manual-review",
             request_id=row["request_id"],
             expected_state="terminal_uncertain",
             state="manual_review",
+            pbs_job_id="123.opbs",
+            scheduler_state="no_record",
             evidence_source="deadline",
         )
         assert second_uncertain["uncertainty_deadline"] == 140.0
@@ -933,37 +1020,86 @@ def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: 
         assert failed["launch_state"] == "failed"
         with sqlite3.connect(tmp_path / "authority.sqlite3") as connection:
             released_at = connection.execute(
-                "SELECT reservation_released_at FROM candidate_launch_outbox WHERE request_id=?",
+                "SELECT reservation_released_at FROM launch_requests WHERE request_id=?",
                 (row["request_id"],),
             ).fetchone()[0]
         assert released_at == clock.now
+
+
+def test_terminal_ack_can_precede_final_proposal_visibility_and_merge(tmp_path: Path) -> None:
+    clock = Clock()
+    with _open_static(tmp_path, clock) as authority:
+        leader = authority.open_leader(
+            authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
+        )
+        fence_payload = _static_fence(leader)
+        fence = StaticContributorFence.from_dict(fence_payload)
+        leader.initialize_v0(
+            command_id="v0",
+            publication_id="publication-v0",
+            **publish_checkpoint_pair(tmp_path, version=0),
+        )
+        leader.begin_terminal_close(command_id="close", reason="target reached")
+        update_id = "00000000-0000-4000-8000-000000000099"
+        receipt = CycleReceiptV1.from_dict(
+            receipt_payload(
+                fence=fence_payload,
+                stable_contributor_key="learner-0",
+                update_id=update_id,
+            )
+        )
+        leader.ingest_cycle_receipt(command_id="receipt-final", receipt=receipt)
+
+        assert (
+            leader.acknowledge_terminal_contributor(
+                command_id="ack-before-proposal",
+                fence=fence,
+                final_cycle_seq=1,
+                final_update_id=update_id,
+            )
+            == "acked"
+        )
+        assert authority.read.update_status(update_id) is None
+
+        proposal = FullUpdateProposalV2.from_dict(
+            proposal_payload(
+                fence=fence_payload,
+                stable_contributor_key="learner-0",
+                update_id=update_id,
+                receipt_sha256=receipt.immutable_sha256(),
+            )
+        )
+        publish_proposal_payload(tmp_path, proposal)
+        leader.ingest_proposal(command_id="proposal-final-visible", proposal=proposal)
+        _commit_next(leader, tmp_path, version=1)
+        assert authority.read.update_status(update_id) == "applied"
+        assert leader.finalize_terminal(command_id="finalize", reason="done").value == ("finalized")
 
 
 def test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolution(
     tmp_path: Path,
 ) -> None:
     clock = Clock()
-    with _open_static(tmp_path, clock) as authority:
+    with _open_dynamic(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
         leader = authority.open_leader(token)
-        row = leader.record_candidate_launch_request(
-            command_id="record-launch",
-            request_id="candidate-request-1",
-            observation_key="heartbeat-1",
-            request_sha256="a" * 64,
-        )
-        submitting = leader.transition_candidate_launch_request(
+        row = _plan_dynamic_launch(leader)
+        submitting = leader.transition_dynamic_launch_request(
             command_id="submitting",
             request_id=row["request_id"],
             expected_state="planned",
             state="submitting",
+            pbs_job_id=None,
+            scheduler_state="qsub_started",
             evidence_source="qsub_started",
         )
-        unknown = leader.transition_candidate_launch_request(
+        unknown = leader.transition_dynamic_launch_request(
             command_id="unknown",
             request_id=submitting["request_id"],
             expected_state="submitting",
             state="submission_unknown",
+            pbs_job_id=None,
+            scheduler_state="no_record",
             evidence_source="qsub_receipt_missing",
             uncertainty_timeout_seconds=30.0,
         )
@@ -974,30 +1110,36 @@ def test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolu
             authority.acquire_leader(owner_id="owner-2", hostname="host", pid=2)
         )
         clock.now = 129.0
-        uncertain = successor.transition_candidate_launch_request(
+        uncertain = successor.transition_dynamic_launch_request(
             command_id="terminal-uncertain",
             request_id=unknown["request_id"],
             expected_state="submission_unknown",
             state="terminal_uncertain",
+            pbs_job_id=None,
+            scheduler_state="no_record",
             evidence_source="live+historical:no_record",
             uncertainty_timeout_seconds=999.0,
         )
         assert uncertain["first_uncertain_at"] == 100.0
         assert uncertain["uncertainty_deadline"] == 130.0
         with pytest.raises(RuntimeError, match="deadline has not elapsed"):
-            successor.transition_candidate_launch_request(
+            successor.transition_dynamic_launch_request(
                 command_id="too-early-review",
                 request_id=unknown["request_id"],
                 expected_state="terminal_uncertain",
                 state="manual_review",
+                pbs_job_id=None,
+                scheduler_state="no_record",
                 evidence_source="deadline",
             )
         clock.now = 131.0
-        reviewed = successor.transition_candidate_launch_request(
+        reviewed = successor.transition_dynamic_launch_request(
             command_id="manual-review",
             request_id=unknown["request_id"],
             expected_state="terminal_uncertain",
             state="manual_review",
+            pbs_job_id=None,
+            scheduler_state="no_record",
             evidence_source="deadline",
         )
         assert reviewed["state"] == "manual_review"

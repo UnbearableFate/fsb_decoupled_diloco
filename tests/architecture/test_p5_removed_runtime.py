@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import sqlite3
 import subprocess
 from pathlib import Path
 
@@ -8,6 +9,7 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
+PLAN03_REQUIREMENTS = frozenset({"P5-ARCH", "P5-FRAGMENT"})
 
 REMOVED_SOURCE = (
     "fs_diloco/observability/metrics.py",
@@ -82,6 +84,10 @@ def test_retained_configs_cannot_express_removed_runtime_modes() -> None:
         assert "init" not in payload, path
         coordination = payload.get("coordination", {})
         assert "syncer_ha" not in coordination, path
+        assert "failure_sim" not in coordination, path
+        sync = payload.get("sync", {})
+        assert "stop_after_global_tokens" not in sync, path
+        assert "capture_terminal_predecessor_for_eval" not in sync, path
 
 
 def test_runtime_and_baselines_have_no_legacy_or_classic_dependency() -> None:
@@ -106,13 +112,22 @@ def test_v4_ddl_has_no_fragment_v0_tables() -> None:
             "fs_diloco/storage/schema_v4_dynamic.sql",
         )
     )
+    connection = sqlite3.connect(":memory:")
+    try:
+        connection.executescript(ddl)
+        tables = {
+            str(row[0])
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+    finally:
+        connection.close()
     for table in (
         "fragment_proposal_frontiers",
         "fragments",
         "fragment_versions",
         "fragment_updates",
     ):
-        assert f"create table {table}" not in ddl
+        assert table not in tables
 
 
 def test_archive_tags_are_immutable_and_share_the_frozen_full_commit() -> None:

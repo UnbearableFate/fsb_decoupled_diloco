@@ -9,6 +9,7 @@
 - `publish_quality_gate.py`：多 seed FP32/BF16 配对质量 gate。
 - `authorize_static_replacement.py`：create-no-replace static authorization；collision 要求 fresh attempt ID。
 - `resolve_scheduler_uncertainty.py`：expected-state CAS operator request。
+- `request_terminal_close.py`：manual policy 的 descriptor-bound immutable close request。
 - `clean_run.py`：completion-evidence/artifact-policy/inode/symlink/live-reference gated cleanup，默认 dry-run。
 - `paired_performance.py` / `check_workload_equivalence.py`：signed paired non-inferiority 与 workload identity。
 - `compare_event_traces.py` / `run_metrics_csv.py`：离线 evidence/compatibility analysis。

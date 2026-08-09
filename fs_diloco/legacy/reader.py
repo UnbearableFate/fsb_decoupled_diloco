@@ -7,7 +7,9 @@ import sqlite3
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Self
+from urllib.parse import quote
 
+from ..core.versions import PROTOCOL_VERSION
 from ..storage.atomic_io import atomic_write_json
 
 
@@ -21,6 +23,7 @@ FRAGMENT_V0_TABLES = (
     "fragment_versions",
     "fragment_updates",
 )
+PLAN03_REQUIREMENTS = frozenset({"LEGACY-01"})
 
 
 def open_query_only_database(database_path: str | Path) -> sqlite3.Connection:
@@ -29,7 +32,12 @@ def open_query_only_database(database_path: str | Path) -> sqlite3.Connection:
     path = Path(database_path).expanduser().resolve(strict=True)
     if not path.is_file():
         raise FileNotFoundError(f"legacy authority is not a regular file: {path}")
-    connection = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+    encoded_path = quote(path.as_posix(), safe="/")
+    connection = sqlite3.connect(
+        f"file:{encoded_path}?mode=ro",
+        uri=True,
+        timeout=60.0,
+    )
     try:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA query_only=ON")
@@ -39,6 +47,46 @@ def open_query_only_database(database_path: str | Path) -> sqlite3.Connection:
         connection.close()
         raise
     return connection
+
+
+def query_run_protocol(run_root: str | Path) -> str:
+    """Classify a query source from its authority schema without mutating it."""
+
+    root = Path(run_root).expanduser().resolve(strict=True)
+    database = root / "control" / "syncer_metadata.sqlite3"
+    connection = open_query_only_database(database)
+    try:
+        schema_meta = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_meta'"
+        ).fetchone()
+        if schema_meta is None:
+            return "legacy-v1-v3"
+        row = connection.execute(
+            "SELECT protocol_version FROM schema_meta WHERE singleton=1"
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("current authority schema metadata is missing")
+        if int(row[0]) != PROTOCOL_VERSION:
+            raise RuntimeError(f"unsupported authority protocol version: {row[0]}")
+        return "full-protocol-v4"
+    finally:
+        connection.close()
+
+
+def validate_query_output_path(
+    run_root: str | Path,
+    output_path: str | Path,
+    *,
+    source_protocol: str,
+    label: str,
+) -> Path:
+    """Resolve an output and keep every legacy-derived write outside its source root."""
+
+    root = Path(run_root).expanduser().resolve(strict=True)
+    output = Path(output_path).expanduser().resolve()
+    if source_protocol == "legacy-v1-v3" and (output == root or output.is_relative_to(root)):
+        raise ValueError(f"legacy {label} must be written outside the legacy run root")
+    return output
 
 
 class LegacyRunReader:
@@ -134,9 +182,12 @@ def export_legacy_summary(
     """Export derived metadata outside the immutable historical run root."""
 
     root = Path(run_root).expanduser().resolve(strict=True)
-    output = Path(output_path).expanduser().resolve()
-    if output == root or output.is_relative_to(root):
-        raise ValueError("legacy exports must be written outside the legacy run root")
+    output = validate_query_output_path(
+        root,
+        output_path,
+        source_protocol="legacy-v1-v3",
+        label="export",
+    )
     with LegacyRunReader(root, database_path=database_path) as reader:
         payload = reader.summary()
     json.dumps(payload, allow_nan=False)

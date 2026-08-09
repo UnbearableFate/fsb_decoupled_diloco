@@ -80,7 +80,7 @@ scaling:
   scheduler_reconcile_interval_seconds: 1.0
   starvation_observation_seconds: 2.0
   learner_pbs_script: scripts/miyabi/run_dynamic_learner.pbs
-  learner_walltime: 00:02:00
+  learner_walltime: 00:10:00
   learner_queue: debug-g
 terminal:
   admission_close_policy: global_target_or_launch_budget

@@ -20,6 +20,8 @@ from dataclasses import dataclass
 import time
 from typing import Any, Callable, ClassVar
 
+from ..core.adoption_rules import validate_global_adoption_config
+
 
 @dataclass(frozen=True)
 class PredictionState:
@@ -380,17 +382,12 @@ class RebaseGlobalAdoptionStrategy(GlobalAdoptionStrategy):
 
     @classmethod
     def validate(cls, config: Any) -> None:
-        if (
-            not config.learner.adopt_global_after_upload
-            or not config.learner.poll_latest_during_inner_steps
-        ):
-            raise ValueError(
-                "rebase_post_publish_delta requires adopt_global_after_upload=true and "
-                "poll_latest_during_inner_steps=true"
-            )
+        validate_global_adoption_config(config)
 
     def wants_inner_poll(self, config: Any) -> bool:
-        return bool(config.learner.poll_latest_during_inner_steps and self._reference_flat is not None)
+        return bool(
+            config.learner.poll_latest_during_inner_steps and self._reference_flat is not None
+        )
 
     def on_local_tokens(self, tokens: int) -> None:
         if self._reference_flat is not None:
@@ -458,9 +455,7 @@ class RebaseGlobalAdoptionStrategy(GlobalAdoptionStrategy):
             "local_rebase_anchor_saved",
             update_id=publish_result.update_id,
             base_global_version=publish_result.base_global_version,
-            anchor_bytes=int(
-                self._reference_flat.numel() * self._reference_flat.element_size()
-            ),
+            anchor_bytes=int(self._reference_flat.numel() * self._reference_flat.element_size()),
             **reference_compute_stats,
         )
         return StrategyAction()
@@ -479,22 +474,7 @@ class PredictGlobalAdoptionStrategy(GlobalAdoptionStrategy):
 
     @classmethod
     def validate(cls, config: Any) -> None:
-        if (
-            not config.learner.adopt_global_after_upload
-            or not config.learner.poll_latest_during_inner_steps
-        ):
-            raise ValueError(
-                "predict_post_publish_global requires adopt_global_after_upload=true and "
-                "poll_latest_during_inner_steps=true"
-            )
-        if config.outer_optimizer.name.lower() != "nesterov":
-            raise ValueError("predict_post_publish_global currently requires outer nesterov")
-        if config.outer_optimizer.weight_decay != 0.0:
-            raise ValueError("predict_post_publish_global currently requires outer weight_decay=0")
-        if config.learner.prediction.reconcile_timeout_seconds <= 0.0:
-            raise ValueError(
-                "learner.prediction.reconcile_timeout_seconds must be > 0"
-            )
+        validate_global_adoption_config(config)
 
     def wants_inner_poll(self, config: Any) -> bool:
         return bool(config.learner.poll_latest_during_inner_steps and self._state.active)
@@ -594,7 +574,9 @@ class PredictGlobalAdoptionStrategy(GlobalAdoptionStrategy):
             prepared_reference, prepared_stats, maybe_latest, recovery = ctx.prepare_prediction()
             if recovery is not None:
                 if maybe_latest is None:
-                    raise RuntimeError("prediction preparation recovery did not return newer latest")
+                    raise RuntimeError(
+                        "prediction preparation recovery did not return newer latest"
+                    )
                 ctx.logger.event(
                     "global_prediction_preparation_recovered",
                     update_id=publish_result.update_id,
@@ -652,10 +634,6 @@ def strategy_type_for_config(config: Any) -> type[GlobalAdoptionStrategy]:
     if strategy_type is None:
         raise ValueError(f"unsupported learner.global_adoption_strategy: {name}")
     return strategy_type
-
-
-def validate_global_adoption_strategy(config: Any) -> None:
-    strategy_type_for_config(config).validate(config)
 
 
 def make_global_adoption_strategy(config: Any) -> GlobalAdoptionStrategy:

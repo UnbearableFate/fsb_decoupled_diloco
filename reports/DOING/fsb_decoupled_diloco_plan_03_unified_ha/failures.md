@@ -784,3 +784,55 @@
 - PBS job `2510910.opbs` 在 `mg0028` 通过 Ruff、format、P5 Checker和 focused `382 passed in 20.92s`；full suite 为 `572 passed, 1 failed in 52.41s`。
 - 唯一失败是 P3 requirement checker 返回 `requirements.DMB-05.tests`：删除 classic/fragment 测试时，逐用例 artifact 已把共享 bounded-state 断言映射到 v4 tests，但 source-level `PLAN03_REQUIREMENTS` owner 没有同步绑定到 retained replacement。
 - 下一步读取 DMB-05 matrix contract和删除前 owner，把 literal requirement marker放到实际覆盖该 invariant 的 current v4 test module；不得通过放宽 checker 或修改历史 P3 evidence 规避。证据：`artifacts/20260809-170800_p5-full-attempt5_fail.json`。
+
+## 2026-08-09 17:45 JST — P5 frozen review target attempt 1 不满足 phase 门禁
+
+- Review target `d2dbfed19eb5e9e0835167c13da40a80bc15273a`，base `77e047cc5e291153736f9abbffb8986e6b912330`；本轮是 review-target 验证目标的连续失败次数 1，与 precommit focused/full 计数分开。
+- Codex 先独立保存 `reports/DOING/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P5-delete-classic-refactor/gpt-5.6-sol_d2dbfed19eb5e9e0835167c13da40a80bc15273a.md`，随后 fresh Claude session `9e201349-4710-4153-98c5-55f97a832f20` 实际使用 `claude-opus-5`，成功保存同目录的 `claude-opus-5_d2dbfed19eb5e9e0835167c13da40a80bc15273a.md`。两者均为 `CHANGES_REQUIRED`。
+- Claude 在 login node 的只读轻量复现命令 `.venv/bin/python -m pytest -q tests/test_plan03_checker.py` 得到 `1 failed, 19 passed`；失败测试 clone 当前 committed HEAD 后读取已由 P5 删除的 fragment config，因此 precommit `573 passed` 证据不能证明 frozen target。Claude没有在login node运行完整pytest/torch/GPU workload。
+- 同一审查确认三条 Checker 路径损坏：P3 operational contract读取已删除文件，current boundary manifest索引已删除路径，P4 migration比较把P5预期删除恒定视为漂移。Codex另确认legacy eval/export仍可写入历史root、dynamic scaling和terminal policy是accepted-but-unconsumed runtime surface。
+- 已确认的共同修订逻辑：先新增/恢复RED守卫；让Checker按frozen/current生命周期解释P5删除；收紧v4/legacy config判别；对legacy输出统一实行outside-root immutable policy；实现唯一的dynamic capacity/scheduler与terminal drain/merge composition；删除真正不可达的candidate recovery outbox；共享global-adoption规则；为P5 requirement补owner和clean target evidence。全部High/Medium完成后，在新committed target的compute node重跑focused/full及phase Checker。
+- Claude的Low finding逐条处置：URI/timeout和删除面检查一并修复；worktree inventory helper改名；docs/observability说明同步；`runtime/services`在本轮以实际dynamic/terminal service落地；其余仅在有明确证据时rejected/deferred。P6 crash/performance harness缺口必须在G0前有successor，不把旧classic harness复活。
+
+## 2026-08-09 18:15 JST — P5 remediation checker invocation 缺少仓库 import path
+
+- 登录节点仅运行静态 Checker；首次直接执行 `python scripts/miyabi/check_plan03.py ...` 在导入 `fs_diloco` 时以 `ModuleNotFoundError` 退出，未进入合同校验，也未运行 pytest/runtime workload。
+- 原因是以脚本路径启动时 `sys.path[0]` 是 `scripts/miyabi`，本地包尚未安装到该 Python；这是调用环境错误，不是 Checker 合同失败。下一次使用项目环境的 `uv run python`（或显式仓库 `PYTHONPATH`）重跑相同静态门禁。
+
+## 2026-08-09 18:16 JST — P5 remediation Checker 的 dynamic tombstone 表归属断言错误
+
+- 修正调用环境后，静态 Checker 的 frozen inventory、current boundary 和 P4 migration 均为 PASS；唯一差异为 `p3_operational_contracts.scheduler.reservation-accounting-not-tombstone-based`。
+- 新 Checker 已把 launch reservation 收敛到 dynamic `launch_requests`，但其中一半断言仍错误地到 base/static `schema_v4.sql` 查 `reservation_released_at`；该列按 feature schema 设计只应存在于 `schema_v4_dynamic.sql`。下一步让该合同同时在 authority 查询和 dynamic schema 验证 tombstone，不要求 static schema 创建假的 scheduler 表。
+
+## 2026-08-09 18:36 JST — P5 review remediation compute attempt 1 测试 fixture 未完成 launch 状态机
+
+- PBS job `2511288.opbs` 在 `mg0015` 通过 Ruff、显式 format 和 P5/P3/boundary Checker；focused suite 为 `419 passed, 6 failed in 41.93s`，因此未运行 full suite。
+- 三个 dynamic replacement regression 已创建正确的 durable launch reservation，但 test fixture 直接从 `planned` 调 admission；production 正确拒绝未 qsub/无 scheduler job evidence 的 authorization。下一步让 fixture 显式执行 `planned → submitting → submitted` 并写 exact PBS job ID，保留 production fail-closed 行为。
+- 两个 boundary unit test 仍构造 frozen pre-P5 inventory，再交给已明确要求 post-P5 projected counts 的 verifier，因而同时报告 count/mutator/deletion drift；它们应从 current worktree inventory 只注入各自单一 drift。另一个 baseline 反例引用已不存在的旧文件名，应改为 retained `configs/torch_baseline_tiny_2rank.yaml`。这些均为 test setup drift，不是 runtime/Checker 合同失败。
+
+## 2026-08-09 18:55 JST — P5 review remediation compute attempt 3 的 config 回归测试调用层级错误
+
+- PBS job `2511340.opbs` 在 `mg0002` 通过 Ruff、显式 format scope 和 P5/P3/boundary Checker；focused suite 为 `430 passed, 1 failed in 37.28s`，因此未运行 full suite。
+- 唯一失败 `test_static_deadline_terminal_policy_requires_an_explicit_deadline` 直接调用 dataclass 的结构校验 `Config.validate(...)`，而跨 section 的 terminal policy 校验属于 `resolve_config(...)`；production 已在该解析边界对 static/dynamic 统一要求 deadline。
+- 下一步把反例改为从 YAML 经 `resolve_config(...)` 进入实际 public validation boundary，继续断言缺失 `terminal.deadline_seconds` fail closed；不移动或复制 production policy 规则。原始 PBS 日志：`fsdiloco_plan03_p5.o2511340`。
+
+## 2026-08-09 19:05 JST — P5 self-review 修订的 legacy manifest helper 遗留旧符号引用
+
+- 登录节点静态门禁中 Ruff 报告 `fs_diloco/tools/eval_lm_harness.py:243 F821`：新增统一 source-protocol/output guard 后，model export 的可选 manifest 分支仍调用已移除的局部 `validate_query_output_path` import。compileall不能捕获该运行时名称解析，Checker随同一未通过源码返回 BLOCKED；未运行 pytest/runtime workload。
+- 下一步让可选 export manifest 与 resolve-checkpoint manifest 都调用新的 `validate_query_manifest_output(...)`，并核对两次分类结果一致；随后重跑完整静态门禁和 compute focused/full suite。
+
+## 2026-08-09 19:06 JST — P5 self-review legacy guard 静态修订遗留无用局部变量
+
+- 同一静态门禁连续失败次数 2。旧 guard 调用迁到 `validate_query_manifest_output(...)` 后，Ruff 正确报告 `eval_lm_harness.py:212 F841`：原 `source_run_root` 局部赋值已无 consumer。门禁在 Ruff 停止，未运行 Checker后续步骤或任何 pytest/runtime workload。
+- 下一步只删除该无用赋值；统一 helper 内仍从 immutable manifest 解析并严格 resolve source root，因此不丢失 path guard。随后从 Ruff 开始重跑相同静态门禁。
+
+## 2026-08-09 19:07 JST — P5 dynamic scaling 最短 walltime 修订触发冻结 P4 config 语义漂移
+
+- Ruff、compileall、`git diff --check` 和全部 shell/PBS `bash -n` 已通过；P5/P3/boundary Checker 返回 BLOCKED，仅报告两项 `p4_migration_contracts.config-migration.full-semantic`：`fs_diloco_tiny_ha_dynamic_{2node,acceptance}.yaml` 的 scaling learner walltime 从旧的 1/2 分钟提升为仓库和计划要求的最短 `00:10:00`。
+- 这是 P5 首次实际消费 scaling qsub 配置后必须闭合的 scheduler resource 安全约束，不应回退成提交低于仓库下限的 job；同时也不能整体放宽 P4 config 漂移。
+- 下一步让 P4 migration verifier 只投影这两个 retained dynamic config 中 `scaling.learner_walltime` 的已知 post-P5 最低值变更，继续对其余 config semantic fields 做 exact compare，并新增 Checker 反例证明其他 scaling 字段漂移仍 BLOCKED。
+
+## 2026-08-09 19:15 JST — P5 remediation 登录节点 format 检查误用了全仓范围
+
+- Ruff lint 通过；随后 `ruff format --check fs_diloco tests scripts/miyabi/check_plan03.py` 报告 13 个本轮未修改、且不属于 P5 显式 format scope 的既有文件需要格式化，因此组合命令在进入 `bash -n` 和 Checker 前停止；未运行 pytest 或 runtime workload。
+- 这是静态门禁调用范围错误，不是本轮源码格式回归。下一步严格复用 `run_plan03_phase5_tests.pbs` 中列明的修改/邻接文件 format scope，再继续执行 PBS 静态语法和 P3/P4/P5/boundary Checker；不机械改写无关文件。

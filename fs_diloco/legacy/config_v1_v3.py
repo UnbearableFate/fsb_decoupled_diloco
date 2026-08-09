@@ -17,10 +17,9 @@ import yaml
 from ..core.config import Config, _from_dict, load_resolved_config_snapshot
 
 
-_LEGACY_TOP_LEVEL_RUNTIME_KEYS = frozenset(
-    {"init", "fragments", "failure_sim", "coordination", "maintenance"}
-)
+_LEGACY_TOP_LEVEL_RUNTIME_KEYS = frozenset({"init", "fragments", "failure_sim"})
 _LEGACY_NESTED_RUNTIME_KEYS = {
+    "coordination": frozenset({"syncer_ha", "recovery_submission"}),
     "sync": frozenset(
         {
             "stop_after_global_tokens",
@@ -69,6 +68,8 @@ def _project_legacy_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
             continue
         for key in removed_keys:
             section.pop(key, None)
+        if section_name == "coordination" and not section:
+            projected.pop(section_name)
 
     learner = projected.get("learner")
     if isinstance(learner, dict) and "prediction_reconcile_timeout_seconds" in learner:

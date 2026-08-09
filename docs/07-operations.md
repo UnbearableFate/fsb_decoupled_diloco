@@ -16,9 +16,24 @@ static active attempt 只能通过 `tools.authorize_static_replacement` 发布�
 
 dynamic replacement 必须带 current instance ID、stream ID 和明确 launch request ID。旧进程恢复后可以非零退出，但它的 stale fence 不能提交新 receipt/proposal/version。
 
+启用 scaling 时不要手工 qsub dynamic learner。leader 为连续低容量或有 terminal scheduler evidence 的 exact lost instance 创建 reservation，并把 stream/replacement identity 注入 PBS。只有同一 launch request 和 PBS job identity 的 registration 会被 admission；bootstrap array slot 不能复用。
+
 ## Scheduler 不确定
 
 no-record/unknown 观察不会释放 anti-duplicate reservation。使用 `tools.resolve_scheduler_uncertainty` 生成 expected-state CAS operator request；leader 审计 applied 或 stale-rejected 结果。不要通过直接改 DB 或删除 launch record 解除状态。
+
+## Terminal close
+
+global-target/deadline/launch-budget policy 由 leader 自动评估。manual policy 使用：
+
+```bash
+python -m fs_diloco.cli close \
+  --shared-root /path/to/run \
+  --expected-descriptor-sha256 <sha256> \
+  --reason "operator maintenance"
+```
+
+request 是 descriptor-bound immutable object；不同的第二次请求会 identity collision。close 后不再接收新 admission。只有显式开启 `allow_preclose_admission_during_drain` 时，leader 才在冻结前等待 registration visibility grace，并且只处理 close intent 前创建的 request。
 
 ## 状态检查
 

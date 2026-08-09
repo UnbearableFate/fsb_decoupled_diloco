@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import copy
 import csv
 import hashlib
 import json
@@ -36,6 +37,10 @@ BOUNDARY_COUNT_KEYS = (
     "torch_baseline_tests",
 )
 P1_BASELINE_COMPOSITION_MIGRATION = "fs_diloco/baselines/train.py"
+P5_BASELINE_PROTOCOL_MIGRATION = "fs_diloco/baselines/protocol.py"
+P5_ADDITIONAL_REMOVED_FULL_CONFIGS = frozenset(
+    {"configs/fs_diloco_gpt2_wikitext2_8l_5000steps_terminal_capture.yaml"}
+)
 FROZEN_FULL_COMMIT = "a00a3d64a50f10a2478c3f4fe795e658d1b3b52f"
 P5_REMOVED_SOURCE = (
     "fs_diloco/observability/metrics.py",
@@ -81,7 +86,9 @@ def _git(root: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-def _tracked(root: Path, prefix: str, *, source_ref: str | None = None) -> list[str]:
+def _repository_files(root: Path, prefix: str, *, source_ref: str | None = None) -> list[str]:
+    """List a commit tree, or the current cached plus untracked non-ignored worktree."""
+
     if source_ref is None:
         output = _git(root, "ls-files", "--cached", "--others", "--exclude-standard", prefix)
     else:
@@ -182,20 +189,20 @@ def _fragment_enabled(content: str, *, path: str) -> bool:
 
 
 def inventory(root: Path, *, source_ref: str | None = None) -> dict[str, Any]:
-    source = _tracked(root, "fs_diloco", source_ref=source_ref)
+    source = _repository_files(root, "fs_diloco", source_ref=source_ref)
     tests = [
         path
-        for path in _tracked(root, "tests", source_ref=source_ref)
+        for path in _repository_files(root, "tests", source_ref=source_ref)
         if Path(path).name.startswith("test_")
     ]
     configs = [
         path
-        for path in _tracked(root, "configs", source_ref=source_ref)
+        for path in _repository_files(root, "configs", source_ref=source_ref)
         if path.endswith((".yaml", ".yml"))
     ]
     pbs = [
         path
-        for path in _tracked(root, "scripts/miyabi", source_ref=source_ref)
+        for path in _repository_files(root, "scripts/miyabi", source_ref=source_ref)
         if path.endswith(".pbs")
     ]
     schemas = [path for path in source if path.endswith(".sql")]
@@ -312,10 +319,6 @@ def _boundary_manifest(payload: dict[str, Any]) -> dict[str, str]:
     # historical-control, baseline PBS/test/code and archive-tag boundaries
     # remain byte-frozen until their owning phases.
     paths = {
-        *boundaries["fragment_enabled_configs_delete_in_p5"],
-        *boundaries["fragment_pbs_delete_in_p5"],
-        boundaries["historical_full_control_archive_separately"]["config"],
-        boundaries["historical_full_control_archive_separately"]["pbs"],
         *boundaries["torch_baseline_retain"]["pbs"],
         *boundaries["torch_baseline_retain"]["tests"],
     }
@@ -323,9 +326,14 @@ def _boundary_manifest(payload: dict[str, Any]) -> dict[str, str]:
     paths.update(
         path
         for path in payload["inventory"]["source"]
-        if path.startswith(baseline_package) and path != P1_BASELINE_COMPOSITION_MIGRATION
+        if path.startswith(baseline_package)
+        and path not in {P1_BASELINE_COMPOSITION_MIGRATION, P5_BASELINE_PROTOCOL_MIGRATION}
     )
-    return {path: payload["manifest_sha256"][path] for path in sorted(paths)}
+    return {
+        path: payload["manifest_sha256"][path]
+        for path in sorted(paths)
+        if path in payload["manifest_sha256"]
+    }
 
 
 def verify_p4_migration_contracts(root: Path, frozen_source_ref: str) -> list[str]:
@@ -336,11 +344,11 @@ def verify_p4_migration_contracts(root: Path, frozen_source_ref: str) -> list[st
     differences: list[str] = []
     frozen_configs = [
         path
-        for path in _tracked(root, "configs", source_ref=frozen_source_ref)
+        for path in _repository_files(root, "configs", source_ref=frozen_source_ref)
         if path.endswith((".yaml", ".yml"))
     ]
     current_configs = [
-        path for path in _tracked(root, "configs") if path.endswith((".yaml", ".yml"))
+        path for path in _repository_files(root, "configs") if path.endswith((".yaml", ".yml"))
     ]
 
     def classify(path: str, payload: Any) -> str:
@@ -364,8 +372,18 @@ def verify_p4_migration_contracts(root: Path, frozen_source_ref: str) -> list[st
     }
     frozen_classes = {path: classify(path, payload) for path, payload in frozen_payloads.items()}
     current_classes = {path: classify(path, payload) for path, payload in current_payloads.items()}
+    p5_dynamic_walltime_updates = {
+        "configs/fs_diloco_tiny_ha_dynamic_2node.yaml": "00:10:00",
+        "configs/fs_diloco_tiny_ha_dynamic_acceptance.yaml": "00:10:00",
+    }
     for kind in ("full", "baseline", "fragment", "historical"):
-        expected_paths = sorted(path for path, value in frozen_classes.items() if value == kind)
+        expected_paths = sorted(
+            path
+            for path, value in frozen_classes.items()
+            if value == kind and path not in P5_ADDITIONAL_REMOVED_FULL_CONFIGS
+        )
+        if kind in {"fragment", "historical"}:
+            expected_paths = []
         actual_paths = sorted(path for path, value in current_classes.items() if value == kind)
         if actual_paths != expected_paths:
             differences.append(f"config-migration.{kind}-path-inventory")
@@ -380,6 +398,8 @@ def verify_p4_migration_contracts(root: Path, frozen_source_ref: str) -> list[st
                 _read_text(root, path, source_ref=frozen_source_ref).encode("utf-8")
             )
             expected_payload = yaml.safe_load(migrated_bytes) or {}
+            if path in p5_dynamic_walltime_updates:
+                expected_payload["scaling"]["learner_walltime"] = p5_dynamic_walltime_updates[path]
             if current_payload != expected_payload:
                 differences.append(f"config-migration.full-semantic:{path}")
         elif kind == "baseline":
@@ -419,6 +439,11 @@ def verify_p4_migration_contracts(root: Path, frozen_source_ref: str) -> list[st
 def verify_boundaries(actual: dict[str, Any], expected: dict[str, Any]) -> list[str]:
     """Compare retained migration boundaries, excluding planned P1 composition wiring."""
     differences: list[str] = []
+    expected_counts = {key: expected["counts"][key] for key in BOUNDARY_COUNT_KEYS}
+    expected_counts.update(bound_mutators=0, fragment_enabled_configs=0, fragment_pbs=0)
+    expected_boundaries = copy.deepcopy(expected["migration_boundaries"])
+    expected_boundaries["fragment_enabled_configs_delete_in_p5"] = []
+    expected_boundaries["fragment_pbs_delete_in_p5"] = []
     comparisons = (
         (
             "source_identity.archive_tag_targets",
@@ -428,17 +453,17 @@ def verify_boundaries(actual: dict[str, Any], expected: dict[str, Any]) -> list[
         (
             "boundary_counts",
             {key: actual["counts"][key] for key in BOUNDARY_COUNT_KEYS},
-            {key: expected["counts"][key] for key in BOUNDARY_COUNT_KEYS},
+            expected_counts,
         ),
         (
             "inventory.bound_mutators",
             actual["inventory"]["bound_mutators"],
-            expected["inventory"]["bound_mutators"],
+            [],
         ),
         (
             "migration_boundaries",
             actual["migration_boundaries"],
-            expected["migration_boundaries"],
+            expected_boundaries,
         ),
         ("boundary_manifest_sha256", _boundary_manifest(actual), _boundary_manifest(expected)),
     )
@@ -779,19 +804,33 @@ def verify_p3_operational_contracts(root: Path) -> list[str]:
     """Guard the cross-file scheduler/initializer invariants found during P3 review."""
 
     differences: list[str] = []
-    fenced_store = (root / "fs_diloco/storage/fenced_store.py").read_text(encoding="utf-8")
-    launch_outbox = (root / "fs_diloco/runtime/launch_outbox.py").read_text(encoding="utf-8")
+    authority = (root / "fs_diloco/storage/authority.py").read_text(encoding="utf-8")
+    capacity = (root / "fs_diloco/runtime/services/dynamic_capacity.py").read_text(encoding="utf-8")
     initializer = (root / "fs_diloco/storage/run_initializer.py").read_text(encoding="utf-8")
     schema = (root / "fs_diloco/storage/schema_v4.sql").read_text(encoding="utf-8")
-    if "ELSE COALESCE(uncertainty_deadline, ?) END" not in fenced_store:
+    dynamic_schema = (root / "fs_diloco/storage/schema_v4_dynamic.sql").read_text(encoding="utf-8")
+    if "COALESCE(uncertainty_deadline, ?)" not in authority:
         differences.append("scheduler.deadline-not-first-write-wins")
-    if "clear_uncertainty=True" not in launch_outbox:
+    if (
+        "first_uncertain_at=CASE WHEN ? THEN NULL" not in authority
+        or "uncertainty_deadline=CASE WHEN ? THEN NULL" not in authority
+    ):
         differences.append("scheduler.positive-evidence-does-not-rearm-deadline")
-    if "resolve_manual_review_launch_request" not in fenced_store:
+    if (
+        "SchedulerOperatorAction.MARK_FAILED" not in authority
+        or "reservation_released_at=COALESCE(reservation_released_at, ?)" not in authority
+    ):
         differences.append("scheduler.manual-review-reservation-has-no-release-path")
-    if fenced_store.count("reservation_released_at IS NULL") < 3:
+    if (
+        "reservation_released_at IS NULL" not in authority
+        or "reservation_released_at REAL" not in dynamic_schema
+    ):
         differences.append("scheduler.reservation-accounting-not-tombstone-based")
-    if 'if state == "terminal_uncertain":' not in launch_outbox:
+    if (
+        'state == "submission_unknown"' not in capacity
+        or 'state="terminal_uncertain"' not in capacity
+        or 'state="manual_review"' not in capacity
+    ):
         differences.append("scheduler.no-job-deadline-path-missing")
     validator = ast.parse(initializer, filename="fs_diloco/storage/run_initializer.py")
     validate_function = next(
@@ -814,11 +853,10 @@ def verify_p3_operational_contracts(root: Path) -> list[str]:
             differences.append("initializer.startup-recursive-scan")
     if "claimed_by_epoch INTEGER" not in schema or "claimed_at REAL" not in schema:
         differences.append("audit.gc-claim-ownership-missing")
-    dynamic_schema = (root / "fs_diloco/storage/schema_v4_dynamic.sql").read_text(encoding="utf-8")
-    if "reservation_released_at REAL" not in schema or (
-        "reservation_released_at REAL" not in dynamic_schema
-    ):
+    if "reservation_released_at REAL" not in dynamic_schema:
         differences.append("scheduler.v4-reservation-tombstone-missing")
+    if "candidate_launch_outbox" in schema or "candidate_launch_outbox" in authority:
+        differences.append("scheduler.deleted-candidate-outbox-remains")
     return differences
 
 

@@ -15,6 +15,7 @@ import torch
 import torch.nn.functional as F
 
 from ..legacy.config_v1_v3 import load_query_config_snapshot
+from ..legacy.reader import query_run_protocol, validate_query_output_path
 from ..modeling.hf_data import load_text_split, text_rows_to_blocks
 from ..modeling.hf_model import load_causal_lm_and_tokenizer
 from ..modeling.param_index import build_param_index, load_param_index, validate_compatible_index
@@ -248,6 +249,7 @@ def run_validation(args: argparse.Namespace) -> dict[str, Any]:
         config=str(args.config) if args.config else None,
     )
     run_root = Path(manifest["source_run_root"])
+    source_protocol = query_run_protocol(run_root)
     latest = safe_read_json(run_root / "control" / "latest.json") or {}
     checkpoint_identity = validate_checkpoint_identity(
         manifest["checkpoint_path"],
@@ -322,6 +324,7 @@ def run_validation(args: argparse.Namespace) -> dict[str, Any]:
         "status": "success",
         "evaluated_at": time.time(),
         "source_run_id": manifest["source_run_id"],
+        "source_protocol": source_protocol,
         "global_version": evaluated_global_version(
             manifest,
             terminal_predecessor_capture,
@@ -337,14 +340,27 @@ def run_validation(args: argparse.Namespace) -> dict[str, Any]:
         "terminal_predecessor_capture": terminal_predecessor_capture,
         **metrics,
     }
-    if args.output:
+    if source_protocol == "legacy-v1-v3":
+        if args.output is None:
+            raise ValueError("legacy validation requires an explicit --output outside the run root")
+        output = validate_query_output_path(
+            run_root,
+            args.output,
+            source_protocol=source_protocol,
+            label="validation result",
+        )
+    elif args.output:
         output = args.output
     elif args.terminal_predecessor:
         version = int(terminal_predecessor_capture["source_global_version"])
         output = run_root / "metrics" / f"validation_terminal_predecessor_v{version:06d}.json"
     else:
         output = run_root / "metrics" / "validation_eval.json"
-    if not args.no_attach_summary and not args.terminal_predecessor:
+    if (
+        source_protocol != "legacy-v1-v3"
+        and not args.no_attach_summary
+        and not args.terminal_predecessor
+    ):
         attach_validation_to_summary(
             run_root / "control" / "summary.json",
             output,

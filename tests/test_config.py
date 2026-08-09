@@ -204,6 +204,31 @@ def test_structural_validation_rejects_bool_and_nonfinite_numbers() -> None:
         config.validate(profile="full_v4_shared")
 
 
+def test_static_deadline_terminal_policy_requires_an_explicit_deadline(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "static-deadline.yaml"
+    path.write_text(
+        "membership:\n  mode: static\nterminal:\n  admission_close_policy: deadline\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="deadline_seconds is required"):
+        resolve_config(path)
+
+
+def test_dynamic_scaling_rejects_a_subminimum_learner_walltime(tmp_path: Path) -> None:
+    payload = yaml.safe_load(
+        Path("configs/fs_diloco_tiny_ha_dynamic_2node.yaml").read_text(encoding="utf-8")
+    )
+    payload["scaling"]["learner_walltime"] = "00:09:59"
+    path = tmp_path / "short-scaling-walltime.yaml"
+    path.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="at least 00:10:00"):
+        resolve_config(path)
+
+
 @pytest.mark.parametrize(
     ("keyword", "value", "message"),
     [

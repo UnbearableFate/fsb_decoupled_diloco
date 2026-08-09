@@ -12,8 +12,8 @@ launcher 先提交 syncer candidate，再提交一个 static learner array 或�
 2. 打开严格 authority，轮询获取 leader lease。
 3. 独立 renewer 周期续租并发布 heartbeat。
 4. leader reconcile predecessor publication，初始化 dynamic pool（如需要）。
-5. `syncer_v4` 创建或恢复 global v0，随后循环 admission、receipt/proposal ingest、selection、merge、publish。
-6. 达到 outer-step 或 direct-token target 后进入 terminal close。
+5. `syncer_v4` 创建或恢复 global v0，随后组合 admission/ingest、唯一 merge service，以及 dynamic 模式下的 capacity/PBS reconcile service。
+6. terminal policy 达到 global target、deadline、launch-budget exhaustion 或收到合法 manual request 后进入 terminal close。
 7. 正常结束发布 terminal；异常先发布 error control 并 fence 当前 leader。
 
 ## 3. Learner 生命周期
@@ -32,8 +32,8 @@ leader 每次 ingest 都验证 immutable object 与 current fence。公平 selec
 
 ## 5. 接管与替换
 
-successor candidate 不信任 fixed cache：从 DB 恢复 latest、cursor、membership、terminal 和 pending intent，在自己的 epoch 重发 heartbeat/latest/admission/receipt ack。static active replacement 必须有 create-no-replace operator authorization；dynamic replacement 必须明确 current instance 和 launch request。旧进程即使恢复运行，也不能越过新 fence 提交。
+successor candidate 不信任 fixed cache：从 DB 恢复 latest、cursor、membership、terminal 和 pending intent，在自己的 epoch 重发 heartbeat/latest/admission/receipt ack。static active replacement 必须有 create-no-replace operator authorization；dynamic replacement 必须明确 current instance、stream、launch request 和 normalized PBS job identity。bootstrap slot 只能消费一次；scale-out/replacement learner 在 scheduler positive evidence 写入 authority 之前只会 deferred，不会被无凭据 admission。旧进程即使恢复运行，也不能越过新 fence 提交。
 
 ## 6. 终态
 
-`begin_terminal_close` 冻结 current contributor fences 和 cursor。leader 继续摄取冻结时已在途的最后 receipt/proposal，并只接受允许的连续 final cycle ack。超时 contributor 记录 hard-crash gap 上界；全部处理后 `finalize_terminal` 原子固化 final version、direct applied tokens 和原因。`summary.json`/`stop.json` 是发布后的可修复视图，不是终态写权威。
+可选 pre-close admission grace 只处理 `created_at <= close intent` 的已发布 request，随后 `begin_terminal_close` 冻结 current contributor fences 和 cursor。leader 在独立 drain-ack timeout 内继续摄取冻结时已在途的最后 receipt/proposal，并只接受允许的连续 final cycle ack。超时 contributor 记录 hard-crash gap 上界；proposal visibility grace 后至多执行配置数量的 terminal merge，其余 proposal 明确 dropped，再由 `finalize_terminal` 原子固化 final version、direct applied tokens 和原因。`summary.json`/`stop.json` 是发布后的可修复视图，不是终态写权威。

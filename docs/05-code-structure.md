@@ -12,7 +12,10 @@
 - `runtime/learner_entrypoint.py`：torch-free descriptor/admission gate。
 - `runtime/learner_v4.py`：admitted learner 的训练、receipt/proposal、ack/adoption/terminal loop。
 - `runtime/syncer_entrypoint.py`：candidate/lease/renewer composition。
-- `runtime/syncer_v4.py`：admission、ingest、selection、merge、publication 和 terminal loop。
+- `runtime/syncer_v4.py`：CLI-independent composition/main loop；不内嵌 PBS、SQL 或第二套 merge/terminal 实现。
+- `runtime/services/merge.py`：normal/terminal 共用的唯一 selection、tensor merge 和 publication path。
+- `runtime/services/dynamic_capacity.py`：capacity window、durable launch reservation、qsub/qstat reconcile 和 exact replacement composition。
+- `runtime/services/terminal.py`：close-policy evaluation、pre-close visibility、drain ack、bounded terminal merge 和 finalization。
 - `legacy/`：query-only old-run reader/config projection/pure Fragment V0 decoder；runtime 禁止 import。
 - `baselines/`：独立 torch protocol/health/artifact consumer。
 - `tools/`：operator 与离线工作流；工具可显式使用 legacy reader。
@@ -25,6 +28,7 @@
 - `python -m fs_diloco.learner`
 - `python -m fs_diloco.analysis`
 - `python -m fs_diloco.eval_lm_harness`
+- `python -m fs_diloco.cli close --shared-root <run> --reason <text>`（仅 manual terminal policy）
 
 `syncer`/`learner` shim 直接指向 mandatory v4 entrypoint，不按配置分派 classic 或 fragment。
 
