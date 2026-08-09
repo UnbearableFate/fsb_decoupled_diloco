@@ -1,0 +1,40 @@
+{
+  "artifact_version": 1,
+  "errors": [
+    "dynamic child 2512883 was not admitted before the 120 second harness deadline",
+    "premature bootstrap scale-out exceeded the pre-registered two-allocation maximum",
+    "replacement admissions churned until the non-bootstrap launch budget closed the run"
+  ],
+  "evidence": {
+    "child_jobs": [
+      "2512880.opbs",
+      "2512881.opbs",
+      "2512883.opbs",
+      "2512885.opbs",
+      "2512887.opbs"
+    ],
+    "parent_log": "fsdiloco_p6_g5.o2512873",
+    "partial_artifact_prefix": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/.20260810-002300_p6-g5-tiny-scenarios_pass.json",
+    "run_root": "runs/fs_diloco/plan03_p6_g5_dynamic-2-learners-replacement_2512873"
+  },
+  "experiment_id": "P6-G5-tiny-attempt4",
+  "metrics": {
+    "completed_scenarios": 4,
+    "final_version": 1,
+    "maximum_live_allocations_observed": 3,
+    "nonbootstrap_launches": 4,
+    "replacement_instances_admitted": 3,
+    "terminal_reason": "launch_budget_exhausted"
+  },
+  "pbs": {
+    "exit_status": 1,
+    "host": "mg0006",
+    "job_id": "2512873.opbs",
+    "walltime_requested": "00:20:00",
+    "walltime_used": "00:03:11"
+  },
+  "phase_id": "P6-acceptance-final-review",
+  "plan_id": "fsb_decoupled_diloco_plan_03_unified_ha",
+  "source_commit": "488209ca8865388c90c5fd597769625023281cdd",
+  "status": "BLOCKED"
+}

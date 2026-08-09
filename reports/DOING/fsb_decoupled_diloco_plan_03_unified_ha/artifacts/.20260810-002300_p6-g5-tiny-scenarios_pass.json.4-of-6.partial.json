@@ -1,0 +1,292 @@
+{
+  "completed": 4,
+  "scenarios": [
+    {
+      "epochs": [
+        {
+          "acquired_at": 1786288957.5250306,
+          "config_sha256": "06b10ad94be39faac81f9575ec1859b28b4eec04e447253f8f745faa83815fb5",
+          "epoch": 1,
+          "final_at": 1786288963.439085,
+          "final_state": "released",
+          "hostname": "mg0006",
+          "last_renewed_at": 1786288963.439085,
+          "owner_id": "syncer-e9a0ccd6-d17d-4898-859a-50ff6575ac6b",
+          "pbs_job_id": "2512873.opbs",
+          "pid": 1470579,
+          "source_fingerprint": "sha256:7ec723b2b546211bc472c219ff5db517f7e846ec36a9c418ada4a145f630bdd3",
+          "superseded_by_epoch": null
+        }
+      ],
+      "final_version": 2,
+      "name": "static-1-learner-1-candidate-none",
+      "process_statuses": {
+        "learner_000": 0,
+        "syncer": 0
+      },
+      "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p6_g5_static-1-learner-1-candidate-none_2512873",
+      "summary": {
+        "all_learners_stopped": true,
+        "authority": "full_protocol_v4",
+        "direct_weight_tokens_applied": 128,
+        "final_version": 2,
+        "finalized_at": 1786288963.093323,
+        "finalized_by_epoch": 1,
+        "finalized_by_owner_id": "syncer-e9a0ccd6-d17d-4898-859a-50ff6575ac6b",
+        "format_version": 2,
+        "run_id": "plan03_p6_g5_static-1-learner-1-candidate-none_2512873",
+        "stop_reason": "configured_target",
+        "terminal_generation": 1
+      },
+      "terminal_fences": [
+        {
+          "acknowledged_at": 1786288962.9666102,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 4,
+          "close_last_cycle_seq": 2,
+          "fence_json": "{\"attempt_id\":\"attempt-f8cc0cb7-e5d4-476c-bd0f-64faa7bcf8ca\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"static-d0ae50253be802ae3389e8c47d2869f9\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 2,
+          "final_update_id": "0dae3df6-994d-42a0-a8aa-b46017342be1",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_000",
+          "state": "acked"
+        }
+      ],
+      "token_balance": 0
+    },
+    {
+      "epochs": [
+        {
+          "acquired_at": 1786288966.928618,
+          "config_sha256": "935cec976566f9a78f4b33a00cb3b1c018f20806acc83e50f7ed7eb923b52a27",
+          "epoch": 1,
+          "final_at": 1786288972.0413072,
+          "final_state": "released",
+          "hostname": "mg0006",
+          "last_renewed_at": 1786288972.0413072,
+          "owner_id": "syncer-1c456b02-81e0-4057-bbb8-9cb5742d81ac",
+          "pbs_job_id": "2512873.opbs",
+          "pid": 1470784,
+          "source_fingerprint": "sha256:7ec723b2b546211bc472c219ff5db517f7e846ec36a9c418ada4a145f630bdd3",
+          "superseded_by_epoch": null
+        }
+      ],
+      "final_version": 3,
+      "name": "static-2-learners-1-candidate-none",
+      "process_statuses": {
+        "learner_000": 0,
+        "learner_001": 0,
+        "syncer": 0
+      },
+      "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p6_g5_static-2-learners-1-candidate-none_2512873",
+      "summary": {
+        "all_learners_stopped": true,
+        "authority": "full_protocol_v4",
+        "direct_weight_tokens_applied": 320,
+        "final_version": 3,
+        "finalized_at": 1786288971.5454419,
+        "finalized_by_epoch": 1,
+        "finalized_by_owner_id": "syncer-1c456b02-81e0-4057-bbb8-9cb5742d81ac",
+        "format_version": 2,
+        "run_id": "plan03_p6_g5_static-2-learners-1-candidate-none_2512873",
+        "stop_reason": "configured_target",
+        "terminal_generation": 1
+      },
+      "terminal_fences": [
+        {
+          "acknowledged_at": 1786288971.3998096,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 6,
+          "close_last_cycle_seq": 3,
+          "fence_json": "{\"attempt_id\":\"attempt-9e8d5281-526a-4093-a88b-2a7c800b3f93\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"static-e4c3cc5dd1b11cbfc5b53facf1ead740\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 4,
+          "final_update_id": "dc4998ac-3e0c-4659-84f9-73c7beecc9a3",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_000",
+          "state": "acked"
+        },
+        {
+          "acknowledged_at": 1786288971.159759,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 6,
+          "close_last_cycle_seq": 3,
+          "fence_json": "{\"attempt_id\":\"attempt-5ad4ecee-8959-4b58-aa23-27ca7798ed4a\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_001\",\"logical_launch_id\":\"static-95719ac5f1d4e29d94ba6ff7d23d952a\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 3,
+          "final_update_id": "dc786b5c-8590-4293-82b1-0abe98711f8d",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_001",
+          "state": "acked"
+        }
+      ],
+      "token_balance": 0
+    },
+    {
+      "epochs": [
+        {
+          "acquired_at": 1786288975.6024332,
+          "config_sha256": "bd16925c1d2aec2aee28d5e079391978b6f055e1c96307bc45fdc77814196545",
+          "epoch": 1,
+          "final_at": 1786288986.5009613,
+          "final_state": "released",
+          "hostname": "mg0006",
+          "last_renewed_at": 1786288986.5009613,
+          "owner_id": "syncer-1d02e7cc-4326-4181-bcb7-315d7e0b5139",
+          "pbs_job_id": "2512873.opbs",
+          "pid": 1471126,
+          "source_fingerprint": "sha256:7ec723b2b546211bc472c219ff5db517f7e846ec36a9c418ada4a145f630bdd3",
+          "superseded_by_epoch": null
+        }
+      ],
+      "final_version": 11,
+      "name": "static-2-learners-loss-rerun-old-resume",
+      "process_statuses": {
+        "new": 0,
+        "old": 0,
+        "other": 0,
+        "syncer": 0
+      },
+      "replacement_evidence": {
+        "current_attempt_id": "attempt-p6-tiny-new",
+        "current_binding_generation": 2,
+        "old_final_status": "replaced",
+        "old_generation_authority_updates": 0
+      },
+      "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p6_g5_static-2-learners-loss-rerun-old-resume_2512873",
+      "summary": {
+        "all_learners_stopped": true,
+        "authority": "full_protocol_v4",
+        "direct_weight_tokens_applied": 640,
+        "final_version": 11,
+        "finalized_at": 1786288986.261296,
+        "finalized_by_epoch": 1,
+        "finalized_by_owner_id": "syncer-1d02e7cc-4326-4181-bcb7-315d7e0b5139",
+        "format_version": 2,
+        "run_id": "plan03_p6_g5_static-2-learners-loss-rerun-old-resume_2512873",
+        "stop_reason": "configured_target",
+        "terminal_generation": 1
+      },
+      "terminal_fences": [
+        {
+          "acknowledged_at": 1786288985.6405663,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 28,
+          "close_last_cycle_seq": 14,
+          "fence_json": "{\"attempt_id\":\"attempt-p6-tiny-new\",\"binding_generation\":2,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"p6-tiny-static-rerun\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 14,
+          "final_update_id": "59447ec3-b7a9-4e25-a98c-11ec7ceb141c",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_000",
+          "state": "acked"
+        },
+        {
+          "acknowledged_at": 1786288985.9691246,
+          "acknowledged_by_epoch": 1,
+          "close_data_cursor": 44,
+          "close_last_cycle_seq": 22,
+          "fence_json": "{\"attempt_id\":\"attempt-c9a9fd36-2322-4a0d-a8fb-e9065f606f07\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_001\",\"logical_launch_id\":\"static-6bad35e2518bc6f1adbfd1d4bdeb64df\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 23,
+          "final_update_id": "93271b4c-42f7-4f95-8d0e-60d2541ff372",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_001",
+          "state": "acked"
+        }
+      ],
+      "token_balance": 0
+    },
+    {
+      "epochs": [
+        {
+          "acquired_at": 1786288990.2880747,
+          "config_sha256": "5b8a6789299dd7ea5e655c83ff24772142aa9364fd5dabee2b2dc5e9b715c363",
+          "epoch": 1,
+          "final_at": 1786288994.3807495,
+          "final_state": "error",
+          "hostname": "mg0006",
+          "last_renewed_at": 1786288994.3807495,
+          "owner_id": "syncer-c7c26376-a205-4141-ba20-c06fbdf85b5e",
+          "pbs_job_id": "2512873.opbs",
+          "pid": 1471550,
+          "source_fingerprint": "sha256:7ec723b2b546211bc472c219ff5db517f7e846ec36a9c418ada4a145f630bdd3",
+          "superseded_by_epoch": 2
+        },
+        {
+          "acquired_at": 1786288994.8285697,
+          "config_sha256": "5b8a6789299dd7ea5e655c83ff24772142aa9364fd5dabee2b2dc5e9b715c363",
+          "epoch": 2,
+          "final_at": 1786288998.1954343,
+          "final_state": "released",
+          "hostname": "mg0006",
+          "last_renewed_at": 1786288998.1954343,
+          "owner_id": "syncer-d0248a39-5457-4dff-8a99-d7d5295be5dd",
+          "pbs_job_id": "2512873.opbs",
+          "pid": 1471619,
+          "source_fingerprint": "sha256:7ec723b2b546211bc472c219ff5db517f7e846ec36a9c418ada4a145f630bdd3",
+          "superseded_by_epoch": null
+        }
+      ],
+      "final_version": 11,
+      "name": "static-2-learners-2-candidates-active-crash",
+      "process_statuses": {
+        "first_candidate": 1,
+        "learner_0": 0,
+        "learner_1": 0,
+        "successor": 0
+      },
+      "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p6_g5_static-2-learners-2-candidates-active-crash_2512873",
+      "summary": {
+        "all_learners_stopped": true,
+        "authority": "full_protocol_v4",
+        "direct_weight_tokens_applied": 1408,
+        "final_version": 11,
+        "finalized_at": 1786288997.5447376,
+        "finalized_by_epoch": 2,
+        "finalized_by_owner_id": "syncer-d0248a39-5457-4dff-8a99-d7d5295be5dd",
+        "format_version": 2,
+        "run_id": "plan03_p6_g5_static-2-learners-2-candidates-active-crash_2512873",
+        "stop_reason": "configured_target",
+        "terminal_generation": 1
+      },
+      "terminal_fences": [
+        {
+          "acknowledged_at": 1786288997.3600447,
+          "acknowledged_by_epoch": 2,
+          "close_data_cursor": 22,
+          "close_last_cycle_seq": 11,
+          "fence_json": "{\"attempt_id\":\"attempt-058d1c36-81d8-4211-b707-4e248e431c6d\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"static-373a4f72f832e686ab4d08a2f9fde236\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 11,
+          "final_update_id": "fc9bc399-87ff-4e99-b0a8-b8a03d960502",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_000",
+          "state": "acked"
+        },
+        {
+          "acknowledged_at": 1786288997.3691077,
+          "acknowledged_by_epoch": 2,
+          "close_data_cursor": 24,
+          "close_last_cycle_seq": 12,
+          "fence_json": "{\"attempt_id\":\"attempt-c82ba12a-5cb2-4595-8f90-a041efea6310\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_001\",\"logical_launch_id\":\"static-bcc6833f767478a59c8fa0650a65d177\"}",
+          "fence_kind": "static",
+          "final_cycle_seq": 12,
+          "final_update_id": "16f07054-a875-4781-9259-eecd4412141b",
+          "generation": 1,
+          "hard_crash_gap_tokens_upper_bound": 0,
+          "stable_contributor_key": "learner_001",
+          "state": "acked"
+        }
+      ],
+      "token_balance": 0
+    }
+  ]
+}

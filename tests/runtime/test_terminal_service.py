@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,6 +13,7 @@ from fs_diloco.core.run_descriptor import (
     DescriptorAuthorityIdentity,
     LoadedRunDescriptor,
 )
+from fs_diloco.observability.logging_utils import ActorTelemetryWriter
 from fs_diloco.protocol.contributor import StaticMembershipScope
 from fs_diloco.runtime.services.merge import MergeAttemptStatus
 from fs_diloco.runtime.services.terminal import TerminalService, terminal_close_reason
@@ -20,7 +22,7 @@ from fs_diloco.storage.authority import (
     LeaderAuthority,
     initialize_authority_v4,
 )
-from fs_diloco.storage.control import V4ControlPublisher
+from fs_diloco.storage.control import V4ControlPublisher, publish_terminal_ack
 from fs_diloco.storage.paths import RunPaths
 from fs_diloco.storage.terminal_request import publish_manual_terminal_request
 from tests.support import VirtualClock
@@ -182,6 +184,60 @@ def test_terminal_wait_does_not_sleep_past_durable_ack_deadline(tmp_path: Path) 
         service.finalize(reason="configured_target")
 
         assert clock.wall() == pytest.approx(100.25)
+    finally:
+        authority.close()
+
+
+def test_terminal_ack_telemetry_does_not_override_writer_identity(tmp_path: Path) -> None:
+    clock = VirtualClock(monotonic_seconds=0.0, wall_seconds=100.0)
+    authority, leader, loaded = _runtime(tmp_path, clock, max_terminal_merges=0)
+    telemetry_path = tmp_path / "metrics/syncer.jsonl"
+    telemetry = ActorTelemetryWriter(
+        telemetry_path,
+        actor_kind="syncer",
+        actor_id="syncer-owner",
+        attempt_id="syncer-attempt",
+    )
+    try:
+        fence = authority.read.current_contributor_fences()[0]
+        leader.begin_terminal_close(
+            command_id="terminal-close",
+            reason="test",
+            hard_crash_cycle_token_budget=1,
+            drain_ack_timeout_seconds=1.0,
+        )
+        controller = authority.read.controller_status()
+        publish_terminal_ack(
+            loaded.paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            generation=int(controller["generation"]),
+            actor_id="learner-0",
+            attempt_id="attempt-0",
+            fence=fence,
+            final_cycle_seq=0,
+            final_update_id=None,
+        )
+        service = TerminalService(
+            loaded=loaded,
+            authority=authority,
+            leader=leader,
+            control=V4ControlPublisher(loaded.paths, leader.token),
+            telemetry=telemetry,
+            merge=MergeProbe(),
+            ingest=lambda: None,
+            admit_preclose=lambda _cutoff: None,
+            monotonic_clock=clock.monotonic,
+            wall_clock=clock.wall,
+            sleep=clock.advance,
+        )
+
+        service._ingest_acks(controller)
+
+        events = [json.loads(line) for line in telemetry_path.read_text().splitlines()]
+        assert [event["event_type"] for event in events] == ["terminal_ack_ingested"]
+        assert events[0]["actor_id"] == "syncer-owner"
+        assert events[0]["contributor_actor_id"] == "learner-0"
     finally:
         authority.close()
 

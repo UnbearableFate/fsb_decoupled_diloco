@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -127,6 +128,79 @@ def test_persistent_low_windows_plan_and_submit_exact_stream(tmp_path: Path) -> 
                 "queue": "debug-g",
             }
         ]
+    finally:
+        authority.close()
+
+
+def test_initial_bootstrap_deadline_suppresses_ordinary_scale_out(tmp_path: Path) -> None:
+    clock = Clock()
+    authority, leader, scheduler, service = _runtime(tmp_path, clock)
+    service.membership.bootstrap_instances = 2
+    service.membership.initial_membership_deadline_seconds = 5.0
+    try:
+        leader.admit_dynamic_incarnation(
+            command_id="bootstrap-0",
+            instance_id="instance-0",
+            placement_id="placement-0",
+            stream_id=0,
+            admission_token_sha256="1" * 64,
+            hostname="host",
+            pid=1,
+            pbs_job_id="bootstrap-0.opbs",
+            bootstrap_slot=0,
+        )
+
+        assert service.tick(global_version=0, eligible_contributors=1, selected_contributors=0) == (
+            "bootstrap_wait",
+        )
+        clock.now += 1.1
+        assert service.tick(global_version=0, eligible_contributors=1, selected_contributors=0) == (
+            "bootstrap_wait",
+        )
+        assert scheduler.submissions == []
+
+        clock.now += 4.0
+        actions = service.tick(global_version=0, eligible_contributors=1, selected_contributors=0)
+
+        assert "scale_out_planned" in actions
+        assert scheduler.submissions[0]["stream_id"] == 1
+    finally:
+        authority.close()
+
+
+def test_replacement_loss_window_starts_at_its_own_admission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = Clock()
+    authority, leader, scheduler, service = _runtime(tmp_path, clock)
+    try:
+        leader.admit_dynamic_incarnation(
+            command_id="bootstrap-0",
+            instance_id="instance-0",
+            placement_id="placement-0",
+            stream_id=0,
+            admission_token_sha256="1" * 64,
+            hostname="host",
+            pid=1,
+            pbs_job_id="replacement.opbs",
+            bootstrap_slot=0,
+        )
+        instances = authority.read.dynamic_instances()
+        monkeypatch.setattr(
+            authority.read,
+            "contributor_progress",
+            lambda _key: SimpleNamespace(updated_at=90.0),
+        )
+
+        assert service._confirmed_lost_instance(instances, now=103.0) is None
+        scheduler.queue_query("replacement.opbs", _observation("replacement.opbs", "finished"))
+        scheduler.queue_query(
+            "replacement.opbs", _observation("replacement.opbs", "finished"), historical=True
+        )
+        lost = service._confirmed_lost_instance(instances, now=105.0)
+
+        assert lost is not None
+        assert lost[0]["instance_id"] == "instance-0"
     finally:
         authority.close()
 

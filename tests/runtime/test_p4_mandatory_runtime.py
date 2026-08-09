@@ -30,6 +30,7 @@ from fs_diloco.protocol._validation import identity as validate_identity
 from fs_diloco.storage.admission import (
     AdmissionAuthorizationError,
     AdmissionRejectedError,
+    AdmissionSupersededError,
     admission_request_sha256,
     archive_disposed_admission_request,
     dynamic_placement_id,
@@ -1371,6 +1372,102 @@ def test_dynamic_admission_reader_uses_stable_stream_pointer_key(tmp_path: Path)
         max_clock_skew_seconds=0.0,
     )
     assert admission is not None and admission.fence == fence
+
+
+def test_prior_stream_tombstone_does_not_reject_unprocessed_replacement(
+    tmp_path: Path,
+) -> None:
+    paths = RunPaths(tmp_path)
+    publisher = V4ControlPublisher(
+        paths,
+        LeaderToken(run_id="run-1", epoch=1, owner_id="owner-1"),
+    )
+    _publish_synthetic_heartbeat(publisher)
+    request = {
+        "mode": "dynamic",
+        "run_id": "run-1",
+        "descriptor_sha256": "d" * 64,
+        "instance_id": "replacement-1",
+    }
+    fence = DynamicContributorFence(
+        kind="dynamic",
+        instance_id="replacement-1",
+        placement_id="placement-1",
+        placement_epoch=2,
+        stream_id=0,
+        stream_epoch=2,
+        admission_generation=2,
+        admission_token_sha256="a" * 64,
+    )
+    pointer = paths.epoch_current_admission_path(1, "owner-1", "0")
+    atomic_write_json(
+        pointer,
+        {
+            "format_version": 1,
+            "kind": "superseded",
+            "run_id": "run-1",
+            "leader_epoch": 1,
+            "leader_owner_id": "owner-1",
+            "stable_contributor_key": "0",
+        },
+    )
+
+    assert (
+        read_admission_response(
+            paths,
+            run_id="run-1",
+            descriptor_sha256="d" * 64,
+            actor_id="replacement-1",
+            attempt_id="replacement-1",
+            stable_contributor_key="0",
+            request_sha256=admission_request_sha256(request),
+            max_clock_skew_seconds=0.0,
+        )
+        is None
+    )
+    publish_admission_response(
+        paths,
+        epoch=1,
+        owner_id="owner-1",
+        request=request,
+        fence=fence,
+        resume=ContributorResumeState(0, None, None, 1, stream_epoch=2),
+    )
+    admission = read_admission_response(
+        paths,
+        run_id="run-1",
+        descriptor_sha256="d" * 64,
+        actor_id="replacement-1",
+        attempt_id="replacement-1",
+        stable_contributor_key="0",
+        request_sha256=admission_request_sha256(request),
+        max_clock_skew_seconds=0.0,
+    )
+    assert admission is not None and admission.fence == fence
+
+    atomic_write_json(
+        pointer,
+        {
+            "format_version": 1,
+            "kind": "superseded",
+            "run_id": "run-1",
+            "leader_epoch": 1,
+            "leader_owner_id": "owner-1",
+            "stable_contributor_key": "0",
+        },
+    )
+    with pytest.raises(AdmissionSupersededError):
+        read_admission_response(
+            paths,
+            run_id="run-1",
+            descriptor_sha256="d" * 64,
+            actor_id="replacement-1",
+            attempt_id="replacement-1",
+            stable_contributor_key="0",
+            request_sha256=admission_request_sha256(request),
+            max_clock_skew_seconds=0.0,
+            expected_fence=fence,
+        )
 
 
 def test_admission_response_rejects_extra_fields_even_with_matching_pointer_hash(

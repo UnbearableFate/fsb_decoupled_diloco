@@ -147,6 +147,7 @@ def main(argv: list[str] | None = None) -> None:
         stable_contributor_key=response_stable_key,
         request_sha256=request_sha256,
         max_clock_skew_seconds=config.leader.max_clock_skew_seconds,
+        expected_fence=admission.fence,
     )
     if current_admission != admission:
         raise RuntimeError("learner admission changed immediately before torch import")

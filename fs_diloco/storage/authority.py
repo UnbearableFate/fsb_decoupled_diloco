@@ -478,6 +478,12 @@ class AuthorityReadModel:
     def metadata(self) -> AuthorityMetadata:
         return self._authority.metadata
 
+    def authority_created_at(self) -> float:
+        row = self._authority._fetchone("SELECT created_at FROM schema_meta WHERE singleton = 1")
+        if row is None:
+            raise AuthoritySchemaError("authority schema metadata is missing")
+        return float(row["created_at"])
+
     def latest_committed_version(self) -> CommittedVersion | None:
         row = self._authority._fetchone(
             "SELECT * FROM global_versions ORDER BY version DESC LIMIT 1"

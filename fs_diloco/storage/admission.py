@@ -416,6 +416,7 @@ def read_admission_response(
     stable_contributor_key: str,
     request_sha256: str,
     max_clock_skew_seconds: float,
+    expected_fence: ContributorFence | None = None,
 ) -> AdmissionContext | None:
     current = read_current_control(
         paths,
@@ -460,6 +461,8 @@ def read_admission_response(
     if pointer is None:
         return None
     if pointer.get("kind") == "superseded":
+        if expected_fence is None:
+            return None
         raise AdmissionSupersededError("admission response was superseded by another fence")
     try:
         pointer_fence = decode_contributor_fence(pointer.get("fence"))
@@ -475,7 +478,11 @@ def read_admission_response(
         # has not yet captured a fence and therefore cannot classify it as a
         # superseded admission.  Request-specific rejection or an exact
         # matching pointer/response is required to leave the pending state.
-        return None
+        if expected_fence is None:
+            return None
+        raise AdmissionSupersededError("admission response was superseded by another fence")
+    if expected_fence is not None and pointer_fence != expected_fence:
+        raise AdmissionSupersededError("admission response was superseded by another fence")
     path = paths.epoch_admission_response_path(
         current.epoch,
         current.owner_id,

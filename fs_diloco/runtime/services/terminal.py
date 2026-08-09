@@ -259,7 +259,7 @@ class TerminalService:
                 )
                 self.telemetry.event(
                     "terminal_ack_ingested",
-                    actor_id=actor_id,
+                    contributor_actor_id=actor_id,
                     final_cycle_seq=final_cycle_seq,
                 )
             except Exception as exc:

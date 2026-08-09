@@ -106,7 +106,20 @@ class DynamicCapacityService:
         )
         stable_productive = min([productive, *recent_productive])
         low = stable_productive + reserved <= self.scaling.low_contributor_threshold
-        action = "low" if low else "sufficient"
+        bootstrap_slots = {
+            int(row["bootstrap_slot"])
+            for row in launches
+            if row["role"] == "bootstrap" and row["bootstrap_slot"] is not None
+        }
+        initial_capacity_anchor = self.authority.read.authority_created_at()
+        awaiting_initial_bootstrap = len(bootstrap_slots) < int(
+            self.membership.bootstrap_instances
+        ) and now < initial_capacity_anchor + float(
+            self.membership.initial_membership_deadline_seconds
+        )
+        action = (
+            "bootstrap_wait" if awaiting_initial_bootstrap else ("low" if low else "sufficient")
+        )
         self.leader.record_capacity_observation(
             command_id=f"observe-{observation_key}",
             observation_key=observation_key,
@@ -135,6 +148,9 @@ class DynamicCapacityService:
             if planned:
                 actions.extend(("replacement_planned", *self._reconcile_launches()))
             return tuple(actions)
+
+        if awaiting_initial_bootstrap:
+            return (*actions, "bootstrap_wait")
 
         low_windows = observations[-self.scaling.consecutive_low_windows :]
         persistently_low = len(low_windows) == self.scaling.consecutive_low_windows and all(
@@ -205,8 +221,9 @@ class DynamicCapacityService:
             if instance["status"] != "admitted" or instance["pbs_job_id"] is None:
                 continue
             progress = self.authority.read.contributor_progress(str(instance["stream_id"]))
-            last_progress = float(
-                instance["admitted_at"] if progress is None else progress.updated_at
+            last_progress = max(
+                float(instance["admitted_at"]),
+                float(instance["admitted_at"] if progress is None else progress.updated_at),
             )
             if now - last_progress <= float(self.membership.heartbeat_dead_after_seconds):
                 continue

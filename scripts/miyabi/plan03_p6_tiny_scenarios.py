@@ -298,7 +298,9 @@ def _wait_scheduler_finished(job_id: str, *, timeout: float) -> dict[str, str]:
         time.sleep(0.5)
 
 
-def _wait_replacement_launch(database: Path, *, timeout: float) -> dict[str, Any]:
+def _wait_replacement_launch(
+    database: Path, *, replace_instance_id: str, timeout: float
+) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
     while True:
         connection = sqlite3.connect(f"file:{database.resolve()}?mode=ro", uri=True)
@@ -306,7 +308,9 @@ def _wait_replacement_launch(database: Path, *, timeout: float) -> dict[str, Any
         try:
             row = connection.execute(
                 "SELECT * FROM launch_requests WHERE role='replacement' "
-                "AND pbs_job_id IS NOT NULL ORDER BY created_at LIMIT 1"
+                "AND replace_instance_id=? AND pbs_job_id IS NOT NULL "
+                "ORDER BY created_at LIMIT 1",
+                (replace_instance_id,),
             ).fetchone()
         finally:
             connection.close()
@@ -835,7 +839,11 @@ def _dynamic_replacement(
             project_root=project_root,
             environment=environment,
         )
-        replacement_launch = _wait_replacement_launch(database, timeout=120.0)
+        replacement_launch = _wait_replacement_launch(
+            database,
+            replace_instance_id=str(lost_instance["instance_id"]),
+            timeout=120.0,
+        )
         replacement_job_id = str(replacement_launch["pbs_job_id"])
         if replacement_job_id == initial_job_id:
             raise RuntimeError("replacement reused the terminal learner job ID")
@@ -895,10 +903,18 @@ def _dynamic_replacement(
             (str(replacement_instance["instance_id"]),),
         ).fetchone()
         hot_updates = [dict(row) for row in connection.execute("SELECT * FROM updates")]
+        nonbootstrap_launches = [
+            dict(row)
+            for row in connection.execute(
+                "SELECT * FROM launch_requests WHERE role!='bootstrap' ORDER BY created_at"
+            )
+        ]
     finally:
         connection.close()
     if replacements != 1:
         raise RuntimeError("dynamic tiny scenario did not admit a replacement")
+    if len(nonbootstrap_launches) != 1 or nonbootstrap_launches[0]["role"] != "replacement":
+        raise RuntimeError("dynamic replacement scenario submitted an unrelated scale-out")
     if lost_final is None or lost_final["status"] != "revoked":
         raise RuntimeError("lost dynamic instance was not durably revoked")
     if replacement_final is None or replacement_final["status"] != "stopped":
@@ -912,6 +928,14 @@ def _dynamic_replacement(
     ]
     if old_applied_versions and max(old_applied_versions) > replacement_boundary:
         raise RuntimeError("lost dynamic instance committed after its replacement boundary")
+    replacement_updates = [
+        row
+        for row in [*hot_updates, *_audit_rows(run_root, "updates")]
+        if json.loads(str(row["fence_json"])).get("instance_id")
+        == str(replacement_instance["instance_id"])
+    ]
+    if not any(row.get("applied_version") is not None for row in replacement_updates):
+        raise RuntimeError("replacement never contributed to a committed version")
     return {
         "name": "dynamic-2-learners-replacement",
         "process_statuses": statuses,
@@ -1005,7 +1029,11 @@ def _dynamic_candidate_and_learner_failure(
             project_root=project_root,
             environment=environment,
         )
-        replacement_launch = _wait_replacement_launch(database, timeout=120.0)
+        replacement_launch = _wait_replacement_launch(
+            database,
+            replace_instance_id=str(lost_instance["instance_id"]),
+            timeout=120.0,
+        )
         replacement_job_id = str(replacement_launch["pbs_job_id"])
         if replacement_job_id == initial_job_id:
             raise RuntimeError("replacement reused the terminal learner job ID")
@@ -1072,10 +1100,18 @@ def _dynamic_candidate_and_learner_failure(
             (str(replacement_instance["instance_id"]),),
         ).fetchone()
         hot_updates = [dict(row) for row in connection.execute("SELECT * FROM updates")]
+        nonbootstrap_launches = [
+            dict(row)
+            for row in connection.execute(
+                "SELECT * FROM launch_requests WHERE role!='bootstrap' ORDER BY created_at"
+            )
+        ]
     finally:
         connection.close()
     if replacements != 1:
         raise RuntimeError("combined failure scenario did not admit exactly one replacement")
+    if len(nonbootstrap_launches) != 1 or nonbootstrap_launches[0]["role"] != "replacement":
+        raise RuntimeError("combined failure scenario submitted an unrelated scale-out")
     if lost_final is None or lost_final["status"] != "revoked":
         raise RuntimeError("combined failure lost instance was not revoked")
     if replacement_final is None or replacement_final["status"] != "stopped":
@@ -1089,6 +1125,14 @@ def _dynamic_candidate_and_learner_failure(
     ]
     if old_applied_versions and max(old_applied_versions) > replacement_boundary:
         raise RuntimeError("lost instance committed after combined-failure replacement")
+    replacement_updates = [
+        row
+        for row in [*hot_updates, *_audit_rows(run_root, "updates")]
+        if json.loads(str(row["fence_json"])).get("instance_id")
+        == str(replacement_instance["instance_id"])
+    ]
+    if not any(row.get("applied_version") is not None for row in replacement_updates):
+        raise RuntimeError("combined-failure replacement never committed a contribution")
     return {
         "name": name,
         "process_statuses": statuses,
