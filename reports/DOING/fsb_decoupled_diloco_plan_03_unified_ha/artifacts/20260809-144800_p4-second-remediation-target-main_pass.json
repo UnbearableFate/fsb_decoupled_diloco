@@ -1,0 +1,13 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-second-remediation-target-main",
+  "recorded_at": "2026-08-09T14:48:00+09:00",
+  "status": "PASS",
+  "errors": [],
+  "source_commit": "37b3feeeb64240acf40d2cfdeb7667b32782cd64",
+  "identity": {"git_dirty": false, "source_fingerprint": "sha256:1121846cf888f8325b354ba3ea736aa2f8c1057a9793eb7957b179a2e97b57c5", "static_descriptor_sha256": "46ef33e8879a81bc2bc8443746270ed4c188b51c82610b54a8c528ae7bbbc459", "dynamic_descriptor_sha256": "d189372ebf68a394f9fd6fc80b23f23cf63ba9ae6f2e9f93cf7d0124ac3e0ecd"},
+  "pbs": {"job_id": "2510250.opbs", "host": "mg0033", "queue": "debug-g", "group_id": "xg24i002", "requested_walltime": "00:10:00", "actual_walltime": "00:01:31", "exit_status": 0, "stdout_sha256": "d33b9ce982a3b8c820a17f2fb68355f5f1c0c9f6b2bfa8f6f00c7f56e8b0bb4e"},
+  "checks": {"ruff": "PASS", "format_files": 20, "boundary_checker": "PASS", "focused_tests": "83 passed in 6.97s", "full_tests": "904 passed in 59.49s"},
+  "static": {"run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_static_2510250", "descriptor_sha256": "46ef33e8879a81bc2bc8443746270ed4c188b51c82610b54a8c528ae7bbbc459", "authority_database_sha256_before_cleanup": "6c38044fab4203e9bb835f230057d5304c7995a2aa06e4680b5175e8abeb5084", "summary": {"run_id": "plan03_p4_static_2510250", "final_version": 2, "direct_weight_tokens_applied": 256, "acked_terminal_fences": 2, "hard_crash_gap_tokens_upper_bound": 0, "pending_or_selected_updates": 0, "integrity_check": "ok"}},
+  "dynamic": {"run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_dynamic_2510250", "descriptor_sha256": "d189372ebf68a394f9fd6fc80b23f23cf63ba9ae6f2e9f93cf7d0124ac3e0ecd", "authority_database_sha256_before_cleanup": "1e54e028443f87f40c1740103a198b2b3f64d218f13e8f34d9aa9ff099336f20", "summary": {"run_id": "plan03_p4_dynamic_2510250", "final_version": 12, "direct_weight_tokens_applied": 3840, "acked_terminal_fences": 1, "hard_crash_gap_tokens_upper_bound": 0, "pending_or_selected_updates": 0, "integrity_check": "ok"}}
+}

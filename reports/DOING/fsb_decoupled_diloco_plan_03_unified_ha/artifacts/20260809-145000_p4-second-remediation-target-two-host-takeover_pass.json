@@ -1,0 +1,9 @@
+{
+  "artifact_schema_version": 1, "experiment_id": "p4-second-remediation-target-two-host-takeover", "recorded_at": "2026-08-09T14:50:00+09:00",
+  "status": "PASS", "errors": [], "source_commit": "37b3feeeb64240acf40d2cfdeb7667b32782cd64",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/20260809_144719_fs_diloco_2node_resume",
+  "identity": {"run_id": "20260809_144719_fs_diloco_2node_resume", "git_dirty": false, "source_fingerprint": "sha256:1121846cf888f8325b354ba3ea736aa2f8c1057a9793eb7957b179a2e97b57c5", "descriptor_sha256": "2af3207181375470d6e831d8ac386fb29857d2de1fe75278cb92d9aead703b51"},
+  "pbs": {"job_id": "2510255.opbs", "hosts": ["mg0584", "mg0585"], "queue": "small-g", "submitted_queue_alias": "regular-g", "requested_walltime": "00:10:00", "actual_walltime": "00:00:23", "exit_status": 0, "stdout_sha256": "82cfbf38851811b5eec72fd4ea6cf443912e7fa646b1f6be5b715f86c34d39b0"},
+  "checks": {"epoch_states": ["expired", "released"], "duplicate_versions": 0, "pending_or_selected_updates": 0},
+  "authority": {"database_sha256_before_cleanup": "951405242dfe992d656d617bbee45614768a29d5e803b0a51ac8d91e27dc2f24", "final_version": 20, "direct_weight_tokens_applied": 1280, "acked_terminal_fences": 1, "hard_crash_gap_tokens_upper_bound": 0, "integrity_check": "ok"}
+}

@@ -613,3 +613,24 @@
 
 - `clean_run` correctly refused the static `2510137` root with `matched evidence run summary does not match` because the newly persisted PASS artifact summary omitted the exact `run_id` field required for evidence-to-root binding.
 - No deletion occurred. Correction: add the already attested static/dynamic run IDs to their respective summaries, revalidate the JSON, and repeat dry-run before any delete request.
+
+# 2026-08-09 14:44 JST — P4 clean-target two-host queue override rejected
+
+- Submission of `scripts/miyabi/run_2node_resume_regression.pbs` with `qsub -q small-g -l walltime=00:10:00` failed before creating a job: `qsub: Access to queue is denied`.
+- The PBS script, source target and workload were not executed; the other five independent clean-target jobs were accepted. This is a scheduler admission/configuration failure, not a product or experiment failure.
+- Correction: retain the evidence-based 10-minute walltime and submit the unchanged script to its declared accessible `regular-g` queue. This is the first occurrence of this submission cause.
+
+# 2026-08-09 14:46 JST — Clean-target source identity inspection omitted required output arguments
+
+- A read-only invocation of `capture_source_identity.py --project-root .` exited at argparse because the utility also requires `--output-json` and `--output-env`. It did not mutate the clean target and did not exercise a test or runtime.
+- The immediately preceding `git status --short` was empty and `git rev-parse HEAD` returned the intended target. Correction: import and call `capture()` for stdout-only inspection, or supply both outputs in a temporary directory.
+
+# 2026-08-09 14:47 JST — Clean-target run evidence inspection assumed a nested source object
+
+- A read-only evidence collection command raised `KeyError: 'source'` on the first completed run because the v4 descriptor stores `git_commit`, `git_dirty` and `source_fingerprint` as top-level fields, not under a nested `source` object.
+- No evidence or run state was modified. Correction: read the documented top-level descriptor fields and rerun the same inventory before constructing PASS artifacts.
+
+# 2026-08-09 14:52 JST — Generated matrix patch used incompatible hunk rendering
+
+- A read-only Python transformation correctly asserted nine old runtime/requirement bindings, but the generated `apply_patch` payload lost the leading hunk marker during rendering and failed verification before changing the matrix.
+- Correction: generate explicit `*** Begin Patch` replacement hunks with stable row context, or use an apply-patch-compatible diff renderer, then verify all nine old paths are absent and all nine new paths are present.
