@@ -690,3 +690,8 @@
 
 - The combined `apply_patch` attempted to replace only the evidence-path suffix of quoted CSV rows. Patch verification failed because unified-diff hunks match complete physical lines; the aggregate artifact addition was also rolled back atomically.
 - Correction: add the aggregate artifact in its own patch, then perform the two exact path substitutions as a verified bulk mechanical rewrite and assert the expected nine runtime plus nine requirement-path replacements.
+
+# 2026-08-09 15:47 JST — Final P4 incremental Claude review hit the explicit session limit
+
+- Fresh session `493e2c1b-4bab-4d3d-8584-67c74b874df3` requested `claude-opus-5` for `e565ad8..cb9e464`. The API returned status 429 and `You've hit your session limit · resets 5:20pm (Asia/Tokyo)` before consuming tokens or reporting `modelUsage`; no review report was created.
+- This is the exact user-authorized, non-blocking `skipped-session-limit` case. No actual model is claimed because inference did not begin, and this target will not be retried. Invocation and skip records are retained beside the already saved mandatory Codex report.

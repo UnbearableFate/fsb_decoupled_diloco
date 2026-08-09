@@ -585,3 +585,9 @@
 - After evidence commit `c85d18a`, the full phase-final Checker passed with frozen/current boundary verification, all nine P4 requirement rows, `--require-tracked-evidence`, and clean source target `ba2922dce091cd63b7c2bfcedc20be0aa9ff6bcf`.
 - Every evidence path is tracked and the evidence-only descendant contains no relevant source-tree drift. Compact record: `artifacts/20260809-154300_p4-third-remediation-tracked-evidence-gate_pass.json`.
 - Because the third remediation changed the public admission replay/recovery boundary, one final incremental Codex review of `e565ad8..latest evidence target` remains mandatory before P4 closure. Claude remains non-blocking under the explicit session-limit exception already recorded for this review cycle.
+
+# 2026-08-09 15:47 JST — Final P4 incremental review completed with authorized Claude skip
+
+- Codex independently reviewed `e565ad8f9a71af128c6df7c1dfb4e42a9e520388..cb9e4645b4126f46bfa1b73ce302d67e47b0a044` and saved its report before the Claude invocation. Verdict: `CHANGES_REQUIRED` for one Medium error-classification regression.
+- The fresh Claude invocation ended immediately on the explicit account session limit and is recorded as non-blocking `skipped-session-limit`; it produced no report and is not retried.
+- Required remediation is narrow: malformed committed replay JSON must remain an `AuthoritySchemaError`, not be caught as learner `ValueError`. A RED test and the complete P4 gate are required before phase closure.
