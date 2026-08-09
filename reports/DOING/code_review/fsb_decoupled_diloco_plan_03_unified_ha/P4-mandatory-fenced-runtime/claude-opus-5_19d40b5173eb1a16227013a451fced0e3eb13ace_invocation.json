@@ -1,0 +1,24 @@
+{
+  "base_commit": "d18fae055b5beec1887f38c3f2070f0bf6ec901b",
+  "target_commit": "19d40b5173eb1a16227013a451fced0e3eb13ace",
+  "requested_model": "claude-opus-5",
+  "actual_model": "claude-opus-5",
+  "requested_session_id": "175cc4fb-6814-4917-b567-1d712b8a6bcf",
+  "actual_session_id": "175cc4fb-6814-4917-b567-1d712b8a6bcf",
+  "terminal_reason": "completed",
+  "subtype": "success",
+  "exit_code": 0,
+  "is_error": false,
+  "api_error_status": null,
+  "permission_denials": [],
+  "duration_api_ms": 998381,
+  "num_turns": 68,
+  "usage": {
+    "input_tokens": 112,
+    "cache_creation_input_tokens": 203539,
+    "cache_read_input_tokens": 7894147,
+    "output_tokens": 66784
+  },
+  "report": "reports/DOING/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P4-mandatory-fenced-runtime/claude-opus-5_19d40b5173eb1a16227013a451fced0e3eb13ace.md",
+  "verdict": "CHANGES_REQUIRED"
+}
