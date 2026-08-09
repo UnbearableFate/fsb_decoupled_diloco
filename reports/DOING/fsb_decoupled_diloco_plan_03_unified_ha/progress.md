@@ -505,3 +505,9 @@
 - Evidence-authorized cleanup inventories are `artifacts/20260809-134500_p4-remediation-final-target-*_cleanup.json`; all seven successful run roots were cleaned after their PASS records were persisted.
 - The source-targeted P4 requirement Checker returned `PASS` for the frozen/current boundary, migration surface and all nine P4-owned rows including MODE-02. Evidence: `artifacts/20260809-134700_p4-remediation-final-target-requirements_pass.json`.
 - Every Codex and Claude finding from the `0e8b14ed..d18fae0` review now has an explicit disposition in `artifacts/20260809-134800_p4-incremental-review-finding-dispositions_review.json`. Protocol/fencing blockers are fixed; bounded-size, retention, steady-state I/O and transient pre-torch retry remain mandatory P6 work, while operator collision guidance is mandatory P5 work. Malformed actor-addressed rejection and lock-file unlinking are rejected with security/concurrency evidence.
+
+# 2026-08-09 13:51 JST — P4 final tracked-evidence gate PASS
+
+- After evidence commit `07d7ea1`, the full phase-final Checker passed with frozen/current boundary verification, P4 requirement aggregation and `--require-tracked-evidence` against source target `27f1a0388cbe27a32b24e6d5d72ff550818a4797`. The evidence-only descendant rule verified that no `fs_diloco/`, tests, scripts or configs source changed between the runtime target and evidence commit.
+- All nine P4 rows and every referenced artifact were tracked; differences were empty. Compact record: `artifacts/20260809-135100_p4-remediation-final-tracked-evidence-gate_pass.json`; full temporary Checker output SHA-256 `8aea36643444af243a450b86d8937538f2931e98a6238fe1d81945dbb5510e2b`.
+- The mandatory incremental review must now cover the continuous source/evidence interval from prior review target `d18fae055b5beec1887f38c3f2070f0bf6ec901b` through the latest frozen evidence target; the Codex report must be persisted before a fresh Claude invocation.

@@ -1,0 +1,16 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-remediation-final-tracked-evidence-gate",
+  "recorded_at": "2026-08-09T13:51:00+09:00",
+  "status": "PASS",
+  "errors": [],
+  "verification_target_commit": "27f1a0388cbe27a32b24e6d5d72ff550818a4797",
+  "evidence_commit": "07d7ea1",
+  "source_ref": "a00a3d64a50f10a2478c3f4fe795e658d1b3b52f",
+  "phase": "P4-mandatory-fenced-runtime",
+  "requirements_checked": ["AUTH-02", "AUTH-03", "AUTH-04", "AUTH-05", "AUTH-07", "AUTH-09", "AUTH-10", "MODE-02", "P4-MIGRATE"],
+  "command": ".venv/bin/python scripts/miyabi/check_plan03.py --root . --expect reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-003335_p0-current-boundary-check_review.json --verify-boundaries --source-ref a00a3d64a50f10a2478c3f4fe795e658d1b3b52f --verification-target-ref 27f1a0388cbe27a32b24e6d5d72ff550818a4797 --verify-phase-requirements P4-mandatory-fenced-runtime --require-tracked-evidence --inventory-output <temporary>",
+  "full_checker_output_sha256": "8aea36643444af243a450b86d8937538f2931e98a6238fe1d81945dbb5510e2b",
+  "differences": [],
+  "note": "The target source and protocol tree is frozen at 27f1a03. The evidence commit is an evidence-only descendant; the Checker verified source-tree equivalence, tracked evidence, the frozen/current migration boundary and every P4 requirement binding."
+}
