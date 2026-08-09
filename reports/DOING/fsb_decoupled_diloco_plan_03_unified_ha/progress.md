@@ -986,3 +986,83 @@
 - Full v4 model/data producers now re-check the resolved actor-time reference immediately before importing/calling Hugging Face producers: explicit local spellings, an existing relative path, symlink, fallback target and `FS_DILOCO_HF_WIKITEXT_REPO` local override fail closed because no descriptor-bound content manifest exists. The gate is opt-in at Full v4 runtime/current-v4 query call sites, so Torch baseline and classic/fragment query-only local input remain compatible.
 - Focused result: `673 passed` in 42.30 s. Full result: `805 passed, 2 skipped` in 118.76 s, with zero failures/errors; this includes the four prior RED cases and two local-compatibility counter-regressions. The structured G2 status is intentionally `BLOCKED` only by `formal executable source scope is dirty`, because this review remediation is not committed yet; no behavioral error remains.
 - Retained evidence: `reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260810-074500_plan-complete-loader-local-remediation-g2-attempt2-fail.json`, `logs/qsub_plan03_p6_g2_2514597/{collect,focused,full}.log`, and `fsdiloco_p6_g2.o2514597`. Next: freeze this remediation in a review-target commit, perform the required incremental independent review, then regenerate clean-target G0–G10 evidence.
+
+## 2026-08-10 07:55 JST — final plan-complete remediation incremental review closed
+
+- Review continuity is exact: base `3cd7dab0ca846a9914b8e6784c7fc11e818a7ade` is an ancestor of frozen target `9b7e1dacdecbea8951121b3f70a6caece481a380`; the diff contains only the loader-time identity remediation, regressions, synchronized documentation and evidence. User-owned `plans/AGENTS.md` remains outside target.
+- Codex independently reviewed every changed producer/caller plus the all-call-site inventory before any Claude result was read. Report `reports/DOING/code_review/fsb_decoupled_diloco_plan_03_unified_ha/plan-complete-remediation/gpt-5.6-sol_9b7e1dacdecbea8951121b3f70a6caece481a380.md` concludes `APPROVE` with no finding.
+- Claude was invoked with requested model `claude-opus-5` and new session `da256101-5b1c-4ea4-98d2-f97a6c80b6c2`; it returned HTTP 429 session limit with zero input/output tokens and no permission denial. Metadata `.../claude-opus-5_9b7e1dacdecbea8951121b3f70a6caece481a380_skipped-session-limit.json` records the verifiable nonblocking skip authorized by the user and `plans/AGENTS.md`; no fabricated Claude review exists.
+- All findings from the original current-state review and three continuous incremental reviews are now fixed and reviewed. Remaining work is evidence regeneration, not product remediation: run G0–G10, quality/docs, exact cleanup, aggregate/matrix and tracked-evidence Checker on final clean source target `9b7e1dacdecbea8951121b3f70a6caece481a380`.
+
+## 2026-08-10 08:00 JST — plan-final G0/G1, G3/G4, G7 and G8 PASS
+
+- All artifacts bind clean source commit `9b7e1dacdecbea8951121b3f70a6caece481a380`, fingerprint `sha256:89044994d93c2f9a0d0800c3a387cca99f66892d73944270e6eb1b42d841abfc`, and the canonical nine source scopes with `git_dirty=false`. Each PBS submission followed the repository-wide syntax/literal-group preflight and used the stated explicit walltime.
+- Login/control-plane G0/G1 artifact `artifacts/20260810-075600_p6-g0-g1-plan-final-pass.json` passed diff, compile, full Ruff lint, changed-file format, all shell/PBS syntax, exact literal group IDs, frozen boundaries, P3/P5 contracts, eight-row P6 inventory and cost freeze.
+- G3/G4 job `2514621.opbs`, one `debug-g` node, `00:20:00`: generated state-machine profiles passed 1,000×300 pure plus 200×150 SQLite examples over all 13 actions in 24.28 s; the publication matrix passed all 18 crash boundaries at exactly ten repetitions. Artifacts: `artifacts/20260810-075600_p6-g3-plan-final-pass.json` and `...g4-plan-final-pass.json`; logs: `logs/plan03_p6_g3_g4_plan_final_20260810_075600/`.
+- G7 job `2514626.opbs`, two distinct `regular-g` nodes, `00:10:00`: the outside-transaction old writer resumed only to `StaleLeaderTokenError` with zero successful stale commit; the inside-transaction successor waited 3.279 s and advanced only after the old process was explicitly terminated. Both authorities report SQLite integrity `ok`; artifact `artifacts/20260810-075600_p6-g7-plan-final-pass.json`, run `runs/fs_diloco/plan03_p6_g7_plan_final_20260810_075600/`.
+- G8 job `2514623.opbs`, nine `regular-g` nodes, `00:20:00`: eight static FP32 learners reached final version 21 at 60 local steps/cycle, all eight contributors have credit 21 and terminal acknowledgements, 168 FP32 updates account for 322,560 direct tokens with zero ledger balance, hot authority contains only the current version, and SQLite integrity is `ok`. Artifact `artifacts/20260810-075600_p6-g8-plan-final-pass.json`; exact run `runs/fs_diloco/plan03_p6_g8_static_plan_final_20260810_075600/` is terminal and eligible for evidence-bound cleanup.
+- G2/G5/G6/G9/G10 remain active; no result from them is claimed here.
+
+## 2026-08-10 08:01 JST — plan-final G8 evidence-bound cleanup complete
+
+- After the G8 PASS record was persisted, `fs_diloco.tools.clean_run` dry-run resolved exactly the known terminal run and matching immutable evidence, confirmed no SQLite sidecar/live authority blocker, and inventoried 16 policy-allowed objects: eight terminal proposal pointers plus their eight current terminal payloads, 71,088 bytes total.
+- The deletion invocation revalidated the full plan by evidence SHA, artifact-policy SHA, inode, device, mtime and size, then removed exactly those 16 regular files. Manifest `artifacts/20260810-080000_p6-g8-plan-final-cleanup.json` has `status=complete`, `deleted_count=16`, `deleted_bytes=71088`, and retains the exact candidate inventory.
+- Post-delete validation found zero candidate paths still present, SQLite integrity `ok`, 22 checkpoint weight objects, terminal summary/control database and all 160 authority-owned fenced-GC payload paths retained. No audit, DB, checkpoint, GC-owned, source, report or user file was removed. The 16 deleted terminal pointer/payload objects are not directly recoverable; reproduction requires rerunning G8, while their bound invariant evidence remains retained.
+
+## 2026-08-10 08:02 JST — plan-final G5 six real tiny scenarios PASS
+
+- PBS job `2514620.opbs`, one `debug-g` node, explicit `00:20:00`, passed all six declared real-pipeline scenarios on clean target `9b7e1dacdecbea8951121b3f70a6caece481a380` and fingerprint `sha256:89044994d93c2f9a0d0800c3a387cca99f66892d73944270e6eb1b42d841abfc`.
+- Static terminal versions were 1, 3, 11 and 10 for the single-learner, two-learner, loss/rerun/old-resume and two-candidate active-crash cases. Dynamic replacement and combined candidate/learner failure cases both reached version 11. Every scenario has zero token balance, finalized contributor fences, all learners stopped and no artifact/authority error.
+- Artifact: `artifacts/20260810-075600_p6-g5-plan-final-pass.json`; exact six run roots are named in its scenario records and remain as minimal real-pipeline audit/recovery evidence. The harness temp root and scheduler processes terminated; there are no live scenario jobs or temporary files.
+- After confirming the final aggregate contains all six scenario records, six hidden per-scenario partial JSONs (64,394 bytes total) were removed as superseded intermediate report output. They are not directly recoverable, but contain no evidence absent from the retained final G5 artifact and run roots.
+
+## 2026-08-10 08:02 JST — plan-final G2 clean full regression PASS
+
+- PBS job `2514625.opbs`, one `debug-g` compute node, explicit `00:10:00`, ran from clean commit `9b7e1dacdecbea8951121b3f70a6caece481a380` and canonical fingerprint `sha256:89044994d93c2f9a0d0800c3a387cca99f66892d73944270e6eb1b42d841abfc`; its source capture reports `git_dirty=false` despite the explicitly excluded user plan/report changes.
+- Collection, focused and full commands all returned zero. Focused result was `673 passed` in 41.39 s; full result was `805 passed, 2 skipped` in 129.35 s, with zero failures/errors and no retained xfail. This is the formal clean-target replacement for the prior dirty remediation run.
+- Artifact: `artifacts/20260810-075600_p6-g2-plan-final-pass.json`; raw logs/JUnit: `logs/qsub_plan03_p6_g2_2514625/{collect,focused,full}.{log,xml}` where applicable; stdout: `fsdiloco_p6_g2.o2514625`. The complete G2 gate is `PASS` with an empty error list.
+
+## 2026-08-10 08:03 JST — plan-final quality boundary PASS
+
+- `plan03_p6_quality_manifest.py` consumed only the new clean G2 artifact and returned `PASS` in `artifacts/20260810-080300_p6-quality-plan-final-pass.json`, binding source commit `9b7e1dacdecbea8951121b3f70a6caece481a380` with no failures/errors.
+- Current deterministic oracles and finite numeric regressions are covered by the 805-test full suite; frozen classic/static semantic oracle files remain named explicitly. The separate three-seed unique-token quality study remains honestly `NOT_RUN`, nonblocking and unclaimed, as required by P6-QUALITY.
+
+## 2026-08-10 08:03 JST — plan-final G9 dynamic nine-allocation failure soak PASS
+
+- Parent job `2514624.opbs`, one candidate allocation plus eight bootstrap learners and one bounded replacement across `regular-g`, explicit `00:30:00`, passed on clean target `9b7e1dacdecbea8951121b3f70a6caece481a380` and fingerprint `sha256:89044994d93c2f9a0d0800c3a387cca99f66892d73944270e6eb1b42d841abfc`.
+- The timeline never exceeded nine live allocations. A duplicate bootstrap was rejected before Torch, permanent learner loss produced exactly one replacement with an advanced stream epoch, the old candidate paused outside its SQLite transaction and was superseded by epoch 2, and stale epoch effects were zero. The run finalized at version 121 with all learners stopped.
+- Authority reports SQLite integrity `ok`, one hot current version, zero pending/selected updates or prepared intents, 925 BF16 updates, CPU/FP32 syncer compute contract, balanced token ledger and no errors. Artifact: `artifacts/20260810-075600_p6-g9-plan-final-pass.json`; exact terminal run: `runs/fs_diloco/plan03_p6_g9_dynamic_plan_final_20260810_075600/`.
+
+## 2026-08-10 08:04 JST — plan-final G9 evidence-bound cleanup complete
+
+- The dry-run bound the exact terminal G9 directory to its PASS evidence and immutable artifact policy, rejected no live authority reference, and inventoried only eight terminal dynamic proposal pointers plus their eight current payloads: 16 files, 39,359 bytes.
+- The delete pass revalidated evidence SHA, policy SHA, inode/device/mtime/size and removed exactly those candidates. Manifest `artifacts/20260810-080400_p6-g9-plan-final-cleanup.json` reports `status=complete`, `deleted_count=16`, `deleted_bytes=39359`, and 344 retained authority-owned fenced-GC paths.
+- Post-delete verification found no candidate remaining, SQLite integrity `ok`, 44 checkpoint weights, terminal summary/control database, audit archive and all GC-owned paths intact. No source, report or unrelated run was touched. These 16 terminal pointer/payload objects are not directly recoverable; the experiment can be reproduced from the recorded source/config/job, and its invariant evidence remains retained.
+
+## 2026-08-10 08:05 JST — plan-final documentation synchronization review PASS
+
+- `artifacts/20260810-080500_p6-docs-plan-final-review.json` binds the exact clean target/fingerprint plus the new G8/G9 nine-node evidence. Both runs use 60 local steps per cycle and exceed the 50×10 documentation synchronization threshold.
+- The stable docs still contain no PBS job IDs or performance timings, relative links resolve, authority schema is 9, and no duplicate protocol chapter was added. The review additionally covers exact Hub commit pins and the Full-v4 actor-time local-input gate while retaining Torch baseline/classic-fragment query compatibility. Status is `PASS` with no errors and requirement owner `P6-DOCS`.
+
+## 2026-08-10 08:06 JST — plan-final G10 paired performance gates PASS
+
+- PBS job `2514627.opbs`, one `debug-g` node, explicit `00:30:00`, completed one warmup/arm plus exactly 20 AB/BA pairs for each comparison on source commit `9b7e1dacdecbea8951121b3f70a6caece481a380` and fingerprint `sha256:89044994d93c2f9a0d0800c3a387cca99f66892d73944270e6eb1b42d841abfc`.
+- Both comparisons proved exact equal workloads: v2 target, four selected updates, 256 processed/direct-weight tokens, cursor `[4,4]`, no failure tape, matched model/data/seed/resource/timer anchor. Scratch runs and detached classic worktree/venvs were removed.
+- Classic-vs-unified is `COMPARABLE`: median signed ratio `-10.3342%`, one-sided paired-bootstrap 95% upper `-9.1358%`, satisfying the unchanged `<=10%` noninferiority margin. Dynamic-vs-static is `COMPARABLE`: median `0.1026%`, upper `2.6745%`, also passing without clipping.
+- Artifacts: `artifacts/20260810-075600_p6-g10-classic-plan-final-pass.json` and `...g10-dynamic-plan-final-pass.json`; both report `PASS`, 20 paired repeats, `scratch_removed=true` and empty errors.
+
+## 2026-08-10 08:18 JST — plan-final G6 10,000-cycle boundedness PASS
+
+- PBS job `2514622.opbs`, one `debug-g` node, explicit `00:30:00`, completed all 10,000 cycles in `1292.17s` on clean target `9b7e1dacdecbea8951121b3f70a6caece481a380` and fingerprint `sha256:89044994d93c2f9a0d0800c3a387cca99f66892d73944270e6eb1b42d841abfc`. Calibration remained a separate `REVIEW` artifact and the formal artifact is `artifacts/20260810-075600_p6-g6-plan-final-pass.json` with `PASS` and no errors.
+- Live SQLite pages had slope `0.00014747` page/cycle and fixed-block one-sided 95% upper `0.00559848 < 0.01`; active/recovery files had slope `-0.00005081` and upper `0.00452273 < 0.01`. Quiescent hot state has one current version, zero prepared intents/GC candidates, three active/recovery files, two checkpoint files and one update payload; 51,813 immutable audit files remain explicitly separate from the bounded recovery set, with 13 hot archive batches.
+- The authority ledger adjudicated 80,000 processed tokens, directly applied 60,000 and balances to zero. This closes the last plan-final runtime gate on the same source identity as G0–G5 and G7–G10; no PBS jobs remain active.
+
+## 2026-08-10 08:19 JST — plan-final G0–G7 aggregate PASS
+
+- `plan03_p6_acceptance.py` consumed the final G0/G1 through G7 artifacts, required all eight named gates to be `PASS`, and verified the common clean source commit `9b7e1dacdecbea8951121b3f70a6caece481a380`. Strict aggregate `artifacts/20260810-081900_p6-g0-g7-plan-final-pass.json` returned `PASS` with no errors.
+- The eight P6 matrix owners now bind exclusively to this plan-final evidence group: G7 for `AUTH-11`, the aggregate for `P6-ACCEPTANCE`, and the new G8, G9, both G10 comparisons, quality and docs artifacts for their respective rows. The superseded `dea559a...` P6 group remains tracked as historical evidence but no longer satisfies a current matrix row.
+
+## 2026-08-10 08:20 JST — plan-final staged requirement Checker PASS
+
+- `check_plan03.py --phase P6-acceptance-final-review --mode staged --verification-target-ref 9b7e1dac...` retained the frozen boundary, P3 operational and P5 deletion/legacy-reader verifiers, resolved all eight current P6 matrix evidence bindings, and returned `PASS` with zero errors/differences. Artifact: `artifacts/20260810-082000_p6-requirements-plan-final-staged-pass.json`.
+- Its source identity is the clean formal target despite report/plan edits outside the canonical executable scopes. The next and final machine gate is to commit this evidence set, then repeat in completed mode with tracked-evidence enforcement; no source change or recursive product review is introduced by that evidence-only commit.

@@ -1,0 +1,18 @@
+{
+  "status": "skipped-session-limit",
+  "review_type": "plan-complete-remediation-incremental-retry3",
+  "base_commit": "3cd7dab0ca846a9914b8e6784c7fc11e818a7ade",
+  "target_commit": "9b7e1dacdecbea8951121b3f70a6caece481a380",
+  "requested_model": "claude-opus-5",
+  "session_id": "da256101-5b1c-4ea4-98d2-f97a6c80b6c2",
+  "result_uuid": "e816cca5-9108-4377-b5bf-51391c2fb235",
+  "exit_code": 1,
+  "api_error_status": 429,
+  "terminal_reason": "api_error",
+  "input_tokens": 0,
+  "output_tokens": 0,
+  "permission_denials": [],
+  "result": "You've hit your session limit; resets 9:30am (Asia/Tokyo)",
+  "blocking": false,
+  "policy": "plans/AGENTS.md and the user's explicit instruction allow a verified account/session-limit skip; Codex review remains mandatory"
+}

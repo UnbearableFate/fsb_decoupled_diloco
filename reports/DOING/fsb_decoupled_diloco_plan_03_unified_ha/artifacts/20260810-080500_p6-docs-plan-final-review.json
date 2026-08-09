@@ -1,0 +1,69 @@
+{
+  "artifact_version": 1,
+  "checks": {
+    "authority_version_matches_fs_diloco_core_versions": 9,
+    "g0_g1_artifact": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260810-075600_p6-g0-g1-plan-final-pass.json",
+    "g0_g1_status": "PASS",
+    "new_duplicate_protocol_chapter_added": false,
+    "relative_markdown_links_exist": true,
+    "stable_docs_contain_pbs_job_ids": false,
+    "stable_docs_contain_performance_timings": false,
+    "verified_g8_g9_behavior_synchronized": true
+  },
+  "documentation_target_commit": "9b7e1dacdecbea8951121b3f70a6caece481a380",
+  "errors": [],
+  "phase_id": "P6-acceptance-final-review",
+  "plan_id": "fsb_decoupled_diloco_plan_03_unified_ha",
+  "requirements_covered": [
+    "P6-DOCS"
+  ],
+  "runtime_evidence_source_commit": "9b7e1dacdecbea8951121b3f70a6caece481a380",
+  "source_commit": "9b7e1dacdecbea8951121b3f70a6caece481a380",
+  "source_identity": {
+    "git_commit": "9b7e1dacdecbea8951121b3f70a6caece481a380",
+    "git_dirty": false,
+    "source_fingerprint": "sha256:89044994d93c2f9a0d0800c3a387cca99f66892d73944270e6eb1b42d841abfc",
+    "source_scopes": [
+      "fs_diloco",
+      "tests",
+      "configs",
+      "scripts",
+      "docs",
+      "main.py",
+      "pyproject.toml",
+      "uv.lock",
+      ".python-version"
+    ]
+  },
+  "status": "PASS",
+  "synchronized_contracts": [
+    "authority schema 9 and no in-place schema 6/7/8 migration",
+    "bounded Torch-free initial admission before syncer model initialization",
+    "target-aware learner await-close and final drain acknowledgement",
+    "online dependency-closed audit archive, partition compaction and durable command replay",
+    "nonterminal progress anchors retain a contributor-bounded receipt/update/selection/publication closure until terminal maintenance",
+    "identity-checked fenced artifact/audit GC",
+    "removed syncer.parallel_checkpoint_writes stays strict for production/resume and query-only compatible for historical evaluation",
+    "Full v4 Hub model tokenizer and dataset inputs use exact commit revisions",
+    "Full v4 actor-time loader guard rejects mutable local input while Torch baseline and classic/fragment query-only local input remain compatible",
+    "verified static FP32 and dynamic BF16-publish/CPU-FP32-compute acceptance boundaries"
+  ],
+  "updated": [
+    "README.md",
+    "docs/01-overview.md",
+    "docs/03-runtime-flow.md",
+    "docs/04-data-flow.md",
+    "docs/06-configuration.md",
+    "docs/08-compatibility-and-migration.md",
+    "docs/modules/core.md",
+    "docs/modules/modeling.md",
+    "docs/modules/runtime-learner.md",
+    "docs/modules/runtime-syncer.md",
+    "docs/modules/storage.md"
+  ],
+  "verified_behavior_evidence": {
+    "dynamic_9node": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260810-075600_p6-g9-plan-final-pass.json",
+    "qualification": "both formal runs use 9 nodes and 60 local steps per cycle, exceeding the 50-local-step x 10-global-step documentation baseline",
+    "static_9node": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260810-075600_p6-g8-plan-final-pass.json"
+  }
+}
