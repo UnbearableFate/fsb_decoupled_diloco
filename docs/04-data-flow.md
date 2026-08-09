@@ -87,7 +87,7 @@ carried ancestry 与 hard-crash gap upper bound 单独报告，不能混入 dire
 
 ## Audit 与 telemetry
 
-active leader 的 bounded maintenance pass 在 commit 后和 terminal close 执行。authority history 的不可变 audit batch 先发布并校验，DB 才删除 dependency-closed 的精确 source rows；controller 尚未 terminal 时，每个 `contributor_progress.last_receipt_id` 指向的 current receipt、update 和 selection dependency 继续留在 hot authority，保证 visibility 与 clean drain acknowledgement 可验证，只有 terminal 固化后才允许最终归档。多个 hot batch 合并成带 manifest 的 partition 后，source batch 才可通过 fenced claim/complete GC 删除。启动与恢复只扫描有界 hot authority，不全量读取历史 partition。
+active leader 的 bounded maintenance pass 在 commit 后和 terminal close 执行。authority history 的不可变 audit batch 先发布并校验，DB 才删除 dependency-closed 的精确 source rows；controller 尚未 terminal 时，每个 `contributor_progress.last_receipt_id` 指向的 current receipt、update 和 selection dependency 继续留在 hot authority，保证 visibility 与 clean drain acknowledgement 可验证，只有 terminal 固化后才允许最终归档。该依赖闭包也会暂时保留对应 publication/global-version artifact；其数量受 contributor key 数量约束，stream retire 不立即释放，terminal maintenance 才把它们归档并交给 fenced GC。多个 hot batch 合并成带 manifest 的 partition 后，source batch 才可通过 fenced claim/complete GC 删除。启动与恢复只扫描有界 hot authority，不全量读取历史 partition。
 
 被 DB history prune 的 command 仍以 immutable `audit/command_receipts/` 保存 request digest 和 result；相同 command 重放会验证 receipt 后返回原结果，digest 冲突仍 fail closed。artifact/audit GC 在 authority 中先 claim，再核对 regular-file、path、size 和 SHA-256 identity 后删除，不能把未知对象当成 orphan。
 

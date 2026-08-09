@@ -18,6 +18,11 @@ from fs_diloco.protocol.contributor import StaticMembershipScope
 from fs_diloco.storage.authority import AuthorityIdentity, LeaderAuthority, initialize_authority_v4
 from fs_diloco.storage.leader_lease import LeaseUnavailableError, StaleLeaderTokenError
 
+if __package__:
+    from .capture_source_identity import capture as capture_source_identity
+else:
+    from capture_source_identity import capture as capture_source_identity
+
 
 PLAN_ID = "fsb_decoupled_diloco_plan_03_unified_ha"
 REQUIREMENTS_COVERED = ("AUTH-11", "P6-ACCEPTANCE")
@@ -370,32 +375,9 @@ def orchestrate(
         "old_mpirun_returncode": old_status,
         "authority": inside_integrity,
     }
-    source_commit = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=project_root,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    dirty = bool(
-        subprocess.run(
-            [
-                "git",
-                "status",
-                "--porcelain",
-                "--untracked-files=all",
-                "--",
-                "fs_diloco",
-                "tests",
-                "scripts",
-                "configs",
-            ],
-            cwd=project_root,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-    )
+    source_identity = capture_source_identity(project_root)
+    source_commit = str(source_identity["git_commit"])
+    dirty = bool(source_identity["git_dirty"])
     errors: list[str] = []
     if dirty:
         errors.append("formal source target is dirty")
@@ -406,7 +388,7 @@ def orchestrate(
         "experiment_id": "p6-g7-two-node-sqlite-stop",
         "status": "PASS" if not errors else "BLOCKED",
         "source_commit": source_commit,
-        "source_identity": {"git_commit": source_commit, "git_dirty": dirty},
+        "source_identity": source_identity,
         "requirements_covered": list(REQUIREMENTS_COVERED),
         "pbs_job_id": os.environ.get("PBS_JOBID"),
         "hosts": list(hosts),

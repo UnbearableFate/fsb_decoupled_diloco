@@ -22,18 +22,14 @@ from typing import Any
 
 import yaml
 
+if __package__:
+    from .capture_source_identity import SOURCE_SCOPES
+else:
+    from capture_source_identity import SOURCE_SCOPES
+
 
 PLAN_ID = "fsb_decoupled_diloco_plan_03_unified_ha"
-EXECUTABLE_SOURCE_SCOPES = (
-    "fs_diloco",
-    "tests",
-    "configs",
-    "scripts",
-    "main.py",
-    "pyproject.toml",
-    "uv.lock",
-    ".python-version",
-)
+EXECUTABLE_SOURCE_SCOPES = SOURCE_SCOPES
 ARCHIVE_TAGS = (
     "archive/classic-full-v1-final",
     "archive/fragment-v0-final",
@@ -80,12 +76,6 @@ P6_ACCEPTANCE_CONFIG_PROJECTIONS: dict[str, dict[tuple[str, ...], Any]] = {
             "publish_dtype": "bfloat16",
         },
     },
-}
-P6_ACCEPTANCE_CONFIG_REMOVALS: dict[str, tuple[tuple[str, ...], ...]] = {
-    "configs/fs_diloco_tiny_ha_static_acceptance.yaml": (("syncer", "parallel_checkpoint_writes"),),
-    "configs/fs_diloco_tiny_ha_dynamic_acceptance.yaml": (
-        ("syncer", "parallel_checkpoint_writes"),
-    ),
 }
 FROZEN_FULL_COMMIT = "a00a3d64a50f10a2478c3f4fe795e658d1b3b52f"
 P5_REMOVED_SOURCE = (
@@ -433,16 +423,6 @@ def verify_p4_migration_contracts(root: Path, frozen_source_ref: str) -> list[st
                 current = nested
             current[path[-1]] = copy.deepcopy(value)
 
-    def apply_removals(payload: dict[str, Any], removals: tuple[tuple[str, ...], ...]) -> None:
-        for path in removals:
-            current: dict[str, Any] = payload
-            for component in path[:-1]:
-                nested = current.get(component)
-                if not isinstance(nested, dict):
-                    raise RuntimeError(f"config removal crosses non-mapping field: {path}")
-                current = nested
-            current.pop(path[-1], None)
-
     for kind in ("full", "baseline", "fragment", "historical"):
         expected_paths = sorted(
             path
@@ -469,8 +449,6 @@ def verify_p4_migration_contracts(root: Path, frozen_source_ref: str) -> list[st
                 expected_payload["scaling"]["learner_walltime"] = p5_dynamic_walltime_updates[path]
             if path in P6_ACCEPTANCE_CONFIG_PROJECTIONS:
                 apply_projection(expected_payload, P6_ACCEPTANCE_CONFIG_PROJECTIONS[path])
-            if path in P6_ACCEPTANCE_CONFIG_REMOVALS:
-                apply_removals(expected_payload, P6_ACCEPTANCE_CONFIG_REMOVALS[path])
             if current_payload != expected_payload:
                 differences.append(f"config-migration.full-semantic:{path}")
         elif kind == "baseline":
@@ -741,17 +719,8 @@ def _evidence_source_matches_target(root: Path, source: Any, target: str | None)
     )
     if ancestry.returncode != 0:
         return False
-    relevant_tree = (
-        "fs_diloco",
-        "tests",
-        "scripts",
-        "configs",
-        "pyproject.toml",
-        "uv.lock",
-        "main.py",
-    )
     difference = subprocess.run(
-        ["git", "diff", "--quiet", source, target, "--", *relevant_tree],
+        ["git", "diff", "--quiet", source, target, "--", *SOURCE_SCOPES],
         cwd=root,
         check=False,
         capture_output=True,

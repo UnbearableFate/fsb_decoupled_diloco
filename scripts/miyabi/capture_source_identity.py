@@ -17,8 +17,11 @@ from typing import Any
 
 SOURCE_SCOPES = (
     "fs_diloco",
+    "tests",
     "configs",
     "scripts",
+    "docs",
+    "main.py",
     "pyproject.toml",
     "uv.lock",
     ".python-version",

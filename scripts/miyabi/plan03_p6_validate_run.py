@@ -272,7 +272,7 @@ def validate_run(
             row["status"] for row in static_bindings
         } != {"terminal"}:
             errors.append("static bindings are not all terminal")
-        if update_dtypes and {row["tensor_dtype"] for row in update_dtypes} != {"float32"}:
+        if {row["tensor_dtype"] for row in update_dtypes} != {"float32"}:
             errors.append(f"static update dtypes are not FP32: {update_dtypes}")
     else:
         admitted_by_stream: dict[int, int] = {}
@@ -288,7 +288,7 @@ def validate_run(
             row["role"] == "replacement" and row["state"] == "admitted" for row in launch_requests
         ):
             errors.append("dynamic replacement launch was not admitted")
-        if update_dtypes and {row["tensor_dtype"] for row in update_dtypes} != {"bfloat16"}:
+        if {row["tensor_dtype"] for row in update_dtypes} != {"bfloat16"}:
             errors.append(f"dynamic update dtypes are not BF16: {update_dtypes}")
 
     attestation_rows = _attestations(run_root)

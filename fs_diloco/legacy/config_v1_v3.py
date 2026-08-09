@@ -1,8 +1,8 @@
-"""Read-only config projection for completed v1-v3 runs.
+"""Read-only config projection for completed historical runs.
 
-The production loader deliberately rejects these keys.  Evaluation and export
-tools opt into this module so historical runs remain inspectable without making
-their runtime modes constructible or resumable.
+The production loader deliberately rejects retired runtime keys. Evaluation and
+export tools opt into this module so historical runs remain inspectable without
+making their runtime modes constructible or resumable.
 """
 
 from __future__ import annotations
@@ -31,6 +31,9 @@ _LEGACY_NESTED_RUNTIME_KEYS = {
     "liveness": frozenset({"quorum_policy"}),
     "inner_optimizer": frozenset({"reset_on_global_update"}),
 }
+_QUERY_ONLY_REMOVED_V4_KEYS = {
+    "syncer": frozenset({"parallel_checkpoint_writes"}),
+}
 
 
 @dataclass(frozen=True)
@@ -54,6 +57,10 @@ def _has_legacy_runtime_keys(payload: Mapping[str, Any]) -> bool:
         section = payload.get(section_name)
         if isinstance(section, Mapping) and removed_keys & section.keys():
             return True
+    for section_name, removed_keys in _QUERY_ONLY_REMOVED_V4_KEYS.items():
+        section = payload.get(section_name)
+        if isinstance(section, Mapping) and removed_keys & section.keys():
+            return True
     learner = payload.get("learner")
     return isinstance(learner, Mapping) and "prediction_reconcile_timeout_seconds" in learner
 
@@ -67,6 +74,12 @@ def _project_legacy_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     projected.pop("coordination", None)
     projected.pop("maintenance", None)
     for section_name, removed_keys in _LEGACY_NESTED_RUNTIME_KEYS.items():
+        section = projected.get(section_name)
+        if not isinstance(section, dict):
+            continue
+        for key in removed_keys:
+            section.pop(key, None)
+    for section_name, removed_keys in _QUERY_ONLY_REMOVED_V4_KEYS.items():
         section = projected.get(section_name)
         if not isinstance(section, dict):
             continue
@@ -89,8 +102,8 @@ def _project_legacy_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
 def load_query_config_snapshot(path: str | Path) -> Config:
     """Load current config strictly or explicitly project a historical snapshot.
 
-    Unknown keys do not trigger a compatibility downgrade.  Only a snapshot
-    containing a known v1-v3 runtime key is eligible for the legacy projection.
+    Unknown keys do not trigger a compatibility downgrade. Only a snapshot
+    containing an explicitly known historical key is eligible for projection.
     """
 
     try:

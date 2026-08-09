@@ -240,6 +240,30 @@ sync:
     assert projected.data.dataset_name == "synthetic"
 
 
+def test_query_config_projection_reads_removed_v4_syncer_key(tmp_path):
+    snapshot = tmp_path / "pre-removal-v4-resolved.yaml"
+    snapshot.write_text(
+        """config_schema_version: 1
+run:
+  name: historical-p6
+syncer:
+  device: cpu
+  compute_dtype: float32
+  publish_dtype: bfloat16
+  parallel_checkpoint_writes: true
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="syncer.parallel_checkpoint_writes.*移除"):
+        load_resolved_config_snapshot(snapshot)
+    projected = load_query_config_snapshot(snapshot)
+
+    assert projected.run.name == "historical-p6"
+    assert projected.syncer.device == "cpu"
+    assert projected.syncer.publish_dtype == "bfloat16"
+
+
 @pytest.mark.parametrize(
     "leader_yaml",
     [

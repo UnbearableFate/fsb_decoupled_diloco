@@ -60,12 +60,15 @@ def _read(path: Path) -> dict[str, Any]:
 def _atomic(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    with temporary.open("x", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(temporary, path)
-    fsync_directory(path.parent)
+    try:
+        with temporary.open("x", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        fsync_directory(path.parent)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def validate(paths: dict[str, Path]) -> dict[str, Any]:

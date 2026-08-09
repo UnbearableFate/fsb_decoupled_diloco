@@ -40,14 +40,28 @@ def test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources(tm
     repo = tmp_path / "repo"
     (repo / "fs_diloco").mkdir(parents=True)
     (repo / "configs").mkdir()
+    (repo / "docs").mkdir()
+    (repo / "tests").mkdir()
     (repo / "fs_diloco" / "module.py").write_text("VALUE = 1\n", encoding="utf-8")
     (repo / "configs" / "run.yaml").write_text("run: {}\n", encoding="utf-8")
+    (repo / "docs" / "contract.md").write_text("# Contract\n", encoding="utf-8")
+    (repo / "tests" / "test_module.py").write_text("def test_value(): pass\n", encoding="utf-8")
+    (repo / "main.py").write_text("VALUE = 1\n", encoding="utf-8")
     (repo / ".gitignore").write_text("uv.lock\n", encoding="utf-8")
     (repo / "uv.lock").write_text("dependency = 1\n", encoding="utf-8")
     _git(repo, "init", "-q")
     _git(repo, "config", "user.email", "test@example.invalid")
     _git(repo, "config", "user.name", "Test User")
-    _git(repo, "add", ".gitignore", "fs_diloco/module.py", "configs/run.yaml")
+    _git(
+        repo,
+        "add",
+        ".gitignore",
+        "fs_diloco/module.py",
+        "configs/run.yaml",
+        "docs/contract.md",
+        "tests/test_module.py",
+        "main.py",
+    )
     _git(repo, "commit", "-qm", "baseline")
 
     clean = _capture(repo, "clean")
@@ -55,7 +69,10 @@ def test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources(tm
     assert clean["source_fingerprint"].startswith("sha256:")
     assert {entry["path"] for entry in clean["source_files"]} == {
         "configs/run.yaml",
+        "docs/contract.md",
         "fs_diloco/module.py",
+        "main.py",
+        "tests/test_module.py",
         "uv.lock",
     }
 
@@ -64,6 +81,20 @@ def test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources(tm
     out_of_scope = _capture(repo, "out-of-scope")
     assert out_of_scope["git_dirty"] is False
     assert out_of_scope["source_fingerprint"] == clean["source_fingerprint"]
+
+    (repo / "tests" / "test_module.py").write_text(
+        "def test_value(): assert False\n", encoding="utf-8"
+    )
+    dirty_test = _capture(repo, "dirty-test")
+    assert dirty_test["git_dirty"] is True
+    assert dirty_test["source_fingerprint"] != clean["source_fingerprint"]
+    _git(repo, "restore", "tests/test_module.py")
+
+    (repo / "docs" / "contract.md").write_text("# Changed contract\n", encoding="utf-8")
+    dirty_docs = _capture(repo, "dirty-docs")
+    assert dirty_docs["git_dirty"] is True
+    assert dirty_docs["source_fingerprint"] != clean["source_fingerprint"]
+    _git(repo, "restore", "docs/contract.md")
 
     (repo / "fs_diloco" / "module.py").write_text("VALUE = 2\n", encoding="utf-8")
     tracked_edit = _capture(repo, "tracked")

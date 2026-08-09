@@ -32,6 +32,7 @@ REMOVED_CONFIG_KEYS: dict[str, str | None] = {
     "learner.prediction_reconcile_timeout_seconds": (
         "learner.prediction.reconcile_timeout_seconds"
     ),
+    "syncer.parallel_checkpoint_writes": None,
 }
 
 

@@ -21,6 +21,7 @@ from scripts.miyabi.check_plan03 import (
     verify_p4_migration_contracts,
     verify_tracked_evidence,
 )
+from scripts.miyabi.capture_source_identity import SOURCE_SCOPES
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,9 +63,9 @@ def test_plan03_checker_cli_prints_only_pass_for_frozen_verification() -> None:
     assert "Traceback" not in result.stderr
 
 
-def test_plan03_phase_source_cleanliness_covers_tests_and_entrypoint() -> None:
-    assert "tests" in EXECUTABLE_SOURCE_SCOPES
-    assert "main.py" in EXECUTABLE_SOURCE_SCOPES
+def test_plan03_checker_uses_the_canonical_formal_source_scope() -> None:
+    assert EXECUTABLE_SOURCE_SCOPES is SOURCE_SCOPES
+    assert {"tests", "docs", "main.py"} <= set(SOURCE_SCOPES)
 
 
 def test_plan03_checker_blocks_count_manifest_and_tag_drift() -> None:

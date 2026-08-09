@@ -583,3 +583,48 @@ Classic v0 `created_at` occurs after its setup, while unified epoch `acquired_at
 - Fixed High startup serialization: authority tensor verification imports are lazy at their exact pre-transaction verification sites, the admission-bearing syncer module is Torch-free, and the leader admits initial requests before entering the heavy runtime. Full proposal/publication/admission tests pass; formal initialization fell from about 2.51s to `0.32–0.36s`.
 - Fixed Medium evidence loss: successful artifacts retain all actor JSONL event tapes, and a 42-trial negative regression proves post-trial validation failures retain trials, timings, events and variant sets before cleanup. The initializer fsync-batching candidate is rejected as unnecessary risk: the unchanged durability path already meets G10 after removing the accidental Torch dependency. Secondary lifecycle spans remain diagnostic only.
 - Formal attempt 8 satisfies the unchanged gate: classic/unified median `-10.764%`, upper `-9.518%`; static/dynamic median `0.036%`, upper `0.947%`; both `COMPARABLE`, unclipped and exact 20 pairs with equal actual work. All accepted findings are fixed; no High/Medium finding is deferred.
+
+# 2026-08-10 P6 incremental-review G2 attempts 1–3 Codex+GPT comprehensive review
+
+Review trigger: jobs `2514234.opbs`, `2514252.opbs`, and `2514273.opbs` form three consecutive non-PASS submissions of experiment `P6-incremental-review-remediation-G2`. The first two exposed a checker design error introduced while addressing review Low L1; the third passed all tests but correctly refused formal evidence from an uncommitted source tree. No fourth submission is authorized until this review and the revised freeze logic are saved.
+
+## Common pattern, differences, and evidence
+
+- All three runs used the same one-node `debug-g` PBS launcher, resolved project interpreter, focused suite, full suite and structured artifact collector. Each passed PBS syntax and literal group preflight, captured commit `557874c1761e10dcc0243f0f315742b386d553d8`, and ran without source edits during the allocation.
+- Attempt 1 (`2514234`) made an existing `pop(..., None)` fail closed but applied the removal after replacing the entire projected `syncer` mapping. Five checker tests failed with `config removal path is absent`; source attestation correctly became dirty and included the new nine-scope inventory.
+- Attempt 2 (`2514252`) reordered the operation. Five checker tests then failed with `config removal crosses non-mapping field`, proving the frozen P0-to-v4 migrated payload has no `syncer` mapping at that stage. The field was introduced only by the later exact P6 projection, so a separate deletion operator has no valid position.
+- Attempt 3 (`2514273`) deleted the redundant removal API. It passed `628/628` focused and `749 passed, 2 skipped` full, including both review REDs. Its sole structured error was `formal executable source scope is dirty`; the artifact reported the intended nine scopes and fingerprint `sha256:1376ea14bdb0f00096aa49331135cb528660cff3b38359f7982da56561aeb620`.
+
+The repeated pattern is not a production runtime failure. It is a mismatch between two representations of config evolution followed by a deliberate evidence-freeze refusal: the acceptance checker attempted to express one whole-mapping transition simultaneously as an exact replacement and a nested deletion, while the formal test gate correctly distinguishes behavior success from clean-source evidence.
+
+## Complete input, transformation, persistence, and output flow
+
+1. `verify_p4_migration_contracts` reads the immutable P0 config from `FROZEN_FULL_COMMIT`, runs the v3→v4 migration, applies the reviewed P5 walltime adjustment, then applies exact P6 acceptance projections before comparing with the current tracked YAML payload.
+2. In P0 the relevant legacy information lives under `coordination.syncer_ha`; the migrated shared payload has no top-level `syncer` mapping. P6 introduced the top-level `syncer` configuration as a whole mapping. The previous projection included `parallel_checkpoint_writes`; the reviewed target changes the same whole mapping to three retained fields. Exact dictionary equality already rejects a missing, extra, renamed or value-drifted field.
+3. A separate nested-removal list therefore cannot address the original frozen payload before projection and cannot address the projected payload afterward. The silent `pop` was not merely weak; the abstraction itself duplicated and obscured the authoritative whole-mapping transition. Deleting the mini-language is safer than strengthening it.
+4. Separately, `capture_source_identity.capture()` enumerates tracked, untracked and explicit ignored-file scopes, hashes their type/mode/content, computes one canonical fingerprint, and records HEAD plus dirtiness. G2 runs collection, a focused group and the full suite, parses both JUnit files, and writes one atomic artifact. Test success never overrides dirty-source rejection.
+5. `plan03_p6_acceptance` and the requirement checker consume formal gate artifacts only when status is PASS, source is clean, and evidence binds to the verification target. Reports are intentionally outside source scope; `fs_diloco`, tests, configs, scripts, docs, entrypoint and environment lock/version inputs are inside it. Thus attempt 3 is positive regression evidence but cannot enter the acceptance matrix.
+
+## Invariants reviewed
+
+- Config migration remains an exact, allow-listed transformation from a frozen commit. No unknown current key is discarded; current payload equality is structural and value-exact. Production and resume loaders remain strict. Only `load_query_config_snapshot` may remove the single registered historical v4 query key after strict loading fails for that exact known field.
+- Source identity is a content manifest, not only a commit name. Uncommitted tracked and untracked tests, docs, entrypoint or runtime/config/script changes must set `git_dirty=true` and alter the fingerprint. All producers and consumers use the same canonical tuple.
+- The G2 artifact is atomically published after both suites terminate. A behavior pass on a dirty tree is BLOCKED, never PASS. Report-only additions and the user-owned `plans/AGENTS.md` are not executable inputs and do not change the formal fingerprint.
+- The changes do not touch SQLite transactions, file publication order, authority GC references, actor lifecycle or runtime recovery. The only persistence compatibility change is read-only config projection; it cannot make an old run resumable.
+- Existing acceptance evidence remains historical until every required gate is regenerated from one clean descendant containing the reviewed executable tree.
+
+## Test-oracle audit and alternative explanation
+
+The two new REDs check behavior rather than constants. A synthetic Git repository proves `tests/`, `docs/`, and `main.py` are present in `source_files`; modifying a tracked test or doc changes dirtiness and the fingerprint. A pre-removal v4 resolved snapshot proves the strict loader returns the registered removed-field diagnostic while the query loader preserves all retained syncer values after projecting only `parallel_checkpoint_writes` away. Attempt 3 also reran the exact P6 semantic-projection regression and the complete repository suite.
+
+An alternative explanation was that removal ordering alone was wrong. Attempt 1 tested post-projection removal and attempt 2 tested pre-projection removal; their distinct failures falsify both possible orderings. Another candidate was retaining a generic JSON-patch-style removal layer and changing its base to the prior P6 target, but that would mix two baselines inside a checker whose contract is a single frozen P0 migration. The selected whole-mapping projection is smaller, exact, and already covered by equality tests.
+
+The third BLOCKED result is not evidence that the expanded source scope is defective. Its sole error and full passing JUnit records show the inverse: the gate now detects precisely the uncommitted source/test/doc changes that the review required. The remaining action is a Git freeze boundary, not another behavioral change.
+
+## Revised implementation and attempt-4 gate
+
+1. Keep `P6_ACCEPTANCE_CONFIG_REMOVALS` and its helper deleted. Keep the exact whole-`syncer` values in `P6_ACCEPTANCE_CONFIG_PROJECTIONS`; add no second migration base or permissive unknown-key rule.
+2. Keep `capture_source_identity.SOURCE_SCOPES` as the single definition and consume it from the requirement checker and G7 producer. Keep the behavioral source-manifest RED and query-projection RED.
+3. Record review finding dispositions and the passing attempt-3 metrics. Run full Ruff/format/diff/PBS preflight, then commit all implementation, tests, docs, failure artifacts and both independent review reports while excluding only the user's unstaged `plans/AGENTS.md`.
+4. Freeze the resulting clean commit and fingerprint. Attempt 4 is a formal G2 run, not another dirty-tree development check. It must collect exactly the current focused and full suites, return zero failures/errors, report `git_dirty=false`, list the canonical nine scopes, and bind its `source_commit`/fingerprint to the frozen target.
+5. Any behavioral or source-attestation failure in attempt 4 must be recorded against this complete flow before modification. A PASS resets this experiment's consecutive-failure count. The complete G0–G10 ladder must then use the same clean target and fingerprint; no artifact from attempts 1–3 can substitute for it.
