@@ -463,7 +463,55 @@ def _admit_observations_unprotected(
                     and prior.logical_launch_id == str(request["logical_launch_id"])
                     and prior.attempt_id == str(request["attempt_id"])
                 ):
-                    binding = leader.replay_committed_static_binding(command_id=command_id)
+                    replay_authorization = None
+                    prior_was_active = False
+                    if prior.binding_generation > 1:
+                        history = authority.read.static_binding_history(
+                            prior.learner_id,
+                            prior.binding_generation - 1,
+                        )
+                        if history is None:
+                            raise AuthoritySchemaError(
+                                "committed static binding history is missing"
+                            )
+                        history_status = history.get("final_status")
+                        if history_status not in {"terminal", "replaced"}:
+                            raise AuthoritySchemaError(
+                                "committed static binding history status is invalid"
+                            )
+                        previous_fence = StaticContributorFence(
+                            kind="static",
+                            learner_id=str(history["learner_id"]),
+                            logical_launch_id=str(history["logical_launch_id"]),
+                            attempt_id=str(history["attempt_id"]),
+                            binding_generation=int(history["binding_generation"]),
+                        )
+                        prior_was_active = history_status == "replaced"
+                        if prior_was_active or (
+                            previous_fence.logical_launch_id != str(request["logical_launch_id"])
+                        ):
+                            replay_authorization = read_static_replacement_authorization(
+                                loaded.paths,
+                                request=request,
+                                current_fence=previous_fence,
+                            )
+                            if replay_authorization is None:
+                                raise AdmissionAuthorizationError(
+                                    "committed static replacement authorization is missing"
+                                )
+                    binding = leader.replay_committed_static_binding(
+                        command_id=command_id,
+                        learner_id=str(request["learner_id"]),
+                        logical_launch_id=str(request["logical_launch_id"]),
+                        attempt_id=str(request["attempt_id"]),
+                        expected_generation=request["expected_generation"],
+                        allow_logical_replacement=replay_authorization is not None,
+                        replacement_reason=(
+                            f"operator_static_replacement:{replay_authorization[1]}"
+                            if prior_was_active and replay_authorization is not None
+                            else None
+                        ),
+                    )
                     if binding is None or binding != prior:
                         raise MembershipFenceError(
                             "active static attempt ID belongs to another admission request"

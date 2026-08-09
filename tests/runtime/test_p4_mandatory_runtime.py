@@ -1918,6 +1918,61 @@ def test_fresh_request_cannot_reuse_the_current_static_attempt_id(tmp_path: Path
         authority.close()
 
 
+def test_static_replay_requires_exact_committed_command_request(tmp_path: Path) -> None:
+    paths, authority, leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    try:
+        publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-1",
+            expected_generation=None,
+        )
+        _admit_requests(loaded, authority, leader, telemetry)
+        first = authority.read.static_binding("learner_000")
+        assert first is not None and first.binding_generation == 1
+
+        duplicate_path = publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-1",
+            expected_generation=1,
+        )
+        duplicate = json.loads(duplicate_path.read_bytes())
+        request_sha = admission_request_sha256(duplicate)
+        collision = leader.bind_or_replace_static_attempt(
+            command_id=f"admit-{request_sha}",
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-1",
+            expected_generation=None,
+        )
+        assert collision == first
+
+        _admit_requests(loaded, authority, leader, telemetry)
+
+        current = authority.read.static_binding("learner_000")
+        assert current == first
+        rejection = paths.epoch_admission_rejection_path(
+            leader.token.epoch,
+            leader.token.owner_id,
+            "learner_000",
+            "attempt-1",
+            request_sha,
+        )
+        assert rejection.is_file()
+        assert json.loads(rejection.read_bytes())["error_type"] == "CommandConflictError"
+        assert not duplicate_path.exists()
+    finally:
+        authority.close()
+
+
 def test_stale_leader_cannot_use_exact_binding_shortcut_to_remove_hot_request(
     tmp_path: Path,
 ) -> None:
@@ -2053,6 +2108,83 @@ def test_cross_epoch_rejected_disposition_is_visible_to_waiting_learner(
                 max_clock_skew_seconds=0.0,
             )
         assert not rejected_path.exists()
+    finally:
+        authority.close()
+
+
+def test_rejected_disposition_survives_takeover_during_successor_repair(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths, authority, first_leader, loaded = _static_admission_runtime(tmp_path)
+    telemetry = _TelemetryProbe()
+    original_archive = syncer_runtime.archive_disposed_admission_request
+    original_repair = syncer_runtime.repair_rejected_admission_control
+    try:
+        publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-1",
+            expected_generation=None,
+        )
+        _admit_requests(loaded, authority, first_leader, telemetry)
+        rejected_path = publish_static_request(
+            paths,
+            run_id="run-v4",
+            descriptor_sha256="d" * 64,
+            learner_id="learner_000",
+            logical_launch_id="logical-1",
+            attempt_id="attempt-2",
+            expected_generation=1,
+        )
+        rejected = json.loads(rejected_path.read_bytes())
+
+        def fail_archive(*_args: object, **_kwargs: object) -> Path:
+            raise OSError("injected crash after rejected disposition")
+
+        monkeypatch.setattr(syncer_runtime, "archive_disposed_admission_request", fail_archive)
+        _admit_requests(loaded, authority, first_leader, telemetry)
+        authority.fail_leader(first_leader.token)
+        successor = authority.open_leader(
+            authority.acquire_leader(owner_id="owner-2", hostname="host", pid=2)
+        )
+        monkeypatch.setattr(
+            syncer_runtime,
+            "archive_disposed_admission_request",
+            original_archive,
+        )
+
+        def fence_successor_during_repair(*args: object, **kwargs: object) -> Path | None:
+            repaired = original_repair(*args, **kwargs)
+            authority.fail_leader(successor.token)
+            third = authority.open_leader(
+                authority.acquire_leader(owner_id="owner-3", hostname="host", pid=3)
+            )
+            _publish_synthetic_heartbeat(V4ControlPublisher(paths, third.token))
+            return repaired
+
+        monkeypatch.setattr(
+            syncer_runtime,
+            "repair_rejected_admission_control",
+            fence_successor_during_repair,
+        )
+        _admit_requests(loaded, authority, successor, telemetry)
+
+        assert not rejected_path.exists()
+        with pytest.raises(AdmissionRejectedError, match="active static replacement"):
+            read_admission_response(
+                paths,
+                run_id="run-v4",
+                descriptor_sha256="d" * 64,
+                actor_id="learner_000",
+                attempt_id="attempt-2",
+                stable_contributor_key="learner_000",
+                request_sha256=admission_request_sha256(rejected),
+                max_clock_skew_seconds=0.0,
+            )
     finally:
         authority.close()
 

@@ -1,0 +1,62 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-third-incremental-remediation-final-precommit",
+  "recorded_at": "2026-08-09T15:28:00+09:00",
+  "status": "PASS",
+  "errors": [],
+  "source_commit": "998564ee67fa3d0b79a5a0ac47b5f4c0716d243c",
+  "identity": {
+    "git_dirty": true,
+    "source_fingerprint": "sha256:8c3e550e59ee6f95c5dcbe5520d34a5dab790be49a471834e8e261b8eb381992",
+    "static_descriptor_sha256": "386640c7264475abe0714988aaa1290bddbbe128cd314279972a5fa8dc9fefce",
+    "dynamic_descriptor_sha256": "52f122a8c71a9ff2b1856fbd48fa1da982e897097096c2fb2eefd27d79b8958a"
+  },
+  "pbs": {
+    "job_id": "2510455.opbs",
+    "host": "mg0019",
+    "queue": "debug-g",
+    "requested_walltime": "00:10:00",
+    "exit_status": 0,
+    "stdout_sha256": "f95bc62f0842667b8204f691f09481d342223ded51fa83fdd64cd722f69967a2"
+  },
+  "checks": {
+    "ruff": "PASS",
+    "format_files": 20,
+    "boundary_checker": "PASS",
+    "focused_tests": "85 passed in 6.95s",
+    "full_tests": "908 passed in 71.53s"
+  },
+  "static": {
+    "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_static_2510455",
+    "descriptor_sha256": "386640c7264475abe0714988aaa1290bddbbe128cd314279972a5fa8dc9fefce",
+    "authority_database_sha256_before_cleanup": "644717b955a308e13b6de6245490d2aa33ec51af955d2e1dc2640bed0b6b9842",
+    "summary": {
+      "run_id": "plan03_p4_static_2510455",
+      "final_version": 2,
+      "direct_weight_tokens_applied": 256,
+      "acked_terminal_fences": 2,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "pending_or_selected_updates": 0,
+      "integrity_check": "ok"
+    }
+  },
+  "dynamic": {
+    "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_dynamic_2510455",
+    "descriptor_sha256": "52f122a8c71a9ff2b1856fbd48fa1da982e897097096c2fb2eefd27d79b8958a",
+    "authority_database_sha256_before_cleanup": "046dc09ed0d2c0a56df8cc1d30181f478a3c84b8c8a6a81902f5205278815702",
+    "summary": {
+      "run_id": "plan03_p4_dynamic_2510455",
+      "final_version": 12,
+      "direct_weight_tokens_applied": 3840,
+      "acked_terminal_fences": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "pending_or_selected_updates": 0,
+      "integrity_check": "ok"
+    }
+  },
+  "findings_closed": [
+    "durable rejected disposition remains directly visible across repeated takeover",
+    "missing and null runtime cleanliness markers fail the requirement Checker",
+    "static replay compares the exact stored canonical command request"
+  ]
+}

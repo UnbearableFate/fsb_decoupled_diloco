@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
 import yaml
 
 from scripts.miyabi.check_plan03 import (
@@ -305,6 +306,7 @@ def test_plan03_requirement_checker_rejects_self_evidence_and_stale_source(
     stale_runtime = {
         "status": "PASS",
         "source_commit": "stale",
+        "source_identity": {"git_dirty": False},
         "requirements_covered": ["REQ-1"],
     }
     (tmp_path / "runtime.json").write_text(json.dumps(stale_runtime), encoding="utf-8")
@@ -369,6 +371,7 @@ def test_plan03_requirement_checker_accepts_evidence_only_descendant_target(
             {
                 "status": "PASS",
                 "source_commit": source,
+                "source_identity": {"git_dirty": False},
                 "requirements_covered": ["REQ-1"],
             }
         ),
@@ -501,6 +504,35 @@ def test_plan03_requirement_checker_rejects_dirty_runtime_evidence(tmp_path: Pat
         ),
         encoding="utf-8",
     )
+
+    _checks, differences = verify_phase_requirements(
+        root,
+        matrix,
+        "P4",
+        expected_source_commit=source,
+    )
+
+    assert differences == ["requirements.REQ-1.structured-checker-evidence"]
+
+
+@pytest.mark.parametrize(
+    "source_identity",
+    [None, {"git_dirty": None}],
+    ids=["missing-marker", "null-marker"],
+)
+def test_plan03_requirement_checker_requires_explicit_clean_runtime_evidence(
+    tmp_path: Path,
+    source_identity: dict[str, object] | None,
+) -> None:
+    root, matrix, source = _requirement_evidence_repo(tmp_path)
+    payload: dict[str, object] = {
+        "status": "PASS",
+        "source_commit": source,
+        "requirements_covered": ["REQ-1"],
+    }
+    if source_identity is not None:
+        payload["source_identity"] = source_identity
+    (root / "evidence.json").write_text(json.dumps(payload), encoding="utf-8")
 
     _checks, differences = verify_phase_requirements(
         root,

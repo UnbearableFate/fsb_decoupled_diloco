@@ -1,0 +1,38 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-third-incremental-review-m2-red",
+  "recorded_at": "2026-08-09T15:23:00+09:00",
+  "status": "FAIL",
+  "source_commit": "998564ee67fa3d0b79a5a0ac47b5f4c0716d243c",
+  "source_identity": {
+    "git_dirty": true,
+    "source_fingerprint": "sha256:428457e6bec6e0fd1d58cbfae4a314810c7ebcb08b84bdd59dd714750e6ab023",
+    "note": "H1/M1 remediation and the intentional M2 RED test were uncommitted"
+  },
+  "pbs": {
+    "job_id": "2510443.opbs",
+    "host": "mg0001",
+    "queue": "debug-g",
+    "requested_walltime": "00:10:00",
+    "exit_status": 1,
+    "stdout_sha256": "37c0c15e40cd0764c527986c6fa40b67649e79dd2e3d561a4342cca4a3283f2a"
+  },
+  "completed_checks": {
+    "ruff": "PASS",
+    "format_files": 20,
+    "boundary_checker": "PASS",
+    "focused_tests": "84 passed, 1 failed in 7.08s"
+  },
+  "failures": [
+    {
+      "test": "tests/runtime/test_p4_mandatory_runtime.py::test_static_replay_requires_exact_committed_command_request",
+      "expected": "a same-kind command record with different canonical arguments cannot authorize replay of a fresh admission request",
+      "actual": "the result-only shortcut accepted the equal current binding, published admission, and produced no CommandConflictError rejection"
+    }
+  ],
+  "not_reached": [
+    "full repository tests",
+    "real static pipeline",
+    "real dynamic pipeline"
+  ]
+}

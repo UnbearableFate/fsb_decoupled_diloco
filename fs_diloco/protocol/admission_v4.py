@@ -429,6 +429,14 @@ def read_admission_response(
             epoch=current.epoch,
             owner_id=current.owner_id,
         )
+    _raise_durable_admission_rejection(
+        paths,
+        run_id=run_id,
+        descriptor_sha256=descriptor_sha256,
+        actor_id=actor_id,
+        attempt_id=attempt_id,
+        request_sha256=request_sha256,
+    )
     pointer_path = paths.epoch_current_admission_path(
         current.epoch, current.owner_id, stable_contributor_key
     )
@@ -591,6 +599,93 @@ def _raise_valid_rejection(
     )
     raise AdmissionRejectedError(
         f"learner admission rejected: {rejection['error_type']}: {rejection['message']}"
+    )
+
+
+def _raise_durable_admission_rejection(
+    paths: RunPaths,
+    *,
+    run_id: str,
+    descriptor_sha256: str,
+    actor_id: str,
+    attempt_id: str,
+    request_sha256: str,
+) -> None:
+    """Consume a permanent rejection without depending on current-epoch repair."""
+
+    disposition_path = paths.registration_disposition_path(request_sha256)
+    disposition = safe_read_json(disposition_path)
+    if disposition is None:
+        try:
+            disposition_path.lstat()
+        except FileNotFoundError:
+            return
+        except OSError as exc:
+            raise RuntimeError(f"malformed admission disposition: {disposition_path}") from exc
+        raise RuntimeError(f"malformed admission disposition: {disposition_path}")
+    expected = {
+        "format_version": ADMISSION_DISPOSITION_FORMAT_VERSION,
+        "request_sha256": request_sha256,
+        "run_id": run_id,
+        "descriptor_sha256": descriptor_sha256,
+    }
+    fields = {
+        *expected,
+        "leader_epoch",
+        "leader_owner_id",
+        "outcome",
+        "control_path",
+        "fence",
+        "error_type",
+    }
+    if (
+        not isinstance(disposition, dict)
+        or set(disposition) != fields
+        or any(disposition.get(key) != value for key, value in expected.items())
+    ):
+        raise RuntimeError(f"malformed admission disposition: {disposition_path}")
+    epoch = disposition.get("leader_epoch")
+    owner_id = disposition.get("leader_owner_id")
+    outcome = disposition.get("outcome")
+    if (
+        isinstance(epoch, bool)
+        or not isinstance(epoch, int)
+        or epoch < 1
+        or not isinstance(owner_id, str)
+        or not owner_id
+        or outcome not in {"admitted", "rejected"}
+    ):
+        raise RuntimeError(f"malformed admission disposition: {disposition_path}")
+    if outcome == "admitted":
+        return
+    rejection_path = paths.epoch_admission_rejection_path(
+        epoch,
+        owner_id,
+        actor_id,
+        attempt_id,
+        request_sha256,
+    )
+    error_type = disposition.get("error_type")
+    rejection = safe_read_json(rejection_path)
+    if (
+        disposition.get("fence") is not None
+        or not isinstance(error_type, str)
+        or not error_type
+        or disposition.get("control_path") != paths.relative(rejection_path)
+        or rejection is None
+        or not isinstance(rejection, dict)
+        or rejection.get("error_type") != error_type
+    ):
+        raise RuntimeError(f"malformed admission disposition: {disposition_path}")
+    _raise_valid_rejection(
+        rejection,
+        path=rejection_path,
+        run_id=run_id,
+        descriptor_sha256=descriptor_sha256,
+        actor_id=actor_id,
+        attempt_id=attempt_id,
+        epoch=epoch,
+        owner_id=owner_id,
     )
 
 

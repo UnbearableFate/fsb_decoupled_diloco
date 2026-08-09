@@ -491,6 +491,25 @@ class AuthorityReadModel:
         )
         return None if row is None else _decode_static_binding(row)
 
+    def static_binding_history(
+        self, learner_id: str, binding_generation: int
+    ) -> dict[str, Any] | None:
+        validate_identity(learner_id, name="learner_id")
+        if (
+            isinstance(binding_generation, bool)
+            or not isinstance(binding_generation, int)
+            or binding_generation < 1
+        ):
+            raise ValueError("binding_generation must be a positive integer")
+        row = self._authority._fetchone(
+            """
+            SELECT * FROM static_binding_history
+            WHERE learner_id=? AND binding_generation=?
+            """,
+            (learner_id, binding_generation),
+        )
+        return None if row is None else dict(row)
+
     def contributor_progress(self, stable_contributor_key: str) -> ContributorProgress | None:
         row = self._authority._fetchone(
             "SELECT * FROM contributor_progress WHERE stable_contributor_key = ?",
@@ -905,24 +924,37 @@ class LeaderSession:
         self._authority = authority
         self.token = token
 
-    def replay_committed_static_binding(self, *, command_id: str) -> StaticBinding | None:
-        """Return the exact committed binding result for a content-addressed command."""
+    def replay_committed_static_binding(
+        self,
+        *,
+        command_id: str,
+        learner_id: str,
+        logical_launch_id: str,
+        attempt_id: str,
+        expected_generation: int | None = None,
+        allow_logical_replacement: bool = False,
+        replacement_reason: str | None = None,
+    ) -> StaticBinding | None:
+        """Replay only an exact committed static-binding command request."""
 
-        validate_identity(command_id, name="command_id")
-        self._authority._verify_token(self.token)
-        row = self._authority._fetchone(
-            "SELECT command_kind, result_json FROM command_records WHERE command_id=?",
-            (command_id,),
+        request = _static_binding_command_request(
+            learner_id=learner_id,
+            logical_launch_id=logical_launch_id,
+            attempt_id=attempt_id,
+            expected_generation=expected_generation,
+            allow_logical_replacement=allow_logical_replacement,
+            replacement_reason=replacement_reason,
         )
-        self._authority._verify_token(self.token)
-        if row is None:
+        payload = self._command_replay(
+            command_id,
+            "bind_or_replace_static_attempt",
+            request,
+        )
+        if payload is None:
             return None
-        if row["command_kind"] != "bind_or_replace_static_attempt":
-            raise CommandConflictError("command ID belongs to another command kind")
         try:
-            payload = json.loads(str(row["result_json"]))
             return _decode_static_binding(payload)
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        except (KeyError, TypeError, ValueError) as exc:
             raise AuthoritySchemaError("committed static binding result is invalid") from exc
 
     def bind_or_replace_static_attempt(
@@ -936,27 +968,14 @@ class LeaderSession:
         allow_logical_replacement: bool = False,
         replacement_reason: str | None = None,
     ) -> StaticBinding:
-        validate_identity(learner_id, name="learner_id")
-        validate_identity(logical_launch_id, name="logical_launch_id")
-        validate_identity(attempt_id, name="attempt_id")
-        if expected_generation is not None and (
-            isinstance(expected_generation, bool)
-            or not isinstance(expected_generation, int)
-            or expected_generation < 0
-        ):
-            raise ValueError("expected_generation must be a non-negative integer")
-        if not isinstance(allow_logical_replacement, bool):
-            raise ValueError("allow_logical_replacement must be a boolean")
-        if replacement_reason is not None and not replacement_reason:
-            raise ValueError("replacement_reason must not be empty")
-        request = {
-            "learner_id": learner_id,
-            "logical_launch_id": logical_launch_id,
-            "attempt_id": attempt_id,
-            "expected_generation": expected_generation,
-            "allow_logical_replacement": allow_logical_replacement,
-            "replacement_reason": replacement_reason,
-        }
+        request = _static_binding_command_request(
+            learner_id=learner_id,
+            logical_launch_id=logical_launch_id,
+            attempt_id=attempt_id,
+            expected_generation=expected_generation,
+            allow_logical_replacement=allow_logical_replacement,
+            replacement_reason=replacement_reason,
+        )
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
             if not isinstance(self._authority._scope, StaticMembershipScope):
@@ -4952,6 +4971,38 @@ def _audit_history_records(
                 primary_key = str(row[key_kind])
             records.append({"table": table, "primary_key": primary_key, "row": dict(row)})
     return sorted(records, key=lambda item: (item["table"], item["primary_key"]))
+
+
+def _static_binding_command_request(
+    *,
+    learner_id: str,
+    logical_launch_id: str,
+    attempt_id: str,
+    expected_generation: int | None,
+    allow_logical_replacement: bool,
+    replacement_reason: str | None,
+) -> dict[str, Any]:
+    validate_identity(learner_id, name="learner_id")
+    validate_identity(logical_launch_id, name="logical_launch_id")
+    validate_identity(attempt_id, name="attempt_id")
+    if expected_generation is not None and (
+        isinstance(expected_generation, bool)
+        or not isinstance(expected_generation, int)
+        or expected_generation < 0
+    ):
+        raise ValueError("expected_generation must be a non-negative integer")
+    if not isinstance(allow_logical_replacement, bool):
+        raise ValueError("allow_logical_replacement must be a boolean")
+    if replacement_reason is not None and not replacement_reason:
+        raise ValueError("replacement_reason must not be empty")
+    return {
+        "learner_id": learner_id,
+        "logical_launch_id": logical_launch_id,
+        "attempt_id": attempt_id,
+        "expected_generation": expected_generation,
+        "allow_logical_replacement": allow_logical_replacement,
+        "replacement_reason": replacement_reason,
+    }
 
 
 def _canonical_json(value: Any) -> str:

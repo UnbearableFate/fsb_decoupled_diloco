@@ -37,6 +37,16 @@ BOUNDARY_COUNT_KEYS = (
 )
 P1_BASELINE_COMPOSITION_MIGRATION = "fs_diloco/baselines/train.py"
 
+# This retained P3 runtime result predates source-cleanliness fields. Its exact
+# path is frozen and separately bound to the reviewed clean target; every newly
+# produced runtime artifact must carry an explicit marker.
+LEGACY_CLEAN_RUNTIME_EVIDENCE = frozenset(
+    {
+        "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/"
+        "20260809-071821_p3-incremental-remediation-tests_pass.json"
+    }
+)
+
 
 def _git(root: Path, *args: str) -> str:
     return subprocess.run(
@@ -550,22 +560,16 @@ def verify_phase_requirements(
                 )
             source_matches = source_match_cache[cache_key]
             covered_requirements = payload.get("requirements_covered", [])
-            dirty_markers = [
-                marker
-                for marker in (
-                    payload.get("git_dirty"),
-                    payload.get("source_identity", {}).get("git_dirty")
-                    if isinstance(payload.get("source_identity"), dict)
-                    else None,
-                    payload.get("identity", {}).get("git_dirty")
-                    if isinstance(payload.get("identity"), dict)
-                    else None,
-                )
-                if marker is not None
-            ]
-            runtime_source_is_clean = not dirty_markers or all(
-                marker is False for marker in dirty_markers
-            )
+            dirty_markers: list[Any] = []
+            if "git_dirty" in payload:
+                dirty_markers.append(payload["git_dirty"])
+            for container_name in ("source_identity", "identity"):
+                container = payload.get(container_name)
+                if isinstance(container, dict) and "git_dirty" in container:
+                    dirty_markers.append(container["git_dirty"])
+            runtime_source_is_clean = (
+                bool(dirty_markers) and all(marker is False for marker in dirty_markers)
+            ) or (not dirty_markers and item in LEGACY_CLEAN_RUNTIME_EVIDENCE)
             runtime_evidence_pass = (
                 payload.get("status") == "PASS"
                 and isinstance(covered_requirements, list)

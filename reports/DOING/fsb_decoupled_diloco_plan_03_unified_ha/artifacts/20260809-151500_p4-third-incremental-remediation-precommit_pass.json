@@ -1,0 +1,44 @@
+{
+  "artifact_schema_version": 1,
+  "experiment_id": "p4-third-incremental-remediation-precommit",
+  "recorded_at": "2026-08-09T15:15:00+09:00",
+  "status": "PASS",
+  "errors": [],
+  "source_commit": "998564ee67fa3d0b79a5a0ac47b5f4c0716d243c",
+  "identity": {
+    "git_dirty": true,
+    "source_fingerprint": "sha256:428457e6bec6e0fd1d58cbfae4a314810c7ebcb08b84bdd59dd714750e6ab023",
+    "static_descriptor_sha256": "07000a234a2f78e3a8af41622118afea7909a1047f92e1eb33822789807c56af",
+    "dynamic_descriptor_sha256": "ecec8d4993d7beda4547c45bad59d3a4cca1b3d4153c7601f5e082cc9a2c48cc"
+  },
+  "pbs": {
+    "job_id": "2510405.opbs",
+    "host": "mg0019",
+    "queue": "debug-g",
+    "requested_walltime": "00:10:00",
+    "actual_walltime": "00:01:42",
+    "exit_status": 0,
+    "stdout_sha256": "77604cd738fb95f88739d36241128e3c735dfa0093591d3a23736ab057da627b"
+  },
+  "checks": {
+    "ruff": "PASS",
+    "format_files": 20,
+    "boundary_checker": "PASS",
+    "focused_tests": "84 passed in 6.94s",
+    "full_tests": "907 passed in 71.36s"
+  },
+  "static": {
+    "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_static_2510405",
+    "authority_database_sha256_before_cleanup": "3a5f0e85ae7a0be55efc22b76570aa744179da5fefea7cef9d5f454c453f1b00",
+    "summary": {"run_id": "plan03_p4_static_2510405", "final_version": 2, "direct_weight_tokens_applied": 256, "acked_terminal_fences": 2, "hard_crash_gap_tokens_upper_bound": 0, "pending_or_selected_updates": 0, "integrity_check": "ok"}
+  },
+  "dynamic": {
+    "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan03_p4_dynamic_2510405",
+    "authority_database_sha256_before_cleanup": "4eaa6d8eea044293ba41e663b724683a170aefde24b5038b9e0214224f419eae",
+    "summary": {"run_id": "plan03_p4_dynamic_2510405", "final_version": 12, "direct_weight_tokens_applied": 3840, "acked_terminal_fences": 1, "hard_crash_gap_tokens_upper_bound": 0, "pending_or_selected_updates": 0, "integrity_check": "ok"}
+  },
+  "findings_closed": [
+    "durable rejected disposition remains directly visible across repeated takeover",
+    "missing and null runtime cleanliness markers fail the requirement Checker"
+  ]
+}

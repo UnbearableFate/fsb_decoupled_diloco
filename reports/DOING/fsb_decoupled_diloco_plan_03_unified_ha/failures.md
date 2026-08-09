@@ -639,3 +639,49 @@
 
 - Fresh session `a887a576-1c59-4c58-996d-b2563b8b3165` requested and actually used `claude-opus-5` for `19d40b5..e565ad8`. After 19 read-only review turns, the API exited 1 with status 429 and the explicit message `You've hit your session limit`, reset 17:20 Asia/Tokyo, before creating a report.
 - This is the exact non-blocking exception authorized by `plans/AGENTS.md` and the user. It is classified `skipped-session-limit`, will not be retried, and does not replace the already persisted mandatory Codex review. Invocation and skip records are retained alongside the P4 reports.
+
+# 2026-08-09 15:02 JST — Third P4 review RED test lint missed the pytest import
+
+- The pre-PBS Ruff gate rejected the new parameterized Checker RED test with `F821 Undefined name pytest`; no test or runtime executed.
+- Cause: `tests/test_plan03_checker.py` previously used plain assertions only and therefore had no pytest import. The first corrective `apply_patch` also matched an assumed import order and failed verification without changing files.
+- Correction: add the explicit import at the actual import block, rerun Ruff/format/diff checks, then submit the unchanged RED behaviors.
+
+# 2026-08-09 15:04 JST — P4 third incremental review RED gate failed as designed
+
+- Job `2510392.opbs` on `mg0020` passed Ruff, the 20-file format gate and boundary Checker, then stopped at `83 passed, 1 failed in 7.03s` in the focused P4 suite. Full tests and real pipelines were intentionally not reached after the first RED failure.
+- The failure deterministically proves Codex H1: epoch 2 validated and republished a durable rejection, was fenced by epoch 3 inside repair, then still deleted the global hot request. The public reader queried only epoch 3 and returned pending instead of the retained rejection.
+- The two Checker RED parameter cases for missing/null cleanliness markers are present but were not reached by this fail-fast PBS script. They will be exercised after the runtime fix in the full suite and are also directly validated by the focused Checker invocation before GREEN submission.
+- Remediation: add a strict global rejected-disposition consumer fallback to the public reader, require explicit boolean-false runtime cleanliness (with a finite named legacy attestation only where necessary), then rerun the complete gate. Evidence: `artifacts/20260809-150400_p4-third-incremental-review-red_fail.json`. This is attempt 1 for these accepted findings.
+
+# 2026-08-09 15:05 JST — Combined remediation patch assumed a nonexistent Checker constant
+
+- The first combined product patch attempted to anchor the legacy-attestation set after `DEFAULT_MATRIX`, but this Checker version has no such module constant. `apply_patch` failed atomically before changing any product or test file.
+- Correction: anchor the finite legacy set after the actual `P1_BASELINE_COMPOSITION_MIGRATION` constant and reapply the same protocol, Checker and fixture changes.
+
+# 2026-08-09 15:06 JST — Checker remediation needed formatter normalization
+
+- Ruff lint passed, but `ruff format --check` reported that `scripts/miyabi/check_plan03.py` would be reformatted; later py_compile/diff checks in the chained static gate were not reached.
+- Correction: run the repository formatter on that single modified Checker file, then rerun the complete static gate before PBS attempt 2. No behavior changes are intended.
+
+# 2026-08-09 15:23 JST — P4 exact-command replay RED gate failed as designed
+
+- Job `2510443.opbs` on `mg0001` passed Ruff, the 20-file format gate and boundary Checker, then produced `84 passed, 1 failed in 7.08s` in the focused suite. Full tests and real pipelines were not reached.
+- The new regression constructed the Codex M2 collision exactly: a supported authority call committed the target content-addressed command ID with the same command kind and equal binding result but a different canonical request (`expected_generation=null` instead of `1`). The result-only replay shortcut admitted the fresh request and created no rejection.
+- Remediation: remove the result-only shortcut. Reconstruct the original replacement context from immutable binding history plus the retained operator authorization, then invoke the ordinary fenced command path so `_command` compares the stored canonical request digest. Evidence: `artifacts/20260809-152300_p4-third-incremental-review-m2-red_fail.json`. This is attempt 1 for M2.
+
+# 2026-08-09 15:27 JST — Exact-replay remediation needed formatter normalization
+
+- Ruff lint passed, but the format gate reported that `fs_diloco/runtime/syncer_v4.py` would be reformatted; py_compile and diff checks in the chained command were not reached.
+- Correction: run Ruff format on that one modified file, then rerun the complete static gate before submitting the GREEN job. No semantic change is intended.
+
+# 2026-08-09 15:29 JST — Final precommit cleanup evidence used the wrong identity key
+
+- The first `clean_run` dry-run correctly refused the static `2510455` root with `completion evidence has no source identity`; no deletion occurred and the dynamic dry-run was not attempted.
+- Cause: the new PASS artifact used the Checker's accepted `source_identity` spelling, while `clean_run` requires the established top-level `identity` object used by prior P4 artifacts.
+- Correction: rename that object to `identity` without changing its attested values, then repeat both dry-runs before either delete request.
+
+# 2026-08-09 15:30 JST — Final precommit cleanup evidence omitted descriptor identity aliases
+
+- After correcting the identity object name, the repeated static `clean_run` dry-run refused with `completion evidence descriptor identity does not match`; no deletion occurred and later commands were not attempted.
+- Cause: the root-specific sections recorded both descriptor hashes, but the cleaner's established evidence contract reads `static_descriptor_sha256` and `dynamic_descriptor_sha256` from the shared `identity` object.
+- Correction: copy the already attested descriptor hashes into those two identity fields and repeat both dry-run validations before deletion.

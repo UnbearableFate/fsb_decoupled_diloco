@@ -553,3 +553,21 @@
 - Codex independently reviewed the complete `19d40b5173eb1a16227013a451fced0e3eb13ace..e565ad8f9a71af128c6df7c1dfb4e42a9e520388` increment and persisted `gpt-5.6-sol_e565ad8f9a71af128c6df7c1dfb4e42a9e520388.md` before invoking Claude. Verdict: `CHANGES_REQUIRED` with one High and two Medium findings.
 - The fresh Claude Opus 5 call ended on an explicit account session limit before producing a report and is therefore the authorized non-blocking `skipped-session-limit` case. Files: `claude-opus-5_e565ad8f9a71af128c6df7c1dfb4e42a9e520388_{attempt1_invocation,skipped-session-limit}.json`.
 - Remediation must now make rejected dispositions directly visible across repeated takeover, require explicit runtime cleanliness evidence, and bind exact static replay to the stored canonical command request before P4 can close.
+
+# 2026-08-09 15:15 JST — P4 third incremental remediation precommit PASS
+
+- Job `2510405.opbs` on `mg0019` passed Ruff/format/boundary Checker, all `84` focused P4 tests, all `907` repository tests, and both real strict-v4 pipelines from dirty-source fingerprint `sha256:428457e6bec6e0fd1d58cbfae4a314810c7ebcb08b84bdd59dd714750e6ab023`.
+- The public learner now validates and consumes the immutable global rejected disposition/control, so a second takeover after current-epoch repair cannot hide the terminal outcome even if the stale successor removes the hot request. Runtime evidence now requires at least one explicit boolean-false cleanliness marker; missing/null markers fail, while the single known pre-marker P3 artifact is a finite exact-path attestation rather than an open compatibility bypass.
+- Static/dynamic pipelines finalized at v2/256 and v12/3,840 direct tokens with 2/1 acknowledged fences, zero hard-crash gap, zero pending/selected updates and SQLite integrity `ok`. Evidence: `artifacts/20260809-151500_p4-third-incremental-remediation-precommit_pass.json`; PBS stdout SHA-256 `77604cd738fb95f88739d36241128e3c735dfa0093591d3a23736ab057da627b`.
+
+# 2026-08-09 15:28 JST — P4 third incremental remediation final precommit PASS
+
+- After RED-locking Codex M2, the result-only shortcut was replaced by exact `_command_replay` validation. For a previously committed replacement, immutable binding history reconstructs the old fence and the retained exact operator authorization reconstructs the canonical command request; a different request under the same command ID now yields `CommandConflictError`.
+- Job `2510455.opbs` on `mg0019` passed Ruff/format/boundary Checker, all `85` focused tests, all `908` repository tests, and real static/dynamic pipelines. The pipelines finalized at v2/256 and v12/3,840 direct tokens with 2/1 acknowledged fences, no hard-crash gap, no pending/selected update and SQLite integrity `ok`.
+- Evidence: `artifacts/20260809-152800_p4-third-incremental-remediation-final-precommit_pass.json`; stdout SHA-256 `f95bc62f0842667b8204f691f09481d342223ded51fa83fdd64cd722f69967a2`. Clean frozen-target validation remains required.
+- Evidence-bound `clean_run` dry-runs and deletes matched exactly: 8 static objects (50,832 bytes) and 13 dynamic objects (99,985 bytes). Manifests: `artifacts/20260809-153100_p4-third-incremental-remediation-final-precommit-{static,dynamic}_cleanup.json`; authority, configuration, control and audit state remain retained.
+
+# 2026-08-09 15:32 JST — P4 third incremental review findings fully dispositioned
+
+- Codex H1, M1 and M2 are all fixed with dedicated RED/GREEN coverage. The exact disposition record is `artifacts/20260809-153200_p4-third-incremental-review-finding-dispositions_review.json`.
+- Claude's fresh invocation is retained as the user-authorized `skipped-session-limit` case and does not block the already completed Codex review/remediation gate. No review finding remains deferred from this increment.
