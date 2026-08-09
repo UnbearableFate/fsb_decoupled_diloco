@@ -22,6 +22,7 @@ CLASSIC_ROOT="$TMPDIR/plan03-classic-worktree"
 CURRENT_VENV="$TMPDIR/plan03-current-venv"
 CLASSIC_VENV="$TMPDIR/plan03-classic-venv"
 SHARED_PARENT="${SHARED_PARENT:-$PROJECT_ROOT/runs/fs_diloco}"
+CLASSIC_REF="archive/classic-full-v1-final"
 
 cleanup() {
   if [[ -d "$CLASSIC_ROOT" ]]; then
@@ -31,7 +32,9 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 cd "$PROJECT_ROOT"
-git worktree add --detach "$CLASSIC_ROOT" archive/classic-full-v1-final
+CLASSIC_COMMIT="$(git rev-parse "${CLASSIC_REF}^{commit}")"
+git worktree add --detach "$CLASSIC_ROOT" "$CLASSIC_COMMIT"
+test "$(git -C "$CLASSIC_ROOT" rev-parse HEAD)" = "$CLASSIC_COMMIT"
 UV_PROJECT_ENVIRONMENT="$CURRENT_VENV" "$UV_BIN" sync \
   --project "$PROJECT_ROOT" --frozen --no-dev
 UV_PROJECT_ENVIRONMENT="$CLASSIC_VENV" "$UV_BIN" sync \

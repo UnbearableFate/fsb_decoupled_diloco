@@ -439,3 +439,63 @@ The rejected design is to keep normalizing arbitrary `learner_instances.pbs_job_
 2. Require lost final status `expired` and exact reason `confirmed_scheduler_terminal_after_progress_stall` in both dynamic scenarios. Keep `replacement_final='stopped'`, one exact replacement, contribution and old-fence boundary assertions.
 3. Run Ruff/format/compile/PBS syntax/literal-group checks, freeze a clean commit, then run complete G2. Attempt 7 may be submitted only after that group passes.
 4. Attempt 7 passes only if six partial artifacts plus final structured artifact exist; every scenario validates integrity, terminal/current-only authority, token balance and artifacts; both dynamic scenarios record exact request/instance/scheduler bindings; qstat shows no scenario child queued/running. Any further failure is recorded before modification and re-audited against this request-keyed control flow rather than patched by timeout, budget, or permissive status sets.
+
+# 2026-08-10 P6 G10 attempts 1–3 Codex+GPT comprehensive review
+
+Review trigger: formal G10 jobs `2513331.opbs`, `2513381.opbs`, and `2513422.opbs` failed consecutively before producing any timed arm. No attempt 4 is authorized until this environment/source/config/timer review is saved, the latent config counterexample has a RED test, and a clean compute regression passes.
+
+## Three-failure pattern and independent review lenses
+
+The Codex implementation audit traced the PBS shell, Git objects, uv environments, subprocess cwd, run lifecycle and evidence writer. The GPT protocol/statistics audit independently checked comparability identities, timer anchors, pair order, bootstrap method and acceptance thresholds. The failures share one pattern: setup code compared string-shaped identities without preserving the semantic layer that produced them.
+
+1. Attempt 1 exported a locked `torch==2.13.0+cu132` requirement but discarded the explicit PyTorch index that makes that version resolvable. No environment or arm existed yet. The repair now builds both independent venvs directly from the same current frozen project/lock and replaces only the classic project source with the detached worktree.
+2. Attempt 2 proved both installs, but `python -c` ran from the current project root, so the interpreter's empty path entry shadowed the classic editable install. The neutral-`TMPDIR` probe fixes observation without `PYTHONPATH` or weakened assertions.
+3. Attempt 3 passed environment and package-origin preflight, then compared an annotated tag object's SHA (`53e05fa...`) with the detached checkout's peeled commit SHA (`a00a3d6...`). Git correctly checked out the tag's commit; the validator compared different object kinds.
+
+None is a performance result or production regression. The common correction is to capture a canonical identity once, retain its type/derivation, and compare like with like before entering the timer.
+
+## End-to-end environment, run and evidence flow
+
+The PBS job creates a detached classic worktree under job-owned `TMPDIR`, creates two physically distinct venv paths from the current `uv.lock`, and installs the archived source into only the classic venv with `--no-deps --reinstall -e`. Neutral-cwd probes must prove current import → current root, classic import → detached root, distinct Python paths and identical Torch versions. The frozen classic reference is an annotated tag, so preflight must record the ref object and explicitly resolve `^{commit}`; the worktree HEAD is compared only with that peeled commit.
+
+For each comparison, the current source helper captures a clean commit/fingerprint. Configs are generated before timing from frozen templates. Every arm starts at a nonexistent fresh run root; the main timer begins before any arm-specific initializer and ends only after all three actor `wait()` calls return. Config preparation, result reading and cleanup remain outside the timer for both arms. Classic initializes inside its actor processes; unified static/dynamic includes the mandatory initializer inside its timed arm. All roots and logs are per-arm/per-pair and removed only after their terminal summaries have been projected into the retained trial record.
+
+Classic-vs-unified runs one unmeasured warmup per arm followed by exactly twenty pairs, AB on even pair indices and BA on odd indices. Static-vs-dynamic repeats the same independent sequence. Each measured pair preserves baseline/candidate end-to-end seconds, signed overhead `(candidate-baseline)/baseline`, secondary active-protocol duration and actor output tails. The evidence writer runs only after all workload projections and statistics are available; a non-inferiority failure writes `BLOCKED` evidence before exiting nonzero.
+
+## Workload, persistence and statistics invariants
+
+- Both arms use two learners, quorum 2, two inner steps, two global versions, FP32 synthetic-tiny data/model, seed 1337, no failure injection and no mid-cycle replacement.
+- Comparability is derived from terminal SQLite/audit facts, not declared config alone: contiguous final version, applied update count, processed/direct tokens, per-contributor cursor, source/config/model/data identity and equal resource allocation.
+- Current summaries join hot plus content-addressed archived updates and reconcile `direct_applied` with the token rollup. Classic summaries reconcile applied updates with committed `total_seen_tokens`. Each arm requires SQLite integrity and terminal completion before any timing is accepted.
+- Each arm has a distinct DB/run root and interpreter. No performance state is shared except normal read-only package/model caches; synthetic data avoids external cache effects.
+- Formal inference remains the pre-registered median of twenty signed paired overheads plus a fixed-seed 10,000-sample one-sided paired-bootstrap 95% upper bound. Both must be `<=0.10`; absolute median above 20% is `INCOMPARABLE`, and no clipping is permitted.
+
+## Findings discovered before attempt 4
+
+### High — classic reference validation must peel the annotated tag
+
+`git worktree add` dereferences the annotated tag to a commit, while plain `git rev-parse <tag>` returns the tag object. The expected identity must use `git rev-parse '<ref>^{commit}'`, and evidence should retain the frozen ref name, tag object SHA/type and peeled commit separately. Comparing worktree `HEAD` to the peeled commit proves the intended source without accepting another commit.
+
+### High — static performance config assumes an optional YAML section exists
+
+`_prepare_configs()` assigns `static["terminal"]["max_terminal_merges"]`, but the tracked `configs/fs_diloco_tiny_ha_static.yaml` relies on the dataclass default and has no `terminal` mapping. Once tag preflight passes, attempt 4 would fail with `KeyError` before warmup. Use `setdefault("terminal", {})` and add a direct RED regression that loads the actual tracked templates and generates the dynamic comparison configs; it must assert the resolved static baseline receives `max_terminal_merges=0` without mutating the source file.
+
+### Rejected after exact-line verification — apparent duplicate unreachable raise
+
+The initial review display concatenated two overlapping `sed` ranges and printed their shared boundary line twice. Exact source inspection and `git blame` confirm `_wait_processes()` contains one `raise RuntimeError`, followed by the intended `finally` teardown. No code change is warranted for this display artifact.
+
+No production, persistent schema, timer formula, workload identity or statistical threshold change is justified by the three failures.
+
+## Alternatives considered
+
+Re-exporting requirements and manually adding one extra index is rejected because it recreates part of uv's source-resolution contract and can drift on future explicit sources. Sharing one interpreter with different `PYTHONPATH` values is rejected because it violates independent-env provenance and permits cwd shadowing. Checking only the tag name is rejected because annotated and lightweight refs have different object behavior. The selected approach uses two frozen-lock venvs, an exact detached worktree, neutral-cwd origin probes and an explicitly peeled commit.
+
+An alternative performance design would run each arm in its own PBS job. It would add scheduler/node noise to pairs and weaken the common allocation anchor, so the single allocation with fresh sequential roots remains preferable. Reducing pairs, dropping warmups, changing the 10% margin or stopping after an interim result is rejected by the frozen method.
+
+## Revised implementation, RED tests and attempt-4 gate
+
+1. Add a frozen classic-ref resolver that records ref/object/type/peeled commit; compare classic worktree HEAD only with the peeled commit and include all identities in the artifact.
+2. Change static config generation to tolerate an omitted optional `terminal` mapping. Add a full-suite RED test against the real templates, plus a ref-resolution test that proves the repository's annotated tag object differs from and peels to the expected commit.
+3. Keep `_wait_processes()` unchanged because exact-line verification rejected the apparent duplicate. Keep the two independent frozen environments and neutral-cwd origin/version probes unchanged.
+4. Run diff/compile/Ruff/format/PBS syntax/literal-group checks, freeze a clean target and pass the complete G2 compute suite before attempt 4.
+5. Attempt 4 is successful only if both classic-vs-unified and static-vs-dynamic artifacts are written from the same clean target; each contains one warmup per arm, exactly twenty AB/BA pairs, invariant workload identity, unclipped raw signed deltas, complete timer/secondary metrics, and both median plus one-sided 95% upper bound `<=10%`. Any later failure is recorded and re-audited against this full flow before another run; timeouts, pair count, margin and CI method remain frozen.

@@ -80,17 +80,18 @@ def _qsub_learners(
     shared_root: Path,
     descriptor: dict[str, Any],
     duplicate_result: Path,
+    bootstrap_release: Path,
 ) -> list[str]:
     base = (
         f"FS_DILOCO_SHARED_ROOT={shared_root},"
         f"FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256={descriptor['descriptor_sha256']},"
+        f"FS_DILOCO_TEST_PRETORCH_RELEASE_MARKER_PATH={bootstrap_release},"
+        "FS_DILOCO_TEST_PRETORCH_RELEASE_TIMEOUT_SECONDS=900,"
         f"PROJECT_ROOT={project_root}"
     )
     job_ids: list[str] = []
     for slot in range(8):
         variables = f"{base},BOOTSTRAP_SLOT={slot}"
-        if slot == 0:
-            variables += ",FS_DILOCO_TEST_TERMINATE_AFTER_ADMISSION_SECONDS=2"
         if slot == 1:
             variables += (
                 ",FS_DILOCO_TEST_SPAWN_DUPLICATE_PRETORCH=1,"
@@ -121,6 +122,85 @@ def _query_rows(database: Path, query: str) -> list[dict[str, Any]]:
         connection.close()
 
 
+def _normalize_job_id(value: str) -> str:
+    normalized = value.strip().split(".", 1)[0]
+    if not normalized:
+        raise ValueError("empty PBS job ID")
+    return normalized
+
+
+def _bootstrap_admissions(database: Path, initial_job_ids: list[str]) -> dict[str, dict[str, Any]]:
+    expected = {_normalize_job_id(job_id) for job_id in initial_job_ids}
+    rows = _query_rows(
+        database,
+        "SELECT instance_id, pbs_job_id, status, stream_id, stream_epoch "
+        "FROM learner_instances WHERE admitted_at IS NOT NULL "
+        "AND launch_request_id IS NULL ORDER BY admitted_at",
+    )
+    matched: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        raw_job_id = row.get("pbs_job_id")
+        if not isinstance(raw_job_id, str):
+            continue
+        job_id = _normalize_job_id(raw_job_id)
+        if job_id not in expected:
+            continue
+        if job_id in matched:
+            raise RuntimeError(f"bootstrap job admitted more than once: {job_id}")
+        matched[job_id] = row
+    return matched
+
+
+def _qdel(job_id: str) -> dict[str, Any]:
+    completed = subprocess.run(
+        ["qdel", job_id],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30.0,
+    )
+    result = {
+        "job_id": job_id,
+        "returncode": completed.returncode,
+        "stdout": completed.stdout.strip(),
+        "stderr": completed.stderr.strip(),
+        "requested_at": time.time(),
+    }
+    if completed.returncode != 0:
+        raise RuntimeError(f"qdel failed for {job_id}: {result}")
+    return result
+
+
+def _best_effort_cancel(job_ids: set[str]) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    for job_id in sorted(job_ids):
+        try:
+            completed = subprocess.run(
+                ["qdel", job_id],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30.0,
+            )
+            returncode = completed.returncode
+            stdout = completed.stdout.strip()
+            stderr = completed.stderr.strip()
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            returncode = -1
+            stdout = ""
+            stderr = repr(exc)
+        results.append(
+            {
+                "job_id": job_id,
+                "returncode": returncode,
+                "stdout": stdout,
+                "stderr": stderr,
+                "requested_at": time.time(),
+            }
+        )
+    return results
+
+
 def _process_state(pid: int) -> str | None:
     try:
         content = Path(f"/proc/{pid}/status").read_text(encoding="utf-8")
@@ -141,6 +221,8 @@ class TopologyRecorder:
         self.maximum = 1
         self.events: list[dict[str, Any]] = []
         self._last_signature: tuple[str, ...] | None = None
+        self.live_job_ids: tuple[str, ...] = ()
+        self.states: dict[str, str] = {}
 
     def sample(self, job_ids: set[str]) -> None:
         live: list[str] = []
@@ -157,6 +239,8 @@ class TopologyRecorder:
             raise RuntimeError(f"dynamic topology exceeded nine allocations: {allocations}")
         self.maximum = max(self.maximum, allocations)
         signature = tuple(live)
+        self.live_job_ids = signature
+        self.states = states
         if signature != self._last_signature:
             self.events.append(
                 {
@@ -223,13 +307,17 @@ def supervise(
     descriptor = _descriptor(init_output)
     resolved_config = Path(str(descriptor["resolved_config_path"]))
     pause_marker = shared_root / "metrics/p6_candidate_pause.json"
+    pause_trigger = shared_root / "metrics/p6_candidate_pause.trigger.json"
+    bootstrap_release = shared_root / "metrics/p6_bootstrap_release.json"
     duplicate_result = shared_root / "metrics/p6_duplicate_result.json"
+    loss_result = shared_root / "metrics/p6_permanent_loss.json"
     timeline_path = shared_root / "metrics/p6_topology_timeline.json"
     initial_job_ids = _qsub_learners(
         project_root=project_root,
         shared_root=shared_root,
         descriptor=descriptor,
         duplicate_result=duplicate_result,
+        bootstrap_release=bootstrap_release,
     )
     (log_root / "bootstrap_jobs.json").write_text(
         json.dumps({"job_ids": initial_job_ids}, sort_keys=True, indent=2) + "\n",
@@ -250,6 +338,7 @@ def supervise(
     old_environment.update(
         FS_DILOCO_TEST_PAUSE_AFTER_COMMITTED_VERSION="5",
         FS_DILOCO_TEST_PAUSE_MARKER_PATH=str(pause_marker),
+        FS_DILOCO_TEST_PAUSE_TRIGGER_PATH=str(pause_trigger),
     )
     old_log = (log_root / "syncer_old.log").open("w", encoding="utf-8")
     successor_log = (log_root / "syncer_successor.log").open("w", encoding="utf-8")
@@ -268,7 +357,68 @@ def supervise(
     recorder = TopologyRecorder(candidate_job_id=os.environ["PBS_JOBID"])
     deadline = time.monotonic() + timeout_seconds
     database = shared_root / "control/syncer_metadata.sqlite3"
+    run_completed = False
     try:
+        expected_bootstrap_jobs = {_normalize_job_id(job_id) for job_id in initial_job_ids}
+        while True:
+            if old.poll() is not None:
+                raise RuntimeError(
+                    f"old candidate exited before bootstrap convergence: {old.returncode}"
+                )
+            if time.monotonic() >= deadline:
+                raise TimeoutError("eight bootstrap learners did not converge before timeout")
+            recorder.sample(known_job_ids)
+            admissions = _bootstrap_admissions(database, initial_job_ids)
+            missing = expected_bootstrap_jobs - set(admissions)
+            scheduler_states = {
+                _normalize_job_id(job_id): state for job_id, state in recorder.states.items()
+            }
+            finished_missing = {
+                job_id
+                for job_id in missing
+                if scheduler_states.get(job_id) in {"finished", "no_record"}
+            }
+            if finished_missing:
+                raise RuntimeError(
+                    f"bootstrap jobs terminated without admission: {sorted(finished_missing)}"
+                )
+            if not missing:
+                statuses = {str(row["status"]) for row in admissions.values()}
+                live = {_normalize_job_id(job_id) for job_id in recorder.live_job_ids}
+                if statuses != {"admitted"}:
+                    raise RuntimeError(
+                        f"bootstrap learner left admitted state before release: {statuses}"
+                    )
+                if {int(row["stream_id"]) for row in admissions.values()} != set(range(8)):
+                    raise RuntimeError("bootstrap admissions do not cover streams 0 through 7")
+                if not expected_bootstrap_jobs <= live:
+                    raise RuntimeError("all bootstrap admissions were not simultaneously live")
+                if not duplicate_result.is_file():
+                    time.sleep(0.2)
+                    continue
+                duplicate = json.loads(duplicate_result.read_text(encoding="utf-8"))
+                if duplicate.get("rejected_before_torch") is not True:
+                    raise RuntimeError("duplicate learner crossed the pre-Torch admission gate")
+                _atomic_json(
+                    bootstrap_release,
+                    {
+                        "format_version": 1,
+                        "released_at": time.time(),
+                        "bootstrap_job_ids": sorted(expected_bootstrap_jobs),
+                        "bootstrap_instances": admissions,
+                        "maximum_live_allocations": recorder.maximum,
+                    },
+                )
+                _atomic_json(
+                    pause_trigger,
+                    {
+                        "format_version": 1,
+                        "created_at": time.time(),
+                        "reason": "bootstrap_converged_and_duplicate_rejected",
+                    },
+                )
+                break
+            time.sleep(0.5)
         while not pause_marker.is_file():
             if old.poll() is not None:
                 raise RuntimeError(f"old candidate exited before pause: {old.returncode}")
@@ -280,6 +430,18 @@ def supervise(
             if time.monotonic() >= deadline:
                 raise TimeoutError("old candidate marker appeared but process was not stopped")
             time.sleep(0.05)
+        loss = _qdel(initial_job_ids[0])
+        loss.update(
+            {
+                "format_version": 1,
+                "bootstrap_slot": 0,
+                "injected_after_candidate_pause": True,
+                "candidate_pause_epoch": json.loads(pause_marker.read_text(encoding="utf-8"))[
+                    "epoch"
+                ],
+            }
+        )
+        _atomic_json(loss_result, loss)
         successor = subprocess.Popen(
             command,
             env=base_environment,
@@ -367,12 +529,17 @@ def supervise(
                 str(pause_marker),
                 "--duplicate-result",
                 str(duplicate_result),
+                "--bootstrap-release",
+                str(bootstrap_release),
+                "--loss-result",
+                str(loss_result),
                 "--topology-timeline",
                 str(timeline_path),
                 "--output",
                 str(evidence_output),
             ]
         )
+        run_completed = True
     finally:
         if old.poll() is None:
             os.kill(old.pid, signal.SIGCONT)
@@ -389,6 +556,18 @@ def supervise(
             except subprocess.TimeoutExpired:
                 successor.kill()
                 successor.wait(timeout=10.0)
+        if not run_completed:
+            if database.is_file():
+                try:
+                    launch_rows = _query_rows(
+                        database,
+                        "SELECT pbs_job_id FROM launch_requests WHERE pbs_job_id IS NOT NULL",
+                    )
+                    known_job_ids.update(str(row["pbs_job_id"]) for row in launch_rows)
+                except (OSError, sqlite3.Error):
+                    pass
+            cleanup = _best_effort_cancel(known_job_ids)
+            _atomic_json(log_root / "failed_child_cleanup.json", {"jobs": cleanup})
         old_log.close()
         successor_log.close()
 

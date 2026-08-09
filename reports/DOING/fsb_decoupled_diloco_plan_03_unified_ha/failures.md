@@ -1000,3 +1000,15 @@
 - Experiment ID `P6-G10-performance-attempt2`，该目标连续失败次数2。PBS job `2513381.opbs`在单个`debug-g`节点成功从current frozen lock分别构造两个独立venv，classic环境也成功把editable project从current root替换为detached tag worktree，且locked `torch==2.13.0+cu132`完整安装；随后在任何warmup/pair前由PBS line 45的classic package-origin assertion exit 1。Raw log：`fsdiloco_p6_g10.o2513381`；没有comparison artifact或性能样本。
 - Origin probe以`python -c`运行时仍处在`$PROJECT_ROOT`，Python的空路径entry先解析当前工作目录中的`fs_diloco/`，遮蔽了已经正确安装的classic editable path。因此断言观察的是probe cwd，不是classic environment provenance；uv的uninstall/install回执已明确显示classic worktree成为installed project。
 - 下一轮只让两个origin/version probe在共同中立`$TMPDIR`工作目录执行；仍精确要求current import来自current root、classic import来自detached worktree、venv路径不同且torch版本相同，随后才进入固定warmup和20 AB/BA pairs。不得删除origin断言或用`PYTHONPATH`强行伪造结果。
+
+## 2026-08-10 01:47 JST — P6 G10 attempt 3 compared an annotated tag object to its commit
+
+- Experiment ID `P6-G10-performance-attempt3`，该目标连续失败次数3。PBS job `2513422.opbs`再次成功创建两个独立frozen-lock环境；neutral-cwd origin assertions和torch版本等式均通过，随后在任何arm warmup前由`plan03_p6_performance.py`报`classic worktree is not the frozen archive tag`并exit 1。Raw log：`fsdiloco_p6_g10.o2513422`；没有comparison artifact或计时样本。
+- 冻结引用`archive/classic-full-v1-final`是annotated tag：`git cat-file -t`为`tag`，`git rev-parse`得到tag-object `53e05fa0a9ef3776ab18cfab7cc44a76052f2a65`，而detached worktree正确checkout其peeled commit `a00a3d64a50f10a2478c3f4fe795e658d1b3b52f`。Validator错误地把这两种不同Git object identity直接比较；既不是worktree漂移，也不是classic source错误。
+- 同一G10目标已连续三次失败。Attempt 4前停止提交，在`code_review.md`全面审查environment构造、tag/worktree identity、两arm config、timer、fresh-root lifecycle、workload equivalence、20-pair统计、cleanup和failure handling；修订方案必须使用显式peeled commit验证且先以非计时preflight证明两个source/venv，再保留全部正式门禁。
+
+## 2026-08-10 01:52 JST — P6 G9 attempt 2 injected learner loss before bootstrap convergence
+
+- Experiment ID `P6-G9-dynamic-9node-attempt2`。Parent PBS job `2513421.opbs`在`small-g`以30分钟walltime、clean source target `3f40137`启动，成功冻结source identity、初始化dynamic run并提交八个learner child；约6分钟后supervisor因`old candidate exited before pause: 0`而exit 1。Raw log为`fsdiloco_p6_g9_dynamic.o2513421`，supervisor现场为`logs/qsub_plan03_p6_g9_dynamic_2513421/`，没有G9 pass artifact。
+- Authority DB给出精确根因：slot 0在首次admission后2秒自终结，后续仍排队的slots 1/4/7被调度器复用到同一物理host `mg0243`，其bootstrap registration因旧placement尚未被确认retire而正确拒绝。配置的60秒initial-membership deadline又在八个独立job排队完成前到期，capacity service随后消耗4个launch budget补齐slot 0/1/4；最终只有7个eligible contributors，run按`launch_budget_exhausted`在v1合法finalize，故version-5 pause marker从未出现。这不是candidate提前越过pause hook，也不是production admission错误。
+- 修复需把fault顺序改为：先给独立bootstrap调度留足有界时间，观测八个不同job全部admitted且同时达到9-allocation topology，并确认同allocation duplicate在pre-Torch gate被拒绝；再由独立trigger让candidate于SQLite transaction外停住，随后只qdel exact slot-0 job并启动successor，让production从scheduler FINISH证据提交唯一replacement。失败路径必须清理本run创建的仍live child jobs。修订后重跑完整G9 attempt 3；若同一目标第三次仍失败，attempt 4前按规则进行全面审查。

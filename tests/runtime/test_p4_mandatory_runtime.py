@@ -1833,13 +1833,20 @@ def test_candidate_pause_hook_quiesces_renewer_and_proves_transaction_boundary(
     renewer = Renewer()
     leader = SimpleNamespace(token=SimpleNamespace(epoch=3, owner_id="owner-3"))
     marker = tmp_path / "pause.json"
+    trigger = tmp_path / "pause.trigger"
     observed_signals: list[tuple[int, signal.Signals]] = []
     monkeypatch.setenv("FS_DILOCO_TEST_PAUSE_AFTER_COMMITTED_VERSION", "4")
     monkeypatch.setenv("FS_DILOCO_TEST_PAUSE_MARKER_PATH", str(marker))
+    monkeypatch.setenv("FS_DILOCO_TEST_PAUSE_TRIGGER_PATH", str(trigger))
     monkeypatch.setattr(os, "kill", lambda pid, value: observed_signals.append((pid, value)))
 
     _pause_candidate_outside_transaction(authority, leader, renewer, version=3)
     assert not marker.exists()
+    _pause_candidate_outside_transaction(authority, leader, renewer, version=4)
+    assert not marker.exists()
+    assert renewer.quiesced == 0
+
+    trigger.touch()
     _pause_candidate_outside_transaction(authority, leader, renewer, version=4)
 
     payload = json.loads(marker.read_text(encoding="utf-8"))

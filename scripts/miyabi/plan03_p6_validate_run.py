@@ -147,6 +147,8 @@ def validate_run(
     expected_contributors: int,
     pause_marker: Path | None = None,
     duplicate_result: Path | None = None,
+    bootstrap_release: Path | None = None,
+    loss_result: Path | None = None,
     topology_timeline: Path | None = None,
 ) -> dict[str, Any]:
     descriptor = _read_json(run_root / "control/run_descriptor.json")
@@ -309,6 +311,8 @@ def validate_run(
 
     pause = _read_json(pause_marker) if pause_marker is not None else None
     duplicate = _read_json(duplicate_result) if duplicate_result is not None else None
+    bootstrap = _read_json(bootstrap_release) if bootstrap_release is not None else None
+    loss = _read_json(loss_result) if loss_result is not None else None
     timeline = _read_json(topology_timeline) if topology_timeline is not None else None
     if mode == "dynamic":
         if (
@@ -319,6 +323,26 @@ def validate_run(
             errors.append("candidate pause lacks an outside-transaction proof")
         if duplicate is None or duplicate.get("rejected_before_torch") is not True:
             errors.append("duplicate learner was not rejected before Torch")
+        if (
+            bootstrap is None
+            or len(bootstrap.get("bootstrap_job_ids", [])) != expected_contributors
+            or int(bootstrap.get("maximum_live_allocations", -1)) != 9
+        ):
+            errors.append("bootstrap evidence does not prove eight simultaneous learners")
+        if (
+            loss is None
+            or loss.get("returncode") != 0
+            or loss.get("bootstrap_slot") != 0
+            or loss.get("injected_after_candidate_pause") is not True
+            or pause is None
+            or loss.get("candidate_pause_epoch") != pause.get("epoch")
+            or bootstrap is None
+            or str(loss.get("job_id", "")).split(".", 1)[0]
+            not in {
+                str(job_id).split(".", 1)[0] for job_id in bootstrap.get("bootstrap_job_ids", [])
+            }
+        ):
+            errors.append("permanent learner loss lacks an exact post-pause qdel proof")
         if len(epochs) < 2:
             errors.append("dynamic candidate successor never acquired a new epoch")
         else:
@@ -340,8 +364,8 @@ def validate_run(
                 ]
                 if stale_after:
                     errors.append(f"stale writer committed after takeover: {stale_after}")
-        if timeline is None or int(timeline.get("maximum_live_allocations", -1)) > 9:
-            errors.append("topology timeline does not prove the nine-allocation ceiling")
+        if timeline is None or int(timeline.get("maximum_live_allocations", -1)) != 9:
+            errors.append("topology timeline does not prove the exact nine-allocation maximum")
 
     source = _source_identity(project_root)
     if (
@@ -399,7 +423,12 @@ def validate_run(
             "static_bindings": static_bindings,
             "update_dtypes": update_dtypes,
         },
-        "fault_evidence": {"pause": pause, "duplicate": duplicate},
+        "fault_evidence": {
+            "pause": pause,
+            "duplicate": duplicate,
+            "bootstrap": bootstrap,
+            "permanent_loss": loss,
+        },
         "terminal_summary": summary,
         "errors": errors,
     }
@@ -424,6 +453,8 @@ def main() -> None:
     parser.add_argument("--expected-contributors", type=int, default=8)
     parser.add_argument("--pause-marker", type=Path)
     parser.add_argument("--duplicate-result", type=Path)
+    parser.add_argument("--bootstrap-release", type=Path)
+    parser.add_argument("--loss-result", type=Path)
     parser.add_argument("--topology-timeline", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -439,6 +470,10 @@ def main() -> None:
             duplicate_result=(
                 None if args.duplicate_result is None else args.duplicate_result.resolve()
             ),
+            bootstrap_release=(
+                None if args.bootstrap_release is None else args.bootstrap_release.resolve()
+            ),
+            loss_result=(None if args.loss_result is None else args.loss_result.resolve()),
             topology_timeline=(
                 None if args.topology_timeline is None else args.topology_timeline.resolve()
             ),

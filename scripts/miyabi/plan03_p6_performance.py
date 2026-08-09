@@ -23,6 +23,7 @@ from fs_diloco.tools.check_workload_equivalence import compare_workloads
 
 PLAN_ID = "fsb_decoupled_diloco_plan_03_unified_ha"
 PAIRS = 20
+CLASSIC_REF = "archive/classic-full-v1-final"
 TIMER_ANCHOR = (
     "fresh run root absent before any arm-specific initialization through all actor wait() "
     "calls returning cleanly"
@@ -45,6 +46,16 @@ def _git(root: Path, *arguments: str) -> str:
     ).stdout.strip()
 
 
+def _classic_ref_identity(current_root: Path) -> dict[str, str]:
+    object_id = _git(current_root, "rev-parse", CLASSIC_REF)
+    return {
+        "ref": CLASSIC_REF,
+        "object_id": object_id,
+        "object_type": _git(current_root, "cat-file", "-t", object_id),
+        "commit": _git(current_root, "rev-parse", f"{CLASSIC_REF}^{{commit}}"),
+    }
+
+
 def _write_yaml(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
@@ -64,7 +75,7 @@ def _prepare_configs(
         stop_after_outer_steps=2,
     )
     static["training"].update(inner_steps=2, completion_mode="global_only")
-    static["terminal"]["max_terminal_merges"] = 0
+    static.setdefault("terminal", {})["max_terminal_merges"] = 0
     static.setdefault("wandb", {})["enabled"] = False
     static_path = scratch / "current-static.yaml"
     _write_yaml(static_path, static)
@@ -458,14 +469,15 @@ def run(
         if classic_python.absolute() == current_python.absolute():
             raise RuntimeError("classic and current arms must use independent virtualenvs")
         classic_commit = _git(classic_root, "rev-parse", "HEAD")
+        frozen_ref = _classic_ref_identity(current_root)
         if _git(classic_root, "status", "--porcelain=v1"):
             raise RuntimeError("formal G10 classic worktree is dirty")
         executable_sources["classic"] = {
             "git_commit": classic_commit,
-            "expected_tag_commit": _git(current_root, "rev-parse", "archive/classic-full-v1-final"),
+            "frozen_ref": frozen_ref,
             "python": str(classic_python),
         }
-        if classic_commit != executable_sources["classic"]["expected_tag_commit"]:
+        if classic_commit != frozen_ref["commit"]:
             raise RuntimeError("classic worktree is not the frozen archive tag")
     scratch = Path(tempfile.mkdtemp(prefix=f".plan03-p6-g10-{comparison}-", dir=shared_parent))
     trials: list[dict[str, Any]] = []

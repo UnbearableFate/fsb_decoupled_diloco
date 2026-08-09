@@ -141,6 +141,9 @@ def _pause_candidate_outside_transaction(
             "FS_DILOCO_TEST_PAUSE_MARKER_PATH is required with the candidate pause hook"
         )
     marker = Path(marker_value)
+    trigger_value = os.environ.get("FS_DILOCO_TEST_PAUSE_TRIGGER_PATH")
+    if trigger_value and not Path(trigger_value).is_file():
+        return
     if version < target or marker.exists():
         return
     with renewer.quiesce_for_test_pause():

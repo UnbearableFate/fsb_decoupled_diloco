@@ -751,3 +751,9 @@
 - Clean target `7b7c91d58f81cf56c6411a521469d30938b33f6c` passed the login G0/G1 artifact `artifacts/20260810-014000_p6-g0-g1-freeze-static-pass.json` and compute G2 job `2513380.opbs` with all `616` focused tests plus full `724 passed, 2 skipped`: `artifacts/20260810-014100_p6-g2-tests-pass.json`.
 - Nine-node static job `2513387.opbs` then repeated the G8 acceptance successfully on the same clean target: eight distinct FP32 contributors, 60 inner steps, final version 21, no starvation, all terminal acknowledgements, current-only authority, SQLite integrity and zero token imbalance. Artifact: `artifacts/20260810-014400_p6-g8-static-9node-pass.json`.
 - The immediately following G9 source-bootstrap and G10 neutral-cwd repairs again change the source scope. These passing results remain regression evidence, while plan-final G0–G8 artifacts will be regenerated only after G7/G9/G10 stop exposing harness defects.
+
+## 2026-08-10 01:50 JST — P6 G7 two-node shared-FS/SQLite gate PASS
+
+- Corrected two-node job `2513406.opbs` ran on clean target `3f40137e15097b0a127e5c7288075f545026f17e` and passed all 11 supplemental contracts plus both real shared-filesystem takeover branches. Structured artifact: `artifacts/20260810-015000_p6-g7-two-node-pass.json`.
+- Outside a SQLite transaction, epoch 1 stopped at committed v5, epoch 2 took over and committed v6, and the resumed stale candidate made zero later commits. Inside a held `BEGIN IMMEDIATE`, the successor remained blocked for `3.68s`; SIGKILL of the stopped writer caused mpirun exit `137`, SQLite rollback left the uncommitted reason absent, the successor committed only after lock release, and both databases reported integrity `ok`.
+- This validates the SIGKILL fault-injection correction and resets G7's consecutive failure count. Because the later G9/G10 repairs change the executable source scope, G7 will be rerun on the eventual final common target before aggregate acceptance.
