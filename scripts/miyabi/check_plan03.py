@@ -66,6 +66,7 @@ P6_ACCEPTANCE_CONFIG_PROJECTIONS: dict[str, dict[tuple[str, ...], Any]] = {
     },
     "configs/fs_diloco_tiny_ha_dynamic_acceptance.yaml": {
         ("data", "synthetic_num_batches"): 16384,
+        ("membership", "initial_membership_deadline_seconds"): 600.0,
         ("scaling", "learner_walltime"): "00:20:00",
         ("scaling", "learner_queue"): "regular-g",
         ("training", "inner_steps"): 60,
