@@ -1,0 +1,31 @@
+{
+  "artifact_version": 1,
+  "environment": {
+    "pbs_job_id": "2513346.opbs"
+  },
+  "errors": [],
+  "evidence_paths": [
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/qsub_plan03_p6_g3_g4_2513346/state-machines.log"
+  ],
+  "gate": "G3-generated-state-machines",
+  "metrics": {
+    "action_count": 13,
+    "elapsed_seconds": 24.485299414023757,
+    "pure_examples": 1000,
+    "pure_max_transitions": 300,
+    "sqlite_examples": 200,
+    "sqlite_max_transitions": 150
+  },
+  "phase_id": "P6-acceptance-final-review",
+  "plan_id": "fsb_decoupled_diloco_plan_03_unified_ha",
+  "requirements_covered": [
+    "P6-ACCEPTANCE"
+  ],
+  "source_commit": "ade1f60691ac51edea13ff1e0a0806f792de39da",
+  "source_identity": {
+    "git_commit": "ade1f60691ac51edea13ff1e0a0806f792de39da",
+    "git_dirty": false,
+    "source_fingerprint": "sha256:1c01584191f614009fc68c9124796e946672efb7f888df9c79b2909811560579"
+  },
+  "status": "PASS"
+}
