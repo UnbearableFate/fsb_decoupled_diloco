@@ -246,7 +246,6 @@ def run_gate(
         identity,
         scope,
         wall_clock=clock,
-        publication_orphan_grace_seconds=maintenance_config.publication_orphan_grace_seconds,
     ) as authority:
         token = authority.acquire_leader(owner_id="boundedness", hostname="compute", pid=1)
         leader = authority.open_leader(token)

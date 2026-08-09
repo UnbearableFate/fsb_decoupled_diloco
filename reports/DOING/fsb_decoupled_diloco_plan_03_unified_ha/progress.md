@@ -721,3 +721,9 @@
 
 - Clean target `9a8760ff7f37d781a2693087f7e271142a8f287b` passed G0/G1 (`artifacts/20260810-004800_p6-g0-g1-freeze-static_pass.json`) and compute G2 job `2513058.opbs` passed `616` focused tests plus full `724 passed, 2 skipped`, with zero JUnit failures/errors (`artifacts/20260810-004900_p6-g2-tests_pass.json`).
 - The only executable delta from `7aff255` was G5's PBS-ID normalization. Attempt 6 subsequently proved the dynamic production run and normalized lookup but exposed the distinct expired-vs-revoked oracle error; the second three-failure review and request-keyed replacement join therefore remain required before G5 can pass.
+
+## 2026-08-10 01:10 JST — P6 request-keyed replacement target G0/G1, G2 and G5 PASS
+
+- Clean executable target `48d43a28d87728cec1dbfc943cdf78fa73598897` passed the complete G0/G1 gate with source fingerprint `sha256:384683cb8aa3f00c118e8bdc68919595a53fef769c1ee47e75488a5f96b39a1e`: `artifacts/20260810-005600_p6-g0-g1-freeze-static_pass.json`.
+- After the mandatory second G5 review, PBS G2 job `2513116.opbs` passed all `616` focused tests and the full `724 passed, 2 skipped` suite with zero failures/errors. Artifact: `artifacts/20260810-005700_p6-g2-tests_pass.json`.
+- G5 attempt 7, parent job `2513203.opbs`, passed all six real pipelines on the same clean source identity. Both dynamic cases used real scheduler child jobs, observed the lost instance as `expired` for `confirmed_scheduler_terminal_after_progress_stall`, joined each replacement through its exact launch request, completed at version 11 with zero token imbalance, acknowledged both terminal fences, and never exceeded two live allocations. The combined artifact is `artifacts/20260810-010700_p6-g5-tiny-scenarios_pass.json`; the six per-scenario partials remain only as resumability evidence pending final evidence compaction.
