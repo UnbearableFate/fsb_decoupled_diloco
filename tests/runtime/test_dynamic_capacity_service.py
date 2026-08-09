@@ -24,7 +24,9 @@ from fs_diloco.storage.paths import RunPaths
 from tests.support import FakePBS
 
 
-PLAN03_REQUIREMENTS = frozenset({"P5-ARCH", "SCHED-01", "SCHED-02", "SCHED-03", "SCHED-04"})
+PLAN03_REQUIREMENTS = frozenset(
+    {"P5-ARCH", "P6-ACCEPTANCE", "SCHED-01", "SCHED-02", "SCHED-03", "SCHED-04"}
+)
 
 
 class Clock:
@@ -549,5 +551,35 @@ def test_suspended_or_unknown_scheduler_state_never_authorizes_replacement(
             row for row in authority.read.dynamic_launch_requests() if row["role"] != "bootstrap"
         ] == []
         assert authority.read.dynamic_instances()[0]["status"] == "admitted"
+    finally:
+        authority.close()
+
+
+def test_shared_running_pbs_job_never_proves_one_child_process_lost(tmp_path: Path) -> None:
+    clock = Clock()
+    authority, leader, scheduler, service = _runtime(tmp_path, clock, streams=2)
+    try:
+        for stream_id in range(2):
+            leader.admit_dynamic_incarnation(
+                command_id=f"bootstrap-{stream_id}",
+                instance_id=f"instance-{stream_id}",
+                placement_id=f"placement-{stream_id}",
+                stream_id=stream_id,
+                admission_token_sha256=f"{stream_id + 1}" * 64,
+                hostname="host",
+                pid=stream_id + 1,
+                pbs_job_id="shared-parent.opbs",
+            )
+        clock.now = 105.0
+        scheduler.queue_query("shared-parent.opbs", _observation("shared-parent.opbs", "running"))
+        scheduler.queue_query("shared-parent.opbs", _observation("shared-parent.opbs", "running"))
+
+        actions = service.tick(global_version=0, eligible_contributors=2, selected_contributors=0)
+
+        assert "replacement_planned" not in actions
+        assert [
+            row for row in authority.read.dynamic_launch_requests() if row["role"] != "bootstrap"
+        ] == []
+        assert {row["status"] for row in authority.read.dynamic_instances()} == {"admitted"}
     finally:
         authority.close()

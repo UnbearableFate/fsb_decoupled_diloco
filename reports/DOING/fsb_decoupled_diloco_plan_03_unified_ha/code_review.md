@@ -350,3 +350,57 @@ The lexical checks are useful deletion tripwires but are not semantic proof. The
 4. Audit every deleted test function against retained v4 storage/GC/terminal coverage and publish the exact classification/count artifact; add any missing shared-invariant tests.
 5. Rerun Ruff, explicit format checks including untracked files, compileall, deletion/architecture Checker, `git diff --check`, and repository-wide `bash -n` before submission.
 6. Attempt 4 passes only if all static/Checker gates pass, focused pytest has zero failures and no unexpected xfail, full pytest has zero failures, and the emitted evidence binds the exact source tree and test counts. A further failure must be recorded and re-audited before another change.
+
+# 2026-08-10 P6 G5 three-failure Codex+GPT comprehensive review
+
+Review trigger: formal G5 jobs `2512722.opbs`, `2512732.opbs`, and `2512750.opbs` failed consecutively. The third job passed four scenarios before the local dynamic-loss topology reached a proven no-progress state and was explicitly deleted. No fourth G5 submission is authorized until the topology and durable assertions below replace the original design.
+
+## Independent review lenses and the three-failure pattern
+
+Codex implementation audit and GPT protocol-model audit agree on the following facts:
+
+1. Attempt 1 exposed a real recovery-hot-set defect, not a scenario timing issue. A lagging contributor's last receipt was held by a hot foreign key, retaining its applied update, selection/publication dependency closure and predecessor global version. The repair made progress's ID/hash/cursor the continuity authority and allowed already-adjudicated noncurrent history to archive.
+2. Attempt 2 exposed a wrong test oracle. A resumed replaced static actor may cleanly observe terminal state before attempting a write; nonzero Unix exit is not the safety property. The revised oracle checks durable replacement history, exact current generation and the union of hot+archived updates for zero old-generation authority updates.
+3. Attempt 3 exposed a topology contradiction. Both manually spawned dynamic learners inherited the parent candidate's `PBS_JOBID`. Killing one subprocess cannot make that shared PBS allocation terminal, while production replacement deliberately requires live/historical scheduler proof before revocation. No timeout, extra capacity window, log verbosity or heartbeat threshold can turn a RUNNING shared job into evidence that one contained actor is permanently lost.
+
+The common pattern is that the first harness treated process-local observations as if they were authority facts: a row count was assumed to mean current-only recovery, an exit status was assumed to mean stale fencing, and a killed PID was assumed to mean scheduler-confirmed loss. The corrected gate must validate the same durable identities production uses.
+
+## End-to-end data and control flow
+
+The dynamic scenario starts from a clean descriptor-bound run root and fresh dynamic authority. Initial admission consumes one bootstrap slot per stream and records the exact physical instance, stream epoch, placement identity and PBS job ID in one fenced SQLite transaction. Learners publish immutable receipt/proposal/payload objects; the syncer observes them, verifies the current dynamic fence, records receipt and proposal commands, and selection requires both current streams at quorum 2.
+
+Permanent-loss handling begins only after the dead timeout and lack of current progress. `DynamicCapacityService._confirmed_lost_instance()` then queries both live and historical scheduler views for that instance's exact PBS job. Only FINISH evidence permits a replacement plan. The plan reserves the stream, persists an exact launch request, transitions through submission state around qsub, and records the returned child job ID. A replacement learner must present that request/stream/replaced-instance identity before admission advances the stream epoch and revokes the old instance. Only then may quorum resume.
+
+The original local topology bypassed the scheduler for both bootstrap actors. Consequently the killed instance and survivor shared the candidate job ID, the scheduler truth remained RUNNING, SQLite correctly retained both as admitted, and all survivor proposals were superseded/dropped while v0 remained current. This was fail-closed production behavior.
+
+## Transactions, publication, archive/GC and process lifecycle
+
+- SQLite remains the sole membership and writer authority. The harness must not directly edit `learner_instances`, `streams`, launch requests or candidate leases, and must not synthesize FINISH state in the database.
+- The initial losable learner must therefore run in its own real PBS child allocation. `run_dynamic_learner.pbs` supplies the descriptor/source checks and bootstrap-slot admission boundary. Its existing post-admission test hook may TERM only that learner; normal PBS job completion then supplies real live/historical terminal evidence.
+- The survivor may remain a subprocess in the parent candidate allocation because it is not the object whose scheduler death is being proved. The production scheduler submits the replacement using the configured literal script, queue and at-least-10-minute walltime. The parent plus one learner child are the maximum live allocations; the replacement is submitted only after the first child is terminal.
+- Receipt/proposal/checkpoint publication ordering is unchanged. A failed child can leave immutable receipts/proposals, but current-fence ingest and terminal accounting decide their fate. Maintenance archives dependency-closed adjudicated rows, writes command receipts before pruning, and GC deletes only identity-checked claimed objects; validation must read hot and immutable audit history where an assertion spans compaction.
+- Parent teardown must wait for or explicitly terminate only job IDs created by this scenario. It must never qdel an unknown/successor allocation merely because the parent exits. The final artifact records both child IDs and scheduler terminal observations.
+
+## Test-oracle audit and omitted counterexamples
+
+The six scenario names remain correct, but three original assertions were not: exact one-row hot version state was tested before the archive closure could remove last-progress dependencies; stale safety was mapped to process exit; permanent loss was injected below the scheduler identity boundary. The revised oracles are:
+
+- terminal/current-only hot DB plus balanced rollup and no active/prepared rows;
+- old static generation has no hot or archived update, independent of its exit code;
+- lost dynamic instance has a distinct terminal child job, status `revoked`, replacement has a different child job, same stream with greater epoch, and no old-fence application after the replacement boundary;
+- all six scenarios still validate summary, terminal fences, checkpoint controls, integrity, temp files and candidate epoch history.
+
+Missing counterexamples to add or preserve are: a killed subprocess whose shared PBS job remains RUNNING must not be labeled permanent loss; a qstat live `no_record` without historical FINISH must remain uncertain; a replacement registration with the wrong request/stream/replaced-instance must be rejected before model load; and an old dynamic instance resuming after replacement must have zero successful commits after the boundary.
+
+## Alternative explanations and designs
+
+Increasing timeouts or lowering `heartbeat_dead_after_seconds` is rejected because scheduler FINISH is a mandatory second factor. Directly calling `retire_dynamic_incarnation` from the harness is rejected because it bypasses the capacity/scheduler contract G5 is meant to exercise. A fake scheduler injected only into the candidate would make the test deterministic but would no longer be a real tiny pipeline. Running both bootstrap learners as child jobs is valid but unnecessarily raises the live allocation and submission cost; one real losable child plus one parent-local survivor exercises the exact boundary with the frozen maximum of two live allocations.
+
+## Revised implementation and RED-to-GREEN sequence
+
+1. Add bounded qsub/query helpers to the G5 runner. Submit bootstrap slot 0 through `run_dynamic_learner.pbs` with descriptor/source variables, `debug-g`, explicit `00:10:00`, and the existing terminate-after-admission hook. Launch only slot 1 locally.
+2. Record the initial child job ID. Wait for its exact admission row, then for live/historical scheduler FINISH; do not infer death from elapsed time alone.
+3. Let the production capacity service plan and submit the replacement. Read the durable replacement launch row to obtain the second child job ID and require it differs from the lost job. Do not manually admit or mutate the stream.
+4. Wait for survivor, replacement and candidate to finish. Query hot plus archived updates and record the version at replacement. Require old-instance `MAX(applied_version)` absent or at most that boundary, replacement same stream/higher epoch, single current admission, terminal fences acknowledged, balanced token ledger and current-only hot authority.
+5. Add a focused scheduler-identity regression showing two instances with the same RUNNING job cannot produce `_confirmed_lost_instance`, while exact historical FINISH for a distinct job can. This is the RED test for the prior topology assumption.
+6. Run Ruff/format/compile, full PBS shell syntax and literal-group checks, then the affected complete G2 suite before G5 attempt 4. Attempt 4 passes only if all six partial artifacts and the final artifact exist, all process/scheduler/DB/artifact assertions pass, maximum live allocations is at most two, and no scenario-created child job remains queued/running. This data flow avoids all three prior failure classes because each gate now uses the durable authority identity at its actual trust boundary.

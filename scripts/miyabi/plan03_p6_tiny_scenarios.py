@@ -217,6 +217,113 @@ def _wait_version(run_root: Path, version: int, *, timeout: float) -> None:
         time.sleep(0.1)
 
 
+def _qsub_dynamic_bootstrap(
+    *,
+    project_root: Path,
+    run_root: Path,
+    bootstrap_slot: int,
+    environment: dict[str, str],
+) -> str:
+    variables = ",".join(
+        (
+            f"PROJECT_ROOT={project_root}",
+            f"FS_DILOCO_SHARED_ROOT={run_root}",
+            f"BOOTSTRAP_SLOT={bootstrap_slot}",
+        )
+    )
+    output = _run_checked(
+        [
+            "qsub",
+            "-q",
+            "debug-g",
+            "-l",
+            "walltime=00:10:00",
+            "-v",
+            variables,
+            str(project_root / "scripts/miyabi/run_dynamic_learner.pbs"),
+        ],
+        cwd=project_root,
+        environment=environment,
+    )
+    job_id = output.splitlines()[-1].strip()
+    if not job_id:
+        raise RuntimeError("dynamic bootstrap qsub returned no job ID")
+    return job_id
+
+
+def _wait_dynamic_admission(database: Path, job_id: str, *, timeout: float) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout
+    while True:
+        connection = sqlite3.connect(f"file:{database.resolve()}?mode=ro", uri=True)
+        connection.row_factory = sqlite3.Row
+        try:
+            row = connection.execute(
+                "SELECT * FROM learner_instances WHERE pbs_job_id=? AND status='admitted'",
+                (job_id,),
+            ).fetchone()
+        finally:
+            connection.close()
+        if row is not None:
+            return dict(row)
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"dynamic child {job_id} was not admitted")
+        time.sleep(0.2)
+
+
+def _wait_scheduler_finished(job_id: str, *, timeout: float) -> dict[str, str]:
+    from fs_diloco.runtime.pbs_scheduler import PBSScheduler
+
+    scheduler = PBSScheduler()
+    deadline = time.monotonic() + timeout
+    while True:
+        live = scheduler.query(job_id)
+        if live.classification == "query_failed":
+            raise RuntimeError(f"live qstat failed for dynamic child {job_id}")
+        historical = None
+        if live.classification == "no_record":
+            historical = scheduler.query(job_id, historical=True)
+            if historical.classification == "query_failed":
+                raise RuntimeError(f"historical qstat failed for dynamic child {job_id}")
+        if live.classification == "finished" or (
+            live.classification == "no_record"
+            and historical is not None
+            and historical.classification == "finished"
+        ):
+            return {
+                "live": live.classification,
+                "historical": ("not_queried" if historical is None else historical.classification),
+            }
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"dynamic child {job_id} did not reach scheduler FINISH")
+        time.sleep(0.5)
+
+
+def _wait_replacement_launch(database: Path, *, timeout: float) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout
+    while True:
+        connection = sqlite3.connect(f"file:{database.resolve()}?mode=ro", uri=True)
+        connection.row_factory = sqlite3.Row
+        try:
+            row = connection.execute(
+                "SELECT * FROM launch_requests WHERE role='replacement' "
+                "AND pbs_job_id IS NOT NULL ORDER BY created_at LIMIT 1"
+            ).fetchone()
+        finally:
+            connection.close()
+        if row is not None:
+            return dict(row)
+        if time.monotonic() >= deadline:
+            raise TimeoutError("production scheduler did not submit a replacement learner")
+        time.sleep(0.5)
+
+
+def _terminate_scenario_job(
+    *, job_id: str, project_root: Path, environment: dict[str, str]
+) -> dict[str, str]:
+    _run_checked(["qdel", job_id], cwd=project_root, environment=environment)
+    return _wait_scheduler_finished(job_id, timeout=60.0)
+
+
 def _wait_process(
     role: str,
     process: subprocess.Popen[Any],
@@ -585,6 +692,16 @@ def _candidate_and_optional_dynamic_failure(
     mode: str,
     kill_learner: bool,
 ) -> dict[str, Any]:
+    if mode == "dynamic" and kill_learner:
+        return _dynamic_candidate_and_learner_failure(
+            name=name,
+            project_root=project_root,
+            python=python,
+            config=config,
+            run_root=run_root,
+            log_root=log_root,
+            environment=environment,
+        )
     resolved, _descriptor = _initialize(
         project_root=project_root,
         python=python,
@@ -686,11 +803,6 @@ def _dynamic_replacement(
     syncer_command, learner_commands = _commands(
         python, resolved, run_root, mode="dynamic", learners=2
     )
-    signal_path = log_root / "learner-0-admitted.json"
-    learner_zero_environment = {
-        **environment,
-        "FS_DILOCO_TEST_ADMISSION_SIGNAL_PATH": str(signal_path),
-    }
     syncer, syncer_log = _spawn(
         role="syncer",
         command=syncer_command,
@@ -699,52 +811,303 @@ def _dynamic_replacement(
         log_root=log_root,
         cuda="",
     )
-    learners = [
-        _spawn(
-            role=f"learner_{index:03d}",
-            command=command,
-            project_root=project_root,
-            environment=(learner_zero_environment if index == 0 else environment),
-            log_root=log_root,
-            cuda=str(index),
-        )
-        for index, command in enumerate(learner_commands)
-    ]
+    survivor, survivor_log = _spawn(
+        role="learner_001",
+        command=learner_commands[1],
+        project_root=project_root,
+        environment=environment,
+        log_root=log_root,
+        cuda="1",
+    )
+    initial_job_id: str | None = None
+    replacement_job_id: str | None = None
     try:
-        _wait_file(signal_path, timeout=60.0)
-        learners[0][0].terminate()
+        initial_job_id = _qsub_dynamic_bootstrap(
+            project_root=project_root,
+            run_root=run_root,
+            bootstrap_slot=0,
+            environment=environment,
+        )
+        database = run_root / "control/syncer_metadata.sqlite3"
+        lost_instance = _wait_dynamic_admission(database, initial_job_id, timeout=120.0)
+        initial_scheduler = _terminate_scenario_job(
+            job_id=initial_job_id,
+            project_root=project_root,
+            environment=environment,
+        )
+        replacement_launch = _wait_replacement_launch(database, timeout=120.0)
+        replacement_job_id = str(replacement_launch["pbs_job_id"])
+        if replacement_job_id == initial_job_id:
+            raise RuntimeError("replacement reused the terminal learner job ID")
+        replacement_instance = _wait_dynamic_admission(database, replacement_job_id, timeout=120.0)
+        if int(replacement_instance["stream_id"]) != int(lost_instance["stream_id"]) or int(
+            replacement_instance["stream_epoch"]
+        ) <= int(lost_instance["stream_epoch"]):
+            raise RuntimeError("replacement did not advance the lost stream epoch")
+        connection = sqlite3.connect(f"file:{database.resolve()}?mode=ro", uri=True)
+        try:
+            replacement_boundary = int(
+                connection.execute("SELECT MAX(version) FROM global_versions").fetchone()[0]
+            )
+        finally:
+            connection.close()
         deadline = time.monotonic() + 300.0
         statuses = {
-            "lost_learner": _wait_process(
-                "lost_learner", learners[0][0], deadline=deadline, expected_zero=False
-            ),
-            "survivor": _wait_process(
-                "survivor", learners[1][0], deadline=deadline, expected_zero=True
-            ),
+            "survivor": _wait_process("survivor", survivor, deadline=deadline, expected_zero=True),
             "syncer": _wait_process("syncer", syncer, deadline=deadline, expected_zero=True),
         }
+        replacement_scheduler = _wait_scheduler_finished(replacement_job_id, timeout=60.0)
     finally:
-        for process in (syncer, learners[0][0], learners[1][0]):
+        for process in (syncer, survivor):
             if process.poll() is None:
                 process.terminate()
-        for handle in (syncer_log, learners[0][1], learners[1][1]):
+        for job_id in (initial_job_id, replacement_job_id):
+            if job_id is None:
+                continue
+            try:
+                _wait_scheduler_finished(job_id, timeout=0.1)
+            except (RuntimeError, TimeoutError):
+                try:
+                    _terminate_scenario_job(
+                        job_id=job_id,
+                        project_root=project_root,
+                        environment=environment,
+                    )
+                except (RuntimeError, TimeoutError):
+                    pass
+        for handle in (syncer_log, survivor_log):
             handle.close()
     result = _validate(run_root, expected_epochs=1, expected_contributors=2)
     connection = sqlite3.connect(run_root / "control/syncer_metadata.sqlite3")
+    connection.row_factory = sqlite3.Row
     try:
         replacements = int(
             connection.execute(
                 "SELECT COUNT(*) FROM launch_requests WHERE role='replacement' AND state='admitted'"
             ).fetchone()[0]
         )
+        lost_final = connection.execute(
+            "SELECT * FROM learner_instances WHERE instance_id=?",
+            (str(lost_instance["instance_id"]),),
+        ).fetchone()
+        replacement_final = connection.execute(
+            "SELECT * FROM learner_instances WHERE instance_id=?",
+            (str(replacement_instance["instance_id"]),),
+        ).fetchone()
+        hot_updates = [dict(row) for row in connection.execute("SELECT * FROM updates")]
     finally:
         connection.close()
-    if replacements < 1:
+    if replacements != 1:
         raise RuntimeError("dynamic tiny scenario did not admit a replacement")
+    if lost_final is None or lost_final["status"] != "revoked":
+        raise RuntimeError("lost dynamic instance was not durably revoked")
+    if replacement_final is None or replacement_final["status"] != "stopped":
+        raise RuntimeError("replacement dynamic instance did not stop terminally")
+    old_applied_versions = [
+        int(row["applied_version"])
+        for row in [*hot_updates, *_audit_rows(run_root, "updates")]
+        if json.loads(str(row["fence_json"])).get("instance_id")
+        == str(lost_instance["instance_id"])
+        and row.get("applied_version") is not None
+    ]
+    if old_applied_versions and max(old_applied_versions) > replacement_boundary:
+        raise RuntimeError("lost dynamic instance committed after its replacement boundary")
     return {
         "name": "dynamic-2-learners-replacement",
         "process_statuses": statuses,
         "replacement_launches": replacements,
+        "scheduler_jobs": {
+            "lost": {"job_id": initial_job_id, **initial_scheduler},
+            "replacement": {"job_id": replacement_job_id, **replacement_scheduler},
+            "maximum_live_allocations": 2,
+        },
+        "replacement_evidence": {
+            "stream_id": int(lost_instance["stream_id"]),
+            "old_stream_epoch": int(lost_instance["stream_epoch"]),
+            "new_stream_epoch": int(replacement_instance["stream_epoch"]),
+            "replacement_boundary_version": replacement_boundary,
+            "old_max_applied_version": (
+                None if not old_applied_versions else max(old_applied_versions)
+            ),
+            "old_final_status": str(lost_final["status"]),
+            "replacement_final_status": str(replacement_final["status"]),
+        },
+        **result,
+    }
+
+
+def _dynamic_candidate_and_learner_failure(
+    *,
+    name: str,
+    project_root: Path,
+    python: Path,
+    config: Path,
+    run_root: Path,
+    log_root: Path,
+    environment: dict[str, str],
+) -> dict[str, Any]:
+    resolved, _descriptor = _initialize(
+        project_root=project_root,
+        python=python,
+        config=config,
+        run_id=run_root.name,
+        run_root=run_root,
+        environment=environment,
+    )
+    syncer_command, learner_commands = _commands(
+        python, resolved, run_root, mode="dynamic", learners=2
+    )
+    first_environment = {
+        **environment,
+        "FS_DILOCO_TEST_FAIL_AFTER_COMMITTED_VERSION": "2",
+    }
+    first, first_log = _spawn(
+        role="syncer_first",
+        command=syncer_command,
+        project_root=project_root,
+        environment=first_environment,
+        log_root=log_root,
+        cuda="",
+    )
+    survivor, survivor_log = _spawn(
+        role="learner_001",
+        command=learner_commands[1],
+        project_root=project_root,
+        environment=environment,
+        log_root=log_root,
+        cuda="1",
+    )
+    successor: subprocess.Popen[Any] | None = None
+    successor_log = None
+    initial_job_id: str | None = None
+    replacement_job_id: str | None = None
+    try:
+        initial_job_id = _qsub_dynamic_bootstrap(
+            project_root=project_root,
+            run_root=run_root,
+            bootstrap_slot=0,
+            environment=environment,
+        )
+        database = run_root / "control/syncer_metadata.sqlite3"
+        lost_instance = _wait_dynamic_admission(database, initial_job_id, timeout=120.0)
+        _wait_version(run_root, 0, timeout=60.0)
+        successor, successor_log = _spawn(
+            role="syncer_successor",
+            command=syncer_command,
+            project_root=project_root,
+            environment=environment,
+            log_root=log_root,
+            cuda="",
+        )
+        _wait_version(run_root, 2, timeout=120.0)
+        initial_scheduler = _terminate_scenario_job(
+            job_id=initial_job_id,
+            project_root=project_root,
+            environment=environment,
+        )
+        replacement_launch = _wait_replacement_launch(database, timeout=120.0)
+        replacement_job_id = str(replacement_launch["pbs_job_id"])
+        if replacement_job_id == initial_job_id:
+            raise RuntimeError("replacement reused the terminal learner job ID")
+        replacement_instance = _wait_dynamic_admission(database, replacement_job_id, timeout=120.0)
+        if int(replacement_instance["stream_id"]) != int(lost_instance["stream_id"]) or int(
+            replacement_instance["stream_epoch"]
+        ) <= int(lost_instance["stream_epoch"]):
+            raise RuntimeError("replacement did not advance the lost stream epoch")
+        connection = sqlite3.connect(f"file:{database.resolve()}?mode=ro", uri=True)
+        try:
+            replacement_boundary = int(
+                connection.execute("SELECT MAX(version) FROM global_versions").fetchone()[0]
+            )
+        finally:
+            connection.close()
+        assert successor is not None
+        deadline = time.monotonic() + 300.0
+        statuses = {
+            "first_candidate": _wait_process(
+                "first_candidate", first, deadline=deadline, expected_zero=False
+            ),
+            "successor": _wait_process(
+                "successor", successor, deadline=deadline, expected_zero=True
+            ),
+            "survivor": _wait_process("survivor", survivor, deadline=deadline, expected_zero=True),
+        }
+        replacement_scheduler = _wait_scheduler_finished(replacement_job_id, timeout=60.0)
+    finally:
+        for process in (first, successor, survivor):
+            if process is not None and process.poll() is None:
+                process.terminate()
+        for job_id in (initial_job_id, replacement_job_id):
+            if job_id is None:
+                continue
+            try:
+                _wait_scheduler_finished(job_id, timeout=0.1)
+            except (RuntimeError, TimeoutError):
+                try:
+                    _terminate_scenario_job(
+                        job_id=job_id,
+                        project_root=project_root,
+                        environment=environment,
+                    )
+                except (RuntimeError, TimeoutError):
+                    pass
+        for handle in (first_log, successor_log, survivor_log):
+            if handle is not None:
+                handle.close()
+    result = _validate(run_root, expected_epochs=2, expected_contributors=2)
+    connection = sqlite3.connect(run_root / "control/syncer_metadata.sqlite3")
+    connection.row_factory = sqlite3.Row
+    try:
+        replacements = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM launch_requests WHERE role='replacement' AND state='admitted'"
+            ).fetchone()[0]
+        )
+        lost_final = connection.execute(
+            "SELECT * FROM learner_instances WHERE instance_id=?",
+            (str(lost_instance["instance_id"]),),
+        ).fetchone()
+        replacement_final = connection.execute(
+            "SELECT * FROM learner_instances WHERE instance_id=?",
+            (str(replacement_instance["instance_id"]),),
+        ).fetchone()
+        hot_updates = [dict(row) for row in connection.execute("SELECT * FROM updates")]
+    finally:
+        connection.close()
+    if replacements != 1:
+        raise RuntimeError("combined failure scenario did not admit exactly one replacement")
+    if lost_final is None or lost_final["status"] != "revoked":
+        raise RuntimeError("combined failure lost instance was not revoked")
+    if replacement_final is None or replacement_final["status"] != "stopped":
+        raise RuntimeError("combined failure replacement did not stop terminally")
+    old_applied_versions = [
+        int(row["applied_version"])
+        for row in [*hot_updates, *_audit_rows(run_root, "updates")]
+        if json.loads(str(row["fence_json"])).get("instance_id")
+        == str(lost_instance["instance_id"])
+        and row.get("applied_version") is not None
+    ]
+    if old_applied_versions and max(old_applied_versions) > replacement_boundary:
+        raise RuntimeError("lost instance committed after combined-failure replacement")
+    return {
+        "name": name,
+        "process_statuses": statuses,
+        "scheduler_jobs": {
+            "lost": {"job_id": initial_job_id, **initial_scheduler},
+            "replacement": {"job_id": replacement_job_id, **replacement_scheduler},
+            "maximum_live_allocations": 2,
+        },
+        "replacement_evidence": {
+            "stream_id": int(lost_instance["stream_id"]),
+            "old_stream_epoch": int(lost_instance["stream_epoch"]),
+            "new_stream_epoch": int(replacement_instance["stream_epoch"]),
+            "replacement_boundary_version": replacement_boundary,
+            "old_max_applied_version": (
+                None if not old_applied_versions else max(old_applied_versions)
+            ),
+            "old_final_status": str(lost_final["status"]),
+            "replacement_final_status": str(replacement_final["status"]),
+        },
         **result,
     }
 

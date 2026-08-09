@@ -944,3 +944,10 @@
 - Experiment ID `P6-G5-tiny-attempt2`，该正式门禁目标连续失败次数 2。PBS job `2512732.opbs` 的前两个no-fault static场景均通过current-only/terminal/token/artifact验证；第三个static replacement场景已SIGSTOP old、授权同logical launch新attempt、等待new admission并SIGCONT old，但old最终exit 0，harness把“必须nonzero”当作失败。
 - Production允许被替换old actor在恢复后先观察到terminal/current control并clean exit；安全不变量是old generation不得获得新admission、不得产生pending/selected/applied update或commit，而不是Unix exit code必须非零。当前场景在极短tiny workload中new/other actor可先完成terminal，因此0是合法race结果。
 - 修复为让old resume的process status只做诊断，并从authority断言old binding已进入`replaced` history、current binding精确为new attempt/generation且old attempt active/applied update计数为0。new/other/syncer仍必须clean exit；不得仅忽略old进程而缺少durable stale-commit证明。
+
+## 2026-08-10 00:07 JST — P6 G5 attempt 3 local dynamic loss had no scheduler-visible job boundary
+
+- Experiment ID `P6-G5-tiny-attempt3`，该正式门禁目标连续失败次数 3。PBS job `2512750.opbs` 在 `mg0004` 已通过4/6场景（两个no-fault static、static same-launch replacement、static active-candidate crash），随后dynamic replacement在v0持续等待；确认根因后用 `qdel 2512750.opbs` 终止无可能前进的父allocation，未留下child job。
+- Run `plan03_p6_g5_dynamic-2-learners-replacement_2512750` 的两个bootstrap learner都是父job内subprocess，authority把两者 `pbs_job_id` 都记为仍RUNNING的`2512750.opbs`。杀死learner_000 subprocess后，capacity观测持续为eligible=2/productive=1/action=low；`_confirmed_lost_instance()`按设计只有在该instance的独立live/historical qstat为FINISH时才可确认永久丢失，因此不能retire或提交replacement。survivor已连续发布并被裁决90+ cycles，但quorum=2所以version保持v0。
+- 事实排除“加大heartbeat timeout”方案：这里缺失的不是等待时间，而是scheduler identity；同一父PBS仍RUNNING永远不能证明某个child subprocess永久终止。完整现场保留在 `runs/fs_diloco/plan03_p6_g5_dynamic-2-learners-replacement_2512750`、`logs/qsub_plan03_p6_g5_dynamic-2-learners-replacement_2512750/` 和四份partial artifact。
+- 依三连失败规则，第四次G5前停止局部修改，先在`code_review.md`完成Codex+GPT全面审查并重写动态场景拓扑。候选新方案是把待丢失bootstrap learner作为独立10分钟PBS child运行并在admission后自行TERM，使qstat提供真实FINISH；survivor留在父allocation，production scheduler再提交同stream replacement child，任何时刻最多父+1 child两allocation。
