@@ -51,8 +51,9 @@ sync:
 - `liveness.quorum_policy`
 - `inner_optimizer.reset_on_global_update`
 - `learner.prediction_reconcile_timeout_seconds`（新路径是 `learner.prediction.reconcile_timeout_seconds`）
+- `syncer.parallel_checkpoint_writes`
 
-旧 config 只能由 `legacy.load_query_config_snapshot` 在分析/导出/评估工具中投影；production loader 不会静默丢弃旧字段。schema 9 之前的 v4 resolved snapshot 中若仅多出已删除的 `syncer.parallel_checkpoint_writes`，query loader 会精确移除该字段以支持只读评估；production/resume loader 仍以“字段已移除”拒绝它。
+旧 config 只能由 `legacy.load_query_config_snapshot` 在分析/导出/评估工具中投影；production loader 不会静默丢弃旧字段。本次配置收敛之前的 v4 resolved snapshot 中若仅多出已删除的 `syncer.parallel_checkpoint_writes`，query loader 会精确移除该字段以支持只读评估；production/resume loader 仍以“字段已移除”拒绝它。
 
 ## Migration
 
