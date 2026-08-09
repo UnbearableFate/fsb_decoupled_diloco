@@ -547,3 +547,9 @@
 - After evidence commit `84a01ba8115453e9916504d192f78ada71c0133a`, the phase-final Checker reran with frozen/current boundaries, P4 requirement aggregation, `--require-tracked-evidence`, and source verification target `37b3feeeb64240acf40d2cfdeb7667b32782cd64`.
 - All evidence paths were tracked, the descendant contained no relevant source-tree drift, all nine requirements passed, and every difference list was empty. Compact artifact: `artifacts/20260809-145400_p4-second-remediation-tracked-evidence-gate_pass.json`; full temporary Checker output SHA-256 `e9dc406c4be2f6f2c690e66f7ea92c438af8eaffb390546f4632ef2053918402`.
 - Because the remediation changed the public admission and recovery boundary, the mandatory next gate is a fresh independent incremental review from the prior review target `19d40b5173eb1a16227013a451fced0e3eb13ace` to the latest frozen evidence target.
+
+# 2026-08-09 14:58 JST — P4 second remediation incremental review gate completed with authorized Claude skip
+
+- Codex independently reviewed the complete `19d40b5173eb1a16227013a451fced0e3eb13ace..e565ad8f9a71af128c6df7c1dfb4e42a9e520388` increment and persisted `gpt-5.6-sol_e565ad8f9a71af128c6df7c1dfb4e42a9e520388.md` before invoking Claude. Verdict: `CHANGES_REQUIRED` with one High and two Medium findings.
+- The fresh Claude Opus 5 call ended on an explicit account session limit before producing a report and is therefore the authorized non-blocking `skipped-session-limit` case. Files: `claude-opus-5_e565ad8f9a71af128c6df7c1dfb4e42a9e520388_{attempt1_invocation,skipped-session-limit}.json`.
+- Remediation must now make rejected dispositions directly visible across repeated takeover, require explicit runtime cleanliness evidence, and bind exact static replay to the stored canonical command request before P4 can close.

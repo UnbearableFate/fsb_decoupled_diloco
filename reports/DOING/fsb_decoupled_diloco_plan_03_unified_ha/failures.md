@@ -634,3 +634,8 @@
 
 - A read-only Python transformation correctly asserted nine old runtime/requirement bindings, but the generated `apply_patch` payload lost the leading hunk marker during rendering and failed verification before changing the matrix.
 - Correction: generate explicit `*** Begin Patch` replacement hunks with stable row context, or use an apply-patch-compatible diff renderer, then verify all nine old paths are absent and all nine new paths are present.
+
+# 2026-08-09 14:58 JST — P4 second remediation Claude review hit the explicit session limit
+
+- Fresh session `a887a576-1c59-4c58-996d-b2563b8b3165` requested and actually used `claude-opus-5` for `19d40b5..e565ad8`. After 19 read-only review turns, the API exited 1 with status 429 and the explicit message `You've hit your session limit`, reset 17:20 Asia/Tokyo, before creating a report.
+- This is the exact non-blocking exception authorized by `plans/AGENTS.md` and the user. It is classified `skipped-session-limit`, will not be retried, and does not replace the already persisted mandatory Codex review. Invocation and skip records are retained alongside the P4 reports.
