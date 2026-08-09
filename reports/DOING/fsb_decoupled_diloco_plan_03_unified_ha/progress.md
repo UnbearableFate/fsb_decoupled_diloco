@@ -671,3 +671,9 @@
 - `artifacts/20260809-212300_p5-review-finding-dispositions_review.json`逐条处置P5四段连续审查的全部finding；所有Critical/High均fixed，Medium除classic-only G4/G10 harness明确归属P6外均fixed，Low仅保留malformed manual-request telemetry的P6可观测性follow-up，并以authority必须独立分类为依据拒绝无DB checkpoint目录兼容建议。blocking finding为0。
 - Requirement matrix中`P5-FRAGMENT`、`P5-ARCH`、`LEGACY-01`已改为`complete`且绑定`checker requirements.<ID>`和clean target evidence；混入P5的pending `P6-DOCS`已纠正到`P6-acceptance-final-review`。Checker以verification target `57fd2bef341df75c373f433ba3a38252240c6e26`同时验证frozen inventory、current boundaries、P3 operational contracts、P5 contracts和三条phase requirement，结果`PASS`、differences为空。
 - Requirement evidence：`artifacts/20260809-212200_p5-operator-disposal-target-requirements_pass.json`，SHA-256 `30bb057baf8199bd0016da2c42afac64cdf240465a2b2f4eb9bcddc1a73ca1f0`。下一步提交review/evidence-only descendant并重跑`--require-tracked-evidence`；通过后P5才正式关闭。
+
+## 2026-08-09 21:25 JST — P5 delete/classic refactor phase complete
+
+- Evidence-only descendant `810b63a838285d8a3e58e25369f907ebca037b29`提交后，最终Checker对clean source target `57fd2bef341df75c373f433ba3a38252240c6e26`通过frozen inventory、current migration boundaries、P3 operational、P5 removal/legacy、三条P5 requirement和`--require-tracked-evidence`；status为`PASS`、所有difference列表为空。
+- Final gate：`artifacts/20260809-212500_p5-final-tracked-evidence-gate_pass.json`，SHA-256 `7c25933a4eb91d3f071896a5a7ab27433ea21ff1f737cef30f8e9b5c53537575`。P5连续Codex审查范围完整，所有blocking finding关闭，两个最后Claude调用均为已核验且用户授权的session-limit skip。
+- P5正式完成。下一工作单元为`P6-acceptance-final-review`：先从计划/矩阵推导G0..G11和pending invariants，补齐current-v4 crash/performance/acceptance harness，再依风险分层执行compute/多节点/9节点门禁；9节点超过50×10后同步verified behavior文档。
