@@ -867,3 +867,26 @@
 
 - 新target提交前的 `git diff --cached --check` 唯一报告 `gpt-5.6-sol_eb56219....md:58: new blank line at EOF`；production/source/test diff均无whitespace问题，尚未创建commit，也未重跑runtime。
 - 原因是只读Codex审查报告生成时保留了一个多余空白尾行。下一步只删除该报告末尾空行并重新stage，随后重跑cached diff gate；报告正文、finding和审查身份不变。
+
+## 2026-08-09 21:02 JST — P5 target `a540feb` 增量审查发现 operator-file disposal 路径缺陷
+
+- Review base/target为 `eb56219e13817b1f659921ea093c2dfdfa473abd..a540febd489abfac245790967a0b2a5667f90345`，ancestor关系已确认。Codex在调用Claude前独立保存 `code_review/.../P5-delete-classic-refactor/gpt-5.6-sol_a540febd489abfac245790967a0b2a5667f90345.md`，结论 `CHANGES_REQUIRED`。
+- High：新 `processed` archive目录允许既有symlink被`mkdir(exist_ok=True)`接受，随后immutable publisher可能写出run root；caller-derived长文件名也可能在durable disposition后触发`NAME_MAX`。Medium：1 MiB限制发生在`read_bytes()`之后，不能约束leader内存。clean job `2511948`未覆盖这两个反例。
+- fresh Claude session `3f94c140-dece-4457-ae19-4e1e6fe5683a` 按要求请求实际模型 `claude-opus-5`，HTTP 429明确返回 `You've hit your session limit · resets 10:20pm (Asia/Tokyo)`，input/output token均0且未生成target报告。按用户和`plans/AGENTS.md`规则记为 `skipped-session-limit`，不重试、不阻断；Codex findings仍是必修门禁。
+- 下一轮删除非必要的第二filesystem archive，只在durable disposition成功后以no-follow打开身份/内容重验并unlink exact hot entry；regular file改为no-follow streaming digest且最多保留1 MiB+1供解析。新增processed-symlink不外写、large file bounded read、source replacement不误删和disposition-before-unlink successor cleanup反例。High/Medium修复后重跑P5 focused/full；因修复触及filesystem安全边界，冻结新target并执行下一段连续增量复审。
+
+## 2026-08-09 21:06 JST — P5 operator disposal review repair 首次 format gate 未通过
+
+- Experiment ID `P5-operator-disposal-review-repair-format-attempt1`，静态格式目标连续失败次数1。no-follow streaming read/exact unlink实现及4类反例已通过`py_compile`、Ruff lint和`git diff --check`，但显式Ruff format报告`dynamic_capacity.py`及其test需要机械格式化；未运行pytest/runtime。
+- 下一步只对这两个文件运行formatter，再重跑相同静态scope；行为设计和断言不变。
+
+## 2026-08-09 21:08 JST — P5 operator disposal review repair compute attempt 1 的新fixture未创建请求目录
+
+- Experiment ID `P5-operator-disposal-review-repair-compute-attempt1`，该行为目标连续失败次数1。命令 `qsub -l walltime=00:10:00 scripts/miyabi/run_plan03_phase5_tests.pbs`；job `2511984.opbs`，host `mg0006`，申请10分钟、实际44秒、exit 1；raw log `fsdiloco_plan03_p5.o2511984`。
+- Ruff/45文件format/Checker通过，focused为`451 passed, 3 failed in 38.81s`，full未运行。三个新增反例均在setup阶段因`control/scheduler_operator_requests`尚未创建而`FileNotFoundError`，未调用production disposal逻辑；已有operator tests会显式`mkdir(parents=True)`，`_runtime()`只初始化authority DB而不初始化完整run directory。
+- 下一轮只让三个fixture在写file/symlink前创建同一request root，再重跑相同focused/full目标；production实现不变。
+
+## 2026-08-09 21:13 JST — clean runtime stdout留存触发cached trailing-whitespace gate
+
+- 新安全修复target提交前`git diff --cached --check`只报告clean job `2511948`保留stdout的module-list两行含上游输出尾随空格；source/test/report JSON均无whitespace错误，尚未commit。
+- 原始clean-worktree log的SHA/size已单独核验。下一步在tracked代表日志中只移除这两处展示性尾随空格，并把evidence JSON明确改为normalized retained-log的新SHA/size，同时保留原始PBS stdout SHA作为`original_raw_log_sha256`，不改变测试结论。

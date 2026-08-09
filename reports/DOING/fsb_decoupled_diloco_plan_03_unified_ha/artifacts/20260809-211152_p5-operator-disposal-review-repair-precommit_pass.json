@@ -1,0 +1,49 @@
+{
+  "artifact_version": 1,
+  "phase": "P5-delete-classic-refactor",
+  "status": "PASS",
+  "source_commit": "a540febd489abfac245790967a0b2a5667f90345",
+  "source_identity": {
+    "git_commit": "a540febd489abfac245790967a0b2a5667f90345",
+    "git_dirty": true,
+    "source_fingerprint": "sha256:2c6cf33d4127c4e8d0f518c22f9135b91a17215e8277e9d9778fdac670f2bbcd"
+  },
+  "command": "qsub -l walltime=00:10:00 scripts/miyabi/run_plan03_phase5_tests.pbs",
+  "pbs": {
+    "job_id": "2511996.opbs",
+    "compute_host": "mg0028",
+    "queue": "debug-g",
+    "nodes": 1,
+    "walltime_requested": "00:10:00",
+    "walltime_used": "00:01:40",
+    "exit_status": 0
+  },
+  "checks": {
+    "ruff_lint": "PASS",
+    "ruff_format_modified_scope": "PASS",
+    "p3_boundary_p5_checker": "PASS",
+    "focused_pytest": {
+      "collected": 454,
+      "passed": 454,
+      "failed": 0,
+      "duration_seconds": 39.11
+    },
+    "full_pytest": {
+      "collected": 625,
+      "passed": 625,
+      "failed": 0,
+      "duration_seconds": 54.13
+    },
+    "completion_marker": "PLAN03_PHASE5_TESTS_COMPLETE=2511996.opbs"
+  },
+  "requirements_covered": [
+    "P5-ARCH",
+    "SCHED-04"
+  ],
+  "raw_log": {
+    "path": "fsdiloco_plan03_p5.o2511996",
+    "sha256": "4f45f4010ad49dbae552435eeb9c73d62a92bf392fde302c2d37ab128bcefaff",
+    "size_bytes": 2053
+  },
+  "remaining_gate": "freeze and cleanly verify the security-boundary review repair"
+}

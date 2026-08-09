@@ -2,21 +2,34 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
+import os
+import stat
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
 from ...core.config import MembershipSection, ScalingSection
 from ...protocol.scheduler import SchedulerOperatorRequest
-from ...storage.atomic_io import fsync_directory, publish_immutable_bytes
+from ...storage.atomic_io import fsync_directory
 from ...storage.authority import LeaderAuthority, LeaderSession, MembershipFenceError
 from ...storage.paths import RunPaths
 from ..pbs_scheduler import PBSJobObservation
 
 
 PLAN03_REQUIREMENTS = frozenset({"P5-ARCH", "SCHED-01", "SCHED-02", "SCHED-03", "SCHED-04"})
+_MAX_OPERATOR_REQUEST_BYTES = 1_048_576
+
+
+@dataclass(frozen=True)
+class _OperatorFileObservation:
+    raw: bytes
+    content_sha256: str
+    identity: tuple[int, int, int, int, int]
+    rejection_reason: str | None
 
 
 class SchedulerAdapter(Protocol):
@@ -407,53 +420,38 @@ class DynamicCapacityService:
             return ()
         for path in sorted(root.glob("*.json")):
             relative_path = path.name
-            if path.is_symlink():
-                raw = f"symlink:{relative_path}".encode()
-                rejection_reason = "scheduler operator request must not be a symlink"
-            else:
-                try:
-                    raw = path.read_bytes()
-                except OSError:
-                    actions.append("operator_request_transient_io")
-                    continue
-                rejection_reason = None
-            content_sha256 = hashlib.sha256(raw).hexdigest()
+            try:
+                observation = self._read_operator_file(path)
+            except FileNotFoundError:
+                continue
+            except OSError:
+                actions.append("operator_request_transient_io")
+                continue
             if (
                 self.authority.read.scheduler_operator_file_disposition(
-                    relative_path, content_sha256
+                    relative_path, observation.content_sha256
                 )
                 is not None
             ):
-                self._archive_operator_file(
-                    path=path,
-                    raw=raw,
-                    content_sha256=content_sha256,
-                    was_symlink=path.is_symlink(),
-                )
+                if not self._remove_disposed_operator_file(path, observation):
+                    actions.append("operator_request_disposal_deferred")
                 continue
             request: SchedulerOperatorRequest | None = None
             try:
-                if rejection_reason is not None:
-                    raise ValueError(rejection_reason)
-                if len(raw) > 1_048_576:
-                    raise ValueError("scheduler operator request exceeds 1 MiB")
-                payload = json.loads(raw)
+                if observation.rejection_reason is not None:
+                    raise ValueError(observation.rejection_reason)
+                payload = json.loads(observation.raw)
                 request = SchedulerOperatorRequest.from_dict(payload)
             except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
                 reason = str(exc) or type(exc).__name__
                 self._record_operator_file_disposition(
                     relative_path=relative_path,
-                    content_sha256=content_sha256,
+                    content_sha256=observation.content_sha256,
                     disposition="rejected",
                     reason=reason,
                 )
-                if not self._archive_operator_file(
-                    path=path,
-                    raw=raw,
-                    content_sha256=content_sha256,
-                    was_symlink=rejection_reason is not None,
-                ):
-                    actions.append("operator_request_archive_deferred")
+                if not self._remove_disposed_operator_file(path, observation):
+                    actions.append("operator_request_disposal_deferred")
                 actions.append("invalid_operator_request")
                 continue
             assert request is not None
@@ -463,47 +461,108 @@ class DynamicCapacityService:
             )
             self._record_operator_file_disposition(
                 relative_path=relative_path,
-                content_sha256=content_sha256,
+                content_sha256=observation.content_sha256,
                 disposition="applied",
                 reason=str(result["request_state"]),
             )
-            if not self._archive_operator_file(
-                path=path,
-                raw=raw,
-                content_sha256=content_sha256,
-                was_symlink=False,
-            ):
-                actions.append("operator_request_archive_deferred")
+            if not self._remove_disposed_operator_file(path, observation):
+                actions.append("operator_request_disposal_deferred")
             actions.append(f"operator_{result['request_state']}")
         return tuple(actions)
 
     @staticmethod
-    def _archive_operator_file(
-        *,
-        path: Path,
-        raw: bytes,
-        content_sha256: str,
-        was_symlink: bool,
-    ) -> bool:
-        """Move a disposed request out of the hot scan without losing its bytes."""
+    def _file_identity(metadata: os.stat_result) -> tuple[int, int, int, int, int]:
+        return (
+            int(metadata.st_dev),
+            int(metadata.st_ino),
+            int(metadata.st_mode),
+            int(metadata.st_size),
+            int(metadata.st_mtime_ns),
+        )
 
-        archive = path.parent / "processed"
-        archive.mkdir(parents=True, exist_ok=True)
-        suffix = ".symlink" if was_symlink else ""
-        target = archive / f"{content_sha256}-{path.name}{suffix}"
-        publish_immutable_bytes(target, raw)
+    @classmethod
+    def _read_operator_file(cls, path: Path) -> _OperatorFileObservation:
+        flags = (
+            os.O_RDONLY
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_NONBLOCK", 0)
+        )
         try:
-            if was_symlink:
-                if not path.is_symlink():
-                    return False
-            elif (
-                path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != content_sha256
-            ):
+            descriptor = os.open(path, flags)
+        except OSError as exc:
+            if exc.errno != errno.ELOOP:
+                raise
+            metadata = path.lstat()
+            raw = f"symlink:{path.name}".encode()
+            return _OperatorFileObservation(
+                raw=raw,
+                content_sha256=hashlib.sha256(raw).hexdigest(),
+                identity=cls._file_identity(metadata),
+                rejection_reason="scheduler operator request must not be a symlink",
+            )
+        try:
+            initial = os.fstat(descriptor)
+            if not stat.S_ISREG(initial.st_mode):
+                raw = f"non-regular:{initial.st_mode}:{path.name}".encode()
+                return _OperatorFileObservation(
+                    raw=raw,
+                    content_sha256=hashlib.sha256(raw).hexdigest(),
+                    identity=cls._file_identity(initial),
+                    rejection_reason="scheduler operator request must be a regular file",
+                )
+            digest = hashlib.sha256()
+            retained = bytearray()
+            total = 0
+            while True:
+                chunk = os.read(descriptor, 64 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+                total += len(chunk)
+                remaining = _MAX_OPERATOR_REQUEST_BYTES + 1 - len(retained)
+                if remaining > 0:
+                    retained.extend(chunk[:remaining])
+            final = os.fstat(descriptor)
+        finally:
+            os.close(descriptor)
+        named = path.lstat()
+        identity = cls._file_identity(initial)
+        if cls._file_identity(final) != identity or cls._file_identity(named) != identity:
+            raise OSError(errno.EAGAIN, "scheduler operator request changed while reading")
+        return _OperatorFileObservation(
+            raw=bytes(retained),
+            content_sha256=digest.hexdigest(),
+            identity=identity,
+            rejection_reason=(
+                "scheduler operator request exceeds 1 MiB"
+                if total > _MAX_OPERATOR_REQUEST_BYTES
+                else None
+            ),
+        )
+
+    @classmethod
+    def _remove_disposed_operator_file(cls, path: Path, expected: _OperatorFileObservation) -> bool:
+        try:
+            current = cls._read_operator_file(path)
+        except FileNotFoundError:
+            return True
+        except OSError:
+            return False
+        if (
+            current.identity != expected.identity
+            or current.content_sha256 != expected.content_sha256
+        ):
+            return False
+        try:
+            if cls._file_identity(path.lstat()) != expected.identity:
                 return False
             path.unlink()
             fsync_directory(path.parent)
         except FileNotFoundError:
             pass
+        except OSError:
+            return False
         return True
 
     def _record_operator_file_disposition(

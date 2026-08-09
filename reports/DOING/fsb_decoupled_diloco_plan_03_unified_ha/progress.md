@@ -643,3 +643,17 @@
 - 本组验证覆盖 scheduler list→detail recovery、distinct stream reservations、flapping rearm、operator request disposition/hot-file移出、terminal durable cutoff/deadline/merge budget、normal-vs-terminal merge fence、manual close reason、legacy config/CSV重分类、schema 8及现存 P5 deletion/architecture回归。前两次失败的import owner和三个fixture调用错误均由本次完整同目标通过证伪，连续失败计数归零。
 - Evidence：`artifacts/20260809-205134_p5-incremental-review-remediation-precommit_pass.json`；raw log `fsdiloco_plan03_p5.o2511921`，SHA-256 `04cacc99e271eaeaf051adb26170a0db9ddfbcd169cc61128e416b097f0c8f78`，2053 bytes。该artifact明确标记 `git_dirty=true`，只证明precommit tree，不可冒充clean phase evidence。
 - 下一工作单元是排除用户自有 `plans/AGENTS.md` 后冻结新review target commit，在clean detached worktree重跑相同门禁并完成 `eb56219..new-target` 的独立Codex审查；Claude session-limit仍按已记录规则处理。
+
+## 2026-08-09 20:58 JST — P5 增量审查修订 clean target compute gate PASS
+
+- 新冻结target `a540febd489abfac245790967a0b2a5667f90345`，base `eb56219e13817b1f659921ea093c2dfdfa473abd`；ancestor检查通过。detached worktree `/work/xg24i002/x10041/plan03-p5-a540-clean.H5XxF2` 的source identity为 `git_dirty=false`、fingerprint `sha256:cb662e1e2444cff4a3b6406bd8dcab3f37f8d199fb230536ae2a9b7216122a96`。
+- PBS job `2511948.opbs` 在 `mg0006` 通过 Ruff、45文件format、P3/current-boundary/P5 Checker、focused `451 passed in 40.23s`、full `622 passed in 40.02s`及completion marker；exit 0，申请10分钟、实际1分27秒。
+- Clean evidence：`artifacts/20260809-205800_p5-incremental-review-remediation-target-runtime_pass.json`；保留的最小完整stdout为同名前缀`.log`，SHA-256 `7eba0f8df6754ce49c7e601dd759b2a4f9177c2ccea297cfde61986de699173a`，2053 bytes。未产生run root/checkpoint等需清理的runtime对象。
+- 下一工作单元仅审查冻结增量 `eb56219..a540feb`：Codex报告必须先落盘，再调用fresh Claude；明确session-limit时按用户规则非阻断skip。review finding处置和matrix/tracked-evidence gate尚未完成，P5仍未complete。
+
+## 2026-08-09 21:11 JST — P5 operator disposal review repair precommit PASS
+
+- Codex对`eb56219..a540feb`的独立复审发现并接受1条High symlink/path-escape和1条Medium unbounded-read finding；Claude session `3f94c140-dece-4457-ae19-4e1e6fe5683a`因明确账户session limit记为非阻断skip。
+- 修复删除了非必要的`processed` filesystem archive：valid request完整字段已在scheduler audit表，所有file均有durable disposition digest/reason；successor只no-follow重读并在identity+SHA仍一致时unlink hot entry。regular file以64 KiB块stream digest，parser最多保留1 MiB+1；symlink/non-regular只形成有界拒绝marker。
+- 新反例覆盖processed symlink不外写、2 MiB file retained bytes有界且只拒绝一次、disposition-before-unlink successor cleanup、观察后source replacement不误删。job `2511996.opbs`（`mg0028`）通过静态/Checker、focused `454 passed in 39.11s`、full `625 passed in 54.13s`，exit0，实际1分40秒。
+- Evidence：`artifacts/20260809-211152_p5-operator-disposal-review-repair-precommit_pass.json`，raw log SHA-256 `4f45f4010ad49dbae552435eeb9c73d62a92bf392fde302c2d37ab128bcefaff`；该证据为`git_dirty=true`，下一步仍需冻结新安全边界target、clean rerun及连续增量复审。

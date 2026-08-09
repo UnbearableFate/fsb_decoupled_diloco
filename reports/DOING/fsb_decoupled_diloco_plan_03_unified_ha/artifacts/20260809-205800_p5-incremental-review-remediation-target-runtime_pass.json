@@ -1,0 +1,70 @@
+{
+  "artifact_version": 1,
+  "phase": "P5-delete-classic-refactor",
+  "status": "PASS",
+  "source_commit": "a540febd489abfac245790967a0b2a5667f90345",
+  "source_identity": {
+    "git_commit": "a540febd489abfac245790967a0b2a5667f90345",
+    "git_dirty": false,
+    "source_fingerprint": "sha256:cb662e1e2444cff4a3b6406bd8dcab3f37f8d199fb230536ae2a9b7216122a96"
+  },
+  "source_tree": "/work/xg24i002/x10041/plan03-p5-a540-clean.H5XxF2",
+  "command": "qsub -v PROJECT_ROOT=/work/xg24i002/x10041/plan03-p5-a540-clean.H5XxF2,PYTHON_BIN=/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python,RUFF_BIN=/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/ruff -l walltime=00:10:00 scripts/miyabi/run_plan03_phase5_tests.pbs",
+  "pbs": {
+    "job_id": "2511948.opbs",
+    "compute_host": "mg0006",
+    "queue": "debug-g",
+    "nodes": 1,
+    "mpiprocs": 1,
+    "walltime_requested": "00:10:00",
+    "walltime_used": "00:01:27",
+    "exit_status": 0
+  },
+  "checks": {
+    "ruff_lint": "PASS",
+    "ruff_format_modified_scope": {
+      "status": "PASS",
+      "files": 45
+    },
+    "p3_boundary_p5_checker": "PASS",
+    "focused_pytest": {
+      "collected": 451,
+      "passed": 451,
+      "failed": 0,
+      "xfail": 0,
+      "duration_seconds": 40.23
+    },
+    "full_pytest": {
+      "collected": 622,
+      "passed": 622,
+      "failed": 0,
+      "xfail": 0,
+      "duration_seconds": 40.02
+    },
+    "completion_marker": "PLAN03_PHASE5_TESTS_COMPLETE=2511948.opbs"
+  },
+  "requirements_covered": [
+    "P5-FRAGMENT",
+    "P5-ARCH",
+    "LEGACY-01",
+    "SCHED-01",
+    "SCHED-02",
+    "SCHED-03",
+    "SCHED-04",
+    "TERM-01",
+    "TERM-02",
+    "TERM-03"
+  ],
+  "raw_log": {
+    "path": "reports/DOING/fsb_decoupled_diloco_plan_03_unified_ha/artifacts/20260809-205800_p5-incremental-review-remediation-target-runtime_pass.log",
+    "sha256": "eb8f07991cd6a2f95823b0fa5d3c191b7ed75fe4aacf46ba34df7f7a6e63c855",
+    "size_bytes": 2049,
+    "original_pbs_stdout_sha256": "7eba0f8df6754ce49c7e601dd759b2a4f9177c2ccea297cfde61986de699173a",
+    "normalization": "Removed two display-only trailing-space pairs from the retained module-list header."
+  },
+  "modules": [
+    "nvidia/25.9",
+    "nv-hpcx/25.9"
+  ],
+  "remaining_gate": "complete independent incremental review and bind the P5 requirement matrix to tracked clean evidence"
+}

@@ -272,7 +272,7 @@ def test_lost_qsub_result_never_resubmits_and_ends_in_manual_review(tmp_path: Pa
         )
         assert not any(item.startswith("operator_") for item in replay_actions)
         assert not target.exists()
-        assert len(list((target.parent / "processed").iterdir())) == 1
+        assert not (target.parent / "processed").exists()
     finally:
         authority.close()
 
@@ -290,7 +290,101 @@ def test_invalid_operator_file_is_disposed_once(tmp_path: Path) -> None:
         assert "invalid_operator_request" in first
         assert "invalid_operator_request" not in second
         assert not request_path.exists()
-        assert len(list((request_path.parent / "processed").iterdir())) == 1
+        assert not (request_path.parent / "processed").exists()
+    finally:
+        authority.close()
+
+
+def test_operator_disposal_never_follows_processed_symlink(tmp_path: Path) -> None:
+    clock = Clock()
+    authority, _leader, _scheduler, service = _runtime(tmp_path, clock)
+    root = RunPaths(tmp_path).scheduler_operator_requests
+    root.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (root / "processed").symlink_to(outside, target_is_directory=True)
+    request_path = root / "invalid.json"
+    request_path.write_text("not-json", encoding="utf-8")
+    try:
+        actions = service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
+
+        assert "invalid_operator_request" in actions
+        assert not request_path.exists()
+        assert (root / "processed").is_symlink()
+        assert list(outside.iterdir()) == []
+    finally:
+        authority.close()
+
+
+def test_oversize_operator_file_is_streamed_bounded_and_disposed_once(
+    tmp_path: Path,
+) -> None:
+    clock = Clock()
+    authority, _leader, _scheduler, service = _runtime(tmp_path, clock)
+    request_path = RunPaths(tmp_path).scheduler_operator_requests / "oversize.json"
+    request_path.parent.mkdir(parents=True)
+    request_path.write_bytes(b"x" * (2 * 1024 * 1024))
+    try:
+        observation = service._read_operator_file(request_path)
+        assert len(observation.raw) == 1_048_577
+        assert observation.rejection_reason == "scheduler operator request exceeds 1 MiB"
+
+        first = service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
+        second = service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
+
+        assert "invalid_operator_request" in first
+        assert "invalid_operator_request" not in second
+        assert not request_path.exists()
+        disposition = authority.read.scheduler_operator_file_disposition(
+            request_path.name, observation.content_sha256
+        )
+        assert disposition is not None
+        assert disposition["reason"] == "scheduler operator request exceeds 1 MiB"
+    finally:
+        authority.close()
+
+
+def test_disposed_operator_file_successor_cleanup_preserves_replacement(
+    tmp_path: Path,
+) -> None:
+    clock = Clock()
+    authority, leader, _scheduler, service = _runtime(tmp_path, clock)
+    request_path = RunPaths(tmp_path).scheduler_operator_requests / "invalid.json"
+    request_path.parent.mkdir(parents=True)
+    request_path.write_text("old-invalid", encoding="utf-8")
+    try:
+        old = service._read_operator_file(request_path)
+        leader.record_scheduler_operator_file_disposition(
+            command_id="record-old-disposition",
+            relative_path=request_path.name,
+            content_sha256=old.content_sha256,
+            disposition="rejected",
+            reason="invalid JSON",
+        )
+        replay_actions = service.tick(
+            global_version=0, eligible_contributors=0, selected_contributors=0
+        )
+        assert "invalid_operator_request" not in replay_actions
+        assert not request_path.exists()
+
+        request_path.write_text("replaced-old-invalid", encoding="utf-8")
+        replaced_old = service._read_operator_file(request_path)
+        leader.record_scheduler_operator_file_disposition(
+            command_id="record-replaced-old-disposition",
+            relative_path=request_path.name,
+            content_sha256=replaced_old.content_sha256,
+            disposition="rejected",
+            reason="invalid JSON",
+        )
+        request_path.unlink()
+        request_path.write_text("new-invalid", encoding="utf-8")
+
+        assert not service._remove_disposed_operator_file(request_path, replaced_old)
+        assert request_path.read_text(encoding="utf-8") == "new-invalid"
+
+        actions = service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
+        assert "invalid_operator_request" in actions
+        assert not request_path.exists()
     finally:
         authority.close()
 
