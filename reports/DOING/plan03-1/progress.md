@@ -164,3 +164,18 @@
 - The shorter limit retains margin beyond the only previously substantive
   external response latency while avoiding another unused 30-minute request.
   Only monitoring and evidence collection are allowed until terminal state.
+
+## 2026-08-10T17:48:52+09:00 — external review skipped by user
+
+- The user directed that external reviewers be skipped temporarily and that
+  review use Codex only. Running job `2519093.opbs` was therefore cancelled;
+  `qstat` confirms no unfinished job remains.
+- The partial external request/raw/stderr artifacts are retained for audit but
+  contain no valid external report or finding. No external conclusion is used.
+- The already saved mandatory Codex report for target
+  `219abe663025adc7ff8f731f65d90fb27c42c0fe` is `APPROVE` and becomes the
+  controlling test-design decision under this explicit override.
+- Transition: `EXTERNAL_TEST_REVIEW` -> `STAGED_TEST_EXECUTION`, work unit
+  `P2-W2-one-node-validation`. The next action is to acquire the main-agent-held
+  one-node `interact-g` allocation and run the focused harness/static suite,
+  then the full pytest suite in the same allocation.
