@@ -1131,3 +1131,15 @@
 - README, design and testing documentation now reflect the verified current
   behavior; the canonical formal config is restored to 50 × 10. Freeze and
   review this documentation-complete common target before restarting U1/F1/G1.
+
+## 2026-08-10T23:36:00+09:00 — R3 final common target frozen
+
+- Documentation-complete source target:
+  `1558e1112108ec38388cc2361b69e2cf78d49217`; clean fingerprint
+  `sha256:9fdff5a7c613e044a7f97523ede2c566f60d4fc9fbf5a5cb4edd5c416ee06337`.
+- Codex R3 verified the complete continuity chain, the revision-11
+  over-baseline result, restored 50 × 10 formal config, updated ingest-error
+  semantics and all FSD-R1 through R10 closures. Verdict: `APPROVE`.
+- Transition: `PLAN_REVIEW_TARGET` -> `EXTERNAL_TEST_REVIEW`. Submit the
+  restored four-lane R3 job for this exact target; final U1/F1/G1 remains
+  blocked until terminal disposition.

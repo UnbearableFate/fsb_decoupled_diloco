@@ -4,9 +4,9 @@ branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P4-formal-and-docs
 work_unit_id: P4-W13-final-common-target
-state: PLAN_REVIEW_TARGET
+state: EXTERNAL_TEST_REVIEW
 base_commit: 5b474d5c1735beb8cca922fd6cc7b6304926df2c
-target_commit: 47662f8d872f4a5e451908796a6b677105a28c52
+target_commit: 1558e1112108ec38388cc2361b69e2cf78d49217
 formal_source_commit: null
 formal_source_fingerprint: null
 experiment_id: plan03-1-current-review-remediation
@@ -63,6 +63,7 @@ required_evidence:
   - reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log.full-pytest.junit.xml
   - reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json
   - reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_pbs.log
+  - reports/DOING/code_review/plan03-1/final-common-target-r3/codex-gpt_1558e1112108ec38388cc2361b69e2cf78d49217.md
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -78,7 +79,7 @@ invalidated_evidence:
   - current-u1-target-081e81e-superseded-by-completion-contract-mutation-test
   - current-u1-target-3b99d1a-superseded-by-effective-entrypoint-oracle
 external_review:
-  pbs_job_id: 2521428.opbs
-  status: completed-unavailable
+  pbs_job_id: null
+  status: pending
 open_blocking_findings: []
-allowed_next_action: freeze_and_review_final_common_target
+allowed_next_action: submit_external_final_common_target_r3

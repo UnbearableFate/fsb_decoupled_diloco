@@ -236,3 +236,17 @@ only after implementation, compute-node validation and Codex rereview.
   `reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/codex-gpt_47662f8d872f4a5e451908796a6b677105a28c52.md`.
   Exact compute validation passed 186 focused and 544 complete tests. FSD-R1
   through R10 are closed. Verdict: `APPROVE`.
+
+## 2026-08-10T23:36:00+09:00 — R3 final common target Codex review
+
+- Continuity base: `47662f8d872f4a5e451908796a6b677105a28c52`.
+- Final common target: `1558e1112108ec38388cc2361b69e2cf78d49217`;
+  clean fingerprint
+  `sha256:9fdff5a7c613e044a7f97523ede2c566f60d4fc9fbf5a5cb4edd5c416ee06337`.
+- Codex compared the documentation-complete target with the fresh revision-11
+  nine-node artifact and its raw PBS evidence. Every documented identity,
+  workload and durable metric matches; the canonical config is restored to
+  50 × 10 and the DOCS-01 run is not represented as final G1.
+- Mandatory report:
+  `reports/DOING/code_review/plan03-1/final-common-target-r3/codex-gpt_1558e1112108ec38388cc2361b69e2cf78d49217.md`.
+  Verdict: `APPROVE` for external R3 review and then a fresh final ladder.
