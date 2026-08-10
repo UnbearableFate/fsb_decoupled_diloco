@@ -1,0 +1,177 @@
+Currently Loaded Modulefiles:
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9  
+
+Key:
+(symbolic-version)  
+RUN_ID=plan03_1_final_f1_normal_20260810_212500
+SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan03_1_final_f1_normal_20260810_212500
+DESCRIPTOR_SHA256=06a7e01bb13cd10ea68841639c92200983ab39b046b898512cef306d659adeb1
+HOST mg0001
+HOST mg0005
+HOST mg0008
+HOST mg0010
+HOST mg0011
+{
+  "audit": {
+    "claimed_gc": 0,
+    "folded_batch_index_rows": 0,
+    "folded_batches": 0,
+    "hot_batches": 1,
+    "partitions": 0,
+    "pending_gc": 0
+  },
+  "authority": {
+    "ddl_sha256": "81a0d2dcd641c6562f7d293244608378c99c886730ae0c43b0b9109853947b3d",
+    "features": [],
+    "mode": "static",
+    "protocol_version": 4,
+    "schema_fingerprint": "37912d4344eb4fcd85929b1b0b8d8a87d7969d42d328afa6f1e6033d02766dca",
+    "schema_version": 10
+  },
+  "contributor_progress": {},
+  "controller": {
+    "drain_ack_deadline": 1786364741.0898151,
+    "generation": 1,
+    "hard_crash_cycle_token_budget": 320,
+    "proposal_visibility_deadline": 1786364713.493722,
+    "reason": "configured_target",
+    "registration_visibility_deadline": 1786364711.0898151,
+    "requested_at": 1786364711.0898151,
+    "singleton": 1,
+    "state": "finalized",
+    "terminal_merge_count": 0,
+    "updated_by_epoch": 1,
+    "updated_by_owner_id": "syncer-7044c485-1f60-4127-8bd8-801df8d5c5f8"
+  },
+  "current_contributor_fences": [],
+  "dynamic": {
+    "capacity_observations": [],
+    "instances": [],
+    "launch_requests": [],
+    "streams": []
+  },
+  "integrity_check": [
+    "ok"
+  ],
+  "latest_version": {
+    "committed_at": 1786364710.8512418,
+    "committed_by_epoch": 1,
+    "committed_by_owner_id": "syncer-7044c485-1f60-4127-8bd8-801df8d5c5f8",
+    "direct_weight_tokens_applied": 1280,
+    "optim_relative_path": "optim/epochs/e000001/2e7b5a9ecc33/outer_v000004_p8d1adb27fff1.safetensors",
+    "optim_sha256": "395d467371c973f115110ef9ad2d1c8474d917b9482b33190b4bfbdac9247455",
+    "optim_size": 65856,
+    "predecessor_version": 3,
+    "publication_id": "8d1adb27-fff1-4b66-80ab-80c90d1afd54",
+    "theta_sha256": "7439503239e1bbbb64531db31b9f4745d61f4471f03b12bb947b2b24d4477acd",
+    "version": 4,
+    "weight_relative_path": "weights/epochs/e000001/2e7b5a9ecc33/global_v000004_p8d1adb27fff1.safetensors",
+    "weight_sha256": "128dd256f74ee75f2b362f841f0d1dfb6ceb85baba869a694db645e0e04b76fd",
+    "weight_size": 33104
+  },
+  "run": {
+    "config_sha256": "6806aa67627a17f09ea6c2c67cfef9a4f5aee45c656323e6a6cdb8dc07ef3bfc",
+    "descriptor_sha256": "06a7e01bb13cd10ea68841639c92200983ab39b046b898512cef306d659adeb1",
+    "mode": "static",
+    "run_id": "plan03_1_final_f1_normal_20260810_212500",
+    "shared_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan03_1_final_f1_normal_20260810_212500",
+    "source_fingerprint": "sha256:d824e2ae1c30346b034dbfd0e8b618910dbc7eb14e8ee5a250551051e90369ea"
+  },
+  "syncer_epochs": [
+    {
+      "acquired_at": 1786364702.1467166,
+      "config_sha256": "6806aa67627a17f09ea6c2c67cfef9a4f5aee45c656323e6a6cdb8dc07ef3bfc",
+      "epoch": 1,
+      "final_at": 1786364712.162191,
+      "final_state": "released",
+      "hostname": "mg0001",
+      "last_renewed_at": 1786364712.162191,
+      "owner_id": "syncer-7044c485-1f60-4127-8bd8-801df8d5c5f8",
+      "pbs_job_id": "2520697.opbs",
+      "pid": 2706037,
+      "source_fingerprint": "sha256:d824e2ae1c30346b034dbfd0e8b618910dbc7eb14e8ee5a250551051e90369ea",
+      "superseded_by_epoch": null
+    }
+  ],
+  "terminal": {
+    "direct_weight_tokens_applied": 5120,
+    "final_version": 4,
+    "finalized_at": 1786364711.576355,
+    "finalized_by_epoch": 1,
+    "finalized_by_owner_id": "syncer-7044c485-1f60-4127-8bd8-801df8d5c5f8",
+    "generation": 1,
+    "singleton": 1,
+    "state": "finalized",
+    "stop_reason": "configured_target"
+  },
+  "terminal_contributor_fences": [
+    {
+      "acknowledged_at": 1786364711.4595466,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 160,
+      "close_last_cycle_seq": 8,
+      "fence_json": "{\"attempt_id\":\"attempt-5a7e2e60-7f9d-40c4-9324-b4e5d4eb3b60\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"allocation-2520697-learner_000\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 8,
+      "final_update_id": "2edc8105-05ca-45f7-bb0f-beae16b013f7",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_000",
+      "state": "acked"
+    },
+    {
+      "acknowledged_at": 1786364711.467954,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 140,
+      "close_last_cycle_seq": 7,
+      "fence_json": "{\"attempt_id\":\"attempt-66a7af20-b1d8-47fb-b153-e6a48bfd59e6\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_001\",\"logical_launch_id\":\"allocation-2520697-learner_001\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 7,
+      "final_update_id": "5c8f07d8-af2a-4edc-9a21-a54560254096",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_001",
+      "state": "acked"
+    },
+    {
+      "acknowledged_at": 1786364711.476054,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 100,
+      "close_last_cycle_seq": 5,
+      "fence_json": "{\"attempt_id\":\"attempt-e62bcd1c-fd91-4a42-9f53-62ad1a096575\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_002\",\"logical_launch_id\":\"allocation-2520697-learner_002\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 5,
+      "final_update_id": "60171757-9a8d-41aa-97ee-c21d7c24b7cf",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_002",
+      "state": "acked"
+    },
+    {
+      "acknowledged_at": 1786364711.4841876,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 100,
+      "close_last_cycle_seq": 5,
+      "fence_json": "{\"attempt_id\":\"attempt-b06706f2-0ff0-4907-9987-164e34b2a616\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_003\",\"logical_launch_id\":\"allocation-2520697-learner_003\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 5,
+      "final_update_id": "7c542b4a-94f8-4251-b6e8-9f50b6d959cd",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_003",
+      "state": "acked"
+    }
+  ],
+  "token_ledger": {
+    "adjudicated_processed": 8000,
+    "carried_ancestry": 0,
+    "direct_applied": 5120,
+    "direct_dropped": 2880,
+    "direct_outstanding": 0,
+    "direct_quarantined_or_conflicted": 0,
+    "direct_reported_unpublished": 0,
+    "hard_crash_gap_tokens_upper_bound": 0,
+    "local_discarded": 0
+  }
+}
+PASS

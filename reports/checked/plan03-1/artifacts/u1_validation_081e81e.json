@@ -1,0 +1,142 @@
+{
+  "artifact_version": 1,
+  "cleanup": {
+    "eligible": false,
+    "owner": "validation_suite",
+    "targets": []
+  },
+  "config_schema_identity": null,
+  "environment": {
+    "interpreter": {
+      "executable": "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+      "version": "3.13.13 (main, May 10 2026, 19:28:34) [Clang 22.1.3 ]"
+    },
+    "nodes": [
+      "mg0010"
+    ],
+    "packages": {
+      "pytest": "9.1.1",
+      "pytest-timeout": "2.4.0",
+      "ruff": "0.15.21",
+      "torch": "2.13.0+cu132"
+    },
+    "pbs_job_id": "2521177.opbs",
+    "topology": {
+      "validation_runner": "mg0010"
+    }
+  },
+  "errors": [],
+  "evidence_paths": [
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/u1_validation_081e81e.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/u1_validation_081e81e.log.focused-pytest.junit.xml",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/u1_validation_081e81e.log.full-pytest.junit.xml"
+  ],
+  "experiment_id": "plan03-1-current-suite",
+  "gate": "U1-one-node-validation",
+  "metrics": {
+    "steps": [
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+          "-m",
+          "ruff",
+          "format",
+          "--check",
+          "."
+        ],
+        "elapsed_seconds": 0.18347763502970338,
+        "name": "ruff-format",
+        "result_kind": "command",
+        "returncode": 0
+      },
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+          "-m",
+          "ruff",
+          "check",
+          "."
+        ],
+        "elapsed_seconds": 0.05912976496620104,
+        "name": "ruff-lint",
+        "result_kind": "command",
+        "returncode": 0
+      },
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+          "-m",
+          "pytest",
+          "-q",
+          "tests/architecture",
+          "tests/harness/test_full_protocol_harness.py",
+          "tests/harness/test_plan_completion.py",
+          "tests/harness/test_validation_suite.py",
+          "tests/runtime/test_learner_entrypoint.py",
+          "tests/runtime/test_syncer_fault_boundary.py",
+          "tests/runtime/test_syncer_composition.py",
+          "tests/runtime/test_syncer_startup_admission.py",
+          "tests/runtime/test_terminal_service.py",
+          "tests/storage/test_authority_operational.py",
+          "tests/storage/test_contributor_progress.py",
+          "tests/storage/test_dynamic_admission_request.py",
+          "tests/test_capture_source_identity.py",
+          "tests/test_clean_run.py",
+          "tests/test_config.py",
+          "tests/tools/test_analysis.py",
+          "tests/tools/test_launch_independent_run.py",
+          "tests/tools/test_request_terminal_close.py",
+          "--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/u1_validation_081e81e.log.focused-pytest.junit.xml"
+        ],
+        "elapsed_seconds": 16.418876665993594,
+        "errors": 0,
+        "failures": 0,
+        "junit_xml": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/u1_validation_081e81e.log.focused-pytest.junit.xml",
+        "name": "focused-pytest",
+        "result_kind": "pytest",
+        "returncode": 0,
+        "skipped": 0,
+        "tests": 185
+      },
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+          "-m",
+          "pytest",
+          "-q",
+          "--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/u1_validation_081e81e.log.full-pytest.junit.xml"
+        ],
+        "elapsed_seconds": 33.208316267002374,
+        "errors": 0,
+        "failures": 0,
+        "junit_xml": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/u1_validation_081e81e.log.full-pytest.junit.xml",
+        "name": "full-pytest",
+        "result_kind": "pytest",
+        "returncode": 0,
+        "skipped": 0,
+        "tests": 543
+      }
+    ]
+  },
+  "protocol_schema_identity": null,
+  "requirements_covered": [
+    "UNIT-01",
+    "HARNESS-01"
+  ],
+  "source_identity": {
+    "commit": "081e81e403622656f80f4d31c7b0b7665bf65102",
+    "dirty": false,
+    "fingerprint": "sha256:552f98c31ccc2529a4aae4a276124ac42ab0079285432a3de45532f78a43c843",
+    "scopes": [
+      "fs_diloco",
+      "configs",
+      "scripts/miyabi",
+      "tests",
+      "pyproject.toml",
+      "README.md",
+      "docs"
+    ]
+  },
+  "status": "PASS",
+  "workload_identity": null
+}

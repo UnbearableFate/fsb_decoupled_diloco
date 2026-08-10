@@ -1,0 +1,606 @@
+2026-08-10T18:03:29+09:00
+mg0012
+PBS_JOBID=2519128.opbs
+4a09e41343f7524c79e41dc7d2894f49aacb23d0
+## plan03-1...origin/plan03-1 [ahead 1]
+Currently Loaded Modulefiles:
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9  
+
+Key:
+(symbolic-version)  
+........F............................................................... [ 14%]
+......................................FF................................ [ 29%]
+........................................................................ [ 44%]
+........................................................................ [ 58%]
+........................................................................ [ 73%]
+.........................FF...FFFFFFFFFFF............................... [ 88%]
+.........................................................                [100%]
+=================================== FAILURES ===================================
+_________________ test_only_unversioned_product_surfaces_exist _________________
+
+    def test_only_unversioned_product_surfaces_exist() -> None:
+        tracked = {
+            path.relative_to(ROOT).as_posix()
+            for root in (ROOT / "fs_diloco", ROOT / "configs", ROOT / "scripts", ROOT / "tests")
+            for path in root.rglob("*")
+            if path.is_file()
+        }
+        generation_suffix = re.compile(r"(?:^|[/_.-])v[0-9]+(?:$|[/_.-])")
+>       assert not any(generation_suffix.search(path) for path in tracked)
+E       assert not True
+E        +  where True = any(<generator object test_only_unversioned_product_surfaces_exist.<locals>.<genexpr> at 0x400152bfbe60>)
+
+tests/architecture/test_plan_complete_dead_surfaces.py:79: AssertionError
+_______ test_initial_static_requests_are_admitted_before_runtime_import ________
+
+    def test_initial_static_requests_are_admitted_before_runtime_import() -> None:
+        fences: list[SimpleNamespace] = []
+        authority = SimpleNamespace(
+            read=SimpleNamespace(current_contributor_fences=lambda: tuple(fences))
+        )
+        calls = 0
+    
+        def admit(*_args, **_kwargs) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                fences.extend(
+                    [
+                        SimpleNamespace(stable_contributor_key="learner_000"),
+                        SimpleNamespace(stable_contributor_key="learner_001"),
+                    ]
+                )
+    
+        clock = _Clock()
+        telemetry = _Telemetry()
+>       _admit_before_runtime_import(
+            _loaded(),
+            authority,
+            object(),
+            telemetry,
+            admit=admit,
+            monotonic_clock=clock.monotonic,
+            sleep=clock.sleep,
+        )
+
+tests/runtime/test_syncer_startup_admission.py:71: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+loaded = namespace(config=namespace(shared=namespace(membership=namespace(mode='static', registration_scan_interval_seconds=2.0...(scan_interval_seconds=0.2))), descriptor={'static_learner_ids': ['learner_000', 'learner_001'], 'bootstrap_slots': 2})
+authority = namespace(read=namespace(current_contributor_fences=<function test_initial_static_requests_are_admitted_before_runtime_import.<locals>.<lambda> at 0x400152890d60>))
+leader = <object object at 0x400151ee4ab0>
+telemetry = <test_syncer_startup_admission._Telemetry object at 0x400152bd7cb0>
+admit = <function test_initial_static_requests_are_admitted_before_runtime_import.<locals>.admit at 0x400152890cc0>
+monotonic_clock = <bound method _Clock.monotonic of <test_syncer_startup_admission._Clock object at 0x400152bd7e00>>
+sleep = <bound method _Clock.sleep of <test_syncer_startup_admission._Clock object at 0x400152bd7e00>>
+
+    def _admit_before_runtime_import(
+        loaded: LoadedRunDescriptor,
+        authority: Any,
+        leader: Any,
+        telemetry: ActorTelemetryWriter,
+        *,
+        admit: Callable[..., None],
+        monotonic_clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        """Briefly admit initial peers before the syncer imports Torch/model code.
+    
+        This is only a startup overlap window.  The main loop keeps scanning the
+        same durable request directory, so late requests are neither required here
+        nor lost when the bounded window expires.
+        """
+    
+        shared = loaded.config
+        poll_seconds = min(
+>           float(shared.sync.scan_interval_seconds),
+                  ^^^^^^^^^^^
+            float(shared.membership.registration_scan_interval_seconds),
+        )
+E       AttributeError: 'types.SimpleNamespace' object has no attribute 'sync'
+
+fs_diloco/runtime/syncer_entrypoint.py:121: AttributeError
+________ test_bounded_startup_window_leaves_late_requests_for_main_loop ________
+
+    def test_bounded_startup_window_leaves_late_requests_for_main_loop() -> None:
+        authority = SimpleNamespace(read=SimpleNamespace(current_contributor_fences=lambda: ()))
+        clock = _Clock()
+        telemetry = _Telemetry()
+        calls = 0
+    
+        def admit(*_args, **_kwargs) -> None:
+            nonlocal calls
+            calls += 1
+    
+>       _admit_before_runtime_import(
+            _loaded(),
+            authority,
+            object(),
+            telemetry,
+            admit=admit,
+            monotonic_clock=clock.monotonic,
+            sleep=clock.sleep,
+        )
+
+tests/runtime/test_syncer_startup_admission.py:96: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+loaded = namespace(config=namespace(shared=namespace(membership=namespace(mode='static', registration_scan_interval_seconds=2.0...(scan_interval_seconds=0.2))), descriptor={'static_learner_ids': ['learner_000', 'learner_001'], 'bootstrap_slots': 2})
+authority = namespace(read=namespace(current_contributor_fences=<function test_bounded_startup_window_leaves_late_requests_for_main_loop.<locals>.<lambda> at 0x4001528c8c20>))
+leader = <object object at 0x400151ee4af0>
+telemetry = <test_syncer_startup_admission._Telemetry object at 0x400152ad3390>
+admit = <function test_bounded_startup_window_leaves_late_requests_for_main_loop.<locals>.admit at 0x4001528c8b80>
+monotonic_clock = <bound method _Clock.monotonic of <test_syncer_startup_admission._Clock object at 0x400152ad3890>>
+sleep = <bound method _Clock.sleep of <test_syncer_startup_admission._Clock object at 0x400152ad3890>>
+
+    def _admit_before_runtime_import(
+        loaded: LoadedRunDescriptor,
+        authority: Any,
+        leader: Any,
+        telemetry: ActorTelemetryWriter,
+        *,
+        admit: Callable[..., None],
+        monotonic_clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        """Briefly admit initial peers before the syncer imports Torch/model code.
+    
+        This is only a startup overlap window.  The main loop keeps scanning the
+        same durable request directory, so late requests are neither required here
+        nor lost when the bounded window expires.
+        """
+    
+        shared = loaded.config
+        poll_seconds = min(
+>           float(shared.sync.scan_interval_seconds),
+                  ^^^^^^^^^^^
+            float(shared.membership.registration_scan_interval_seconds),
+        )
+E       AttributeError: 'types.SimpleNamespace' object has no attribute 'sync'
+
+fs_diloco/runtime/syncer_entrypoint.py:121: AttributeError
+_ test_strategy_factory_dispatches[rebase_local-RebaseGlobalAdoptionStrategy] __
+
+strategy_name = 'rebase_local'
+expected_type = <class 'fs_diloco.runtime.adoption.RebaseGlobalAdoptionStrategy'>
+
+    @pytest.mark.parametrize(
+        ("strategy_name", "expected_type"),
+        [
+            ("replace", ReplaceGlobalAdoptionStrategy),
+            ("rebase_local", RebaseGlobalAdoptionStrategy),
+            ("predict_global", PredictGlobalAdoptionStrategy),
+        ],
+    )
+    def test_strategy_factory_dispatches(strategy_name, expected_type):
+>       strategy = make_global_adoption_strategy(_config(strategy_name))
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_adoption_strategy.py:87: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_adoption_strategy.py:32: in _config
+    config.validate()
+fs_diloco/core/config.py:286: in validate
+    _normalize_and_validate(self)
+fs_diloco/core/config.py:647: in _normalize_and_validate
+    validate_global_adoption_config(config)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = Config(config_schema_version=1, run=RunSection(name='fs_diloco_gpt2_wikitext2_8l', run_id=None, shared_root=None, git_..._rows=256, recent_batch_dedup_count=64, quarantine_records_per_contributor=64, publication_orphan_grace_seconds=120.0))
+
+    def validate_global_adoption_config(config: Any) -> None:
+        strategy = config.learner.global_adoption_strategy
+        if strategy == "replace":
+            return
+        if strategy not in {"rebase_post_publish_delta", "predict_post_publish_global"}:
+>           raise ValueError(f"unsupported learner.global_adoption_strategy: {strategy}")
+E           ValueError: unsupported learner.global_adoption_strategy: rebase_local
+
+fs_diloco/core/adoption_rules.py:13: ValueError
+_ test_strategy_factory_dispatches[predict_global-PredictGlobalAdoptionStrategy] _
+
+strategy_name = 'predict_global'
+expected_type = <class 'fs_diloco.runtime.adoption.PredictGlobalAdoptionStrategy'>
+
+    @pytest.mark.parametrize(
+        ("strategy_name", "expected_type"),
+        [
+            ("replace", ReplaceGlobalAdoptionStrategy),
+            ("rebase_local", RebaseGlobalAdoptionStrategy),
+            ("predict_global", PredictGlobalAdoptionStrategy),
+        ],
+    )
+    def test_strategy_factory_dispatches(strategy_name, expected_type):
+>       strategy = make_global_adoption_strategy(_config(strategy_name))
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_adoption_strategy.py:87: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_adoption_strategy.py:32: in _config
+    config.validate()
+fs_diloco/core/config.py:286: in validate
+    _normalize_and_validate(self)
+fs_diloco/core/config.py:647: in _normalize_and_validate
+    validate_global_adoption_config(config)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = Config(config_schema_version=1, run=RunSection(name='fs_diloco_gpt2_wikitext2_8l', run_id=None, shared_root=None, git_..._rows=256, recent_batch_dedup_count=64, quarantine_records_per_contributor=64, publication_orphan_grace_seconds=120.0))
+
+    def validate_global_adoption_config(config: Any) -> None:
+        strategy = config.learner.global_adoption_strategy
+        if strategy == "replace":
+            return
+        if strategy not in {"rebase_post_publish_delta", "predict_post_publish_global"}:
+>           raise ValueError(f"unsupported learner.global_adoption_strategy: {strategy}")
+E           ValueError: unsupported learner.global_adoption_strategy: predict_global
+
+fs_diloco/core/adoption_rules.py:13: ValueError
+_________ test_rebase_context_returns_actual_latest_from_retry_helper __________
+
+    def test_rebase_context_returns_actual_latest_from_retry_helper():
+>       config = _config("rebase_local")
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_adoption_strategy.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_adoption_strategy.py:32: in _config
+    config.validate()
+fs_diloco/core/config.py:286: in validate
+    _normalize_and_validate(self)
+fs_diloco/core/config.py:647: in _normalize_and_validate
+    validate_global_adoption_config(config)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = Config(config_schema_version=1, run=RunSection(name='fs_diloco_gpt2_wikitext2_8l', run_id=None, shared_root=None, git_..._rows=256, recent_batch_dedup_count=64, quarantine_records_per_contributor=64, publication_orphan_grace_seconds=120.0))
+
+    def validate_global_adoption_config(config: Any) -> None:
+        strategy = config.learner.global_adoption_strategy
+        if strategy == "replace":
+            return
+        if strategy not in {"rebase_post_publish_delta", "predict_post_publish_global"}:
+>           raise ValueError(f"unsupported learner.global_adoption_strategy: {strategy}")
+E           ValueError: unsupported learner.global_adoption_strategy: rebase_local
+
+fs_diloco/core/adoption_rules.py:13: ValueError
+______ test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption _______
+
+    def test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption():
+>       config = _config("rebase_local")
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_adoption_strategy.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_adoption_strategy.py:32: in _config
+    config.validate()
+fs_diloco/core/config.py:286: in validate
+    _normalize_and_validate(self)
+fs_diloco/core/config.py:647: in _normalize_and_validate
+    validate_global_adoption_config(config)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = Config(config_schema_version=1, run=RunSection(name='fs_diloco_gpt2_wikitext2_8l', run_id=None, shared_root=None, git_..._rows=256, recent_batch_dedup_count=64, quarantine_records_per_contributor=64, publication_orphan_grace_seconds=120.0))
+
+    def validate_global_adoption_config(config: Any) -> None:
+        strategy = config.learner.global_adoption_strategy
+        if strategy == "replace":
+            return
+        if strategy not in {"rebase_post_publish_delta", "predict_post_publish_global"}:
+>           raise ValueError(f"unsupported learner.global_adoption_strategy: {strategy}")
+E           ValueError: unsupported learner.global_adoption_strategy: rebase_local
+
+fs_diloco/core/adoption_rules.py:13: ValueError
+_______ test_prediction_strategy_starts_reconciles_and_abandons_on_stop ________
+
+    def test_prediction_strategy_starts_reconciles_and_abandons_on_stop():
+>       config = _config("predict_global")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_adoption_strategy.py:210: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_adoption_strategy.py:32: in _config
+    config.validate()
+fs_diloco/core/config.py:286: in validate
+    _normalize_and_validate(self)
+fs_diloco/core/config.py:647: in _normalize_and_validate
+    validate_global_adoption_config(config)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = Config(config_schema_version=1, run=RunSection(name='fs_diloco_gpt2_wikitext2_8l', run_id=None, shared_root=None, git_..._rows=256, recent_batch_dedup_count=64, quarantine_records_per_contributor=64, publication_orphan_grace_seconds=120.0))
+
+    def validate_global_adoption_config(config: Any) -> None:
+        strategy = config.learner.global_adoption_strategy
+        if strategy == "replace":
+            return
+        if strategy not in {"rebase_post_publish_delta", "predict_post_publish_global"}:
+>           raise ValueError(f"unsupported learner.global_adoption_strategy: {strategy}")
+E           ValueError: unsupported learner.global_adoption_strategy: predict_global
+
+fs_diloco/core/adoption_rules.py:13: ValueError
+_________ test_prediction_strategy_timeout_keeps_state_for_diagnostics _________
+
+    def test_prediction_strategy_timeout_keeps_state_for_diagnostics():
+>       config = _config("predict_global")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_adoption_strategy.py:243: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_adoption_strategy.py:32: in _config
+    config.validate()
+fs_diloco/core/config.py:286: in validate
+    _normalize_and_validate(self)
+fs_diloco/core/config.py:647: in _normalize_and_validate
+    validate_global_adoption_config(config)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = Config(config_schema_version=1, run=RunSection(name='fs_diloco_gpt2_wikitext2_8l', run_id=None, shared_root=None, git_..._rows=256, recent_batch_dedup_count=64, quarantine_records_per_contributor=64, publication_orphan_grace_seconds=120.0))
+
+    def validate_global_adoption_config(config: Any) -> None:
+        strategy = config.learner.global_adoption_strategy
+        if strategy == "replace":
+            return
+        if strategy not in {"rebase_post_publish_delta", "predict_post_publish_global"}:
+>           raise ValueError(f"unsupported learner.global_adoption_strategy: {strategy}")
+E           ValueError: unsupported learner.global_adoption_strategy: predict_global
+
+fs_diloco/core/adoption_rules.py:13: ValueError
+_____ test_prediction_reconcile_stop_during_wait_abandons_without_timeout ______
+
+tmp_path = PosixPath('/tmp/2519128.5177/pytest-of-x10041/pytest-2/test_prediction_reconcile_stop0')
+
+    def test_prediction_reconcile_stop_during_wait_abandons_without_timeout(tmp_path):
+>       config = _config("predict_global")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_adoption_strategy.py:257: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_adoption_strategy.py:32: in _config
+    config.validate()
+fs_diloco/core/config.py:286: in validate
+    _normalize_and_validate(self)
+fs_diloco/core/config.py:647: in _normalize_and_validate
+    validate_global_adoption_config(config)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = Config(config_schema_version=1, run=RunSection(name='fs_diloco_gpt2_wikitext2_8l', run_id=None, shared_root=None, git_..._rows=256, recent_batch_dedup_count=64, quarantine_records_per_contributor=64, publication_orphan_grace_seconds=120.0))
+
+    def validate_global_adoption_config(config: Any) -> None:
+        strategy = config.learner.global_adoption_strategy
+        if strategy == "replace":
+            return
+        if strategy not in {"rebase_post_publish_delta", "predict_post_publish_global"}:
+>           raise ValueError(f"unsupported learner.global_adoption_strategy: {strategy}")
+E           ValueError: unsupported learner.global_adoption_strategy: predict_global
+
+fs_diloco/core/adoption_rules.py:13: ValueError
+_________ test_predict_after_publish_stop_skips_prediction_preparation _________
+
+tmp_path = PosixPath('/tmp/2519128.5177/pytest-of-x10041/pytest-2/test_predict_after_publish_sto0')
+
+    def test_predict_after_publish_stop_skips_prediction_preparation(tmp_path):
+>       config = _config("predict_global")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_adoption_strategy.py:288: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_adoption_strategy.py:32: in _config
+    config.validate()
+fs_diloco/core/config.py:286: in validate
+    _normalize_and_validate(self)
+fs_diloco/core/config.py:647: in _normalize_and_validate
+    validate_global_adoption_config(config)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = Config(config_schema_version=1, run=RunSection(name='fs_diloco_gpt2_wikitext2_8l', run_id=None, shared_root=None, git_..._rows=256, recent_batch_dedup_count=64, quarantine_records_per_contributor=64, publication_orphan_grace_seconds=120.0))
+
+    def validate_global_adoption_config(config: Any) -> None:
+        strategy = config.learner.global_adoption_strategy
+        if strategy == "replace":
+            return
+        if strategy not in {"rebase_post_publish_delta", "predict_post_publish_global"}:
+>           raise ValueError(f"unsupported learner.global_adoption_strategy: {strategy}")
+E           ValueError: unsupported learner.global_adoption_strategy: predict_global
+
+fs_diloco/core/adoption_rules.py:13: ValueError
+_____________ test_rebase_after_publish_stop_skips_anchor_snapshot _____________
+
+tmp_path = PosixPath('/tmp/2519128.5177/pytest-of-x10041/pytest-2/test_rebase_after_publish_stop0')
+
+    def test_rebase_after_publish_stop_skips_anchor_snapshot(tmp_path):
+>       config = _config("rebase_local")
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_adoption_strategy.py:317: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_adoption_strategy.py:32: in _config
+    config.validate()
+fs_diloco/core/config.py:286: in validate
+    _normalize_and_validate(self)
+fs_diloco/core/config.py:647: in _normalize_and_validate
+    validate_global_adoption_config(config)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = Config(config_schema_version=1, run=RunSection(name='fs_diloco_gpt2_wikitext2_8l', run_id=None, shared_root=None, git_..._rows=256, recent_batch_dedup_count=64, quarantine_records_per_contributor=64, publication_orphan_grace_seconds=120.0))
+
+    def validate_global_adoption_config(config: Any) -> None:
+        strategy = config.learner.global_adoption_strategy
+        if strategy == "replace":
+            return
+        if strategy not in {"rebase_post_publish_delta", "predict_post_publish_global"}:
+>           raise ValueError(f"unsupported learner.global_adoption_strategy: {strategy}")
+E           ValueError: unsupported learner.global_adoption_strategy: rebase_local
+
+fs_diloco/core/adoption_rules.py:13: ValueError
+_ test_ha_adoption_ignores_polluted_fixed_stop_without_authoritative_terminal[PredictGlobalAdoptionStrategy-predict_global] _
+
+tmp_path = PosixPath('/tmp/2519128.5177/pytest-of-x10041/pytest-2/test_ha_adoption_ignores_pollu0')
+strategy_type = <class 'fs_diloco.runtime.adoption.PredictGlobalAdoptionStrategy'>
+strategy_name = 'predict_global'
+
+    @pytest.mark.parametrize(
+        "strategy_type,strategy_name",
+        [
+            (PredictGlobalAdoptionStrategy, "predict_global"),
+            (RebaseGlobalAdoptionStrategy, "rebase_local"),
+        ],
+    )
+    def test_ha_adoption_ignores_polluted_fixed_stop_without_authoritative_terminal(
+        tmp_path, strategy_type, strategy_name
+    ):
+>       config = _config(strategy_name)
+                 ^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_adoption_strategy.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_adoption_strategy.py:32: in _config
+    config.validate()
+fs_diloco/core/config.py:286: in validate
+    _normalize_and_validate(self)
+fs_diloco/core/config.py:647: in _normalize_and_validate
+    validate_global_adoption_config(config)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = Config(config_schema_version=1, run=RunSection(name='fs_diloco_gpt2_wikitext2_8l', run_id=None, shared_root=None, git_..._rows=256, recent_batch_dedup_count=64, quarantine_records_per_contributor=64, publication_orphan_grace_seconds=120.0))
+
+    def validate_global_adoption_config(config: Any) -> None:
+        strategy = config.learner.global_adoption_strategy
+        if strategy == "replace":
+            return
+        if strategy not in {"rebase_post_publish_delta", "predict_post_publish_global"}:
+>           raise ValueError(f"unsupported learner.global_adoption_strategy: {strategy}")
+E           ValueError: unsupported learner.global_adoption_strategy: predict_global
+
+fs_diloco/core/adoption_rules.py:13: ValueError
+_ test_ha_adoption_ignores_polluted_fixed_stop_without_authoritative_terminal[RebaseGlobalAdoptionStrategy-rebase_local] _
+
+tmp_path = PosixPath('/tmp/2519128.5177/pytest-of-x10041/pytest-2/test_ha_adoption_ignores_pollu1')
+strategy_type = <class 'fs_diloco.runtime.adoption.RebaseGlobalAdoptionStrategy'>
+strategy_name = 'rebase_local'
+
+    @pytest.mark.parametrize(
+        "strategy_type,strategy_name",
+        [
+            (PredictGlobalAdoptionStrategy, "predict_global"),
+            (RebaseGlobalAdoptionStrategy, "rebase_local"),
+        ],
+    )
+    def test_ha_adoption_ignores_polluted_fixed_stop_without_authoritative_terminal(
+        tmp_path, strategy_type, strategy_name
+    ):
+>       config = _config(strategy_name)
+                 ^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_adoption_strategy.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_adoption_strategy.py:32: in _config
+    config.validate()
+fs_diloco/core/config.py:286: in validate
+    _normalize_and_validate(self)
+fs_diloco/core/config.py:647: in _normalize_and_validate
+    validate_global_adoption_config(config)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = Config(config_schema_version=1, run=RunSection(name='fs_diloco_gpt2_wikitext2_8l', run_id=None, shared_root=None, git_..._rows=256, recent_batch_dedup_count=64, quarantine_records_per_contributor=64, publication_orphan_grace_seconds=120.0))
+
+    def validate_global_adoption_config(config: Any) -> None:
+        strategy = config.learner.global_adoption_strategy
+        if strategy == "replace":
+            return
+        if strategy not in {"rebase_post_publish_delta", "predict_post_publish_global"}:
+>           raise ValueError(f"unsupported learner.global_adoption_strategy: {strategy}")
+E           ValueError: unsupported learner.global_adoption_strategy: rebase_local
+
+fs_diloco/core/adoption_rules.py:13: ValueError
+_ test_stop_does_not_skip_already_visible_direct_adoption[PredictGlobalAdoptionStrategy-predict_global] _
+
+tmp_path = PosixPath('/tmp/2519128.5177/pytest-of-x10041/pytest-2/test_stop_does_not_skip_alread0')
+strategy_type = <class 'fs_diloco.runtime.adoption.PredictGlobalAdoptionStrategy'>
+strategy_name = 'predict_global'
+
+    @pytest.mark.parametrize(
+        "strategy_type,strategy_name",
+        [
+            (PredictGlobalAdoptionStrategy, "predict_global"),
+            (RebaseGlobalAdoptionStrategy, "rebase_local"),
+        ],
+    )
+    def test_stop_does_not_skip_already_visible_direct_adoption(tmp_path, strategy_type, strategy_name):
+>       config = _config(strategy_name)
+                 ^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_adoption_strategy.py:393: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_adoption_strategy.py:32: in _config
+    config.validate()
+fs_diloco/core/config.py:286: in validate
+    _normalize_and_validate(self)
+fs_diloco/core/config.py:647: in _normalize_and_validate
+    validate_global_adoption_config(config)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = Config(config_schema_version=1, run=RunSection(name='fs_diloco_gpt2_wikitext2_8l', run_id=None, shared_root=None, git_..._rows=256, recent_batch_dedup_count=64, quarantine_records_per_contributor=64, publication_orphan_grace_seconds=120.0))
+
+    def validate_global_adoption_config(config: Any) -> None:
+        strategy = config.learner.global_adoption_strategy
+        if strategy == "replace":
+            return
+        if strategy not in {"rebase_post_publish_delta", "predict_post_publish_global"}:
+>           raise ValueError(f"unsupported learner.global_adoption_strategy: {strategy}")
+E           ValueError: unsupported learner.global_adoption_strategy: predict_global
+
+fs_diloco/core/adoption_rules.py:13: ValueError
+_ test_stop_does_not_skip_already_visible_direct_adoption[RebaseGlobalAdoptionStrategy-rebase_local] _
+
+tmp_path = PosixPath('/tmp/2519128.5177/pytest-of-x10041/pytest-2/test_stop_does_not_skip_alread1')
+strategy_type = <class 'fs_diloco.runtime.adoption.RebaseGlobalAdoptionStrategy'>
+strategy_name = 'rebase_local'
+
+    @pytest.mark.parametrize(
+        "strategy_type,strategy_name",
+        [
+            (PredictGlobalAdoptionStrategy, "predict_global"),
+            (RebaseGlobalAdoptionStrategy, "rebase_local"),
+        ],
+    )
+    def test_stop_does_not_skip_already_visible_direct_adoption(tmp_path, strategy_type, strategy_name):
+>       config = _config(strategy_name)
+                 ^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_adoption_strategy.py:393: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_adoption_strategy.py:32: in _config
+    config.validate()
+fs_diloco/core/config.py:286: in validate
+    _normalize_and_validate(self)
+fs_diloco/core/config.py:647: in _normalize_and_validate
+    validate_global_adoption_config(config)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = Config(config_schema_version=1, run=RunSection(name='fs_diloco_gpt2_wikitext2_8l', run_id=None, shared_root=None, git_..._rows=256, recent_batch_dedup_count=64, quarantine_records_per_contributor=64, publication_orphan_grace_seconds=120.0))
+
+    def validate_global_adoption_config(config: Any) -> None:
+        strategy = config.learner.global_adoption_strategy
+        if strategy == "replace":
+            return
+        if strategy not in {"rebase_post_publish_delta", "predict_post_publish_global"}:
+>           raise ValueError(f"unsupported learner.global_adoption_strategy: {strategy}")
+E           ValueError: unsupported learner.global_adoption_strategy: rebase_local
+
+fs_diloco/core/adoption_rules.py:13: ValueError
+=========================== short test summary info ============================
+FAILED tests/architecture/test_plan_complete_dead_surfaces.py::test_only_unversioned_product_surfaces_exist
+FAILED tests/runtime/test_syncer_startup_admission.py::test_initial_static_requests_are_admitted_before_runtime_import
+FAILED tests/runtime/test_syncer_startup_admission.py::test_bounded_startup_window_leaves_late_requests_for_main_loop
+FAILED tests/test_adoption_strategy.py::test_strategy_factory_dispatches[rebase_local-RebaseGlobalAdoptionStrategy]
+FAILED tests/test_adoption_strategy.py::test_strategy_factory_dispatches[predict_global-PredictGlobalAdoptionStrategy]
+FAILED tests/test_adoption_strategy.py::test_rebase_context_returns_actual_latest_from_retry_helper
+FAILED tests/test_adoption_strategy.py::test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption
+FAILED tests/test_adoption_strategy.py::test_prediction_strategy_starts_reconciles_and_abandons_on_stop
+FAILED tests/test_adoption_strategy.py::test_prediction_strategy_timeout_keeps_state_for_diagnostics
+FAILED tests/test_adoption_strategy.py::test_prediction_reconcile_stop_during_wait_abandons_without_timeout
+FAILED tests/test_adoption_strategy.py::test_predict_after_publish_stop_skips_prediction_preparation
+FAILED tests/test_adoption_strategy.py::test_rebase_after_publish_stop_skips_anchor_snapshot
+FAILED tests/test_adoption_strategy.py::test_ha_adoption_ignores_polluted_fixed_stop_without_authoritative_terminal[PredictGlobalAdoptionStrategy-predict_global]
+FAILED tests/test_adoption_strategy.py::test_ha_adoption_ignores_polluted_fixed_stop_without_authoritative_terminal[RebaseGlobalAdoptionStrategy-rebase_local]
+FAILED tests/test_adoption_strategy.py::test_stop_does_not_skip_already_visible_direct_adoption[PredictGlobalAdoptionStrategy-predict_global]
+FAILED tests/test_adoption_strategy.py::test_stop_does_not_skip_already_visible_direct_adoption[RebaseGlobalAdoptionStrategy-rebase_local]
+16 failed, 473 passed in 23.37s

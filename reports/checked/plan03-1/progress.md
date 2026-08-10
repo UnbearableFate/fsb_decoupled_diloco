@@ -1333,3 +1333,16 @@
   source, all five fresh gate artifacts, both schema-2 Codex reviews and the
   immutable manifest. All findings are closed. Commit plan-final, then perform
   the required independent archive/move and evidence-path mapping.
+
+## 2026-08-11T01:34:48+09:00 — independent archive staged
+
+- Plan-final is commit `89f0626b6d98b33a0bbdb7973c0fdc5c2595dab3`.
+- The completed plan moved from `plans/DOING/plans/plan03-1.md` to
+  `plans/DONE/plan03-1/plan03-1.md`; its evidence moved from
+  `reports/DOING/plan03-1/` to `reports/checked/plan03-1/`; review evidence
+  moved from `reports/DOING/code_review/plan03-1/` to
+  `reports/checked/code_review/plan03-1/`.
+- `archive-path-map.json` records the three prefix mappings without rewriting
+  hash-bound evidence. The archived evidence set also retains invalidated and
+  failure artifacts. Cleanup of the exact final run and log roots is the only
+  remaining action.

@@ -1,0 +1,84 @@
+2026-08-10T17:56:48+09:00
+mg0012
+PBS_JOBID=2519128.opbs
+33cf3fdb7ef3d178a977c4f122e90340e71dabbf
+## plan03-1
+Currently Loaded Modulefiles:
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9  
+
+Key:
+(symbolic-version)  
+121 files already formatted
+All checks passed!
+..........F............................................................. [ 77%]
+.....................                                                    [100%]
+=================================== FAILURES ===================================
+__ test_aggregate_checker_mutations_change_acceptance_to_fail[exact_workload] __
+
+tmp_path = PosixPath('/tmp/2519128.5177/pytest-of-x10041/pytest-0/test_aggregate_checker_mutatio9')
+mutation = 'exact_workload'
+
+    @pytest.mark.parametrize(
+        "mutation",
+        [
+            "source_identity",
+            "resolved_config",
+            "epoch_lifecycle",
+            "attested_topology",
+            "terminal_authority",
+            "terminal_stop_schema",
+            "terminal_summary_schema",
+            "terminal_control_mutability",
+            "archive_integrity",
+            "exact_workload",
+            "publication_identity",
+        ],
+    )
+    def test_aggregate_checker_mutations_change_acceptance_to_fail(
+        tmp_path: Path, mutation: str
+    ) -> None:
+        run_root, output, command, environment = _build_valid_checker_fixture(tmp_path)
+        paths = RunPaths(run_root)
+        if mutation == "source_identity":
+            source_path = tmp_path / "logs/source_identity.json"
+            source = json.loads(source_path.read_text(encoding="utf-8"))
+            source["source_fingerprint"] = "sha256:" + "0" * 64
+            atomic_write_json(source_path, source)
+        elif mutation == "resolved_config":
+            paths.resolved_config_yaml.chmod(0o644)
+            with paths.resolved_config_yaml.open("a", encoding="utf-8") as handle:
+                handle.write("removed_config_key: true\n")
+        elif mutation == "epoch_lifecycle":
+            with sqlite3.connect(paths.sqlite_db) as connection:
+                connection.execute("UPDATE syncer_epochs SET final_state='error'")
+        elif mutation == "attested_topology":
+            next((paths.metrics / "attestations/syncer").glob("*/*.json")).unlink()
+        elif mutation == "terminal_authority":
+            with sqlite3.connect(paths.sqlite_db) as connection:
+                connection.execute("UPDATE terminal_state SET final_version=0")
+        elif mutation == "terminal_stop_schema":
+            stop = json.loads(paths.stop_json.read_text(encoding="utf-8"))
+            stop["obsolete_field"] = True
+            atomic_write_json(paths.stop_json, stop)
+        elif mutation == "terminal_summary_schema":
+            summary = json.loads(paths.summary_json.read_text(encoding="utf-8"))
+            summary["obsolete_field"] = True
+            atomic_write_json(paths.summary_json, summary)
+        elif mutation == "terminal_control_mutability":
+            immutable_stop = next(paths.syncer_epochs.glob("e*_*/terminal/stop_*.json"))
+            immutable_stop.chmod(0o644)
+        elif mutation == "archive_integrity":
+            archive = run_root / "audit/batches/authority_history/checker-fixture.json"
+            archive.chmod(0o644)
+            archive.write_text('{"not":"a-current-audit-batch"}\n', encoding="utf-8")
+            archive.chmod(0o444)
+        elif mutation == "exact_workload":
+            with sqlite3.connect(paths.sqlite_db) as connection:
+>               connection.execute("UPDATE cycle_receipts SET processed_tokens_this_cycle=15")
+E               sqlite3.IntegrityError: CHECK constraint failed: processed_tokens_this_cycle =
+E                       effective_tokens_this_cycle + local_discarded_tokens_this_cycle
+
+tests/harness/test_full_protocol_harness.py:358: IntegrityError
+=========================== short test summary info ============================
+FAILED tests/harness/test_full_protocol_harness.py::test_aggregate_checker_mutations_change_acceptance_to_fail[exact_workload]
+1 failed, 92 passed in 8.48s

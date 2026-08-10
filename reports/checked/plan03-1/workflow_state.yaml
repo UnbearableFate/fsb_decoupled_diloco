@@ -3,7 +3,7 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P4-formal-and-docs
-work_unit_id: P4-W20-plan-final
+work_unit_id: P4-W21-archive-cleanup
 state: PLAN_FINAL
 base_commit: 08050eed5da6e697437f796aabb7c980311c8937
 target_commit: 00ba722920d01a915efa4a2a90872c46ff906aa3
@@ -106,4 +106,4 @@ external_review:
   pbs_job_id: 2522308.opbs
   status: terminal-no-valid-report
 open_blocking_findings: []
-allowed_next_action: commit_plan_final_then_archive
+allowed_next_action: cleanup_exact_final_run_roots
