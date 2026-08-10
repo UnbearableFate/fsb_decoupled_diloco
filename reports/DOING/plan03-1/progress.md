@@ -1241,3 +1241,26 @@
   report SHA-256:
   `1e3fec2c283a06447d332cdc9e9fcde85c2ce881ecd3cf7e314cedbb031c659c`.
   Verdict: `APPROVE`; final G1 remains queued.
+
+## 2026-08-11T01:08:00+09:00 — final G1 formal PASS
+
+- PBS job `2521829.opbs` ran through the requested `regular-g` submission in
+  scheduler execution class `small-g`, on exact nodes `mg0145`, `mg0147`,
+  `mg0148`, `mg0150`, `mg0170`, `mg0179`, `mg0180`, `mg0181` and `mg0837`.
+  The allocation was `9:ncpus=8:mpiprocs=1:mem=16gb` with `00:10:00`
+  walltime; execution completed in 29 seconds with scheduler exit 0.
+- The structured Checker returned `PASS` for exact source
+  `1558e1112108ec38388cc2361b69e2cf78d49217` and fingerprint
+  `sha256:9fdff5a7c613e044a7f97523ede2c566f60d4fc9fbf5a5cb4edd5c416ee06337`.
+  Versions are `0..10`; every learner has ten credits; 80 proposals/64,000
+  direct tokens were applied; 23 proposals/18,400 tokens were durably dropped;
+  all 82,400 processed tokens have exact fate and token balance is zero.
+- Eight learner plus one syncer attestations cover the exact PBS topology. The
+  sole epoch is released, terminal authority matches, 22 immutable publication
+  objects verify, and SQLite integrity is `ok`.
+- Result/PBS-log/source-identity SHA-256 values are
+  `9f88e4166a3141a7dc1b1b7bd3a5ad358158541039d7263e3c29357624160db1`,
+  `5cc030368744dbf2c0191bb2dfae27eaf2afdf2ce03e7b1849753a70108af6d5`
+  and `239b494d3f834a3ab42c8cbcb2330bed6b02fa8f28335f9a5a16aa2d093f05f2`.
+- All fresh U1/F1/G1 gates now pass on one formal source identity. Prepare the
+  Codex-first final-evidence packet and restored multi-agent review.
