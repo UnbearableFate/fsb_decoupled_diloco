@@ -1172,3 +1172,24 @@
   `sha256:9fdff5a7c613e044a7f97523ede2c566f60d4fc9fbf5a5cb4edd5c416ee06337`.
   No formal source-scope edit is allowed. Start the serial fresh ladder with
   one-node U1 from this exact source identity.
+
+## 2026-08-10T23:54:00+09:00 — final U1 one-node validation PASS
+
+- Interactive PBS job `2521752.opbs` ran on exact one-node `interact-g`
+  topology `mg0012` with `1:ncpus=8:mem=16gb` and a `00:10:00` request.
+- The detached read-only source worktree bound exact commit
+  `1558e1112108ec38388cc2361b69e2cf78d49217` and fingerprint
+  `sha256:9fdff5a7c613e044a7f97523ede2c566f60d4fc9fbf5a5cb4edd5c416ee06337`;
+  source scopes remained clean and unchanged.
+- Ruff format/lint passed. The registered focused suite passed 186 tests and
+  the complete suite passed 544 tests, with zero failure, error or skip in
+  both JUnit projections.
+- Evidence SHA-256: artifact
+  `c9a69d2d1469584c917b89482af30c849bb0b9301cf3aa56a97f4a702a13033b`,
+  raw log `d4fdcd59eb10e74e7e42214570568170ac7365534f09730738e1b8b3cb8c48ad`,
+  focused JUnit
+  `30a16559a7583703d21515e149c8f8306c06c7dcf0cdc6b5d43837cca662ecb5`
+  and full JUnit
+  `29efd5f5639981d4d5cce01ec25392238e5ca35f89a8a36efd1abe1836978131`.
+- Transition: `FINAL_COMMON_TARGET_FREEZE` -> `FINAL_TEST_LADDER`. Submit the
+  normal five-node F1 scenario next from the same detached source identity.

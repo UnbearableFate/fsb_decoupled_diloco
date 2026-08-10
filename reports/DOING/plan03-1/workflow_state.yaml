@@ -3,8 +3,8 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P4-formal-and-docs
-work_unit_id: P4-W14-final-u1
-state: FINAL_COMMON_TARGET_FREEZE
+work_unit_id: P4-W15-final-f1-normal
+state: FINAL_TEST_LADDER
 base_commit: 5b474d5c1735beb8cca922fd6cc7b6304926df2c
 target_commit: 1558e1112108ec38388cc2361b69e2cf78d49217
 formal_source_commit: 1558e1112108ec38388cc2361b69e2cf78d49217
@@ -66,6 +66,10 @@ required_evidence:
   - reports/DOING/code_review/plan03-1/final-common-target-r3/codex-gpt_1558e1112108ec38388cc2361b69e2cf78d49217.md
   - reports/DOING/code_review/plan03-1/final-common-target-r3/reviewer-job_1558e1112108ec38388cc2361b69e2cf78d49217_2521665.json
   - reports/DOING/code_review/plan03-1/final-common-target-r3/finding-dispositions_1558e1112108ec38388cc2361b69e2cf78d49217.md
+  - reports/DOING/plan03-1/artifacts/20260810-235300_final-u1-one-node-validation.json
+  - reports/DOING/plan03-1/artifacts/20260810-235300_final-u1-one-node-validation.log
+  - reports/DOING/plan03-1/artifacts/20260810-235300_final-u1-one-node-validation.log.focused-pytest.junit.xml
+  - reports/DOING/plan03-1/artifacts/20260810-235300_final-u1-one-node-validation.log.full-pytest.junit.xml
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -84,4 +88,4 @@ external_review:
   pbs_job_id: 2521665.opbs
   status: terminal-no-valid-report
 open_blocking_findings: []
-allowed_next_action: submit_final_u1_one_node_validation
+allowed_next_action: submit_final_f1_functional_normal
