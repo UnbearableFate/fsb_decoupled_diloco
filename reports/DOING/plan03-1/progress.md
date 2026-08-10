@@ -594,3 +594,18 @@
 - Transition: `TARGETED_REMEDIATION` -> `TEST_REVIEW_TARGET`. Freeze this
   continuous target and complete the mandatory Codex critical-incremental
   review; external review remains skipped under user direction.
+
+## 2026-08-10T19:28:12+09:00 — P3 terminal applied-total review changes required
+
+- Frozen target: `36987b41daa67558ff83024abb282122f40065bf`;
+  continuous review base: `4ebee6339fb76f63127874c655d7b109b2ec0b39`.
+- Mandatory Codex review found one High regression: the token rollup is lazily
+  created by the first receipt, and the current read contract treats its
+  absence as an all-zero ledger. Requiring a physical row at finalization
+  breaks valid zero-cycle and pre-receipt hard-crash terminal paths.
+- Finding `P3-TAT-001` is accepted. Interpret an absent rollup as zero inside
+  the terminal transaction and extend the existing zero-cycle test to assert
+  the persisted terminal total. The archive authority fix and Checker oracle
+  remain valid.
+- Verdict: `CHANGES_REQUIRED`; external review remains skipped. Transition:
+  `TEST_REVIEW_TARGET` -> `TEST_REMEDIATION`.

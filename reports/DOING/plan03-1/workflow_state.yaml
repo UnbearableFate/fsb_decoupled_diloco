@@ -4,9 +4,9 @@ branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P3-functional-faults
 work_unit_id: P3-W4-learner-replacement-terminal-total-remediation
-state: TEST_REVIEW_TARGET
+state: TEST_REMEDIATION
 base_commit: 4ebee6339fb76f63127874c655d7b109b2ec0b39
-target_commit: null
+target_commit: 36987b41daa67558ff83024abb282122f40065bf
 formal_source_commit: null
 formal_source_fingerprint: null
 experiment_id: p3-learner-replacement-01
@@ -37,6 +37,7 @@ required_evidence:
   - reports/DOING/plan03-1/artifacts/20260810-191842_p3-functional-normal_pbs.log
   - reports/DOING/plan03-1/artifacts/20260810-192006_p3-learner-replacement_result.json
   - reports/DOING/plan03-1/artifacts/20260810-192006_p3-learner-replacement_pbs.log
+  - reports/DOING/code_review/plan03-1/critical-P3-terminal-applied-total-remediation/codex-gpt_36987b41daa67558ff83024abb282122f40065bf.md
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -48,5 +49,6 @@ invalidated_evidence:
 external_review:
   pbs_job_id: null
   status: skipped-by-user
-open_blocking_findings: []
-allowed_next_action: codex_review_p3_terminal_applied_total_remediation
+open_blocking_findings:
+  - P3-TAT-001
+allowed_next_action: fix_zero_work_terminal_rollup_semantics
