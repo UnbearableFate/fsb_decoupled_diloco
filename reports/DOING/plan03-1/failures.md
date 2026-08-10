@@ -76,3 +76,26 @@
   reference remains, save a mandatory Codex-only incremental review, then rerun
   the same static and focused command. A third valid failure would trigger the
   workflow's comprehensive failure review.
+
+## 2026-08-10T17:56:48+09:00 — P2 one-node focused attempt 3
+
+- Experiment: `p2-one-node-validation-01`; domain: `harness`.
+- Category: `test-harness-failure`; valid attempt: yes; consecutive count: 3.
+- Allocation: retained `2519128.opbs`, node `mg0012`.
+- Static result: format and Ruff lint passed.
+- Focused result: `92 passed, 1 failed` in 8.48 seconds. The only failure was
+  aggregate mutation `exact_workload` before Checker invocation.
+- Symptom: the mutation changed only
+  `cycle_receipts.processed_tokens_this_cycle` from 16 to 15. SQLite rejected
+  the statement because the current schema requires processed tokens to equal
+  effective plus locally discarded tokens.
+- Evidence:
+  `artifacts/20260810-175648_p2-one-node-focused-attempt3_fail.log`.
+- Fact: the positive fixture and ten other mutations reached their assertions;
+  this failure says nothing negative about product runtime or Checker workload
+  classification because the intended corrupted input was never committed.
+- Escalation: stop local patch/retry. Freeze the three-attempt evidence and run
+  the workflow's comprehensive Codex failure review across the fixture,
+  authority/schema, Checker, launcher and artifact flow. External review is
+  omitted only under the user's explicit Codex-only directive. A fourth attempt
+  is forbidden until the reviewed test logic has been rewritten.

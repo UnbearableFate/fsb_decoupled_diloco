@@ -228,3 +228,16 @@
 - Transition: `TARGETED_REMEDIATION` -> `STAGED_TEST_EXECUTION`. Retry the exact
   static/focused gate in retained allocation `2519128.opbs`. Another valid
   failure would trigger comprehensive failure review rather than a third patch.
+
+## 2026-08-10T17:56:48+09:00 — FAILURE_REVIEW escalation
+
+- Attempt 3 kept format/lint green and executed 93 focused cases; 92 passed.
+  The remaining workload mutation violated a SQLite CHECK constraint before it
+  could invoke the aggregate Checker.
+- The harness-domain consecutive failure count reached 3. Local iterative
+  patching and a fourth attempt are now blocked.
+- Transition: `STAGED_TEST_EXECUTION` -> `FAILURE_REVIEW`. Freeze this evidence,
+  perform the mandatory comprehensive Codex review, rewrite the mutation to a
+  schema-valid but workload-invalid durable state with an explicit oracle, and
+  review the completed rewrite before any retry. External reviewers remain
+  skipped under the user's current directive.
