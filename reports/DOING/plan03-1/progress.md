@@ -1264,3 +1264,22 @@
   and `239b494d3f834a3ab42c8cbcb2330bed6b02fa8f28335f9a5a16aa2d093f05f2`.
 - All fresh U1/F1/G1 gates now pass on one formal source identity. Prepare the
   Codex-first final-evidence packet and restored multi-agent review.
+
+## 2026-08-11T01:10:00+09:00 — final-evidence candidate APPROVE
+
+- The schema-2 Codex final-evidence artifact binds `DOCS-01`, the formal source
+  and report SHA-256
+  `aeb45926819218b6ad37b06313f385b15dbaf2f02b05907bef5da7a50f2fed39`.
+  Its own SHA-256 is
+  `ab1bc3f01de095b9a6b3c93fd26dda122deae554be9f0cc2c3723357f231ea5a`.
+- The registered formal manifest binds all five gate artifacts, complete U1
+  raw/JUnit evidence, named tracked source identity for every runtime gate and
+  both Codex review artifacts. The requirement matrix now binds every
+  non-final requirement to its current artifact and keeps only `FINAL-01`
+  pending.
+- A create-only staged completion preflight returned `PASS`; manifest SHA-256
+  is `06ed7a04b237a4d6d374fd2c243c68fd30aaeb138ee552d9990ec1c95e6060bc`
+  and matrix SHA-256 is
+  `3a002162fd6456255a931396b67a1787ae18ec416ff945286b96a892356a2bcc`.
+- Codex verdict is `APPROVE`. Freeze this evidence packet, submit the restored
+  four-lane external review, and do not stage completion before disposition.

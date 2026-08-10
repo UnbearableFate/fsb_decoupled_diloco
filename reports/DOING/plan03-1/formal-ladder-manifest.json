@@ -1,7 +1,7 @@
 {
   "manifest_version": 1,
   "plan_id": "plan03-1",
-  "state": "candidate",
+  "state": "registered",
   "source_scopes": [
     "fs_diloco",
     "configs",
@@ -11,7 +11,11 @@
     "README.md",
     "docs"
   ],
-  "source_identity": null,
+  "source_identity": {
+    "commit": "1558e1112108ec38388cc2361b69e2cf78d49217",
+    "dirty": false,
+    "fingerprint": "sha256:9fdff5a7c613e044a7f97523ede2c566f60d4fc9fbf5a5cb4edd5c416ee06337"
+  },
   "gates": [
     {
       "id": "U1-final-one-node-validation",
@@ -20,9 +24,22 @@
         "UNIT-01",
         "HARNESS-01"
       ],
-      "artifact_path": null,
-      "artifact_sha256": null,
-      "supporting_evidence": [],
+      "artifact_path": "reports/DOING/plan03-1/artifacts/20260810-235300_final-u1-one-node-validation.json",
+      "artifact_sha256": "c9a69d2d1469584c917b89482af30c849bb0b9301cf3aa56a97f4a702a13033b",
+      "supporting_evidence": [
+        {
+          "path": "reports/DOING/plan03-1/artifacts/20260810-235300_final-u1-one-node-validation.log",
+          "sha256": "d4fdcd59eb10e74e7e42214570568170ac7365534f09730738e1b8b3cb8c48ad"
+        },
+        {
+          "path": "reports/DOING/plan03-1/artifacts/20260810-235300_final-u1-one-node-validation.log.focused-pytest.junit.xml",
+          "sha256": "30a16559a7583703d21515e149c8f8306c06c7dcf0cdc6b5d43837cca662ecb5"
+        },
+        {
+          "path": "reports/DOING/plan03-1/artifacts/20260810-235300_final-u1-one-node-validation.log.full-pytest.junit.xml",
+          "sha256": "29efd5f5639981d4d5cce01ec25392238e5ca35f89a8a36efd1abe1836978131"
+        }
+      ],
       "topology": {
         "queue": "interact-g",
         "nodes": 1,
@@ -47,9 +64,14 @@
       "requirements": [
         "FUNC-4L1S-01"
       ],
-      "artifact_path": null,
-      "artifact_sha256": null,
-      "supporting_evidence": [],
+      "artifact_path": "reports/DOING/plan03-1/artifacts/20260810-235500_final-f1-functional-normal_result.json",
+      "artifact_sha256": "5db6765f74621aa57ba45a7c7f0bf2e49eff71cae61441698b2d5bf439b58bb4",
+      "supporting_evidence": [
+        {
+          "path": "logs/qsub_plan03_1_final_f1_normal_20260810_235500/source_identity.json",
+          "sha256": "cdee79cc632644d770fba0660ebb9440408c754408404991cc9842da31aa1cfd"
+        }
+      ],
       "topology": {
         "queue": "debug-g",
         "nodes": 5,
@@ -73,9 +95,14 @@
       "requirements": [
         "FAULT-4L1S-01"
       ],
-      "artifact_path": null,
-      "artifact_sha256": null,
-      "supporting_evidence": [],
+      "artifact_path": "reports/DOING/plan03-1/artifacts/20260810-235800_final-f1-learner-replacement_result.json",
+      "artifact_sha256": "d660dda11bf1fdaceec5a30c6f3cdd2373c09f7651cb5e7975514e8465454736",
+      "supporting_evidence": [
+        {
+          "path": "logs/qsub_plan03_1_final_f1_learner_replacement_20260810_235800/source_identity.json",
+          "sha256": "4c4c0105fd21ab29cf7d467b4d2c1e66895b7da64c0dddd81d2788ce72fe4bdd"
+        }
+      ],
       "topology": {
         "queue": "debug-g",
         "nodes": 5,
@@ -99,9 +126,14 @@
       "requirements": [
         "FAULT-4L1S-01"
       ],
-      "artifact_path": null,
-      "artifact_sha256": null,
-      "supporting_evidence": [],
+      "artifact_path": "reports/DOING/plan03-1/artifacts/20260810-235900_final-f1-syncer-takeover_result.json",
+      "artifact_sha256": "ed7c1127f693603f27659e4f424a18136265de07f9bf37dcc2749bca1eb473c2",
+      "supporting_evidence": [
+        {
+          "path": "logs/qsub_plan03_1_final_f1_syncer_takeover_20260810_235900/source_identity.json",
+          "sha256": "cd179e4343a7bfd90a9d6b1f987c9e7193e97c6bb792f6d0e68e44cc924d0ec8"
+        }
+      ],
       "topology": {
         "queue": "debug-g",
         "nodes": 5,
@@ -126,9 +158,14 @@
       "requirements": [
         "FORMAL-8L1S-01"
       ],
-      "artifact_path": null,
-      "artifact_sha256": null,
-      "supporting_evidence": [],
+      "artifact_path": "reports/DOING/plan03-1/artifacts/20260811-000100_final-g1-formal-8l1s_result.json",
+      "artifact_sha256": "9f88e4166a3141a7dc1b1b7bd3a5ad358158541039d7263e3c29357624160db1",
+      "supporting_evidence": [
+        {
+          "path": "logs/qsub_plan03_1_final_g1_formal_8l1s_20260811_000100/source_identity.json",
+          "sha256": "239b494d3f834a3ab42c8cbcb2330bed6b02fa8f28335f9a5a16aa2d093f05f2"
+        }
+      ],
       "topology": {
         "queue": "regular-g",
         "nodes": 9,
@@ -158,8 +195,8 @@
         "CLEAN-01",
         "ARCH-01"
       ],
-      "artifact_path": null,
-      "artifact_sha256": null
+      "artifact_path": "reports/DOING/plan03-1/artifacts/20260811-000200_r2-preformal-current-state_review.json",
+      "artifact_sha256": "23bf04611fe220777022426b6f95f951aa528c78201940ac083c32c4740cb0bc"
     },
     {
       "id": "R3-final-evidence",
@@ -167,8 +204,8 @@
       "requirements": [
         "DOCS-01"
       ],
-      "artifact_path": null,
-      "artifact_sha256": null
+      "artifact_path": "reports/DOING/plan03-1/artifacts/20260811-011000_r3-final-evidence_review.json",
+      "artifact_sha256": "ab1bc3f01de095b9a6b3c93fd26dda122deae554be9f0cc2c3723357f231ea5a"
     }
   ],
   "aggregate": {

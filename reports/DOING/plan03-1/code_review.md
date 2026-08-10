@@ -280,3 +280,18 @@ only after implementation, compute-node validation and Codex rereview.
 - The report incorporates exact-source U1 and all three F1 PASS results while
   keeping unavailable external lanes distinct from approval. No finding is
   open. Verdict: `APPROVE`.
+
+## 2026-08-11T01:10:00+09:00 — Codex final-evidence review
+
+- Formal source: `1558e1112108ec38388cc2361b69e2cf78d49217`, fingerprint
+  `sha256:9fdff5a7c613e044a7f97523ede2c566f60d4fc9fbf5a5cb4edd5c416ee06337`.
+- Codex reviewed the fresh U1, three F1 and final G1 artifacts, their tracked
+  named support, the documentation claims, exact-source R2 artifact, formal
+  manifest and final requirement bindings. The staged completion producer
+  preflight returns `PASS` with all requirements except `FINAL-01` complete.
+- Report:
+  `reports/DOING/code_review/plan03-1/final-evidence-r3/codex-gpt_1558e1112108ec38388cc2361b69e2cf78d49217.md`.
+  Machine artifact:
+  `reports/DOING/plan03-1/artifacts/20260811-011000_r3-final-evidence_review.json`.
+- No finding is open. Verdict: `APPROVE` for restored external final-evidence
+  review before publishing the staged completion artifact.
