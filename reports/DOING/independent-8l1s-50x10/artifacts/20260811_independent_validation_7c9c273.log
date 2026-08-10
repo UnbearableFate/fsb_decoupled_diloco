@@ -1,0 +1,44 @@
+project_root=/work/xg24i002/x10041/fsb_decoupled_diloco
+started_at=1786387249.3803234
+step=ruff-format
+argv=["/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python", "-m", "ruff", "format", "--check", "."]
+result_kind=command
+returncode=0
+elapsed_seconds=0.1344338920316659
+128 files already formatted
+
+step=ruff-lint
+argv=["/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python", "-m", "ruff", "check", "."]
+result_kind=command
+returncode=0
+elapsed_seconds=0.054165425011888146
+All checks passed!
+
+step=focused-pytest
+argv=["/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python", "-m", "pytest", "-q", "tests/architecture", "tests/harness/test_full_protocol_harness.py", "tests/harness/test_plan_completion.py", "tests/harness/test_validation_suite.py", "tests/runtime/test_learner_entrypoint.py", "tests/runtime/test_syncer_fault_boundary.py", "tests/runtime/test_syncer_composition.py", "tests/runtime/test_syncer_startup_admission.py", "tests/runtime/test_terminal_service.py", "tests/storage/test_authority_operational.py", "tests/storage/test_contributor_progress.py", "tests/storage/test_dynamic_admission_request.py", "tests/test_capture_source_identity.py", "tests/test_clean_run.py", "tests/test_config.py", "tests/tools/test_analysis.py", "tests/tools/test_launch_independent_run.py", "tests/tools/test_request_terminal_close.py", "--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/independent-8l1s-50x10/artifacts/20260811_independent_validation_7c9c273.log.focused-pytest.junit.xml"]
+result_kind=pytest
+returncode=0
+elapsed_seconds=20.37791274796473
+........................................................................ [ 36%]
+........................................................................ [ 73%]
+...................................................                      [100%]
+195 passed in 19.07s
+
+junit={"argv": ["/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python", "-m", "pytest", "-q", "tests/architecture", "tests/harness/test_full_protocol_harness.py", "tests/harness/test_plan_completion.py", "tests/harness/test_validation_suite.py", "tests/runtime/test_learner_entrypoint.py", "tests/runtime/test_syncer_fault_boundary.py", "tests/runtime/test_syncer_composition.py", "tests/runtime/test_syncer_startup_admission.py", "tests/runtime/test_terminal_service.py", "tests/storage/test_authority_operational.py", "tests/storage/test_contributor_progress.py", "tests/storage/test_dynamic_admission_request.py", "tests/test_capture_source_identity.py", "tests/test_clean_run.py", "tests/test_config.py", "tests/tools/test_analysis.py", "tests/tools/test_launch_independent_run.py", "tests/tools/test_request_terminal_close.py", "--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/independent-8l1s-50x10/artifacts/20260811_independent_validation_7c9c273.log.focused-pytest.junit.xml"], "elapsed_seconds": 20.37791274796473, "errors": 0, "failures": 0, "junit_xml": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/independent-8l1s-50x10/artifacts/20260811_independent_validation_7c9c273.log.focused-pytest.junit.xml", "name": "focused-pytest", "result_kind": "pytest", "returncode": 0, "skipped": 0, "tests": 195}
+step=full-pytest
+argv=["/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python", "-m", "pytest", "-q", "--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/independent-8l1s-50x10/artifacts/20260811_independent_validation_7c9c273.log.full-pytest.junit.xml"]
+result_kind=pytest
+returncode=0
+elapsed_seconds=35.915789894992486
+........................................................................ [ 13%]
+........................................................................ [ 26%]
+........................................................................ [ 39%]
+........................................................................ [ 52%]
+........................................................................ [ 65%]
+........................................................................ [ 78%]
+........................................................................ [ 91%]
+.................................................                        [100%]
+553 passed in 35.04s
+
+junit={"argv": ["/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python", "-m", "pytest", "-q", "--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/independent-8l1s-50x10/artifacts/20260811_independent_validation_7c9c273.log.full-pytest.junit.xml"], "elapsed_seconds": 35.915789894992486, "errors": 0, "failures": 0, "junit_xml": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/independent-8l1s-50x10/artifacts/20260811_independent_validation_7c9c273.log.full-pytest.junit.xml", "name": "full-pytest", "result_kind": "pytest", "returncode": 0, "skipped": 0, "tests": 553}
+finished_at=1786387306.1411023
