@@ -3,7 +3,7 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P3-functional-faults
-work_unit_id: P3-W4-learner-replacement-terminal-total-remediation
+work_unit_id: P3-W5-unified-functional-fault-rerun
 state: STAGED_TEST_EXECUTION
 base_commit: 4ebee6339fb76f63127874c655d7b109b2ec0b39
 target_commit: 8e7f87432895f3a699c93dc252aa225b7d9944a8
@@ -17,7 +17,7 @@ failure_counters:
   "product:p3-functional-normal-01": 0
   "product:p3-learner-replacement-01": 1
   "product:p3-syncer-takeover-01": 0
-  "harness:p3-functional-checker-01": 1
+  "harness:p3-functional-checker-01": 0
 required_tests:
   - p3-functional-normal
   - p3-learner-replacement
@@ -39,6 +39,8 @@ required_evidence:
   - reports/DOING/plan03-1/artifacts/20260810-192006_p3-learner-replacement_pbs.log
   - reports/DOING/code_review/plan03-1/critical-P3-terminal-applied-total-remediation/codex-gpt_36987b41daa67558ff83024abb282122f40065bf.md
   - reports/DOING/code_review/plan03-1/critical-P3-terminal-applied-total-remediation/codex-gpt_8e7f87432895f3a699c93dc252aa225b7d9944a8.md
+  - reports/DOING/plan03-1/artifacts/20260810-193100_p3-terminal-total-validation.json
+  - reports/DOING/plan03-1/artifacts/20260810-193100_p3-terminal-total-validation.log
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -51,4 +53,4 @@ external_review:
   pbs_job_id: null
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: run_one_node_p3_terminal_applied_total_validation
+allowed_next_action: submit_p3_functional_normal_after_terminal_fix

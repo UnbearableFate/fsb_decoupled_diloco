@@ -1,0 +1,37 @@
+project_root=/work/xg24i002/x10041/fsb_decoupled_diloco
+started_at=1786357894.6326454
+step=ruff-format
+argv=["/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python", "-m", "ruff", "format", "--check", "."]
+returncode=0
+elapsed_seconds=0.13502844504546374
+127 files already formatted
+
+step=ruff-lint
+argv=["/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python", "-m", "ruff", "check", "."]
+returncode=0
+elapsed_seconds=0.05167225794866681
+All checks passed!
+
+step=focused-pytest
+argv=["/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python", "-m", "pytest", "-q", "tests/architecture", "tests/harness/test_full_protocol_harness.py", "tests/harness/test_validation_suite.py", "tests/runtime/test_learner_entrypoint.py", "tests/runtime/test_syncer_fault_boundary.py", "tests/runtime/test_syncer_startup_admission.py", "tests/runtime/test_terminal_service.py", "tests/test_capture_source_identity.py", "tests/test_clean_run.py", "tests/test_cli.py", "tests/test_config.py", "tests/tools/test_analysis.py", "tests/tools/test_launch_independent_run.py", "tests/tools/test_request_terminal_close.py"]
+returncode=0
+elapsed_seconds=14.06543185794726
+........................................................................ [ 60%]
+................................................                         [100%]
+120 passed in 12.96s
+
+step=full-pytest
+argv=["/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python", "-m", "pytest", "-q"]
+returncode=0
+elapsed_seconds=25.94919332698919
+........................................................................ [ 14%]
+........................................................................ [ 28%]
+........................................................................ [ 42%]
+........................................................................ [ 56%]
+........................................................................ [ 71%]
+........................................................................ [ 85%]
+........................................................................ [ 99%]
+..                                                                       [100%]
+506 passed in 25.07s
+
+finished_at=1786357935.1195471

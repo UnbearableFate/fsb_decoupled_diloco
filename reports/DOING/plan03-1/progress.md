@@ -638,3 +638,25 @@
 - Transition: `TEST_REVIEW_TARGET` -> `STAGED_TEST_EXECUTION`. Acquire one
   main-agent-held `interact-g` node and run focused plus complete validation
   before any five-node scenario is resubmitted.
+
+## 2026-08-10T19:32:15+09:00 — P3 terminal applied-total validation PASS
+
+- Main-agent-held allocation `2519904.opbs` ran on exact one-node
+  `interact-g` host `mg0004` with `1:ncpus=8:mem=16gb`; requested walltime was
+  `01:00:00`, terminal exit status is 0, and actual walltime was 1:31.
+- Clean source commit:
+  `0e951518c3ef693b20a241e36fc8396d61f609a7`; fingerprint
+  `sha256:6b4964840a786276242608746f862ca3ce05ae48f256d8755eadb58cfd4454e5`.
+- The structured producer returned `PASS` with no errors. Ruff format and lint
+  passed; the focused group passed 120 tests in 12.96 seconds; the complete
+  suite passed 506 tests in 25.07 seconds.
+- Environment: Python 3.13.13, pytest 9.1.1, pytest-timeout 2.4.0, Ruff 0.15.21,
+  Torch 2.13.0+cu132 and compute modules `nvidia/25.9`, `nv-hpcx/25.9`.
+- Evidence:
+  `artifacts/20260810-193100_p3-terminal-total-validation.json` (SHA-256
+  `e53b58570490861b0ccf7936c036a8be1813852a0296b1c2bb2a2431d221cfaa`)
+  and matching raw log (SHA-256
+  `318899948d345ca5898e3b449be19f1b2e491af7ab28fa5442e6ceb3e03d2f55`).
+- The Checker harness counter resets to zero. The allocation closed normally.
+  Freeze this evidence, then rerun normal, learner replacement and syncer
+  takeover serially from one new source commit/fingerprint.

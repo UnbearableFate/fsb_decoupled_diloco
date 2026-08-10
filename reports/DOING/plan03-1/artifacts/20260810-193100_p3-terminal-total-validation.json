@@ -1,0 +1,120 @@
+{
+  "artifact_version": 1,
+  "cleanup": {
+    "eligible": false,
+    "owner": "validation_suite",
+    "targets": []
+  },
+  "config_schema_identity": null,
+  "environment": {
+    "interpreter": {
+      "executable": "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+      "version": "3.13.13 (main, May 10 2026, 19:28:34) [Clang 22.1.3 ]"
+    },
+    "nodes": [
+      "mg0004"
+    ],
+    "packages": {
+      "pytest": "9.1.1",
+      "pytest-timeout": "2.4.0",
+      "ruff": "0.15.21",
+      "torch": "2.13.0+cu132"
+    },
+    "pbs_job_id": "2519904.opbs",
+    "topology": {
+      "validation_runner": "mg0004"
+    }
+  },
+  "errors": [],
+  "evidence_paths": [
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/20260810-193100_p3-terminal-total-validation.log"
+  ],
+  "experiment_id": "p2-current-suite",
+  "gate": "U1-one-node-validation",
+  "metrics": {
+    "steps": [
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+          "-m",
+          "ruff",
+          "format",
+          "--check",
+          "."
+        ],
+        "elapsed_seconds": 0.13502844504546374,
+        "name": "ruff-format",
+        "returncode": 0
+      },
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+          "-m",
+          "ruff",
+          "check",
+          "."
+        ],
+        "elapsed_seconds": 0.05167225794866681,
+        "name": "ruff-lint",
+        "returncode": 0
+      },
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+          "-m",
+          "pytest",
+          "-q",
+          "tests/architecture",
+          "tests/harness/test_full_protocol_harness.py",
+          "tests/harness/test_validation_suite.py",
+          "tests/runtime/test_learner_entrypoint.py",
+          "tests/runtime/test_syncer_fault_boundary.py",
+          "tests/runtime/test_syncer_startup_admission.py",
+          "tests/runtime/test_terminal_service.py",
+          "tests/test_capture_source_identity.py",
+          "tests/test_clean_run.py",
+          "tests/test_cli.py",
+          "tests/test_config.py",
+          "tests/tools/test_analysis.py",
+          "tests/tools/test_launch_independent_run.py",
+          "tests/tools/test_request_terminal_close.py"
+        ],
+        "elapsed_seconds": 14.06543185794726,
+        "name": "focused-pytest",
+        "returncode": 0
+      },
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "elapsed_seconds": 25.94919332698919,
+        "name": "full-pytest",
+        "returncode": 0
+      }
+    ]
+  },
+  "protocol_schema_identity": null,
+  "requirements_covered": [
+    "UNIT-01",
+    "HARNESS-01"
+  ],
+  "source_identity": {
+    "commit": "0e951518c3ef693b20a241e36fc8396d61f609a7",
+    "dirty": false,
+    "fingerprint": "sha256:6b4964840a786276242608746f862ca3ce05ae48f256d8755eadb58cfd4454e5",
+    "scopes": [
+      "fs_diloco",
+      "configs",
+      "scripts/miyabi",
+      "tests",
+      "pyproject.toml",
+      "README.md",
+      "docs"
+    ]
+  },
+  "status": "PASS",
+  "workload_identity": null
+}
