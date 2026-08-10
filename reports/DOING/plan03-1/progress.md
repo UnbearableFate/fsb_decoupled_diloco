@@ -313,3 +313,23 @@
   skipped under user direction.
 - Transition: `TARGETED_REMEDIATION` -> `STAGED_TEST_EXECUTION`. Run full-suite
   attempt 2 in retained allocation `2519128.opbs`.
+
+## 2026-08-10T18:09:51+09:00 — P2 one-node validation PASS
+
+- Allocation: `2519128.opbs`, main-agent-held one-node `interact-g` allocation
+  on `mg0012`; source HEAD for the full run was
+  `c1ab1305e372b277beb51187539644b2295e7a6f`, with a clean product worktree and
+  the expected NVIDIA/HPC-X modules.
+- Full-suite attempt 2 passed all 489 tests in 19.30 seconds.
+- A final current-target gate then confirmed all 121 Python files formatted and
+  Ruff lint clean.
+- Evidence:
+  - `artifacts/20260810-180907_p2-one-node-full-pytest-attempt2_pass.log`;
+  - `artifacts/20260810-180951_p2-one-node-final-static_pass.log`;
+  - focused prerequisite
+    `artifacts/20260810-180231_p2-one-node-post-rewrite-focused_pass.log`.
+- `qsub` reported job completion and login-node `qstat` confirms no unfinished
+  allocation. The full-suite failure counter resets to zero.
+- P2 implementation, harness and one-node candidate tests are complete. Freeze
+  this evidence for mandatory Codex phase review; external review remains
+  disabled by the user.

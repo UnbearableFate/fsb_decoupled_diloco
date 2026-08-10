@@ -3,17 +3,17 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P2-tests-and-harness
-work_unit_id: P2-W2-one-node-validation
-state: STAGED_TEST_EXECUTION
+work_unit_id: P2-W3-phase-review
+state: PHASE_REVIEW_TARGET
 base_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 target_commit: 5f3d61400fa9fa3c6ee469fa80a75d58558e5c87
 formal_source_commit: null
 formal_source_fingerprint: null
-experiment_id: p2-one-node-validation-01
+experiment_id: p2-phase-code-and-evidence-review-01
 experiment_domain: harness
 failure_counters:
   "harness:p2-one-node-validation-01": 0
-  "harness:p2-one-node-full-suite-01": 1
+  "harness:p2-one-node-full-suite-01": 0
 required_tests:
   - s0-static-preflight
   - harness-focused-unit-tests
@@ -24,6 +24,9 @@ required_evidence:
   - reports/DOING/plan03-1/identity-authority.md
   - reports/DOING/plan03-1/test-ladder.md
   - reports/DOING/plan03-1/artifact-schema.md
+  - reports/DOING/plan03-1/artifacts/20260810-180231_p2-one-node-post-rewrite-focused_pass.log
+  - reports/DOING/plan03-1/artifacts/20260810-180907_p2-one-node-full-pytest-attempt2_pass.log
+  - reports/DOING/plan03-1/artifacts/20260810-180951_p2-one-node-final-static_pass.log
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -33,4 +36,4 @@ external_review:
   pbs_job_id: 2519093.opbs
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: run_p2_one_node_full_pytest_attempt_2
+allowed_next_action: freeze_and_run_codex_p2_phase_review
