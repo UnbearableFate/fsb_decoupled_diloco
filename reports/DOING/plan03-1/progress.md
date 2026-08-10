@@ -1154,3 +1154,21 @@
 - Preflight passed ancestry, source-only whitespace, prompt identity, all
   PBS/shell syntax and literal group checks. Only monitoring is allowed until
   terminal orchestration state.
+
+## 2026-08-10T23:51:00+09:00 — external R3 terminal; final source frozen
+
+- PBS job `2521665.opbs` completed on `mg0018`. All four read-only target
+  snapshots retained digest
+  `60c26ec33ba7ecce7147177121e8fa6f186b98a3c611a55edf4924d0ae10173c`.
+- Claude Opus 5 was capacity-blocked before inference, GLM-5.2 and MiniMax M3
+  timed out, and DeepSeek V4 Flash returned invalid empty output. No lane
+  produced a valid external report; absence is not approval.
+- Partial traces yielded no concrete new finding. Their evidence/config/error
+  path observations were independently checked by Codex and are consistent
+  with the existing exact-target `APPROVE` report. The disposition is tracked
+  under `final-common-target-r3`.
+- `FINAL_COMMON_TARGET_FREEZE`: formal source commit
+  `1558e1112108ec38388cc2361b69e2cf78d49217`, fingerprint
+  `sha256:9fdff5a7c613e044a7f97523ede2c566f60d4fc9fbf5a5cb4edd5c416ee06337`.
+  No formal source-scope edit is allowed. Start the serial fresh ladder with
+  one-node U1 from this exact source identity.

@@ -1,0 +1,2 @@
+Now let me focus on the actual diff between the base commit and the final target. Let me examine the new artifact and verify the documentation claims against the evidence:
+Now let me verify the formal config still has only 50 × 10:

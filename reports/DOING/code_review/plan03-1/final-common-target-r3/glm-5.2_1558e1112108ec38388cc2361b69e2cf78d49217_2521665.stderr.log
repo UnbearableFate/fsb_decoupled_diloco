@@ -1,0 +1,495 @@
+[0m
+> plan · glm-5.2
+[0m
+[0m$ [0mgit log --oneline -5 2>/dev/null; echo "---"; git rev-parse HEAD 2>/dev/null; echo "---"; ls -la
+---
+---
+total 28
+dr-xr-x--- 10 x10041 xg24i002  225 Aug 10 23:38 .
+drwx------  7 x10041 xg24i002  201 Aug 10 23:38 ..
+-r--r-----  1 x10041 xg24i002 5399 Aug 10 23:35 AGENTS.md
+dr-xr-x---  2 x10041 xg24i002  110 Aug 10 23:35 configs
+dr-xr-x---  2 x10041 xg24i002  103 Aug 10 23:35 docs
+dr-xr-x---  9 x10041 xg24i002  168 Aug 10 23:35 fs_diloco
+-r--r-----  1 x10041 xg24i002  460 Aug 10 23:35 .gitignore
+dr-xr-x---  6 x10041 xg24i002  202 Aug 10 23:35 plans
+-r--r-----  1 x10041 xg24i002 1302 Aug 10 23:35 pyproject.toml
+-r--r-----  1 x10041 xg24i002    5 Aug 10 23:35 .python-version
+-r--r-----  1 x10041 xg24i002 2402 Aug 10 23:35 README.md
+dr-xr-x---  5 x10041 xg24i002   53 Aug 10 23:35 reports
+dr-xr-x---  2 x10041 xg24i002   71 Aug 10 23:38 .review-packet
+dr-xr-x---  3 x10041 xg24i002   20 Aug 10 23:35 scripts
+dr-xr-x---  9 x10041 xg24i002 4096 Aug 10 23:35 tests
+[0m
+[0m$ [0mls -la .review-packet/ 2>/dev/null; echo "---DIFFSTAT---"; cat .review-packet/diff-stat.txt 2>/dev/null; echo "---CHANGED---"; cat .review-packet/changed-files.txt 2>/dev/null
+total 416
+dr-xr-x---  2 x10041 xg24i002     71 Aug 10 23:38 .
+dr-xr-x--- 10 x10041 xg24i002    225 Aug 10 23:38 ..
+-r--r-----  1 x10041 xg24i002   2367 Aug 10 23:38 changed-files.txt
+-r--r-----  1 x10041 xg24i002   1581 Aug 10 23:38 diff-stat.txt
+-r--r-----  1 x10041 xg24i002 416765 Aug 10 23:38 target.diff
+---DIFFSTAT---
+ README.md                                          |    2 +-
+ docs/design.md                                     |    2 +
+ docs/testing.md                                    |    8 +-
+ ...5639f236fe73efd013e4f12c910a_2521428.stderr.log |    0
+ ...245639f236fe73efd013e4f12c910a_2521428_raw.json |    1 +
+ ...gpt_47662f8d872f4a5e451908796a6b677105a28c52.md |   56 +
+ ...5639f236fe73efd013e4f12c910a_2521428.stderr.log |  491 +++++++++
+ ...5245639f236fe73efd013e4f12c910a_2521428_raw.txt |    0
+ ...ons_3b99d1a995245639f236fe73efd013e4f12c910a.md |   47 +
+ ...5639f236fe73efd013e4f12c910a_2521428.stderr.log | 1137 ++++++++++++++++++++
+ ...5245639f236fe73efd013e4f12c910a_2521428_raw.txt |    1 +
+ ...5639f236fe73efd013e4f12c910a_2521428.stderr.log | 1062 ++++++++++++++++++
+ ...5245639f236fe73efd013e4f12c910a_2521428_raw.txt |    0
+ ...d1a995245639f236fe73efd013e4f12c910a_2521428.md |   66 ++
+ ...a995245639f236fe73efd013e4f12c910a_2521428.json |   88 ++
+ ...10-233100_p4-current-9node-overbaseline_pbs.log |  237 ++++
+ ...33100_p4-current-9node-overbaseline_result.json |  932 ++++++++++++++++
+ .../plan03-1/artifacts/u1_validation_47662f8.json  |  142 +++
+ .../plan03-1/artifacts/u1_validation_47662f8.log   |   44 +
+ ...validation_47662f8.log.focused-pytest.junit.xml |    1 +
+ ...u1_validation_47662f8.log.full-pytest.junit.xml |    1 +
+ reports/DOING/plan03-1/code_review.md              |   20 +
+ reports/DOING/plan03-1/progress.md                 |   54 +
+ reports/DOING/plan03-1/workflow_state.yaml         |   20 +-
+ 24 files changed, 4403 insertions(+), 9 deletions(-)
+---CHANGED---
+M	README.md
+M	docs/design.md
+M	docs/testing.md
+A	reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/claude-opus-5_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log
+A	reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/claude-opus-5_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.json
+A	reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/codex-gpt_47662f8d872f4a5e451908796a6b677105a28c52.md
+A	reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/deepseek-v4-flash_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log
+A	reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/deepseek-v4-flash_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.txt
+A	reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/finding-dispositions_3b99d1a995245639f236fe73efd013e4f12c910a.md
+A	reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/glm-5.2_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log
+A	reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/glm-5.2_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.txt
+A	reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/minimax-m3_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log
+A	reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/minimax-m3_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.txt
+A	reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/review-request_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.md
+A	reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/reviewer-job_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.json
+A	reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_pbs.log
+A	reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json
+A	reports/DOING/plan03-1/artifacts/u1_validation_47662f8.json
+A	reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log
+A	reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log.focused-pytest.junit.xml
+A	reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log.full-pytest.junit.xml
+M	reports/DOING/plan03-1/code_review.md
+M	reports/DOING/plan03-1/progress.md
+M	reports/DOING/plan03-1/workflow_state.yaml
+[0m
+[0m$ [0mgit --no-pager diff --no-color 47662f8d872f4a5e451908796a6b677105a28c52 1558e1112108ec38388cc2361b69e2cf78d49217 -- README.md docs/design.md docs/testing.md 2>/dev/null || echo "NO GIT"; echo "===END==="
+NO GIT
+===END===
+[0m
+[0m$ [0mgit --version 2>/dev/null; git status 2>&1 | head -3; echo "---"; git log --all --oneline 2>&1 | head -10
+git version 2.43.0
+fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+---
+fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+[0m
+[0m→ [0mRead README.md
+[0m→ [0mRead docs/design.md
+[0m→ [0mRead docs/testing.md
+[0m
+[0m$ [0mls -la configs/ scripts/
+configs/:
+total 12
+dr-xr-x---  2 x10041 xg24i002  110 Aug 10 23:35 .
+dr-xr-x--- 10 x10041 xg24i002  225 Aug 10 23:38 ..
+-r--r-----  1 x10041 xg24i002 2493 Aug 10 23:35 full_protocol_dynamic.yaml
+-r--r-----  1 x10041 xg24i002 1725 Aug 10 23:35 full_protocol_functional.yaml
+-r--r-----  1 x10041 xg24i002 1724 Aug 10 23:35 full_protocol_static.yaml
+
+scripts/:
+total 4
+dr-xr-x---  3 x10041 xg24i002   20 Aug 10 23:35 .
+dr-xr-x--- 10 x10041 xg24i002  225 Aug 10 23:38 ..
+dr-xr-x---  2 x10041 xg24i002 4096 Aug 10 23:35 miyabi
+[0m
+[0m→ [0mRead configs/full_protocol_static.yaml
+[0m
+[0m$ [0mgrep -n -i "2521638\|local_step\|global_step\|applied\|dropped\|71.8\|71,808\|17,952\|outstanding\|balance\|versions\|verdict\|status\|inner_steps\|stop_after\|source_commit\|source_fingerprint\|8dc2b727" "reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json" | head -80
+96:        "pbs_job_id": "2521638.opbs",
+98:        "source_fingerprint": "sha256:cc5a483060e2a6e13c6cd1967d32b37581c642a9706c7ed8919034c90b1f4a98",
+156:        "logical_launch_id": "allocation-2521638-learner_000",
+157:        "status": "terminal",
+166:        "logical_launch_id": "allocation-2521638-learner_001",
+167:        "status": "terminal",
+176:        "logical_launch_id": "allocation-2521638-learner_002",
+177:        "status": "terminal",
+186:        "logical_launch_id": "allocation-2521638-learner_003",
+187:        "status": "terminal",
+196:        "logical_launch_id": "allocation-2521638-learner_004",
+197:        "status": "terminal",
+206:        "logical_launch_id": "allocation-2521638-learner_005",
+207:        "status": "terminal",
+216:        "logical_launch_id": "allocation-2521638-learner_006",
+217:        "status": "terminal",
+226:        "logical_launch_id": "allocation-2521638-learner_007",
+227:        "status": "terminal",
+237:        "fence_json": "{\"attempt_id\":\"attempt-799bb9c3-8f0b-47b5-9ed0-6ac73cf22861\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"allocation-2521638-learner_000\"}",
+251:        "fence_json": "{\"attempt_id\":\"attempt-b8fa08af-f6c3-4061-8c94-472d191e7d6d\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_001\",\"logical_launch_id\":\"allocation-2521638-learner_001\"}",
+265:        "fence_json": "{\"attempt_id\":\"attempt-0bea9aa1-aa25-44cc-be76-bc932ce8245a\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_002\",\"logical_launch_id\":\"allocation-2521638-learner_002\"}",
+279:        "fence_json": "{\"attempt_id\":\"attempt-7092c48c-5739-4e50-9fb1-65ff6529151b\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_003\",\"logical_launch_id\":\"allocation-2521638-learner_003\"}",
+293:        "fence_json": "{\"attempt_id\":\"attempt-7c2831cb-8321-4038-9434-0ab2bd51fa70\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_004\",\"logical_launch_id\":\"allocation-2521638-learner_004\"}",
+307:        "fence_json": "{\"attempt_id\":\"attempt-10c04c2c-3921-4aae-9575-1f560613c4f1\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_005\",\"logical_launch_id\":\"allocation-2521638-learner_005\"}",
+321:        "fence_json": "{\"attempt_id\":\"attempt-56d1da0f-87b0-4972-9acd-b39242d0305a\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_006\",\"logical_launch_id\":\"allocation-2521638-learner_006\"}",
+335:        "fence_json": "{\"attempt_id\":\"attempt-42b0bd9c-7925-4ae7-8ec8-af7d72163dc1\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_007\",\"logical_launch_id\":\"allocation-2521638-learner_007\"}",
+345:    "token_balance": 0,
+349:      "direct_applied": 71808,
+350:      "direct_dropped": 17952,
+351:      "direct_outstanding": 0,
+359:    "versions": [
+364:        "direct_weight_tokens_applied": 0,
+380:        "direct_weight_tokens_applied": 6528,
+396:        "direct_weight_tokens_applied": 6528,
+412:        "direct_weight_tokens_applied": 6528,
+417:        "publication_id": "6b68ce7b-bbd1-433f-8de4-71e86aa51bb3",
+428:        "direct_weight_tokens_applied": 6528,
+444:        "direct_weight_tokens_applied": 6528,
+460:        "direct_weight_tokens_applied": 6528,
+476:        "direct_weight_tokens_applied": 6528,
+492:        "direct_weight_tokens_applied": 6528,
+508:        "direct_weight_tokens_applied": 6528,
+524:        "direct_weight_tokens_applied": 6528,
+540:        "direct_weight_tokens_applied": 6528,
+588:    "pbs_job_id": "2521638.opbs",
+634:    "source_fingerprint": "sha256:cc5a483060e2a6e13c6cd1967d32b37581c642a9706c7ed8919034c90b1f4a98"
+637:    "applied_by_contributor": {
+647:    "applied_proposal_count": 88,
+649:    "direct_dropped_tokens": 17952,
+650:    "dropped_proposal_count": 22,
+658:    "token_balance": 0,
+672:      "status": "ok",
+680:      "status": "ok",
+688:      "status": "ok",
+696:      "status": "ok",
+704:      "status": "ok",
+712:      "status": "ok",
+720:      "status": "ok",
+728:      "status": "ok",
+736:      "status": "ok",
+744:      "status": "ok",
+752:      "status": "ok",
+760:      "status": "ok",
+768:      "status": "ok",
+776:      "status": "ok",
+784:      "status": "ok",
+792:      "status": "ok",
+800:      "status": "ok",
+808:      "status": "ok",
+816:      "status": "ok",
+824:      "status": "ok",
+832:      "status": "ok",
+840:      "status": "ok",
+848:      "status": "ok",
+856:      "status": "ok",
+865:    "commit": "8dc2b727c64eab66f6627e1ed3a70ad9ef093631",
+878:  "status": "PASS",
+883:    "direct_weight_tokens_applied": 71808,
+912:    "global_steps": 11,
+913:    "inner_steps": 51,
+[0m
+[0m$ [0mgrep -n "Job Id\|^PBS_JOBID\|2521638\|2521428\|resource" reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_pbs.log | head -30
+94:      "pbs_job_id": "2521638.opbs",
+117:      "fence_json": "{\"attempt_id\":\"attempt-799bb9c3-8f0b-47b5-9ed0-6ac73cf22861\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"allocation-2521638-learner_000\"}",
+131:      "fence_json": "{\"attempt_id\":\"attempt-b8fa08af-f6c3-4061-8c94-472d191e7d6d\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_001\",\"logical_launch_id\":\"allocation-2521638-learner_001\"}",
+145:      "fence_json": "{\"attempt_id\":\"attempt-0bea9aa1-aa25-44cc-be76-bc932ce8245a\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_002\",\"logical_launch_id\":\"allocation-2521638-learner_002\"}",
+159:      "fence_json": "{\"attempt_id\":\"attempt-7092c48c-5739-4e50-9fb1-65ff6529151b\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_003\",\"logical_launch_id\":\"allocation-2521638-learner_003\"}",
+173:      "fence_json": "{\"attempt_id\":\"attempt-7c2831cb-8321-4038-9434-0ab2bd51fa70\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_004\",\"logical_launch_id\":\"allocation-2521638-learner_004\"}",
+187:      "fence_json": "{\"attempt_id\":\"attempt-10c04c2c-3921-4aae-9575-1f560613c4f1\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_005\",\"logical_launch_id\":\"allocation-2521638-learner_005\"}",
+201:      "fence_json": "{\"attempt_id\":\"attempt-56d1da0f-87b0-4972-9acd-b39242d0305a\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_006\",\"logical_launch_id\":\"allocation-2521638-learner_006\"}",
+215:      "fence_json": "{\"attempt_id\":\"attempt-42b0bd9c-7925-4ae7-8ec8-af7d72163dc1\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_007\",\"logical_launch_id\":\"allocation-2521638-learner_007\"}",
+[0m
+[0m✱ [0mGrep "BUSY|LOCKED|busy|locked|sqlite3.|Cannot|database is locked"[90m in fs_diloco · 100 matches[0m
+[0m→ [0mRead fs_diloco/runtime/syncer.py[90m [limit=120, offset=810][0m
+[0m
+[0m$ [0mawk '/^diff --git/{p=0} /docs\/design\.md/{p=1} p' .review-packet/target.diff | head -120
+diff --git a/docs/design.md b/docs/design.md
+index fd723be..03c4de0 100644
+--- a/docs/design.md
++++ b/docs/design.md
+@@ -52,6 +52,8 @@ descriptor 绑定 run ID、规范化 shared root、配置哈希、Git commit、s
+ 4. 先发布 immutable weight/outer-state objects，再以一个 fenced transaction 提交 publication intent、global version、selection credit 和 token fate。
+ 5. 发布 latest control；重复命令通过 command receipt 幂等返回。
+ 
++receipt/proposal 扫描只把 SQLite `BUSY`/`LOCKED` 结果视为可重试竞争并留给下一轮重新摄取。schema、command conflict、stale leader token、I/O 和其他未分类的 operational error 都会越过扫描边界，由 candidate error path 持久化并 fence 当前 epoch。
++
+ syncer 异常时会把当前 epoch 标为 `error`。successor 获得更高 epoch 后先
+ reconcile prepared/committed publications，再继续推进；旧 token 不能提交后续版本。
+ 
+++M	docs/design.md
+++M	docs/operations.md
+++D	fs_diloco/cli.py
+++M	fs_diloco/core/config.py
+++M	fs_diloco/core/versions.py
+++M	fs_diloco/protocol/__init__.py
+++M	fs_diloco/runtime/syncer.py
+++M	fs_diloco/runtime/syncer_entrypoint.py
+++M	fs_diloco/storage/schema.sql
+++M	plans/workflow.md
+++M	pyproject.toml
+++A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.md
+++A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log
+++A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.json
+++A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/codex-gpt_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
+++A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/deepseek-v4-flash_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log
+++A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/deepseek-v4-flash_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt
+++A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/finding-dispositions_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
+++A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/glm-5.2_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log
+++A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/glm-5.2_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt
+++A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/kimi-k3_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log
+++A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/kimi-k3_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt
+++A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/prompt-source_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
+++A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/review-request_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.md
+++A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/reviewer-job_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.json
+++A	reports/DOING/code_review/plan03-1/plan-complete-final-target-r2/codex-gpt_5b474d5c1735beb8cca922fd6cc7b6304926df2c.md
+++M	reports/DOING/plan03-1/artifact-schema.md
+++M	reports/DOING/plan03-1/code_review.md
+++M	reports/DOING/plan03-1/formal-ladder-manifest.json
+++M	reports/DOING/plan03-1/identity-authority.md
+++M	reports/DOING/plan03-1/plan-complete-remediation.md
+++M	reports/DOING/plan03-1/progress.md
+++M	reports/DOING/plan03-1/workflow_state.yaml
+++M	scripts/miyabi/check_full_protocol_run.py
+++M	scripts/miyabi/check_plan_completion.py
++[0m
++[0m$ [0mcd /tmp/2521428.7247/fsdiloco-review.2521428.yedr0d/repository-minimax && cat reports/DOING/code_review/plan03-1/critical-current-remediation/finding-dispositions_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md
++# Current-review remediation finding dispositions
++
++- Base: `5b474d5c1735beb8cca922fd6cc7b6304926df2c`
++- Reviewed target: `74ecd4fb64311c69ae0d758d8c1d99b27a9c5572`
++- PBS job: `2520922.opbs`
++- Compute node: `mg0011`
++- Scheduler result: exit 0 after 20:14
++
++## Reviewer validity
++
++- Claude Opus 5: `completed`, unchanged snapshot, valid
++  `CHANGES_REQUIRED` report. Raw `modelUsage` verifies canonical/actual model
++  `claude-opus-5`, session `944698db-e744-486d-8b3f-44c045ae3582`.
++- MiniMax M3: `completed`, unchanged snapshot, valid `APPROVE` report. The
++  OpenCode banner and report identity match requested `opencode-go/minimax-m3`.
++- GLM-5.2 and DeepSeek V4 Flash: `invalid-output`; neither produced a complete
++  report with the required final verdict. Their partial progress text is not
++  treated as approval or as a valid finding source.
++
++## Dispositions
++
++| ID | Severity | Decision | Current-only remediation |
++|---|---|---|---|
++| FSD-R1 | High | accepted | Register the takeover boundary in the completion contract, emit it only for the takeover workload, bind it in runtime artifacts and add a discriminating contract test. |
++| FSD-R2 | Medium | partially accepted | The retryability risk is real, but restoring `except Exception` would reintroduce the disposed integrity defect. Retry only SQLite `BUSY`/`LOCKED`; propagate I/O, schema, command and stale-token failures. |
++| FSD-R3 | Medium | accepted | Exercise the positive exact authorization path and a mismatched old-fence mutation through real `LeaderAuthority` composition. |
++| FSD-R4 | Low | accepted | Parametrize receipt and proposal propagation over schema, command-conflict and stale-token failures. |
++| FSD-R5 | Low | accepted | Make `clean_run` consume `RunPaths.epoch_stop_path`; remove the duplicate test fixture derivation. |
++| FSD-R6 | Low | accepted | Require the rank environment, publish the boundary in the gate artifact and prove boundary 3 passes while a 3-vs-2 mismatch fails. |
++| FSD-R7 | Low | accepted | Mark the candidate failed before error fencing so failed fencing cannot trigger release or replace the primary exception; test the double-failure path. |
++| FSD-R8 | Low | accepted | Delete the runtime entrypoint `__main__` guards; keep only `python -m fs_diloco.learner` and `python -m fs_diloco.syncer`. |
++| FSD-R9 | Low | accepted | Add a non-empty storage-module inventory guard to the dependency test. |
++
++The MiniMax residual observation about richer release-failure distinction is
++subsumed by FSD-R7. A successful candidate still surfaces its own release
++failure; a candidate already in its error boundary never attempts a misleading
++release.
++
++All accepted source/test changes require compute-node focused and full-suite
++validation, followed by a Codex rereview. They invalidate target `74ecd4f` for
++promotion; no formal ladder gate may reuse its source identity.
++
++Verdict: CHANGES_REQUIRED
++[0m
++[0m$ [0mcd /tmp/2521428.7247/fsdiloco-review.2521428.yedr0d/repository-minimax && ls reports/DOING/code_review/plan03-1/
++critical-current-fs-diloco
++critical-current-remediation
++critical-P3-normal-checker-remediation
++critical-P3-queue-routing
++critical-P3-terminal-applied-total-remediation
++failure-P2-one-node-validation-round1
++P2-phase-closure-review
++P2-phase-code-and-evidence-review
++P2-phase-remediation-review
++P3-phase-closure-review
++plan-complete-final-target-r2
++plan-complete-preformal-current-state
++plan-complete-preformal-remediation
++test-P2-full-protocol-harness
++test-P2-full-protocol-harness-remediation
++test-P2-full-protocol-terminal-control-closure
++test-P2-full-suite-current-surface-remediation
++test-P2-python-format-remediation
++test-P2-support-cleanup
++test-P3-functional-fault-design
++[0m
++[0m$ [0mcd /tmp/2521428.7247/fsdiloco-review.2521428.yedr0d/repository-minimax && ls fs_diloco/runtime/ fs_diloco/storage/ fs_diloco/tools/ scripts/miyabi/ tests/runtime/ tests/architecture/ tests/harness/ 2>/dev/null
++fs_diloco/runtime/:
++adoption.py
++__init__.py
+[0m
+[0m✱ [0mGrep "_is_retryable_sqlite_contention|ingest_proposal|ingest_cycle_receipt|OperationalError|SQLITE_BUSY|SQLITE_LOCKED|receipt_ingest_rejected|proposal_ingest_rejected"[90m in tests · 68 matches[0m
+[0m
+[0m$ [0mawk '/^diff --git/{p=0} /docs\/testing\.md/{p=1} p' .review-packet/target.diff | head -80; echo "===README==="; awk '/^diff --git/{p=0} /README\.md/{p=1} p' .review-packet/target.diff | head -60
+diff --git a/docs/testing.md b/docs/testing.md
+index f6e487e..622488a 100644
+--- a/docs/testing.md
++++ b/docs/testing.md
+@@ -45,13 +45,15 @@ syncer epoch 和 fault evidence 全部由该场景唯一推导；normal 场景
+ 
+ ## 超基线文档同步验证
+ 
+-2026-08-10 的 preliminary run `plan03_1_p4_prelim_51x11_20260810_211104` 使用 source commit `563bf5298f89ff8481fe533242a4ee2c0cdd16f9`、authority schema revision 10 和 9 个独立 `debug-g` 节点（PBS `2520645.opbs`），执行了 51 local steps × 11 committed global steps，超过正式 50 × 10 基线。27 秒的 PBS 作业得到结构化 `PASS`：
++2026-08-10 的 current run `plan03_1_p4_current_51x11_20260810_233100` 使用 source commit `8dc2b727c64eab66f6627e1ed3a70ad9ef093631`、authority schema revision 11 和 9 个独立 `debug-g` 节点（PBS `2521638.opbs`），执行了 51 local steps × 11 committed global steps，超过正式 50 × 10 基线，并得到结构化 `PASS`：
+ 
+ - versions 恰好为 `0..11`，8 个 learner 各有 11 次 committed selection credit；
+ - 88 个 applied proposal，每个 816 tokens，direct applied 总计 71,808；
+-- 34,272 个异步 supersession/terminal dropped tokens 全部被 durable ledger 裁决；
++- 22 个 dropped proposal 共 17,952 tokens；89,760 processed tokens 全部被 durable ledger 裁决；
+ - token balance、outstanding、quarantine/conflict、reported-unpublished 和 local discard 均为零；
+ - 8 个 learner 加 1 个 syncer attestation 覆盖 exact PBS nodefile；唯一 leader epoch 正常 released；
+ - terminal authority/control 总量一致，publication hashes 通过，SQLite `integrity_check=ok`。
+ 
+-该 run 只证明文档同步前的 over-baseline 行为，不替代最终 formal gate。文档和正式配置恢复为 50 × 10 后会冻结新的 common target，并在该 target 上重跑 U1、三种 4+1 场景和正式 9-node G1。
++结构化结果和 PBS 原始日志分别保存在 `reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json` 与 `20260810-233100_p4-current-9node-overbaseline_pbs.log`，SHA-256 为 `52102369a44e1d0a54b66ea3fcf9d8476ca5ca9239863891d964d6dc75574392` 和 `d23eb054abc0cc515ae315f5fdc6b7a9c5ab79497c940d58004952225d641874`。
++
++该 run 证明 revision 11 的 over-baseline 行为并授权本次文档同步，但不替代最终 formal gate。文档和正式配置恢复为 50 × 10 后冻结新的 common target，并在该 target 上重跑 U1、三种 4+1 场景和正式 9-node G1。
++[0m$ [0mrg -n "takeover" docs/ README.md | head -20; echo "---"; rg -n "version 2|committed version|boundary" docs/testing.md | head -10
++docs/testing.md:24:3. syncer takeover：primary 在 committed version 2 后、SQLite transaction 外且 lease renewer quiesced 的注册边界暂停，harness 强制终止该进程；successor 获得更高 epoch 并提交后续版本，旧 epoch 不得在 takeover 后提交。
++docs/testing.md:29:`learner_replacement` 或 `syncer_takeover`。binding generation、历史 attempt、
++docs/testing.md:31:未注册 replacement/takeover 都会使 gate 失败。
++docs/operations.md:54:## Syncer takeover
++docs/configuration.md:29:- `configs/full_protocol_functional.yaml`：4 learners，full quorum，20 local steps，4 global steps；5-node normal/replacement/takeover harness。
++---
++24:3. syncer takeover：primary 在 committed version 2 后、SQLite transaction 外且 lease renewer quiesced 的注册边界暂停，harness 强制终止该进程；successor 获得更高 epoch 并提交后续版本，旧 epoch 不得在 takeover 后提交。
++[0m
++[0m$ [0msed -n '50,70p' docs/operations.md
++```
++
++随后用完全相同的 new identity 启动 learner。authorization 是一次性 immutable 文件；identity 不匹配会在 Torch import 前拒绝。
++
++## Syncer takeover
++
++提交同一 descriptor/root 的新 `run_syncer.pbs`。candidate 只在获得 leader lease 后运行；failed 或 expired predecessor 会被更高 epoch fence。不要删除 SQLite、WAL/SHM、epoch control 或 publication objects 来帮助恢复。
++
++## 检查、手工关闭和 scheduler uncertainty
++
++```bash
++python -m fs_diloco.tools.analysis RUN_ROOT
++python -m fs_diloco.tools.request_terminal_close --shared-root RUN_ROOT --reason REASON
++python -m fs_diloco.tools.resolve_scheduler_uncertainty --help
++```
++
++analysis 汇总 immutable identity、integrity、controller、latest version、contributor fence/progress、token ledger、terminal state、syncer epochs、dynamic capacity 和 audit 状态。
++
++## 安全清理
++
++完成 checker 生成 PASS evidence 后先 dry-run：
++[0m
++[0m$ [0mls scripts/miyabi/
++actor_identity.sh
++capture_source_identity.py
++check_full_protocol_run.py
++check_plan_completion.py
++run_full_protocol_allocation.sh
++run_full_protocol.pbs
++run_full_protocol_rank.sh
++run_learner.pbs
++run_multi_agent_review.pbs
++run_syncer.pbs
++run_validation_suite.py
++[0m
++[0m→ [0mRead scripts/miyabi/run_syncer.pbs
++[0m→ [0mRead tests/harness/test_full_protocol_harness.py[90m [limit=120, offset=700][0m
++[0m
++[0m$ [0mpython3 - <<'PY'
++import ast
++src = '''
++def main(argv=None) -> None:
++    pass
++
++if __name__ == "__main__":
++    main()
++'''
+===README===
+diff --git a/README.md b/README.md
+index a3ff91a..847fdbf 100644
+--- a/README.md
++++ b/README.md
+@@ -21,7 +21,7 @@ python -m fs_diloco.tools.launch_independent_run \
+ 
+ 加上 `--submit --syncer-walltime HH:MM:SS --learner-walltime HH:MM:SS` 才会提交独立 PBS actor；两个 walltime 都必须显式给出且至少十分钟。正式 9-node 配置是 `configs/full_protocol_static.yaml`，工作量固定为每轮 50 个 local optimizer steps、10 个 committed global steps。
+ 
+-当前 authority schema revision 11 删除了从未写入的 epoch 终态，并继续由 contributor progress 直接持有恢复所需的最后 update 身份。上一轮 9 节点 51-local-step × 11-global-step 结果属于 revision 10 的历史证据；revision 11 会在新的最终 source target 冻结前重新执行超过基线的验证，正式验收仍使用唯一的 50 × 10 配置。
++当前 authority schema revision 11 删除了从未写入的 epoch 终态，并继续由 contributor progress 直接持有恢复所需的最后 update 身份。revision 11 已由 PBS `2521638.opbs` 在 9 个独立节点上完成 51-local-step × 11-global-step 超基线验证：结构化 Checker 返回 `PASS`，88 个 proposal 共应用 71,808 direct tokens，全部 processed token 都有 durable fate。正式验收仍使用唯一的 50 × 10 配置。
+ 
+ 运行根目录中的权威状态是 `control/syncer_metadata.sqlite3`。配置、descriptor、source manifest、artifact policy 和 bootstrap marker 都在初始化时不可变发布；weights、outer optimizer state、receipt、proposal、control publication 和 audit history 都通过内容哈希或 authority row 绑定。
+ 
++-r--r-----  1 x10041 xg24i002 2339 Aug 10 22:55 README.md
++dr-xr-x---  5 x10041 xg24i002   53 Aug 10 22:55 reports
++dr-xr-x---  2 x10041 xg24i002   71 Aug 10 23:02 .review-packet
++dr-xr-x---  3 x10041 xg24i002   20 Aug 10 22:55 scripts
++dr-xr-x---  9 x10041 xg24i002 4096 Aug 10 22:55 tests
++---
++total 364
++dr-xr-x---  2 x10041 xg24i002     71 Aug 10 23:02 .
++dr-xr-x--- 10 x10041 xg24i002    225 Aug 10 23:02 ..
++-r--r-----  1 x10041 xg24i002   2775 Aug 10 23:02 changed-files.txt
++-r--r-----  1 x10041 xg24i002   2160 Aug 10 23:02 diff-stat.txt
++-r--r-----  1 x10041 xg24i002 362412 Aug 10 23:02 target.diff
++---
++not a git repo
++[0m
++[0m$ [0mfind . -maxdepth 3 -type d | head -50
++.
++./configs
++./docs
++./fs_diloco
++./fs_diloco/core
++./fs_diloco/modeling
++./fs_diloco/observability
++./fs_diloco/protocol
++./fs_diloco/runtime
++./fs_diloco/runtime/services
++./fs_diloco/storage
++./fs_diloco/tools
++./plans
++./plans/DOING
++./plans/DOING/plans
++./plans/DONE
++./plans/DONE/20260719-second-review
++./plans/DONE/bug_fix-B
++./plans/DONE/bug_fixing_plans
++./plans/DONE/imp_plans
++./plans/DONE/perf_fix-E
++./plans/DONE/plan02
++./plans/DONE/plan03
++./plans/DONE/quality_fix-Q
++./plans/followups
++./plans/ref
++./reports
++./reports/DOING
++./reports/DOING/code_review
++./reports/DOING/plan03-1
++./reports/checked
+[0m
+[0m→ [0mRead tests/runtime/test_syncer_composition.py[90m [limit=110, offset=195][0m
+[0m→ [0mRead tests/runtime/test_syncer_composition.py[90m [limit=195, offset=150][0m
+[0m→ [0mRead reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/finding-dispositions_3b99d1a995245639f236fe73efd013e4f12c910a.md
+[0m✗ [0mRead reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/review-request_3b99d1a995245639f236fe73efd013e4f12c910a.md failed
+[91m[1mError: [0mFile not found: /tmp/2521665.7843/fsdiloco-review.2521665.vAzOXy/repository-glm/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/review-request_3b99d1a995245639f236fe73efd013e4f12c910a.md
+[0m✱ [0mGrep "\.replace\(|os\.replace|os\.rename|AtomicWriter|atomic_write|tmp.*\.json|def.*publish_receipt|def.*publish_proposal|def.*write_proposal"[90m in fs_diloco · 39 matches[0m
+[0m
+[0m$ [0mgrep -rn "71,808\|71808\|17,952\|17952\|22 dropped\|88 applied\|2521638\|cc5a483060e2\|8dc2b727\|51.x.local\|51 local\|51-local" reports/DOING/plan03-1/progress.md reports/DOING/plan03-1/workflow_state.yaml reports/DOING/plan03-1/code_review.md 2>/dev/null | head -40
+reports/DOING/plan03-1/progress.md:913:  bound a 51-local-step by 11-global-step workload, which exceeds the 50 by 10
+reports/DOING/plan03-1/progress.md:916:  credits for each of 8 learners, 88 applied proposals, 71,808 direct applied
+reports/DOING/plan03-1/progress.md:1112:- Source commit `8dc2b727c64eab66f6627e1ed3a70ad9ef093631`, fingerprint
+reports/DOING/plan03-1/progress.md:1113:  `sha256:cc5a483060e2a6e13c6cd1967d32b37581c642a9706c7ed8919034c90b1f4a98`
+reports/DOING/plan03-1/progress.md:1116:  bound the 51-local-step by 11-global-step revision-11 workload.
+reports/DOING/plan03-1/progress.md:1117:- PBS job `2521638.opbs` ran on exact nine-node `debug-g` topology `mg0001`,
+reports/DOING/plan03-1/progress.md:1122:  credits for every learner, 88 applied proposals, 71,808 direct applied
+reports/DOING/plan03-1/progress.md:1123:  tokens, 22 dropped proposals/17,952 dropped tokens, 89,760 adjudicated
+[0m

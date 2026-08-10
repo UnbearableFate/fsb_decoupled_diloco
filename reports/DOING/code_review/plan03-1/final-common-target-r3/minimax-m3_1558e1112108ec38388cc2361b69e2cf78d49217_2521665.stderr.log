@@ -1,0 +1,1227 @@
+[0m
+> plan · minimax-m3
+[0m
+[0m$ [0mpwd && ls -la
+/tmp/2521665.7843/fsdiloco-review.2521665.vAzOXy/repository-minimax
+total 28
+dr-xr-x--- 10 x10041 xg24i002  225 Aug 10 23:38 .
+drwx------  7 x10041 xg24i002  201 Aug 10 23:38 ..
+-r--r-----  1 x10041 xg24i002 5399 Aug 10 23:35 AGENTS.md
+dr-xr-x---  2 x10041 xg24i002  110 Aug 10 23:35 configs
+dr-xr-x---  2 x10041 xg24i002  103 Aug 10 23:35 docs
+dr-xr-x---  9 x10041 xg24i002  168 Aug 10 23:35 fs_diloco
+-r--r-----  1 x10041 xg24i002  460 Aug 10 23:35 .gitignore
+dr-xr-x---  6 x10041 xg24i002  202 Aug 10 23:35 plans
+-r--r-----  1 x10041 xg24i002 1302 Aug 10 23:35 pyproject.toml
+-r--r-----  1 x10041 xg24i002    5 Aug 10 23:35 .python-version
+-r--r-----  1 x10041 xg24i002 2402 Aug 10 23:35 README.md
+dr-xr-x---  5 x10041 xg24i002   53 Aug 10 23:35 reports
+dr-xr-x---  2 x10041 xg24i002   71 Aug 10 23:38 .review-packet
+dr-xr-x---  3 x10041 xg24i002   20 Aug 10 23:35 scripts
+dr-xr-x---  9 x10041 xg24i002 4096 Aug 10 23:35 tests
+[0m
+[0m$ [0mls -la .review-packet/
+total 416
+dr-xr-x---  2 x10041 xg24i002     71 Aug 10 23:38 .
+dr-xr-x--- 10 x10041 xg24i002    225 Aug 10 23:38 ..
+-r--r-----  1 x10041 xg24i002   2367 Aug 10 23:38 changed-files.txt
+-r--r-----  1 x10041 xg24i002   1581 Aug 10 23:38 diff-stat.txt
+-r--r-----  1 x10041 xg24i002 416765 Aug 10 23:38 target.diff
+[0m
+[0m→ [0mRead .review-packet/changed-files.txt
+[0m→ [0mRead .review-packet/diff-stat.txt
+[0m
+[0m$ [0mwc -l .review-packet/target.diff
+4592 .review-packet/target.diff
+[0m
+[0m→ [0mRead .review-packet/target.diff
+[0m
+[0m$ [0mls reports/DOING/plan03-1/artifacts/
+20260810-183244_p2-phase-remediation-validation_pass.json
+20260810-183244_p2-phase-remediation-validation_pass.log
+20260810-190552_p3-functional-normal_pass.json
+20260810-190552_p3-functional-normal_pbs.log
+20260810-191842_p3-functional-normal_pbs.log
+20260810-191842_p3-functional-normal_result.json
+20260810-192000_p3-checker-remediation-validation.json
+20260810-192000_p3-checker-remediation-validation.log
+20260810-192006_p3-learner-replacement_pbs.log
+20260810-192006_p3-learner-replacement_result.json
+20260810-193100_p3-terminal-total-validation.json
+20260810-193100_p3-terminal-total-validation.log
+20260810-193300_p3-functional-normal_pbs.log
+20260810-193300_p3-functional-normal_result.json
+20260810-193500_p3-learner-replacement_pbs.log
+20260810-193500_p3-learner-replacement_result.json
+20260810-193700_p3-syncer-takeover_pbs.log
+20260810-193700_p3-syncer-takeover_result.json
+20260810-203000_p4-candidate-validation.json
+20260810-203000_p4-candidate-validation.log
+20260810-203000_p4-candidate-validation.log.focused-pytest.junit.xml
+20260810-203000_p4-candidate-validation.log.full-pytest.junit.xml
+20260810-205900_p4-preformal-remediation-validation.json
+20260810-205900_p4-preformal-remediation-validation.log
+20260810-205900_p4-preformal-remediation-validation.log.focused-pytest.junit.xml
+20260810-205900_p4-preformal-remediation-validation.log.full-pytest.junit.xml
+20260810-211104_p4-preliminary-9node-overbaseline_pbs.log
+20260810-211104_p4-preliminary-9node-overbaseline_result.json
+20260810-233100_p4-current-9node-overbaseline_pbs.log
+20260810-233100_p4-current-9node-overbaseline_result.json
+u1_validation_3b99d1a.json
+u1_validation_3b99d1a.log
+u1_validation_3b99d1a.log.focused-pytest.junit.xml
+u1_validation_3b99d1a.log.full-pytest.junit.xml
+u1_validation_47662f8.json
+u1_validation_47662f8.log
+u1_validation_47662f8.log.focused-pytest.junit.xml
+u1_validation_47662f8.log.full-pytest.junit.xml
+[0m
+[0m$ [0msha256sum reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_pbs.log
+52102369a44e1d0a54b66ea3fcf9d8476ca5ca9239863891d964d6dc75574392  reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json
+d23eb054abc0cc515ae315f5fdc6b7a9c5ab79497c940d58004952225d641874  reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_pbs.log
+[0m
+[0m$ [0mpython3 -c "
+import json
+d = json.load(open('reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json'))
+print(json.dumps({k: v for k, v in d.items() if not isinstance(v, dict) and not isinstance(v, list)}, indent=2))
+"
+{
+  "artifact_version": 1,
+  "experiment_id": "p4-current-9node-51x11",
+  "fault_scenario": "none",
+  "gate": "G1-current-doc-verification",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan03_1_p4_current_51x11_20260810_233100",
+  "status": "PASS",
+  "syncer_takeover_boundary_version": 2
+}
+[0m
+[0m$ [0mpython3 -c "
+import json
+d = json.load(open('reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json'))
+for k, v in d.items():
+    if isinstance(v, (dict, list)):
+        print(k, '=>', type(v).__name__, 'len=' + str(len(v)) if isinstance(v, list) else 'keys=' + str(list(v.keys())))
+    else:
+        print(k, '=>', v)
+"
+artifact_version => 1
+authority => dict keys=['contributor_progress', 'epochs', 'final_version', 'integrity', 'selection_credit', 'static_binding_history', 'static_bindings', 'terminal_fences', 'token_balance', 'token_rollup', 'versions']
+cleanup => dict keys=['eligible', 'owner', 'targets']
+config_schema_identity => dict keys=['sha256', 'version']
+environment => dict keys=['interpreter', 'nodes', 'packages', 'pbs_job_id', 'topology']
+errors => list len=0
+evidence_paths => list len=19
+experiment_id => p4-current-9node-51x11
+fault_evidence => dict keys=['learner_replacement', 'syncer_takeover']
+fault_scenario => none
+gate => G1-current-doc-verification
+identity => dict keys=['descriptor_sha256', 'run_id', 'schema_version', 'source_fingerprint']
+metrics => dict keys=['applied_by_contributor', 'applied_proposal_count', 'contributors', 'direct_dropped_tokens', 'dropped_proposal_count', 'expected_direct_tokens', 'learner_attestation_count', 'processed_receipt_tokens', 'proposal_count', 'publication_object_count', 'receipt_count', 'syncer_attestation_count', 'token_balance', 'tokens_per_update']
+protocol_schema_identity => dict keys=['ddl_sha256', 'mode', 'version']
+publication_objects => list len=24
+requirements_covered => list len=1
+run_root => /work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan03_1_p4_current_51x11_20260810_233100
+source_identity => dict keys=['commit', 'dirty', 'fingerprint', 'scopes']
+status => PASS
+syncer_takeover_boundary_version => 2
+terminal_summary => dict keys=['all_learners_stopped', 'authority', 'direct_weight_tokens_applied', 'final_version', 'finalized_at', 'finalized_by_epoch', 'finalized_by_owner_id', 'format_version', 'run_id', 'stop_reason', 'terminal_generation']
+topology => dict keys=['attested_hosts', 'expected_hosts', 'learner_attestation_count', 'syncer_attestation_count']
+workload => dict keys=['contributors', 'expected_direct_tokens', 'global_steps', 'inner_steps', 'tokens_per_update']
+workload_identity => dict keys=['committed_global_steps', 'configured_local_steps', 'cursor_terminal', 'direct_weight_tokens_applied', 'processed_tokens']
+[0m
+[0m$ [0mpython3 -c "
+import json
+d = json.load(open('reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json'))
+print('source_identity:', json.dumps(d['source_identity'], indent=2))
+print()
+print('identity:', json.dumps(d['identity'], indent=2))
+print()
+print('environment:', json.dumps(d['environment'], indent=2))
+print()
+print('workload:', json.dumps(d['workload'], indent=2))
+print()
+print('workload_identity:', json.dumps(d['workload_identity'], indent=2))
+print()
+print('metrics:', json.dumps(d['metrics'], indent=2))
+"
+source_identity: {
+  "commit": "8dc2b727c64eab66f6627e1ed3a70ad9ef093631",
+  "dirty": false,
+  "fingerprint": "sha256:cc5a483060e2a6e13c6cd1967d32b37581c642a9706c7ed8919034c90b1f4a98",
+  "scopes": [
+    "fs_diloco",
+    "configs",
+    "scripts/miyabi",
+    "tests",
+    "pyproject.toml",
+    "README.md",
+    "docs"
+  ]
+}
+
+identity: {
+  "descriptor_sha256": "4e4878ebc8070b908f4d81ae255dcfcae66c39503d75866a3bb0b2f9882ce220",
+  "run_id": "plan03_1_p4_current_51x11_20260810_233100",
+  "schema_version": 11,
+  "source_fingerprint": "sha256:cc5a483060e2a6e13c6cd1967d32b37581c642a9706c7ed8919034c90b1f4a98"
+}
+
+environment: {
+  "interpreter": {
+    "executable": "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+    "version": "3.13.13 (main, May 10 2026, 19:28:34) [Clang 22.1.3 ]"
+  },
+  "nodes": [
+    "mg0001",
+    "mg0004",
+    "mg0008",
+    "mg0009",
+    "mg0012",
+    "mg0013",
+    "mg0015",
+    "mg0018",
+    "mg0019"
+  ],
+  "packages": {
+    "PyYAML": "6.0.3",
+    "datasets": "5.0.0",
+    "safetensors": "0.8.0",
+    "torch": "2.13.0+cu132",
+    "transformers": "5.14.0"
+  },
+  "pbs_job_id": "2521638.opbs",
+  "topology": {
+    "learner:learner_000:attempt-799bb9c3-8f0b-47b5-9ed0-6ac73cf22861": "mg0004",
+    "learner:learner_001:attempt-b8fa08af-f6c3-4061-8c94-472d191e7d6d": "mg0008",
+    "learner:learner_002:attempt-0bea9aa1-aa25-44cc-be76-bc932ce8245a": "mg0009",
+    "learner:learner_003:attempt-7092c48c-5739-4e50-9fb1-65ff6529151b": "mg0012",
+    "learner:learner_004:attempt-7c2831cb-8321-4038-9434-0ab2bd51fa70": "mg0013",
+    "learner:learner_005:attempt-10c04c2c-3921-4aae-9575-1f560613c4f1": "mg0015",
+    "learner:learner_006:attempt-56d1da0f-87b0-4972-9acd-b39242d0305a": "mg0018",
+    "learner:learner_007:attempt-42b0bd9c-7925-4ae7-8ec8-af7d72163dc1": "mg0019",
+    "syncer:syncer-75cffd8c-63e2-4504-9e02-7ae326f154ac:attempt-d6f560e5-dee4-4bc6-be87-da8c011b9d6f": "mg0001"
+  }
+}
+
+workload: {
+  "contributors": 8,
+  "expected_direct_tokens": 71808,
+  "global_steps": 11,
+  "inner_steps": 51,
+  "tokens_per_update": 816
+}
+
+workload_identity: {
+  "committed_global_steps": 11,
+  "configured_local_steps": 51,
+  "cursor_terminal": {
+    "learner_000": 765,
+    "learner_001": 663,
+    "learner_002": 663,
+    "learner_003": 663,
+    "learner_004": 714,
+    "learner_005": 714,
+    "learner_006": 714,
+    "learner_007": 714
+  },
+  "direct_weight_tokens_applied": 71808,
+  "processed_tokens": 89760
+}
+
+metrics: {
+  "applied_by_contributor": {
+    "learner_000": 11,
+    "learner_001": 11,
+    "learner_002": 11,
+    "learner_003": 11,
+    "learner_004": 11,
+    "learner_005": 11,
+    "learner_006": 11,
+    "learner_007": 11
+  },
+  "applied_proposal_count": 88,
+  "contributors": 8,
+  "direct_dropped_tokens": 17952,
+  "dropped_proposal_count": 22,
+  "expected_direct_tokens": 71808,
+  "learner_attestation_count": 8,
+  "processed_receipt_tokens": 89760,
+  "proposal_count": 110,
+  "publication_object_count": 24,
+  "receipt_count": 110,
+  "syncer_attestation_count": 1,
+  "token_balance": 0,
+  "tokens_per_update": 816
+}
+[0m
+[0m$ [0mpython3 -c "
+import json
+d = json.load(open('reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json'))
+print('authority versions:', d['authority']['versions'])
+print('authority integrity:', json.dumps(d['authority']['integrity'], indent=2))
+print('authority token_balance:', json.dumps(d['authority']['token_balance'], indent=2))
+print('authority token_rollup:', json.dumps(d['authority']['token_rollup'], indent=2))
+print('topology:', json.dumps(d['topology'], indent=2))
+print('terminal_summary:', json.dumps(d['terminal_summary'], indent=2))
+print('errors:', d['errors'])
+"
+authority versions: [{'committed_at': 1786372348.8578568, 'committed_by_epoch': 1, 'committed_by_owner_id': 'syncer-75cffd8c-63e2-4504-9e02-7ae326f154ac', 'direct_weight_tokens_applied': 0, 'optim_relative_path': 'optim/epochs/e000001/07a107b86c0c/outer_v000000_pc208e9478094.safetensors', 'optim_sha256': '7b298b1f70624f23442713290e8e126ca9b32a03146a7c0cd6ab75508a8f8753', 'optim_size': 65856, 'predecessor_version': None, 'publication_id': 'c208e947-8094-4e79-b79e-98f24795e2ca', 'theta_sha256': '1562052932eeee4220ed2e91bd971fc1faee0e100f3a7265e832a844eb821e5b', 'version': 0, 'weight_relative_path': 'weights/epochs/e000001/07a107b86c0c/global_v000000_pc208e9478094.safetensors', 'weight_sha256': '998e50534eb8e552a333f25e220265c8f75252b2269862ddfe360bc6eeb209aa', 'weight_size': 33104}, {'committed_at': 1786372352.6852183, 'committed_by_epoch': 1, 'committed_by_owner_id': 'syncer-75cffd8c-63e2-4504-9e02-7ae326f154ac', 'direct_weight_tokens_applied': 6528, 'optim_relative_path': 'optim/epochs/e000001/07a107b86c0c/outer_v000001_pa16d7deb12fe.safetensors', 'optim_sha256': '16e6ae2ef8cb44162b485d6743d7fc96146a782b91b0d1dd6ddb6c60f9de2273', 'optim_size': 65856, 'predecessor_version': 0, 'publication_id': 'a16d7deb-12fe-4b39-a9ee-48483d50390a', 'theta_sha256': '30fa28773930190b6db88a562c06bd67260a3c7534fc56e134cfe75028971560', 'version': 1, 'weight_relative_path': 'weights/epochs/e000001/07a107b86c0c/global_v000001_pa16d7deb12fe.safetensors', 'weight_sha256': '5081793c32f851d515190660ae9b0d536346fb0c3e98c767f44a1f687db80d2e', 'weight_size': 33104}, {'committed_at': 1786372353.850961, 'committed_by_epoch': 1, 'committed_by_owner_id': 'syncer-75cffd8c-63e2-4504-9e02-7ae326f154ac', 'direct_weight_tokens_applied': 6528, 'optim_relative_path': 'optim/epochs/e000001/07a107b86c0c/outer_v000002_p1451ed653e18.safetensors', 'optim_sha256': 'bc58284bf926f425067f3d3273a615a6a12e23e4c5e921939ec6d1a5b1c33d20', 'optim_size': 65856, 'predecessor_version': 1, 'publication_id': '1451ed65-3e18-4231-9522-fa275dbaca72', 'theta_sha256': 'abb420fae64bea8cafef709fa9788fcb89647b4dc1480be858fca6ba14f38b75', 'version': 2, 'weight_relative_path': 'weights/epochs/e000001/07a107b86c0c/global_v000002_p1451ed653e18.safetensors', 'weight_sha256': '7755cd229dfcf0d8626c4ceb54bc2c5652520a8595d7b4b9a039f83138388431', 'weight_size': 33104}, {'committed_at': 1786372354.2700803, 'committed_by_epoch': 1, 'committed_by_owner_id': 'syncer-75cffd8c-63e2-4504-9e02-7ae326f154ac', 'direct_weight_tokens_applied': 6528, 'optim_relative_path': 'optim/epochs/e000001/07a107b86c0c/outer_v000003_p6b68ce7bbbd1.safetensors', 'optim_sha256': '7bd38148899f14ec0ff189c6cdceba67e2dbbb19e389e3a34619bff3f044da57', 'optim_size': 65856, 'predecessor_version': 2, 'publication_id': '6b68ce7b-bbd1-433f-8de4-71e86aa51bb3', 'theta_sha256': '7f9374271d4c793e6382219438f7905beb285b3001d10219b88e4ded9c6993b3', 'version': 3, 'weight_relative_path': 'weights/epochs/e000001/07a107b86c0c/global_v000003_p6b68ce7bbbd1.safetensors', 'weight_sha256': '947025751d3976e2abd24f49a245d76c7efde61d94659a782b6b34b98fe25ca3', 'weight_size': 33104}, {'committed_at': 1786372355.4645944, 'committed_by_epoch': 1, 'committed_by_owner_id': 'syncer-75cffd8c-63e2-4504-9e02-7ae326f154ac', 'direct_weight_tokens_applied': 6528, 'optim_relative_path': 'optim/epochs/e000001/07a107b86c0c/outer_v000004_p137e84385dba.safetensors', 'optim_sha256': '27bdef4fa2c8063b5b857c02c6ddac23deb04cc941c55797dca127f47c4dcbcb', 'optim_size': 65856, 'predecessor_version': 3, 'publication_id': '137e8438-5dba-4204-a52c-ec4bac386e1e', 'theta_sha256': '875b6b94cce8796ee37a99d4b69d8340795c1efd8aa61662b5971fb960e85709', 'version': 4, 'weight_relative_path': 'weights/epochs/e000001/07a107b86c0c/global_v000004_p137e84385dba.safetensors', 'weight_sha256': '517296f4355b54736134626f1c85f2bbfada557a6286dba6fde4039341293c4f', 'weight_size': 33104}, {'committed_at': 1786372356.5597446, 'committed_by_epoch': 1, 'committed_by_owner_id': 'syncer-75cffd8c-63e2-4504-9e02-7ae326f154ac', 'direct_weight_tokens_applied': 6528, 'optim_relative_path': 'optim/epochs/e000001/07a107b86c0c/outer_v000005_pcf2a95d92c59.safetensors', 'optim_sha256': 'acab3a9b4991bd84dcbc52b5635cbb9f1e4de77f0843fe23bad6ada9f9d8765f', 'optim_size': 65856, 'predecessor_version': 4, 'publication_id': 'cf2a95d9-2c59-41d1-b1cc-aff441e82fbe', 'theta_sha256': '7f8eb6613fa00b74f3d96c677bf5d6ebaa343f8a3b89801790f5cbc5188f9817', 'version': 5, 'weight_relative_path': 'weights/epochs/e000001/07a107b86c0c/global_v000005_pcf2a95d92c59.safetensors', 'weight_sha256': '0ba93fcdf6f662689576e87781dced3bc7efe2d33ac810e19d8cd7fd14e898c3', 'weight_size': 33104}, {'committed_at': 1786372357.9475477, 'committed_by_epoch': 1, 'committed_by_owner_id': 'syncer-75cffd8c-63e2-4504-9e02-7ae326f154ac', 'direct_weight_tokens_applied': 6528, 'optim_relative_path': 'optim/epochs/e000001/07a107b86c0c/outer_v000006_p780c2a6a7cb6.safetensors', 'optim_sha256': '2fc36c12f64b5e0f07fd1aa85051aeb0dbfc0091d6c6c5837070a32bff8846bf', 'optim_size': 65856, 'predecessor_version': 5, 'publication_id': '780c2a6a-7cb6-4496-9f6b-756749cd1ef4', 'theta_sha256': 'b59b2bbda775acdde0eefae0ab00083a88935a74cf457317ef54f80adb7a1144', 'version': 6, 'weight_relative_path': 'weights/epochs/e000001/07a107b86c0c/global_v000006_p780c2a6a7cb6.safetensors', 'weight_sha256': '90b7434c203a9420e9d73d9bdc0c8a5fcdcf8633f6e9926568a16dbfd7fbf9dc', 'weight_size': 33104}, {'committed_at': 1786372358.4784591, 'committed_by_epoch': 1, 'committed_by_owner_id': 'syncer-75cffd8c-63e2-4504-9e02-7ae326f154ac', 'direct_weight_tokens_applied': 6528, 'optim_relative_path': 'optim/epochs/e000001/07a107b86c0c/outer_v000007_p52e514d4a694.safetensors', 'optim_sha256': '99ae90fab24cb2587e825fde8818b7b73139e838d8f52be75126744aaeb7b0af', 'optim_size': 65856, 'predecessor_version': 6, 'publication_id': '52e514d4-a694-4d3f-9841-f13c218a57cb', 'theta_sha256': 'a28a7f50882b6a07f1501fbf99722a92e102b3078b033fee57cd269d7e04f92b', 'version': 7, 'weight_relative_path': 'weights/epochs/e000001/07a107b86c0c/global_v000007_p52e514d4a694.safetensors', 'weight_sha256': '242be32eb9505aa78c19c6ac610966bb5d37fbc93b2e97f1fb866bdd1c14c9b7', 'weight_size': 33104}, {'committed_at': 1786372359.0377262, 'committed_by_epoch': 1, 'committed_by_owner_id': 'syncer-75cffd8c-63e2-4504-9e02-7ae326f154ac', 'direct_weight_tokens_applied': 6528, 'optim_relative_path': 'optim/epochs/e000001/07a107b86c0c/outer_v000008_p2c33ca108adf.safetensors', 'optim_sha256': '701ed0ca4ba6cd7fc9da08b41260efdfc0c2c439f1ee89e2e49fa18664dbfb2d', 'optim_size': 65856, 'predecessor_version': 7, 'publication_id': '2c33ca10-8adf-401e-9526-00b9cf056dbf', 'theta_sha256': 'fb8bfec74494443a19d56fce116e265c98722649356177ee05c74dced60a264a', 'version': 8, 'weight_relative_path': 'weights/epochs/e000001/07a107b86c0c/global_v000008_p2c33ca108adf.safetensors', 'weight_sha256': 'e7270a915dcbb2de12937ffc929bf0bfc044873ca21a8db103d17316b2dc24c3', 'weight_size': 33104}, {'committed_at': 1786372360.085103, 'committed_by_epoch': 1, 'committed_by_owner_id': 'syncer-75cffd8c-63e2-4504-9e02-7ae326f154ac', 'direct_weight_tokens_applied': 6528, 'optim_relative_path': 'optim/epochs/e000001/07a107b86c0c/outer_v000009_p621a78c3fc56.safetensors', 'optim_sha256': '0c8478fb764aef93a4334a7a62df78d123fe20675d2ec710dc22692a78ede81b', 'optim_size': 65856, 'predecessor_version': 8, 'publication_id': '621a78c3-fc56-4312-9fab-34937ec3c36d', 'theta_sha256': 'db62d1f07dda08ffa11aa14d3b4713f54a22744a0cee53d06af604bc6c79913c', 'version': 9, 'weight_relative_path': 'weights/epochs/e000001/07a107b86c0c/global_v000009_p621a78c3fc56.safetensors', 'weight_sha256': 'ad078a413604a4b9c448f15cdad454e6def497fc2bdfe8766c3c9b82c4143ab8', 'weight_size': 33104}, {'committed_at': 1786372360.749436, 'committed_by_epoch': 1, 'committed_by_owner_id': 'syncer-75cffd8c-63e2-4504-9e02-7ae326f154ac', 'direct_weight_tokens_applied': 6528, 'optim_relative_path': 'optim/epochs/e000001/07a107b86c0c/outer_v000010_p77db06ce96a7.safetensors', 'optim_sha256': 'c605627595b7548b099824062284ee8d971e4e2ec75f5d539d55524b85fb1373', 'optim_size': 65856, 'predecessor_version': 9, 'publication_id': '77db06ce-96a7-41eb-9b3d-8dadbb93da30', 'theta_sha256': '51ab1cf791abb688bc5516564c1fa3bcb9f1277c0f7490ab20e9df60758a2ffa', 'version': 10, 'weight_relative_path': 'weights/epochs/e000001/07a107b86c0c/global_v000010_p77db06ce96a7.safetensors', 'weight_sha256': '7047aa00a175a7247a45e87b9ceeacaabd0948051bd85bdb9fddbd01b84134b0', 'weight_size': 33104}, {'committed_at': 1786372361.333485, 'committed_by_epoch': 1, 'committed_by_owner_id': 'syncer-75cffd8c-63e2-4504-9e02-7ae326f154ac', 'direct_weight_tokens_applied': 6528, 'optim_relative_path': 'optim/epochs/e000001/07a107b86c0c/outer_v000011_p29443535ad37.safetensors', 'optim_sha256': '69ab658c5bbf08b2960dd8cfc9fc3fb4e49dc7e82296ae86423003a737396904', 'optim_size': 65856, 'predecessor_version': 10, 'publication_id': '29443535-ad37-4534-9b07-7a8788e424ad', 'theta_sha256': '4cc7ba4e590ac4bf4db9730712ecb51d1a57da9d23d331cb6a6398e63f4d3f8e', 'version': 11, 'weight_relative_path': 'weights/epochs/e000001/07a107b86c0c/global_v000011_p29443535ad37.safetensors', 'weight_sha256': '11317e189df7ba417c6ddf1fdee37e423a41f2a55f8730cabdda39198c50d34b', 'weight_size': 33104}]
+authority integrity: [
+  "ok"
+]
+authority token_balance: 0
+authority token_rollup: {
+  "adjudicated_processed": 89760,
+  "carried_ancestry": 0,
+  "direct_applied": 71808,
+  "direct_dropped": 17952,
+  "direct_outstanding": 0,
+  "direct_quarantined_or_conflicted": 0,
+  "direct_reported_unpublished": 0,
+  "local_discarded": 0,
+  "singleton": 1,
+  "updated_at": 1786372363.4882472,
+  "updated_by_epoch": 1
+}
+topology: {
+  "attested_hosts": [
+    "mg0001",
+    "mg0004",
+    "mg0008",
+    "mg0009",
+    "mg0012",
+    "mg0013",
+    "mg0015",
+    "mg0018",
+    "mg0019"
+  ],
+  "expected_hosts": 9,
+  "learner_attestation_count": 8,
+  "syncer_attestation_count": 1
+}
+terminal_summary: {
+  "all_learners_stopped": true,
+  "authority": "full_protocol",
+  "direct_weight_tokens_applied": 71808,
+  "final_version": 11,
+  "finalized_at": 1786372363.4868755,
+  "finalized_by_epoch": 1,
+  "finalized_by_owner_id": "syncer-75cffd8c-63e2-4504-9e02-7ae326f154ac",
+  "format_version": 2,
+  "run_id": "plan03_1_p4_current_51x11_20260810_233100",
+  "stop_reason": "configured_target",
+  "terminal_generation": 1
+}
+errors: []
+[0m
+[0m$ [0mls configs/
+full_protocol_dynamic.yaml
+full_protocol_functional.yaml
+full_protocol_static.yaml
+[0m
+[0m→ [0mRead configs/full_protocol_static.yaml
+[0m
+[0m$ [0mgrep -rn "inner_steps\|stop_after_outer_steps\|num_learners" configs/ 
+configs/full_protocol_dynamic.yaml:15:  num_learners: 4
+configs/full_protocol_dynamic.yaml:20:  stop_after_outer_steps: 4
+configs/full_protocol_dynamic.yaml:61:  inner_steps: 20
+configs/full_protocol_dynamic.yaml:81:  poll_latest_during_inner_steps: false
+configs/full_protocol_functional.yaml:15:  num_learners: 4
+configs/full_protocol_functional.yaml:20:  stop_after_outer_steps: 4
+configs/full_protocol_functional.yaml:38:  inner_steps: 20
+configs/full_protocol_functional.yaml:58:  poll_latest_during_inner_steps: false
+configs/full_protocol_static.yaml:15:  num_learners: 8
+configs/full_protocol_static.yaml:20:  stop_after_outer_steps: 10
+configs/full_protocol_static.yaml:38:  inner_steps: 50
+configs/full_protocol_static.yaml:58:  poll_latest_during_inner_steps: false
+[0m
+[0m$ [0mgrep -rn "p4-current\|51.*11\|inner_steps.*51" configs/ scripts/ docs/ README.md plans/ 2>/dev/null | grep -v "reports/" | head -30
+docs/testing.md:48:2026-08-10 的 current run `plan03_1_p4_current_51x11_20260810_233100` 使用 source commit `8dc2b727c64eab66f6627e1ed3a70ad9ef093631`、authority schema revision 11 和 9 个独立 `debug-g` 节点（PBS `2521638.opbs`），执行了 51 local steps × 11 committed global steps，超过正式 50 × 10 基线，并得到结构化 `PASS`：
+README.md:24:当前 authority schema revision 11 删除了从未写入的 epoch 终态，并继续由 contributor progress 直接持有恢复所需的最后 update 身份。revision 11 已由 PBS `2521638.opbs` 在 9 个独立节点上完成 51-local-step × 11-global-step 超基线验证：结构化 Checker 返回 `PASS`，88 个 proposal 共应用 71,808 direct tokens，全部 processed token 都有 durable fate。正式验收仍使用唯一的 50 × 10 配置。
+[0m
+[0m$ [0mgrep -rn "51\|inner_steps\|stop_after" plans/ scripts/miyabi/ | grep -v "reports/" | grep -E "51|11" | head -30
+plans/DONE/bug_fix-B/B2-scheduler-decoupling.md:22:来源：[DiLoCo](https://arxiv.org/abs/2311.08105)、[Scaling Laws for DiLoCo](https://arxiv.org/abs/2503.09799)、[Async Local-SGD](https://arxiv.org/abs/2401.09135)、[INTELLECT-1 技术报告](https://arxiv.org/abs/2412.01152)、[Decoupled DiLoCo](https://arxiv.org/html/2604.21428v1)、[OpenDiLoCo](https://www.primeintellect.ai/blog/opendiloco)、[Streaming DiLoCo](https://arxiv.org/abs/2501.18512)。
+plans/DONE/bug_fixing_plans/S1-adoption-strategy-refactor.md:46:    # 现 inner-poll 分支体（1551-1647）：replace→adopt_global；
+plans/DONE/plan03/fsb_decoupled_diloco_plan_03_unified_ha.md:510:ambiguous `sync.stop_after_global_tokens` 删除，改成明确的 `sync.stop_after_direct_weight_tokens_applied`。迁移工具只有在旧metric与新direct-weight token可证明等价（例如不允许pre-publication replace且旧计数正是committed selected proposal token）时才自动映射；否则输出blocking diagnostic，要求用户显式确认新语义。
+plans/DONE/plan03/fsb_decoupled_diloco_research_roadmap.md:905:[2] Arthur Douillard et al. **Streaming DiLoCo with Overlapping Communication: Towards a Distributed Free Lunch.** arXiv:2501.18512, 2025.  
+plans/DONE/plan03/fsb_decoupled_diloco_research_roadmap.md:906:<https://arxiv.org/abs/2501.18512>
+scripts/miyabi/check_plan_completion.py:77:        "direct_tokens": 5120,
+scripts/miyabi/check_plan_completion.py:96:        "direct_tokens": 5120,
+scripts/miyabi/check_plan_completion.py:114:        "inner_steps": 20,
+scripts/miyabi/check_plan_completion.py:116:        "direct_tokens": 5120,
+[0m
+[0m→ [0mRead README.md
+[0m→ [0mRead docs/design.md
+[0m→ [0mRead docs/testing.md
+[0m→ [0mRead fs_diloco/runtime/syncer.py[90m [offset=815, limit=120][0m
+[0m
+[0m$ [0mgrep -n "candidate error\|fence.*epoch\|error.*fence" fs_diloco/runtime/syncer.py | head -20
+817:        stream_epoch=fence.stream_epoch if fence.kind == "dynamic" else None,
+[0m
+[0m$ [0mgrep -rn "candidate.*error\|error.*candidate" fs_diloco/ 2>/dev/null | head -20
+fs_diloco/runtime/syncer_entrypoint.py:250:                    f"candidate error-control publication also failed: {publication_error!r}"
+fs_diloco/runtime/syncer_entrypoint.py:255:                exc.add_note(f"candidate error fencing also failed: {failure_error!r}")
+fs_diloco/storage/authority.py:1023:        """Fence a candidate that exited through its error boundary."""
+fs_diloco/storage/control.py:166:            "kind": "candidate_error",
+[0m
+[0m→ [0mRead fs_diloco/runtime/syncer_entrypoint.py[90m [offset=220, limit=90][0m
+[0m→ [0mRead tests/runtime/test_syncer_composition.py[90m [offset=240, limit=60][0m
+[0m
+[0m$ [0mgrep -rn "BUSY\|LOCKED\|retryable\|contention\|sqlite_errorcode" tests/ fs_diloco/ 2>/dev/null | head -40
+tests/harness/test_full_protocol_harness.py:775:    assert artifact["status"] == "BLOCKED"
+tests/harness/test_full_protocol_harness.py:842:    assert artifact["status"] == "BLOCKED"
+tests/harness/test_full_protocol_harness.py:938:        "status": "BLOCKED",
+tests/harness/test_full_protocol_harness.py:1134:printf '{"status":"BLOCKED","errors":["%s"]}\n' "$blocked_reason" >"$output"
+tests/harness/test_full_protocol_harness.py:1176:        "status": "BLOCKED",
+tests/harness/test_validation_suite.py:129:    assert artifact["status"] == "BLOCKED"
+tests/runtime/test_syncer_composition.py:252:    [(sqlite3.SQLITE_BUSY, False), (sqlite3.SQLITE_LOCKED, False), (sqlite3.SQLITE_IOERR, True)],
+tests/runtime/test_syncer_composition.py:254:def test_receipt_ingest_retries_only_sqlite_contention(
+tests/runtime/test_syncer_composition.py:271:    error.sqlite_errorcode = sqlite_code
+tests/storage/test_run_initializer.py:198:def test_every_manifest_object_link_fault_is_invisible_and_retryable(tmp_path: Path) -> None:
+tests/storage/test_run_initializer.py:221:def test_every_initializer_directory_fsync_failure_is_retryable(
+tests/test_clean_run.py:169:    payload["status"] = "BLOCKED"
+tests/test_clean_run.py:274:    payload["status"] = "BLOCKED"
+fs_diloco/runtime/syncer.py:821:def _is_retryable_sqlite_contention(exc: sqlite3.OperationalError) -> bool:
+fs_diloco/runtime/syncer.py:822:    code = getattr(exc, "sqlite_errorcode", None)
+fs_diloco/runtime/syncer.py:824:        sqlite3.SQLITE_BUSY,
+fs_diloco/runtime/syncer.py:825:        sqlite3.SQLITE_LOCKED,
+fs_diloco/runtime/syncer.py:862:                if not _is_retryable_sqlite_contention(exc):
+fs_diloco/runtime/syncer.py:894:                if not _is_retryable_sqlite_contention(exc):
+fs_diloco/storage/object_store.py:25:    errno.EBUSY,
+[0m
+[0m→ [0mRead fs_diloco/storage/object_store.py[90m [offset=15, limit=40][0m
+[0m
+[0m$ [0mgrep -E "^diff --git" .review-packet/target.diff | head -30
+diff --git a/README.md b/README.md
+diff --git a/docs/design.md b/docs/design.md
+diff --git a/docs/testing.md b/docs/testing.md
+diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/claude-opus-5_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/claude-opus-5_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log
+diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/claude-opus-5_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.json b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/claude-opus-5_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.json
+diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/codex-gpt_47662f8d872f4a5e451908796a6b677105a28c52.md b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/codex-gpt_47662f8d872f4a5e451908796a6b677105a28c52.md
+diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/deepseek-v4-flash_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/deepseek-v4-flash_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log
+diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/deepseek-v4-flash_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/deepseek-v4-flash_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.txt
+diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/finding-dispositions_3b99d1a995245639f236fe73efd013e4f12c910a.md b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/finding-dispositions_3b99d1a995245639f236fe73efd013e4f12c910a.md
+diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/glm-5.2_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/glm-5.2_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log
+diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/glm-5.2_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/glm-5.2_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.txt
+diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/minimax-m3_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/minimax-m3_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log
+diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/minimax-m3_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/minimax-m3_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.txt
+diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/review-request_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.md b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/review-request_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.md
+diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/reviewer-job_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.json b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/reviewer-job_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.json
+diff --git a/reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_pbs.log b/reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_pbs.log
+diff --git a/reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json b/reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json
+diff --git a/reports/DOING/plan03-1/artifacts/u1_validation_47662f8.json b/reports/DOING/plan03-1/artifacts/u1_validation_47662f8.json
+diff --git a/reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log b/reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log
+diff --git a/reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log.focused-pytest.junit.xml b/reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log.focused-pytest.junit.xml
+diff --git a/reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log.full-pytest.junit.xml b/reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log.full-pytest.junit.xml
+diff --git a/reports/DOING/plan03-1/code_review.md b/reports/DOING/plan03-1/code_review.md
+diff --git a/reports/DOING/plan03-1/progress.md b/reports/DOING/plan03-1/progress.md
+diff --git a/reports/DOING/plan03-1/workflow_state.yaml b/reports/DOING/plan03-1/workflow_state.yaml
+[0m
+[0m→ [0mRead reports/DOING/plan03-1/workflow_state.yaml
+[0m
+[0m$ [0mgrep -A 100 "diff --git a/reports/DOING/plan03-1/workflow_state.yaml" .review-packet/target.diff | head -100
++4608:diff --git a/reports/DOING/plan03-1/workflow_state.yaml b/reports/DOING/plan03-1/workflow_state.yaml
++4665:diff --git a/scripts/miyabi/check_full_protocol_run.py b/scripts/miyabi/check_full_protocol_run.py
++4706:diff --git a/scripts/miyabi/check_plan_completion.py b/scripts/miyabi/check_plan_completion.py
++4750:diff --git a/scripts/miyabi/run_full_protocol_rank.sh b/scripts/miyabi/run_full_protocol_rank.sh
++4762:diff --git a/tests/architecture/test_dependency_boundaries.py b/tests/architecture/test_dependency_boundaries.py
++4775:diff --git a/tests/architecture/test_plan_complete_dead_surfaces.py b/tests/architecture/test_plan_complete_dead_surfaces.py
++4788:diff --git a/tests/harness/test_full_protocol_harness.py b/tests/harness/test_full_protocol_harness.py
++4881:diff --git a/tests/harness/test_plan_completion.py b/tests/harness/test_plan_completion.py
++4931:diff --git a/tests/runtime/test_syncer_composition.py b/tests/runtime/test_syncer_composition.py
++5155:diff --git a/tests/runtime/test_syncer_startup_admission.py b/tests/runtime/test_syncer_startup_admission.py
++5241:diff --git a/tests/test_clean_run.py b/tests/test_clean_run.py
++5272:diff --git a/tests/test_config.py b/tests/test_config.py
++[0m
++[0m→ [0mRead .review-packet/target.diff[90m [limit=133][0m
++[0m→ [0mRead fs_diloco/runtime/syncer.py[90m [offset=790, limit=140][0m
++[0m→ [0mRead fs_diloco/runtime/syncer_entrypoint.py
++[0m→ [0mRead .review-packet/target.diff[90m [offset=4665, limit=260][0m
++[0m→ [0mRead .review-packet/target.diff[90m [limit=360, offset=4925][0m
++[0m
++[0m$ [0mls reports/DOING/plan03-1/ && echo "---" && cat reports/DOING/plan03-1/formal-ladder-manifest.json | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d, indent=1))" 2>/dev/null | head -150
++artifacts
++artifact-schema.md
++code_review.md
++failures.md
++formal-ladder-manifest.json
++identity-authority.md
++inventory.md
++p3-functional-fault-manifest.json
++plan-complete-remediation.md
++progress.md
++requirement-matrix.csv
++test-ladder.md
++workflow_state.yaml
++---
++{
++ "manifest_version": 1,
++ "plan_id": "plan03-1",
++ "state": "candidate",
++ "source_scopes": [
++  "fs_diloco",
++  "configs",
++  "scripts/miyabi",
++  "tests",
++  "pyproject.toml",
++  "README.md",
++  "docs"
++ ],
++ "source_identity": null,
++ "gates": [
++  {
++   "id": "U1-final-one-node-validation",
++   "producer": "scripts/miyabi/run_validation_suite.py",
++   "requirements": [
++    "UNIT-01",
++    "HARNESS-01"
++   ],
++   "artifact_path": null,
++   "artifact_sha256": null,
++   "supporting_evidence": [],
++   "topology": {
++    "queue": "interact-g",
++    "nodes": 1,
++    "select": "1:ncpus=8:mem=16gb",
++    "walltime": "01:00:00"
++   },
++   "workload": {
++    "commands": [
++     "ruff-format",
++     "ruff-lint",
++     "focused-pytest",
++     "full-pytest"
++    ],
++    "pytest_policy": "tests > 0 and failures = errors = skipped = 0 for each suite"
++   },
++   "pass_formula": "All four registered commands return zero, both pytest JUnit projections are non-empty exact all-pass suites, and the clean source identity is unchanged across execution.",
++   "cleanup": "Retain the structured artifact, raw command log, and both JUnit XML files through completion."
++  },
++  {
++   "id": "F1-final-functional-normal",
++   "producer": "scripts/miyabi/check_full_protocol_run.py",
++   "requirements": [
++    "FUNC-4L1S-01"
++   ],
++   "artifact_path": null,
++   "artifact_sha256": null,
++   "supporting_evidence": [],
++   "topology": {
++    "queue": "debug-g",
++    "nodes": 5,
++    "select": "5:ncpus=8:mpiprocs=1:mem=16gb",
++    "walltime": "00:10:00"
++   },
++   "workload": {
++    "config": "configs/full_protocol_functional.yaml",
++    "fault_scenario": "none",
++    "learners": 4,
++    "local_optimizer_steps_per_cycle": 20,
++    "committed_global_steps": 4,
++    "direct_weight_tokens_applied": 5120
++   },
+[0m
+[0m✗ [0mRead .review-packet/target.diff failed[90m [offset=4608, limit=100][0m
+[91m[1mError: [0mOffset 4608 is out of range for this file (4592 lines)
+[0m
+[0m$ [0mwc -l .review-packet/target.diff
+4592 .review-packet/target.diff
+[0m
+[0m$ [0mgrep -n "diff --git" .review-packet/target.diff
+1:diff --git a/README.md b/README.md
+14:diff --git a/docs/design.md b/docs/design.md
+27:diff --git a/docs/testing.md b/docs/testing.md
+50:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/claude-opus-5_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/claude-opus-5_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log
+53:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/claude-opus-5_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.json b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/claude-opus-5_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.json
+60:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/codex-gpt_47662f8d872f4a5e451908796a6b677105a28c52.md b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/codex-gpt_47662f8d872f4a5e451908796a6b677105a28c52.md
+122:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/deepseek-v4-flash_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/deepseek-v4-flash_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log
+216:+[0m$ [0mwc -l .review-packet/target.diff && grep -n "^diff --git" .review-packet/target.diff | head -60
+218:+1:diff --git a/fs_diloco/runtime/learner_entrypoint.py b/fs_diloco/runtime/learner_entrypoint.py
+219:+13:diff --git a/fs_diloco/runtime/syncer.py b/fs_diloco/runtime/syncer.py
+220:+72:diff --git a/fs_diloco/runtime/syncer_entrypoint.py b/fs_diloco/runtime/syncer_entrypoint.py
+221:+100:diff --git a/fs_diloco/tools/clean_run.py b/fs_diloco/tools/clean_run.py
+222:+133:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md
+223:+337:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log
+224:+340:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.json b/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.json
+225:+347:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/codex-gpt_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/codex-gpt_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md
+226:+426:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/deepseek-v4-flash_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation/deepseek-v4-flash_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log
+227:+3116:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/deepseek-v4-flash_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-remediation/deepseek-v4-flash_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt
+228:+3131:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/finding-dispositions_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/finding-dispositions_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md
+229:+3180:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/glm-5.2_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation/glm-5.2_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log
+230:+3746:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/glm-5.2_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-remediation/glm-5.2_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt
+231:+3768:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md
+232:+3894:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log
+233:+4146:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt
+234:+4272:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/prompt-source_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/prompt-source_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md
+235:+4334:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/review-request_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/review-request_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md
+236:+4411:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/reviewer-job_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.json b/reports/DOING/code_review/plan03-1/critical-current-remediation/reviewer-job_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.json
+237:+4505:diff --git a/reports/DOING/plan03-1/artifact-schema.md b/reports/DOING/plan03-1/artifact-schema.md
+238:+4517:diff --git a/reports/DOING/plan03-1/code_review.md b/reports/DOING/plan03-1/code_review.md
+239:+4557:diff --git a/reports/DOING/plan03-1/progress.md b/reports/DOING/plan03-1/progress.md
+240:+4608:diff --git a/reports/DOING/plan03-1/workflow_state.yaml b/reports/DOING/plan03-1/workflow_state.yaml
+241:+4665:diff --git a/scripts/miyabi/check_full_protocol_run.py b/scripts/miyabi/check_full_protocol_run.py
+242:+4706:diff --git a/scripts/miyabi/check_plan_completion.py b/scripts/miyabi/check_plan_completion.py
+243:+4750:diff --git a/scripts/miyabi/run_full_protocol_rank.sh b/scripts/miyabi/run_full_protocol_rank.sh
+244:+4762:diff --git a/tests/architecture/test_dependency_boundaries.py b/tests/architecture/test_dependency_boundaries.py
+245:+4775:diff --git a/tests/architecture/test_plan_complete_dead_surfaces.py b/tests/architecture/test_plan_complete_dead_surfaces.py
+246:+4788:diff --git a/tests/harness/test_full_protocol_harness.py b/tests/harness/test_full_protocol_harness.py
+247:+4881:diff --git a/tests/harness/test_plan_completion.py b/tests/harness/test_plan_completion.py
+248:+4931:diff --git a/tests/runtime/test_syncer_composition.py b/tests/runtime/test_syncer_composition.py
+249:+5155:diff --git a/tests/runtime/test_syncer_startup_admission.py b/tests/runtime/test_syncer_startup_admission.py
+250:+5241:diff --git a/tests/test_clean_run.py b/tests/test_clean_run.py
+251:+5272:diff --git a/tests/test_config.py b/tests/test_config.py
+619:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/deepseek-v4-flash_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/deepseek-v4-flash_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.txt
+622:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/finding-dispositions_3b99d1a995245639f236fe73efd013e4f12c910a.md b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/finding-dispositions_3b99d1a995245639f236fe73efd013e4f12c910a.md
+675:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/glm-5.2_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/glm-5.2_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log
+723:+diff --git a/fs_diloco/runtime/learner_entrypoint.py b/fs_diloco/runtime/learner_entrypoint.py
+735:+diff --git a/fs_diloco/runtime/syncer.py b/fs_diloco/runtime/syncer.py
+810:+1:diff --git a/fs_diloco/runtime/learner_entrypoint.py b/fs_diloco/runtime/learner_entrypoint.py
+812:+13:diff --git a/fs_diloco/runtime/syncer.py b/fs_diloco/runtime/syncer.py
+817:+72:diff --git a/fs_diloco/runtime/syncer_entrypoint.py b/fs_diloco/runtime/syncer_entrypoint.py
+821:+100:diff --git a/fs_diloco/tools/clean_run.py b/fs_diloco/tools/clean_run.py
+824:+133:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md
+826:+337:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log
+827:+340:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.json b/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.json
+829:+347:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/codex-gpt_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/codex-gpt_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md
+831:+426:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/deepseek-v4-flash_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation/deepseek-v4-flash_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log
+835:+1:diff --git a/fs_diloco/runtime/learner_entrypoint.py b/fs_diloco/runtime/learner_entrypoint.py
+837:+13:diff --git a/fs_diloco/runtime/syncer.py b/fs_diloco/runtime/syncer.py
+842:+72:diff --git a/fs_diloco/runtime/syncer_entrypoint.py b/fs_diloco/runtime/syncer_entrypoint.py
+846:+100:diff --git a/fs_diloco/tools/clean_run.py b/fs_diloco/tools/clean_run.py
+849:+133:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md
+851:+337:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log
+852:+340:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.json b/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.json
+854:+347:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/codex-gpt_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/codex-gpt_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md
+856:+426:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/deepseek-v4-flash_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation/deepseek-v4-flash_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log
+858:+3116:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/deepseek-v4-flash_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-remediation/deepseek-v4-flash_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt
+860:+3131:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/finding-dispositions_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/finding-dispositions_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md
+862:+3180:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/glm-5.2_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation/glm-5.2_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log
+864:+3746:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/glm-5.2_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-remediation/glm-5.2_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt
+866:+3768:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md
+868:+3894:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log
+870:+4146:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt
+872:+4272:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/prompt-source_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/prompt-source_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md
+874:+4334:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/review-request_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/review-request_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md
+876:+4411:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/reviewer-job_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.json b/reports/DOING/code_review/plan03-1/critical-current-remediation/reviewer-job_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.json
+878:+4505:diff --git a/reports/DOING/plan03-1/artifact-schema.md b/reports/DOING/plan03-1/artifact-schema.md
+880:+4517:diff --git a/reports/DOING/plan03-1/code_review.md b/reports/DOING/plan03-1/code_review.md
+882:+4557:diff --git a/reports/DOING/plan03-1/progress.md b/reports/DOING/plan03-1/progress.md
+884:+4608:diff --git a/reports/DOING/plan03-1/workflow_state.yaml b/reports/DOING/plan03-1/workflow_state.yaml
+888:+4665:diff --git a/scripts/miyabi/check_full_protocol_run.py b/scripts/miyabi/check_full_protocol_run.py
+893:+4706:diff --git a/scripts/miyabi/check_plan_completion.py b/scripts/miyabi/check_plan_completion.py
+898:+4750:diff --git a/scripts/miyabi/run_full_protocol_rank.sh b/scripts/miyabi/run_full_protocol_rank.sh
+900:+4762:diff --git a/tests/architecture/test_dependency_boundaries.py b/tests/architecture/test_dependency_boundaries.py
+902:+4775:diff --git a/tests/architecture/test_plan_complete_dead_surfaces.py b/tests/architecture/test_plan_complete_dead_surfaces.py
+904:+4788:diff --git a/tests/harness/test_full_protocol_harness.py b/tests/harness/test_full_protocol_harness.py
+912:+4881:diff --git a/tests/harness/test_plan_completion.py b/tests/harness/test_plan_completion.py
+915:+4931:diff --git a/tests/runtime/test_syncer_composition.py b/tests/runtime/test_syncer_composition.py
+923:+5155:diff --git a/tests/runtime/test_syncer_startup_admission.py b/tests/runtime/test_syncer_startup_admission.py
+930:+5241:diff --git a/tests/test_clean_run.py b/tests/test_clean_run.py
+934:+5272:diff --git a/tests/test_config.py b/tests/test_config.py
+938:+diff --git a/fs_diloco/runtime/syncer_entrypoint.py b/fs_diloco/runtime/syncer_entrypoint.py
+966:+diff --git a/fs_diloco/tools/clean_run.py b/fs_diloco/tools/clean_run.py
+1028:+diff --git a/scripts/miyabi/check_full_protocol_run.py b/scripts/miyabi/check_full_protocol_run.py
+1069:+diff --git a/scripts/miyabi/check_plan_completion.py b/scripts/miyabi/check_plan_completion.py
+1113:+diff --git a/scripts/miyabi/run_full_protocol_rank.sh b/scripts/miyabi/run_full_protocol_rank.sh
+1270:+diff --git a/tests/architecture/test_plan_complete_dead_surfaces.py b/tests/architecture/test_plan_complete_dead_surfaces.py
+1283:+diff --git a/tests/harness/test_full_protocol_harness.py b/tests/harness/test_full_protocol_harness.py
+1288:+diff --git a/tests/architecture/test_dependency_boundaries.py b/tests/architecture/test_dependency_boundaries.py
+1301:+diff --git a/tests/architecture/test_plan_complete_dead_surfaces.py b/tests/architecture/test_plan_complete_dead_surfaces.py
+1311:+diff --git a/tests/runtime/test_syncer_startup_admission.py b/tests/runtime/test_syncer_startup_admission.py
+1397:+diff --git a/tests/test_clean_run.py b/tests/test_clean_run.py
+1409:+diff --git a/tests/test_clean_run.py b/tests/test_clean_run.py
+1440:+diff --git a/tests/test_config.py b/tests/test_config.py
+1485:+diff --git a/reports/DOING/plan03-1/progress.md b/reports/DOING/plan03-1/progress.md
+1536:+diff --git a/reports/DOING/plan03-1/workflow_state.yaml b/reports/DOING/plan03-1/workflow_state.yaml
+1541:+diff --git a/reports/DOING/plan03-1/artifact-schema.md b/reports/DOING/plan03-1/artifact-schema.md
+1553:+diff --git a/reports/DOING/plan03-1/code_review.md b/reports/DOING/plan03-1/code_review.md
+1593:+diff --git a/reports/DOING/plan03-1/progress.md b/reports/DOING/plan03-1/progress.md
+1599:+diff --git a/reports/DOING/plan03-1/workflow_state.yaml b/reports/DOING/plan03-1/workflow_state.yaml
+1656:+diff --git a/scripts/miyabi/check_full_protocol_run.py b/scripts/miyabi/check_full_protocol_run.py
+1818:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/glm-5.2_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/glm-5.2_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.txt
+1825:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/minimax-m3_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/minimax-m3_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.stderr.log
+1985:+diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log
+1988:+diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.json b/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.json
+1995:+diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/codex-gpt_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/codex-gpt_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md
+2074:+diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/deepseek-v4-flash_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation/deepseek-v4-flash_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log
+2296:+[0m$ [0mcd /tmp/2521428.7247/fsdiloco-review.2521428.yedr0d/repository-minimax && grep -n "^diff --git" .review-packet/target.diff
+2297:+1:diff --git a/fs_diloco/runtime/learner_entrypoint.py b/fs_diloco/runtime/learner_entrypoint.py
+2298:+13:diff --git a/fs_diloco/runtime/syncer.py b/fs_diloco/runtime/syncer.py
+2299:+72:diff --git a/fs_diloco/runtime/syncer_entrypoint.py b/fs_diloco/runtime/syncer_entrypoint.py
+2300:+100:diff --git a/fs_diloco/tools/clean_run.py b/fs_diloco/tools/clean_run.py
+2301:+133:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md
+2302:+337:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log
+2303:+340:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.json b/reports/DOING/code_review/plan03-1/critical-current-remediation/claude-opus-5_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.json
+2304:+347:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/codex-gpt_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/codex-gpt_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md
+2305:+426:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/deepseek-v4-flash_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation/deepseek-v4-flash_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log
+2306:+3116:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/deepseek-v4-flash_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-remediation/deepseek-v4-flash_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt
+2307:+3131:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/finding-dispositions_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/finding-dispositions_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md
+2308:+3180:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/glm-5.2_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation/glm-5.2_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log
+2309:+3746:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/glm-5.2_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-remediation/glm-5.2_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt
+2310:+3768:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md
+2311:+3894:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.stderr.log
+2312:+4146:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-remediation/minimax-m3_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922_raw.txt
+2313:+4272:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/prompt-source_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/prompt-source_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md
+2314:+4334:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/review-request_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md b/reports/DOING/code_review/plan03-1/critical-current-remediation/review-request_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.md
+2315:+4411:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation/reviewer-job_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.json b/reports/DOING/code_review/plan03-1/critical-current-remediation/reviewer-job_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572_2520922.json
+2316:+4505:diff --git a/reports/DOING/plan03-1/artifact-schema.md b/reports/DOING/plan03-1/artifact-schema.md
+2317:+4517:diff --git a/reports/DOING/plan03-1/code_review.md b/reports/DOING/plan03-1/code_review.md
+2318:+4557:diff --git a/reports/DOING/plan03-1/progress.md b/reports/DOING/plan03-1/progress.md
+2319:+4608:diff --git a/reports/DOING/plan03-1/workflow_state.yaml b/reports/DOING/plan03-1/workflow_state.yaml
+2320:+4665:diff --git a/scripts/miyabi/check_full_protocol_run.py b/scripts/miyabi/check_full_protocol_run.py
+2321:+4706:diff --git a/scripts/miyabi/check_plan_completion.py b/scripts/miyabi/check_plan_completion.py
+2322:+4750:diff --git a/scripts/miyabi/run_full_protocol_rank.sh b/scripts/miyabi/run_full_protocol_rank.sh
+2323:+4762:diff --git a/tests/architecture/test_dependency_boundaries.py b/tests/architecture/test_dependency_boundaries.py
+2324:+4775:diff --git a/tests/architecture/test_plan_complete_dead_surfaces.py b/tests/architecture/test_plan_complete_dead_surfaces.py
+2325:+4788:diff --git a/tests/harness/test_full_protocol_harness.py b/tests/harness/test_full_protocol_harness.py
+2326:+4881:diff --git a/tests/harness/test_plan_completion.py b/tests/harness/test_plan_completion.py
+2327:+4931:diff --git a/tests/runtime/test_syncer_composition.py b/tests/runtime/test_syncer_composition.py
+2328:+5155:diff --git a/tests/runtime/test_syncer_startup_admission.py b/tests/runtime/test_syncer_startup_admission.py
+2329:+5241:diff --git a/tests/test_clean_run.py b/tests/test_clean_run.py
+2330:+5272:diff --git a/tests/test_config.py b/tests/test_config.py
+2893:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/minimax-m3_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/minimax-m3_3b99d1a995245639f236fe73efd013e4f12c910a_2521428_raw.txt
+2896:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/review-request_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.md b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/review-request_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.md
+2968:diff --git a/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/reviewer-job_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.json b/reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/reviewer-job_3b99d1a995245639f236fe73efd013e4f12c910a_2521428.json
+3062:diff --git a/reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_pbs.log b/reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_pbs.log
+3305:diff --git a/reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json b/reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json
+4243:diff --git a/reports/DOING/plan03-1/artifacts/u1_validation_47662f8.json b/reports/DOING/plan03-1/artifacts/u1_validation_47662f8.json
+4391:diff --git a/reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log b/reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log
+4441:diff --git a/reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log.focused-pytest.junit.xml b/reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log.focused-pytest.junit.xml
+4449:diff --git a/reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log.full-pytest.junit.xml b/reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log.full-pytest.junit.xml
+4457:diff --git a/reports/DOING/plan03-1/code_review.md b/reports/DOING/plan03-1/code_review.md
+4485:diff --git a/reports/DOING/plan03-1/progress.md b/reports/DOING/plan03-1/progress.md
+4547:diff --git a/reports/DOING/plan03-1/workflow_state.yaml b/reports/DOING/plan03-1/workflow_state.yaml
+[0m
+[0m→ [0mRead .review-packet/target.diff[90m [offset=4457, limit=100][0m
+[0m→ [0mRead .review-packet/target.diff[90m [offset=4547, limit=50][0m
+[0m→ [0mRead .review-packet/target.diff[90m [limit=50][0m
+[0m→ [0mRead tests/runtime/test_syncer_composition.py[90m [offset=200, limit=100][0m
+[0m→ [0mRead fs_diloco/runtime/syncer.py[90m [offset=820, limit=90][0m
+[0m
+[0m$ [0mhead -100 reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_pbs.log
+Currently Loaded Modulefiles:
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9  
+
+Key:
+(symbolic-version)  
+RUN_ID=plan03_1_p4_current_51x11_20260810_233100
+SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan03_1_p4_current_51x11_20260810_233100
+DESCRIPTOR_SHA256=4e4878ebc8070b908f4d81ae255dcfcae66c39503d75866a3bb0b2f9882ce220
+HOST mg0001
+HOST mg0004
+HOST mg0008
+HOST mg0009
+HOST mg0012
+HOST mg0013
+HOST mg0015
+HOST mg0018
+HOST mg0019
+{
+  "audit": {
+    "claimed_gc": 0,
+    "folded_batch_index_rows": 0,
+    "folded_batches": 0,
+    "hot_batches": 3,
+    "partitions": 0,
+    "pending_gc": 0
+  },
+  "authority": {
+    "ddl_sha256": "a775627c019dd7a3ed3d52563edd25b0c68f51a01a4cdeddbd12a5b8a294608e",
+    "features": [],
+    "mode": "static",
+    "protocol_version": 4,
+    "schema_fingerprint": "43496cfb369953d00f65e7fa7e7dd75c412441905a1487bd1b27903f75db922c",
+    "schema_version": 11
+  },
+  "contributor_progress": {},
+  "controller": {
+    "drain_ack_deadline": 1786372421.9063866,
+    "generation": 1,
+    "hard_crash_cycle_token_budget": 816,
+    "proposal_visibility_deadline": 1786372368.1734104,
+    "reason": "configured_target",
+    "registration_visibility_deadline": 1786372361.9063866,
+    "requested_at": 1786372361.9063866,
+    "singleton": 1,
+    "state": "finalized",
+    "terminal_merge_count": 0,
+    "updated_by_epoch": 1,
+    "updated_by_owner_id": "syncer-75cffd8c-63e2-4504-9e02-7ae326f154ac"
+  },
+  "current_contributor_fences": [],
+  "dynamic": {
+    "capacity_observations": [],
+    "instances": [],
+    "launch_requests": [],
+    "streams": []
+  },
+  "integrity_check": [
+    "ok"
+  ],
+  "latest_version": {
+    "committed_at": 1786372361.333485,
+    "committed_by_epoch": 1,
+    "committed_by_owner_id": "syncer-75cffd8c-63e2-4504-9e02-7ae326f154ac",
+    "direct_weight_tokens_applied": 6528,
+    "optim_relative_path": "optim/epochs/e000001/07a107b86c0c/outer_v000011_p29443535ad37.safetensors",
+    "optim_sha256": "69ab658c5bbf08b2960dd8cfc9fc3fb4e49dc7e82296ae86423003a737396904",
+    "optim_size": 65856,
+    "predecessor_version": 10,
+    "publication_id": "29443535-ad37-4534-9b07-7a8788e424ad",
+    "theta_sha256": "4cc7ba4e590ac4bf4db9730712ecb51d1a57da9d23d331cb6a6398e63f4d3f8e",
+    "version": 11,
+    "weight_relative_path": "weights/epochs/e000001/07a107b86c0c/global_v000011_p29443535ad37.safetensors",
+    "weight_sha256": "11317e189df7ba417c6ddf1fdee37e423a41f2a55f8730cabdda39198c50d34b",
+    "weight_size": 33104
+  },
+  "run": {
+    "config_sha256": "68bf4ef660f4e44f4244149d45449a72af8709e8d8de2805e7f3cb42ba294e55",
+    "descriptor_sha256": "4e4878ebc8070b908f4d81ae255dcfcae66c39503d75866a3bb0b2f9882ce220",
+    "mode": "static",
+    "run_id": "plan03_1_p4_current_51x11_20260810_233100",
+    "shared_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan03_1_p4_current_51x11_20260810_233100",
+    "source_fingerprint": "sha256:cc5a483060e2a6e13c6cd1967d32b37581c642a9706c7ed8919034c90b1f4a98"
+  },
+  "syncer_epochs": [
+    {
+      "acquired_at": 1786372344.230438,
+      "config_sha256": "68bf4ef660f4e44f4244149d45449a72af8709e8d8de2805e7f3cb42ba294e55",
+      "epoch": 1,
+      "final_at": 1786372364.0105405,
+      "final_state": "released",
+      "hostname": "mg0001",
+      "last_renewed_at": 1786372364.0105405,
+      "owner_id": "syncer-75cffd8c-63e2-4504-9e02-7ae326f154ac",
+      "pbs_job_id": "2521638.opbs",
+      "pid": 3026694,
+      "source_fingerprint": "sha256:cc5a483060e2a6e13c6cd1967d32b37581c642a9706c7ed8919034c90b1f4a98",
+      "superseded_by_epoch": null
+    }
+  ],
+  "terminal": {
+[0m
+[0m$ [0mgrep -n "status\|PASS\|exit\|completion" reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_pbs.log | head -30
+237:PASS
+[0m
+[0m$ [0mtail -50 reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_pbs.log
+"fence_kind": "static",
+      "final_cycle_seq": 14,
+      "final_update_id": "25ad9ae2-4268-4177-8c3e-3dcf93091b07",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_005",
+      "state": "acked"
+    },
+    {
+      "acknowledged_at": 1786372363.155904,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 714,
+      "close_last_cycle_seq": 14,
+      "fence_json": "{\"attempt_id\":\"attempt-56d1da0f-87b0-4972-9acd-b39242d0305a\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_006\",\"logical_launch_id\":\"allocation-2521638-learner_006\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 14,
+      "final_update_id": "da8778a5-d6e1-4f1a-9600-f5149241f522",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_006",
+      "state": "acked"
+    },
+    {
+      "acknowledged_at": 1786372363.1635594,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 714,
+      "close_last_cycle_seq": 14,
+      "fence_json": "{\"attempt_id\":\"attempt-42b0bd9c-7925-4ae7-8ec8-af7d72163dc1\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_007\",\"logical_launch_id\":\"allocation-2521638-learner_007\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 14,
+      "final_update_id": "886b9aed-d928-4492-a7a3-6a29424158a0",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_007",
+      "state": "acked"
+    }
+  ],
+  "token_ledger": {
+    "adjudicated_processed": 89760,
+    "carried_ancestry": 0,
+    "direct_applied": 71808,
+    "direct_dropped": 17952,
+    "direct_outstanding": 0,
+    "direct_quarantined_or_conflicted": 0,
+    "direct_reported_unpublished": 0,
+    "hard_crash_gap_tokens_upper_bound": 0,
+    "local_discarded": 0
+  }
+}
+PASS
+[0m
+[0m$ [0mgrep -n "runtime\|duration\|elapsed\|seconds\|seconds" reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_pbs.log | head -20
+(no output)
+[0m
+[0m$ [0mgrep -n "walltime\|started\|ended\|final_at\|acquired_at" reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_pbs.log | head -20
+86:      "acquired_at": 1786372344.230438,
+89:      "final_at": 1786372364.0105405,
+[0m
+[0m$ [0mgrep -n "秒\|seconds\|duration" docs/testing.md
+(no output)
+[0m
+[0m$ [0mgrep -n "27\|27 秒\|秒" docs/testing.md reports/DOING/plan03-1/progress.md reports/DOING/plan03-1/code_review.md README.md 2>/dev/null
+docs/testing.md:48:2026-08-10 的 current run `plan03_1_p4_current_51x11_20260810_233100` 使用 source commit `8dc2b727c64eab66f6627e1ed3a70ad9ef093631`、authority schema revision 11 和 9 个独立 `debug-g` 节点（PBS `2521638.opbs`），执行了 51 local steps × 11 committed global steps，超过正式 50 × 10 基线，并得到结构化 `PASS`：
+reports/DOING/plan03-1/progress.md:95:  `af54925a4d0487a37c20f298f2027003cb079d20`; base is the prior reviewed
+reports/DOING/plan03-1/progress.md:113:  `af54925a4d0487a37c20f298f2027003cb079d20`.
+reports/DOING/plan03-1/progress.md:142:- Frozen target: `219abe663025adc7ff8f731f65d90fb27c42c0fe`; continuous
+reports/DOING/plan03-1/progress.md:143:  base: `af54925a4d0487a37c20f298f2027003cb079d20`, with ancestry verified.
+reports/DOING/plan03-1/progress.md:161:  (`mg0009`), target `219abe663025adc7ff8f731f65d90fb27c42c0fe`,
+reports/DOING/plan03-1/progress.md:176:  `219abe663025adc7ff8f731f65d90fb27c42c0fe` is `APPROVE` and becomes the
+reports/DOING/plan03-1/progress.md:248:  `a701570a5762c05dd892b10599a27a793e6d1549`; verdict
+reports/DOING/plan03-1/progress.md:310:- Removed 278 ignored generated bytecode files, including stale legacy module
+reports/DOING/plan03-1/progress.md:321:  `c1ab1305e372b277beb51187539644b2295e7a6f`, with a clean product worktree and
+reports/DOING/plan03-1/progress.md:377:- Source: clean commit `8d92bcbe2c16cc813fc5cdca6273e869617401ea`,
+reports/DOING/plan03-1/progress.md:381:- Producer result: `PASS`, no errors. Ruff format covered 127 files, Ruff lint
+reports/DOING/plan03-1/progress.md:522:  format covered 127 files, lint passed, the focused group passed 119 tests in
+reports/DOING/plan03-1/progress.md:530:  `aff0c9d740de5fafd89b81f19aefbf2927d1e0d59471246420f820b896d90c14`).
+reports/DOING/plan03-1/progress.md:540:- Source is clean commit `4ebee6339fb76f63127874c655d7b109b2ec0b39`,
+reports/DOING/plan03-1/progress.md:576:## 2026-08-10T19:27:10+09:00 — P3 terminal applied-total remediation target
+reports/DOING/plan03-1/progress.md:601:  continuous review base: `4ebee6339fb76f63127874c655d7b109b2ec0b39`.
+reports/DOING/plan03-1/progress.md:649:  `sha256:6b4964840a786276242608746f862ca3ce05ae48f256d8755eadb58cfd4454e5`.
+reports/DOING/plan03-1/progress.md:670:  `sha256:6b4964840a786276242608746f862ca3ce05ae48f256d8755eadb58cfd4454e5`.
+reports/DOING/plan03-1/progress.md:687:  `de8b8f09a6efe0f122b2729fab7bdbc9f4d6c7663a93c926d25190823bc3cfa5`).
+reports/DOING/plan03-1/progress.md:697:  `sha256:6b4964840a786276242608746f862ca3ce05ae48f256d8755eadb58cfd4454e5`.
+reports/DOING/plan03-1/progress.md:724:  `sha256:6b4964840a786276242608746f862ca3ce05ae48f256d8755eadb58cfd4454e5`
+reports/DOING/plan03-1/progress.md:739:  `219fc5ef00ab0e700838360351627d3437ccdbe8fa8bd5fb8847568bcb7b3769`)
+reports/DOING/plan03-1/progress.md:741:  `9fa5d202793e172bdc43ed7996adf67ec7538a8c7f7294b3fdb0068b647cf557`).
+reports/DOING/plan03-1/progress.md:754:## 2026-08-10T19:40:27+09:00 — P3 PHASE_FINAL
+reports/DOING/plan03-1/progress.md:871:  527 full tests with zero failures, errors or skips.
+reports/DOING/plan03-1/progress.md:879:  `b90f9710253273069a1d3561722d693cd437dfeafe406351a1221f1ed4738d47`,
+reports/DOING/plan03-1/progress.md:889:  evidence at target `272fa81331a110f815a52d871c2fd61f7d1c3abb`.
+reports/DOING/plan03-1/progress.md:905:- PBS job `2520645.opbs` ran for 27 seconds on exact nine-node `debug-g`
+reports/DOING/plan03-1/progress.md:917:  tokens, 34,272 direct dropped tokens, zero balance/outstanding/other fate,
+reports/DOING/plan03-1/progress.md:923:  `df1102abb83ed5cc7d32781bcaa3531ad0746d3206af9de39ce84a9c602d6a19`.
+reports/DOING/plan03-1/progress.md:949:  the complete suite passed 527 tests. Both JUnit projections contain no
+reports/DOING/plan03-1/progress.md:958:  `7dcb13d34471585d5287a52a010276d36b93a61020aad03c5bb1ce90b7c38ead`.
+reports/DOING/plan03-1/progress.md:1001:- Frozen target `74ecd4fb64311c69ae0d758d8c1d99b27a9c5572` has clean formal source
+reports/DOING/plan03-1/progress.md:1021:  `74ecd4fb64311c69ae0d758d8c1d99b27a9c5572` using the four current lanes.
+reports/DOING/plan03-1/progress.md:1058:  `76b774d65e54db957616ada5b13ed580d1d649f30b7590942695b827d6986d8b`,
+reports/DOING/plan03-1/progress.md:1073:  exact base `74ecd4fb64311c69ae0d758d8c1d99b27a9c5572`, target
+reports/DOING/plan03-1/progress.md:1099:  `b233c36272643a0a5de0bfeb884e2f58d21b1b8ecdf8a6064de28f8a68f173f1`,
+reports/DOING/plan03-1/progress.md:1112:- Source commit `8dc2b727c64eab66f6627e1ed3a70ad9ef093631`, fingerprint
+reports/DOING/plan03-1/code_review.md:27:- Frozen target: `a701570a5762c05dd892b10599a27a793e6d1549`.
+reports/DOING/plan03-1/code_review.md:29:  `reports/DOING/code_review/plan03-1/failure-P2-one-node-validation-round1/codex-gpt_a701570a5762c05dd892b10599a27a793e6d1549.md`.
+reports/DOING/plan03-1/code_review.md:58:- Verified evidence: tracked structured PASS from clean source, 127-file Ruff
+reports/DOING/plan03-1/code_review.md:63:## 2026-08-10T19:40:27+09:00 — P3 phase closure review
+reports/DOING/plan03-1/code_review.md:93:- Reviewed evidence target: `272fa81331a110f815a52d871c2fd61f7d1c3abb`;
+reports/DOING/plan03-1/code_review.md:97:  `reports/DOING/code_review/plan03-1/plan-complete-preformal-remediation/codex-gpt_272fa81331a110f815a52d871c2fd61f7d1c3abb.md`.
+reports/DOING/plan03-1/code_review.md:99:  affected tests, 169 focused tests and 527 complete tests with all registered
+reports/DOING/plan03-1/code_review.md:116:`reports/DOING/code_review/plan03-1/critical-current-fs-diloco/finding-dispositions_4ebee6339fb76f63127874c655d7b109b2ec0b39.md`
+reports/DOING/plan03-1/code_review.md:174:- Frozen target: `74ecd4fb64311c69ae0d758d8c1d99b27a9c5572`.
+reports/DOING/plan03-1/code_review.md:178:  `reports/DOING/code_review/plan03-1/critical-current-remediation/codex-gpt_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md`.
+reports/DOING/plan03-1/code_review.md:195:  `reports/DOING/code_review/plan03-1/critical-current-remediation/finding-dispositions_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md`.
+reports/DOING/plan03-1/code_review.md:205:- Rejected target: `74ecd4fb64311c69ae0d758d8c1d99b27a9c5572`.
+[0m
+[0m$ [0mgrep -rn "inner_steps\|stop_after_outer_steps" configs/ docs/ README.md 2>/dev/null
+configs/full_protocol_dynamic.yaml:20:  stop_after_outer_steps: 4
+configs/full_protocol_dynamic.yaml:61:  inner_steps: 20
+configs/full_protocol_dynamic.yaml:81:  poll_latest_during_inner_steps: false
+configs/full_protocol_functional.yaml:20:  stop_after_outer_steps: 4
+configs/full_protocol_functional.yaml:38:  inner_steps: 20
+configs/full_protocol_functional.yaml:58:  poll_latest_during_inner_steps: false
+configs/full_protocol_static.yaml:20:  stop_after_outer_steps: 10
+configs/full_protocol_static.yaml:38:  inner_steps: 50
+configs/full_protocol_static.yaml:58:  poll_latest_during_inner_steps: false
+[0m
+[0m$ [0mgrep -rn "inner_steps\|stop_after_outer_steps" reports/DOING/plan03-1/artifacts/ 2>/dev/null | grep -v "\.json:" | head -10
+...output truncated...
+
+Full output saved to: /home/x10041/.local/share/opencode/tool-output/tool_fec232fba001CH0UDktQKzvvYq
+
+(no output)
+[0m
+[0m$ [0mpython3 -c "
+import json
+d = json.load(open('reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json'))
+print('config_schema_identity:', json.dumps(d['config_schema_identity'], indent=2))
+"
+config_schema_identity: {
+  "sha256": "68bf4ef660f4e44f4244149d45449a72af8709e8d8de2805e7f3cb42ba294e55",
+  "version": 1
+}
+[0m
+[0m$ [0mls /work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan03_1_p4_current_51x11_20260810_233100/ 2>/dev/null || echo "Run dir not accessible - this is the absolute path mentioned in artifact"
+audit
+control
+heartbeats
+logs
+metrics
+optim
+run_config.resolved.yaml
+updates
+weights
+[0m
+[0m$ [0mgrep "inner_steps\|stop_after_outer_steps" /work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan03_1_p4_current_51x11_20260810_233100/run_config.resolved.yaml
+stop_after_outer_steps: 11
+  inner_steps: 51
+  poll_latest_during_inner_steps: false
+[0m
+[0m$ [0msha256sum /work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan03_1_p4_current_51x11_20260810_233100/run_config.resolved.yaml
+68bf4ef660f4e44f4244149d45449a72af8709e8d8de2805e7f3cb42ba294e55  /work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan03_1_p4_current_51x11_20260810_233100/run_config.resolved.yaml
+[0m
+[0m$ [0mgrep "inner_steps\|stop_after_outer_steps" configs/full_protocol_static.yaml
+stop_after_outer_steps: 10
+  inner_steps: 50
+  poll_latest_during_inner_steps: false
+[0m
+[0m$ [0mgrep -rn "schema_revision\|schema_version\|epoch.*final\|final.*epoch" fs_diloco/storage/authority.py 2>/dev/null | head -20
+123:    schema_version: int
+307:                    singleton, schema_version, protocol_version, mode, features_json,
+341:            "authority_schema_version": AUTHORITY_SCHEMA_VERSION,
+363:        schema_version=AUTHORITY_SCHEMA_VERSION,
+402:        "schema_version": AUTHORITY_SCHEMA_VERSION,
+420:        "authority_schema_version": AUTHORITY_SCHEMA_VERSION,
+445:        schema_version=AUTHORITY_SCHEMA_VERSION,
+913:                    (final_state, now, epoch, int(current["epoch"])),
+1012:                UPDATE syncer_epochs SET final_state='released', final_at=?, last_renewed_at=?
+1038:                UPDATE syncer_epochs SET final_state='error', final_at=?, last_renewed_at=?
+1223:                        final_status, bound_by_epoch, bound_at, finalized_by_epoch, finalized_at
+4768:                    direct_weight_tokens_applied, finalized_by_epoch,
+[0m
+[0m$ [0mgrep -n "AUTHORITY_SCHEMA_VERSION" fs_diloco/storage/authority.py | head -5
+23:from ..core.versions import AUTHORITY_SCHEMA_VERSION, PROTOCOL_VERSION
+300:            connection.execute(f"PRAGMA user_version={AUTHORITY_SCHEMA_VERSION}")
+312:                    AUTHORITY_SCHEMA_VERSION,
+341:            "authority_schema_version": AUTHORITY_SCHEMA_VERSION,
+363:        schema_version=AUTHORITY_SCHEMA_VERSION,
+[0m
+[0m$ [0mgrep -n "AUTHORITY_SCHEMA_VERSION" fs_diloco/core/versions.py
+8:AUTHORITY_SCHEMA_VERSION = 11
+[0m
+[0m$ [0mgrep -B 1 -A 5 "^diff --git a/configs/" .review-packet/target.diff
+(no output)
+[0m
+[0m$ [0mgrep -B 1 -A 5 "^diff --git a/tests/" .review-packet/target.diff
+(no output)
+[0m
+[0m$ [0mgrep -B 1 -A 5 "^diff --git a/fs_diloco/" .review-packet/target.diff
+(no output)
+[0m
+[0m$ [0mgrep -B 1 -A 5 "^diff --git a/scripts/" .review-packet/target.diff
+(no output)
+[0m
+[0m→ [0mRead tests/runtime/test_syncer_composition.py[90m [offset=160, limit=100][0m
+[0m→ [0mRead fs_diloco/runtime/syncer_entrypoint.py[90m [limit=264][0m
+[0m
+[0m$ [0mgrep -n "epoch.*final\|final.*epoch\|terminal_state" fs_diloco/storage/authority.py | head -10
+529:        row = self._authority._fetchone("SELECT * FROM terminal_state WHERE singleton = 1")
+913:                    (final_state, now, epoch, int(current["epoch"])),
+1012:                UPDATE syncer_epochs SET final_state='released', final_at=?, last_renewed_at=?
+1038:                UPDATE syncer_epochs SET final_state='error', final_at=?, last_renewed_at=?
+1223:                        final_status, bound_by_epoch, bound_at, finalized_by_epoch, finalized_at
+4766:                INSERT INTO terminal_state(
+4768:                    direct_weight_tokens_applied, finalized_by_epoch,
+[0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [offset=4760, limit=30][0m
+[0m
+[0m$ [0mgrep -n "CREATE TABLE\|finalized_by_epoch\|epoch_state\|terminal" fs_diloco/storage/authority.py | head -30
+528:    def terminal_record(self) -> dict[str, Any] | None:
+529:        row = self._authority._fetchone("SELECT * FROM terminal_state WHERE singleton = 1")
+532:    def terminal_contributor_fences(self) -> tuple[dict[str, Any], ...]:
+540:            SELECT * FROM terminal_contributor_fences
+580:            FROM terminal_contributor_fences WHERE state='hard_crash'
+1208:                    self._terminalize_fenced_updates(
+1223:                        final_status, bound_by_epoch, bound_at, finalized_by_epoch, finalized_at
+1242:                        bound_by_epoch=?, bound_at=?, terminal_at=NULL
+1263:    def mark_static_attempt_terminal(
+1268:        reason: str = "static_attempt_terminal",
+1271:            raise ValueError("terminal reason must not be empty")
+1277:            self._terminalize_fenced_updates(
+1284:                UPDATE static_contributor_bindings SET status='terminal', terminal_at=?
+1296:        result = self._command(command_id, "mark_static_attempt_terminal", request, operation)
+1312:            self._require_terminal_input_allowed(
+1448:            self._require_terminal_input_allowed(
+1671:        """Persist one typed read result and apply stable terminal thresholds."""
+1742:                    "terminal_disposition": None,
+1761:                observation_id = self._record_visibility_terminal(
+1781:                    "terminal_disposition": "identity_mismatch",
+1790:                        terminal_disposition, archived_at
+1796:                        terminal_disposition=excluded.terminal_disposition,
+1806:                        newest["terminal_disposition"],
+1822:            if previous is not None and previous["terminal_disposition"] is not None:
+1826:                    "terminal_disposition": str(previous["terminal_disposition"]),
+1827:                    "observation_id": int(previous["terminal_observation_id"]),
+1859:            terminal: str | None = None
+1861:                terminal = "identity_mismatch"
+1868:                terminal = "missing"
+1875:                terminal = "malformed"
+[0m
+[0m$ [0mgrep -n "CREATE TABLE\|syncer_epochs\|CREATE TABLE syncer" fs_diloco/storage/authority.py | head -20
+617:    def syncer_epochs(self) -> tuple[dict[str, Any], ...]:
+618:        rows = self._authority._fetchall("SELECT * FROM syncer_epochs ORDER BY epoch")
+908:                    UPDATE syncer_epochs
+934:                INSERT INTO syncer_epochs(
+979:                "UPDATE syncer_epochs SET last_renewed_at=? WHERE epoch=? AND owner_id=?",
+1012:                UPDATE syncer_epochs SET final_state='released', final_at=?, last_renewed_at=?
+1038:                UPDATE syncer_epochs SET final_state='error', final_at=?, last_renewed_at=?
+[0m
+[0m$ [0mgrep -n "CREATE TABLE" fs_diloco/storage/authority.py | head -30
+(no output)
+[0m
+[0m$ [0mgrep -n "syncer_epochs\s*\(\|terminal_state\s*\(\|contributor_progress\s*\(" fs_diloco/storage/authority.py | head -10
+grep: Unmatched ( or \(
+[0m
+[0m$ [0mgrep -n "syncer_epochs (\|terminal_state (\|contributor_progress (" fs_diloco/storage/authority.py | head -10
+(no output)
+[0m
+[0m$ [0mgrep -n "syncer_epochs" fs_diloco/storage/authority.py | head -10
+617:    def syncer_epochs(self) -> tuple[dict[str, Any], ...]:
+618:        rows = self._authority._fetchall("SELECT * FROM syncer_epochs ORDER BY epoch")
+908:                    UPDATE syncer_epochs
+934:                INSERT INTO syncer_epochs(
+979:                "UPDATE syncer_epochs SET last_renewed_at=? WHERE epoch=? AND owner_id=?",
+1012:                UPDATE syncer_epochs SET final_state='released', final_at=?, last_renewed_at=?
+1038:                UPDATE syncer_epochs SET final_state='error', final_at=?, last_renewed_at=?
+[0m
+[0m$ [0mgrep -rn "CREATE TABLE" fs_diloco/storage/ | head -20
+fs_diloco/storage/schema.sql:1:CREATE TABLE schema_meta (
+fs_diloco/storage/schema.sql:12:CREATE TABLE run_identity (
+fs_diloco/storage/schema.sql:19:CREATE TABLE command_records (
+fs_diloco/storage/schema.sql:28:CREATE TABLE syncer_leader (
+fs_diloco/storage/schema.sql:44:CREATE TABLE syncer_epochs (
+fs_diloco/storage/schema.sql:60:CREATE TABLE controller_state (
+fs_diloco/storage/schema.sql:78:CREATE TABLE terminal_state (
+fs_diloco/storage/schema.sql:90:CREATE TABLE terminal_contributor_fences (
+fs_diloco/storage/schema.sql:114:CREATE TABLE static_contributor_bindings (
+fs_diloco/storage/schema.sql:127:CREATE TABLE static_binding_history (
+fs_diloco/storage/schema.sql:140:CREATE TABLE proposal_observations (
+fs_diloco/storage/schema.sql:157:CREATE TABLE proposal_conflicts (
+fs_diloco/storage/schema.sql:167:CREATE TABLE proposal_frontiers (
+fs_diloco/storage/schema.sql:178:CREATE TABLE proposal_visibility (
+fs_diloco/storage/schema.sql:202:CREATE TABLE proposal_visibility_archive (
+fs_diloco/storage/schema.sql:215:CREATE TABLE proposal_quarantine (
+fs_diloco/storage/schema.sql:232:CREATE TABLE cycle_receipts (
+fs_diloco/storage/schema.sql:269:CREATE TABLE contributor_progress (
+fs_diloco/storage/schema.sql:284:CREATE TABLE selection_batches (
+fs_diloco/storage/schema.sql:297:CREATE TABLE updates (
+[0m
+[0m→ [0mRead fs_diloco/storage/schema.sql[90m [offset=44, limit=90][0m
+[0m→ [0mRead fs_diloco/storage/schema.sql[90m [limit=20][0m
+[0m→ [0mRead fs_diloco/storage/schema.sql[90m [offset=269, limit=15][0m
+[0m
+[0m$ [0mpython3 -c "
+import json
+d = json.load(open('reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json'))
+# Verify all key claims
+print('Status:', d['status'])
+print('PBS job:', d['environment']['pbs_job_id'])
+print('Source commit:', d['source_identity']['commit'])
+print('Source fingerprint:', d['source_identity']['fingerprint'])
+print('Schema version:', d['identity']['schema_version'])
+print('Hosts count:', len(d['environment']['nodes']))
+print('Topology expected:', d['topology']['expected_hosts'])
+print('Learner attestations:', d['topology']['learner_attestation_count'])
+print('Syncer attestations:', d['topology']['syncer_attestation_count'])
+print('Versions:', [v['version'] for v in d['authority']['versions']])
+print('Workload:', d['workload'])
+print('Applied proposals:', d['metrics']['applied_proposal_count'])
+print('Direct applied tokens:', d['metrics']['direct_dropped_tokens'], '(dropped)')
+print('Direct applied:', 71808)
+print('Processed receipt tokens:', d['metrics']['processed_receipt_tokens'])
+print('Token balance:', d['authority']['token_balance'])
+print('Outstanding:', d['authority']['token_rollup']['direct_outstanding'])
+print('Quarantined:', d['authority']['token_rollup']['direct_quarantined_or_conflicted'])
+print('Reported unpublished:', d['authority']['token_rollup']['direct_reported_unpublished'])
+print('Local discarded:', d['authority']['token_rollup']['local_discarded'])
+print('Direct dropped:', d['authority']['token_rollup']['direct_dropped'])
+print('Integrity check:', d['authority']['integrity'])
+print('Publication objects:', d['metrics']['publication_object_count'])
+print('Learner credits:')
+for k, v in d['metrics']['applied_by_contributor'].items():
+    print(f'  {k}: {v}')
+print('All learners stopped:', d['terminal_summary']['all_learners_stopped'])
+print('Stop reason:', d['terminal_summary']['stop_reason'])
+print('Errors:', d['errors'])
+"
+Status: PASS
+PBS job: 2521638.opbs
+Source commit: 8dc2b727c64eab66f6627e1ed3a70ad9ef093631
+Source fingerprint: sha256:cc5a483060e2a6e13c6cd1967d32b37581c642a9706c7ed8919034c90b1f4a98
+Schema version: 11
+Hosts count: 9
+Topology expected: 9
+Learner attestations: 8
+Syncer attestations: 1
+Versions: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+Workload: {'contributors': 8, 'expected_direct_tokens': 71808, 'global_steps': 11, 'inner_steps': 51, 'tokens_per_update': 816}
+Applied proposals: 88
+Direct applied tokens: 17952 (dropped)
+Direct applied: 71808
+Processed receipt tokens: 89760
+Token balance: 0
+Outstanding: 0
+Quarantined: 0
+Reported unpublished: 0
+Local discarded: 0
+Direct dropped: 17952
+Integrity check: ['ok']
+Publication objects: 24
+Learner credits:
+  learner_000: 11
+  learner_001: 11
+  learner_002: 11
+  learner_003: 11
+  learner_004: 11
+  learner_005: 11
+  learner_006: 11
+  learner_007: 11
+All learners stopped: True
+Stop reason: configured_target
+Errors: []
+[0m
+[0m$ [0mgrep -n "schema_fingerprint\|schema_version" reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_pbs.log | head -10
+32:    "schema_fingerprint": "43496cfb369953d00f65e7fa7e7dd75c412441905a1487bd1b27903f75db922c",
+33:    "schema_version": 11
+[0m
+[0m$ [0mgrep -n "schema_fingerprint\|schema_version\|protocol_version" reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json
+633:    "schema_version": 11,
+[0m
+[0m$ [0mpython3 -c "
+import json
+d = json.load(open('reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json'))
+print('protocol_schema_identity:', json.dumps(d['protocol_schema_identity'], indent=2))
+"
+protocol_schema_identity: {
+  "ddl_sha256": "a775627c019dd7a3ed3d52563edd25b0c68f51a01a4cdeddbd12a5b8a294608e",
+  "mode": "static",
+  "version": 11
+}
+[0m
+[0m$ [0msha256sum fs_diloco/storage/schema.sql
+6404285c2c202c089f7affb9b1b46f22bc74aa41f770c593faf9c864241274da  fs_diloco/storage/schema.sql
+[0m
+[0m$ [0mgrep -n "ddl_sha256\|compute_ddl\|schema_fingerprint" fs_diloco/storage/authority.py | head -10
+127:    ddl_sha256: str
+128:    schema_fingerprint: str
+189:def _schema_fingerprint(connection: sqlite3.Connection) -> str:
+301:            fingerprint = _schema_fingerprint(connection)
+308:                    ddl_sha256, schema_fingerprint, created_at
+345:            "ddl_sha256": ddl_sha,
+346:            "schema_fingerprint": fingerprint,
+367:        ddl_sha256=ddl_sha,
+368:        schema_fingerprint=fingerprint,
+400:    actual_fingerprint = _schema_fingerprint(connection)
+[0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [offset=175, limit=30][0m
+[0m
+[0m$ [0mgrep -n "_schema_text\|BASE_SCHEMA_NAME\|DYNAMIC_SCHEMA_NAME\|_load_schema_text\|static_schema\|dynamic_schema" fs_diloco/storage/authority.py | head -15
+74:BASE_SCHEMA_NAME = "schema.sql"
+75:DYNAMIC_SCHEMA_NAME = "schema_dynamic.sql"
+153:def _schema_text(mode: str) -> tuple[str, ...]:
+154:    base = (_schema_dir() / BASE_SCHEMA_NAME).read_text(encoding="utf-8")
+158:        dynamic = (_schema_dir() / DYNAMIC_SCHEMA_NAME).read_text(encoding="utf-8")
+178:        (BASE_SCHEMA_NAME, DYNAMIC_SCHEMA_NAME), _schema_text(mode), strict=False
+285:    schemas = _schema_text(mode)
+[0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [offset=145, limit=20][0m
+[0m
+[0m$ [0mls fs_diloco/storage/*.sql
+fs_diloco/storage/schema_dynamic.sql
+fs_diloco/storage/schema.sql
+[0m

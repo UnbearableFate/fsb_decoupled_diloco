@@ -1,0 +1,12 @@
+I'll start by inspecting the repository structure and the review packet metadata, then examine the actual changes.
+Let me look at the actual changed source files and the key evidence files inparallel.
+Not a git repo - just the checked-out snapshot. Let me read all the relevant source, config, docs, and evidence files directly.
+Let me verify the canonical config and the structured result evidence, plus the code's SQLite classifier.
+Config confirms 50 local × 10 global. Now let me verify the structured result evidence and the PBS log identity, plus the source code's SQLite BUSY/LOCKEDclassifier.
+Evidence matches the README/testing claims. Now let me verify the critical SQLite scan contention classifier in code against the design.md documentation (priority#3).
+Only docs (README +2, design.md +2, testing.md +8) plus evidence files changed — no `fs_diloco/`, config, test, Checker, or script changes. Let me examine the exact doc diffs and verify the design.md scan-contention paragraph against code behavior.
+Let me examine the tests that assert scan-contention behavior, and re-read the exact design.md paragraph carefully against code.
+Let me read the scan-contention test oracle in test_syncer_composition.py to understand the traceability.
+Let me check the preceding receipt integrity test to see if filesystem OSError (JSON read) propagationis asserted.
+Let me check the current increment's finding-dispositions doc and the original R2 text to verify FSD-R2 remediation consistency.
+Let me check whether receipt/proposal files are written atomically (which would determine if OSError on read should fence). Also verify source identity of the over-baseline run and the u1 validation evidence consistency.

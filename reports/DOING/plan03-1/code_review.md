@@ -250,3 +250,20 @@ only after implementation, compute-node validation and Codex rereview.
 - Mandatory report:
   `reports/DOING/code_review/plan03-1/final-common-target-r3/codex-gpt_1558e1112108ec38388cc2361b69e2cf78d49217.md`.
   Verdict: `APPROVE` for external R3 review and then a fresh final ladder.
+
+## 2026-08-10T23:51:00+09:00 — R3 external review disposition
+
+- PBS job `2521665.opbs` reached terminal orchestration state on `mg0018` with
+  unchanged before/after digests for all four reviewer snapshots.
+- Claude Opus 5 was capacity-blocked before inference. GLM-5.2 and MiniMax M3
+  timed out; DeepSeek V4 Flash returned invalid empty output. No lane produced
+  a valid external report or verdict, so this round is not represented as
+  approval.
+- The retained partial traces contain no concrete new finding. Codex checked
+  their observations against the exact target; the 50 x 10 config, revision-11
+  evidence claims, SQLite contention text and over-baseline/final-G1 boundary
+  remain consistent.
+- Disposition:
+  `reports/DOING/code_review/plan03-1/final-common-target-r3/finding-dispositions_1558e1112108ec38388cc2361b69e2cf78d49217.md`.
+  No blocking finding is open. The best-effort external gate is terminal and
+  the fresh final ladder may begin.

@@ -3,12 +3,12 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P4-formal-and-docs
-work_unit_id: P4-W13-final-common-target
-state: EXTERNAL_TEST_REVIEW
+work_unit_id: P4-W14-final-u1
+state: FINAL_COMMON_TARGET_FREEZE
 base_commit: 5b474d5c1735beb8cca922fd6cc7b6304926df2c
 target_commit: 1558e1112108ec38388cc2361b69e2cf78d49217
-formal_source_commit: null
-formal_source_fingerprint: null
+formal_source_commit: 1558e1112108ec38388cc2361b69e2cf78d49217
+formal_source_fingerprint: sha256:9fdff5a7c613e044a7f97523ede2c566f60d4fc9fbf5a5cb4edd5c416ee06337
 experiment_id: plan03-1-current-review-remediation
 experiment_domain: product
 failure_counters:
@@ -64,6 +64,8 @@ required_evidence:
   - reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json
   - reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_pbs.log
   - reports/DOING/code_review/plan03-1/final-common-target-r3/codex-gpt_1558e1112108ec38388cc2361b69e2cf78d49217.md
+  - reports/DOING/code_review/plan03-1/final-common-target-r3/reviewer-job_1558e1112108ec38388cc2361b69e2cf78d49217_2521665.json
+  - reports/DOING/code_review/plan03-1/final-common-target-r3/finding-dispositions_1558e1112108ec38388cc2361b69e2cf78d49217.md
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -80,6 +82,6 @@ invalidated_evidence:
   - current-u1-target-3b99d1a-superseded-by-effective-entrypoint-oracle
 external_review:
   pbs_job_id: 2521665.opbs
-  status: running
+  status: terminal-no-valid-report
 open_blocking_findings: []
-allowed_next_action: monitor_external_final_common_target_r3
+allowed_next_action: submit_final_u1_one_node_validation
