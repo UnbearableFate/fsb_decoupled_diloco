@@ -1,9 +1,0 @@
-{
-  "artifact_schema_version": 1, "experiment_id": "p4-second-remediation-target-plan01-regression", "recorded_at": "2026-08-09T14:48:00+09:00",
-  "status": "PASS", "errors": [], "source_commit": "37b3feeeb64240acf40d2cfdeb7667b32782cd64",
-  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/fs_diloco/plan01_regression_2510249",
-  "identity": {"run_id": "plan01_regression_2510249", "git_dirty": false, "source_fingerprint": "sha256:1121846cf888f8325b354ba3ea736aa2f8c1057a9793eb7957b179a2e97b57c5", "descriptor_sha256": "240cff7396f48c444b116894544f657adeeff68a0ac6944d2b7632882b870aeb"},
-  "pbs": {"job_id": "2510249.opbs", "host": "mg0032", "queue": "debug-g", "requested_walltime": "00:10:00", "actual_walltime": "00:01:27", "exit_status": 0, "stdout_sha256": "cd8df8c92465f587ca070fd50ba8ffb6fcb52f5431da0564bf3e83d44f9e9449"},
-  "checks": {"full_tests": "904 passed", "strict_v4_smoke": "PASS", "telemetry_files": 3},
-  "authority": {"database_sha256_before_cleanup": "4675e228fa3486e17eed85f3526004da8736000a4afdff1a9ea78a1646c403af", "final_version": 2, "direct_weight_tokens_applied": 256, "acked_terminal_fences": 2, "hard_crash_gap_tokens_upper_bound": 0, "integrity_check": "ok"}
-}

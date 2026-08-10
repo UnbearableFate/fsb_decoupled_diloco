@@ -56,7 +56,7 @@ reports/DOING/01/
 
 ## 连续三次失败后的升级
 
-同一实验连续失败三次后，停止继续进行局部试错式修改，并在 `code_review.md` 中启动一次全面代码审查。完成审查和实施逻辑重写前，不得提交同一实验的第四次运行。
+同一实验连续失败三次后，停止继续进行局部试错式修改，并在 `code_review.md` 中启动一次只包含codex+gpt的全面代码审查。完成审查和实施逻辑重写前，不得提交同一实验的第四次运行。
 
 全面代码审查至少覆盖：
 
@@ -102,6 +102,8 @@ claude -p \
   --output-format json \
   '以commit <base-commit>为基线，审核commit <target-commit>相对该基线的完整代码修改（等价于git diff <base-commit> <target-commit>），覆盖相关源代码、测试、配置、PBS脚本、launcher、Checker和文档。将审核结果写入 <absolute-repo>/reports/DOING/code_review/<plan-id>/<phase-id>/claude-opus-5_<target-commit>.md，并在报告开头记录完整的base和target commit ID。按 Critical/High/Medium/Low 列出finding、证据、文件行号、修复建议和缺失测试，检查correctness、回归风险、错误处理、并发/持久化不变量、测试覆盖及plan验收条件，最后给出 APPROVE 或 CHANGES_REQUIRED；没有finding时列明检查范围。你是只读reviewer，除上述报告外不得修改任何文件或Git状态，不得qsub/qdel、删除run数据、commit、push或创建PR，也不得在报告中写入secret、token、凭据或完整环境变量。'
 ```
+
+若因账户会话限额而无法进行claude code 审查则跳过,并不影响任务进行.
 
 Codex同时独立审查同一`<base-commit>..<target-commit>`，并在读取Claude报告前保存自己的报告到同一目录。完成报告不可覆盖；重跑使用`-retryN`新文件。核验JSON中的实际模型和session ID；明确的Claude会话额度耗尽记为`skipped-session-limit`，不重试、不伪造报告且不阻断后续任务，Codex审查仍为必做门禁。其他模型/session/fallback/认证/权限错误均为`blocked`。
 

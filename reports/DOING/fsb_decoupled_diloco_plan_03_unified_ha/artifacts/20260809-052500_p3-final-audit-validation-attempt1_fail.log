@@ -1,7 +1,0 @@
-P3 final-audit validation attempt 1 FAIL
-PBS_JOBID=2508905.opbs host=mg0003 queue=debug-g nodes=1 walltime=00:10:00
-Ruff PASS; 40 files formatted; Plan03 Checker + P3 requirements PASS
-Focused pytest: 1 failed, 284 passed in 9.96s
-Full pytest: not run
-Failure: audit leaf-symlink test resolved the adversarial leaf through RunPaths.relative,
-producing outside.json; production correctly rejected the non-audit path before leaf lstat.
