@@ -21,3 +21,18 @@ Codex review covering inputs, authority/schema transitions, persistent rows,
 filesystem controls, process/PBS lifecycle, Checker output and alternative
 mutation design. The user has temporarily disabled external reviewers, so that
 review stage is recorded as skipped-by-user rather than fabricated as approval.
+
+### Comprehensive review result
+
+- Frozen target: `a701570a5762c05dd892b10599a27a793e6d1549`.
+- Mandatory report:
+  `reports/DOING/code_review/plan03-1/failure-P2-one-node-validation-round1/codex-gpt_a701570a5762c05dd892b10599a27a793e6d1549.md`.
+- Verdict: `CHANGES_REQUIRED`; one High harness finding F1 accepted.
+- Root cause: the token mutation violates a current SQLite equality constraint
+  and rolls back before the Checker runs.
+- Chosen rewrite: atomically change processed and effective tokens to 15, prove
+  the row committed, then require the exact workload error from the aggregate
+  Checker. Constraint disabling and weaker/different cursor/config probes are
+  rejected.
+- External failure review is skipped by explicit user direction. No fourth
+  attempt is allowed before implementing and reviewing the complete rewrite.

@@ -241,3 +241,19 @@
   schema-valid but workload-invalid durable state with an explicit oracle, and
   review the completed rewrite before any retry. External reviewers remain
   skipped under the user's current directive.
+
+## 2026-08-10T18:00:00+09:00 — LOGIC_REWRITE authorized by failure review
+
+- Comprehensive Codex failure review completed on frozen target
+  `a701570a5762c05dd892b10599a27a793e6d1549`; verdict
+  `CHANGES_REQUIRED`, with one accepted High harness finding F1.
+- The review traced fixture input through fenced authority persistence,
+  terminal/filesystem publication, direct mutation and Checker artifact output.
+  Attempt 3 rolled back at SQLite and never reached the Checker.
+- The approved rewrite changes processed and effective receipt tokens together
+  to a schema-valid value 15, asserts persistence, and requires the exact
+  cycle-workload error. Product code, schema and acceptance requirements remain
+  unchanged.
+- Transition: `FAILURE_REVIEW` -> `LOGIC_REWRITE`. External failure review is
+  skipped per user direction; the retained allocation remains available, but
+  no retry may run until rewrite implementation and Codex review are frozen.
