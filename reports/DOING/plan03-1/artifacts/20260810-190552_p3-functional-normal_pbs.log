@@ -1,0 +1,178 @@
+Currently Loaded Modulefiles:
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9  
+
+Key:
+(symbolic-version)  
+RUN_ID=plan03_1_p3_normal_20260810_190552
+SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan03_1_p3_normal_20260810_190552
+DESCRIPTOR_SHA256=fa176aa65997fbd24017c83d3d3a837814a4411872078941bf234ed6eddc96f7
+HOST mg0001
+HOST mg0004
+HOST mg0007
+HOST mg0009
+HOST mg0011
+{
+  "audit": {
+    "claimed_gc": 0,
+    "folded_batch_index_rows": 0,
+    "folded_batches": 0,
+    "hot_batches": 1,
+    "partitions": 0,
+    "pending_gc": 0
+  },
+  "authority": {
+    "ddl_sha256": "be522b2e708f98079776cba224d61108e4d9440b4e5e22ef949d0462df76e216",
+    "features": [],
+    "mode": "static",
+    "protocol_version": 4,
+    "schema_fingerprint": "385c18698797fc09424f4cbfa63569accaf296ead8ce2f5b0b98bb88bee63f13",
+    "schema_version": 9
+  },
+  "contributor_progress": {},
+  "controller": {
+    "drain_ack_deadline": 1786356416.0358067,
+    "generation": 1,
+    "hard_crash_cycle_token_budget": 320,
+    "proposal_visibility_deadline": 1786356388.4543347,
+    "reason": "configured_target",
+    "registration_visibility_deadline": 1786356386.0358067,
+    "requested_at": 1786356386.0358067,
+    "singleton": 1,
+    "state": "finalized",
+    "terminal_merge_count": 0,
+    "updated_by_epoch": 1,
+    "updated_by_owner_id": "syncer-4affa047-29c2-4548-a886-f5f0887e3fed"
+  },
+  "current_contributor_fences": [],
+  "dynamic": {
+    "capacity_observations": [],
+    "instances": [],
+    "launch_requests": [],
+    "streams": []
+  },
+  "integrity_check": [
+    "ok"
+  ],
+  "latest_version": {
+    "committed_at": 1786356385.894144,
+    "committed_by_epoch": 1,
+    "committed_by_owner_id": "syncer-4affa047-29c2-4548-a886-f5f0887e3fed",
+    "direct_weight_tokens_applied": 1280,
+    "optim_relative_path": "optim/epochs/e000001/8d7731345a8e/outer_v000004_pbfaa7f14ad00.safetensors",
+    "optim_sha256": "2e0b8d4fd604deb94044dd3a4a6f22cfe1935b32bb1a8fa9cdd059a2ad43498b",
+    "optim_size": 65856,
+    "predecessor_version": 3,
+    "publication_id": "bfaa7f14-ad00-408f-9383-b6e76d549e4a",
+    "theta_sha256": "f520479f641458ea931c3b07ed7640890a29fb2f52e3cad18896964f9025cdda",
+    "version": 4,
+    "weight_relative_path": "weights/epochs/e000001/8d7731345a8e/global_v000004_pbfaa7f14ad00.safetensors",
+    "weight_sha256": "84a06a929c03b0055be4394c0092cd334c281b0f688d33999765d18287ef8a56",
+    "weight_size": 33104
+  },
+  "run": {
+    "config_sha256": "d6f2f7881a43f840eca14b7609ca1de52348f490c1bfbe28fc2831e1c719ea1d",
+    "descriptor_sha256": "fa176aa65997fbd24017c83d3d3a837814a4411872078941bf234ed6eddc96f7",
+    "mode": "static",
+    "run_id": "plan03_1_p3_normal_20260810_190552",
+    "shared_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan03_1_p3_normal_20260810_190552",
+    "source_fingerprint": "sha256:07fdb8bf2ad92104b9ddb8de0fd2afd24ee7541cd7e5648ed58cb936c74ddaa0"
+  },
+  "syncer_epochs": [
+    {
+      "acquired_at": 1786356377.2222083,
+      "config_sha256": "d6f2f7881a43f840eca14b7609ca1de52348f490c1bfbe28fc2831e1c719ea1d",
+      "epoch": 1,
+      "final_at": 1786356387.0565827,
+      "final_state": "released",
+      "hostname": "mg0001",
+      "last_renewed_at": 1786356387.0565827,
+      "owner_id": "syncer-4affa047-29c2-4548-a886-f5f0887e3fed",
+      "pbs_job_id": "2519662.opbs",
+      "pid": 2394997,
+      "source_fingerprint": "sha256:07fdb8bf2ad92104b9ddb8de0fd2afd24ee7541cd7e5648ed58cb936c74ddaa0",
+      "superseded_by_epoch": null
+    }
+  ],
+  "terminal": {
+    "direct_weight_tokens_applied": 5120,
+    "final_version": 4,
+    "finalized_at": 1786356386.530734,
+    "finalized_by_epoch": 1,
+    "finalized_by_owner_id": "syncer-4affa047-29c2-4548-a886-f5f0887e3fed",
+    "generation": 1,
+    "singleton": 1,
+    "state": "finalized",
+    "stop_reason": "configured_target"
+  },
+  "terminal_contributor_fences": [
+    {
+      "acknowledged_at": 1786356386.3980713,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 100,
+      "close_last_cycle_seq": 5,
+      "fence_json": "{\"attempt_id\":\"attempt-7b91d106-a070-452b-8ee2-a0ffa05735da\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"allocation-2519662-learner_000\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 5,
+      "final_update_id": "f35e433d-69b7-4eaf-980b-757b5f92fcb9",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_000",
+      "state": "acked"
+    },
+    {
+      "acknowledged_at": 1786356386.4185543,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 100,
+      "close_last_cycle_seq": 5,
+      "fence_json": "{\"attempt_id\":\"attempt-05ec6e4e-ef02-4df3-b9b2-590a6ca9d33d\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_001\",\"logical_launch_id\":\"allocation-2519662-learner_001\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 5,
+      "final_update_id": "57f9405d-cb62-4c38-b73d-bbb9a4bcb7c8",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_001",
+      "state": "acked"
+    },
+    {
+      "acknowledged_at": 1786356386.4348087,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 100,
+      "close_last_cycle_seq": 5,
+      "fence_json": "{\"attempt_id\":\"attempt-9ef11305-9ef1-4c72-8f60-4f0536904e3b\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_002\",\"logical_launch_id\":\"allocation-2519662-learner_002\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 5,
+      "final_update_id": "45ae1eed-27a1-4925-b66f-68816f7ffafd",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_002",
+      "state": "acked"
+    },
+    {
+      "acknowledged_at": 1786356386.4430046,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 100,
+      "close_last_cycle_seq": 5,
+      "fence_json": "{\"attempt_id\":\"attempt-e22827d7-fa51-46f5-945c-638b808e28b8\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_003\",\"logical_launch_id\":\"allocation-2519662-learner_003\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 5,
+      "final_update_id": "7f79c3b4-3af4-4ea3-8043-35d9a2266909",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_003",
+      "state": "acked"
+    }
+  ],
+  "token_ledger": {
+    "adjudicated_processed": 6400,
+    "carried_ancestry": 0,
+    "direct_applied": 5120,
+    "direct_dropped": 1280,
+    "direct_outstanding": 0,
+    "direct_quarantined_or_conflicted": 0,
+    "direct_reported_unpublished": 0,
+    "hard_crash_gap_tokens_upper_bound": 0,
+    "local_discarded": 0
+  }
+}
+FAIL
+[ERROR] Full Protocol job failed at line 76

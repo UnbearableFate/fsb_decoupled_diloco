@@ -151,3 +151,47 @@
   P3 manifest, freeze and Codex-review that report-only design change, then
   submit a new create-only normal scenario identity. Runtime source scopes stay
   unchanged; no evidence from the cancelled submissions is promoted.
+
+## 2026-08-10T19:06:26+09:00 — P3 normal Checker attempt 1
+
+- Experiment: `p3-functional-normal-01`; domain:
+  `harness:p3-functional-checker-01`.
+- Category: `test-harness-failure`; valid attempt: yes; consecutive harness
+  count: 1. The product experiment counter remains 0 because the sole failure
+  is an acceptance formula that contradicts the registered protocol workload.
+- PBS job `2519662.opbs` ran on five exact `debug-g` nodes
+  (`mg0001`, `mg0004`, `mg0007`, `mg0009`, `mg0011`) with
+  `5:ncpus=8:mpiprocs=1:mem=16gb`, five GPUs and `00:10:00`; terminal scheduler
+  state is `F/substate=93`, exit status 1, walltime 14 seconds.
+- Clean source commit:
+  `4e46b0026e044842cf3956ae7f4c95a5a8f2206b`; fingerprint
+  `sha256:07fdb8bf2ad92104b9ddb8de0fd2afd24ee7541cd7e5648ed58cb936c74ddaa0`.
+- Durable result: versions are exactly 0-4; every contributor has four applied
+  proposals and credit 4; direct applied tokens are exactly 5120; all five
+  actor attestations match the PBS nodes; the single epoch is released; every
+  terminal fence is acknowledged; publication hashes and SQLite integrity are
+  valid; the ledger balances to zero with no outstanding work.
+- The Checker nevertheless returned `FAIL` only because it required exactly 16
+  total receipts/proposals. The real protocol produced 20 exact 320-token
+  cycles: 16 were applied and four were durably dropped as superseded or as the
+  unselected terminal update. This is the designed asynchronous/terminal
+  adjudication path, and the P3 manifest fixes applied work rather than total
+  attempted cycles.
+- Evidence:
+  `artifacts/20260810-190552_p3-functional-normal_pass.json` (status is `FAIL`,
+  SHA-256 `1799ab2cbdfff46470b53c8269dfa155af2f230c6c18f4d8e239b398d8fad97b`)
+  and `artifacts/20260810-190552_p3-functional-normal_pbs.log` (SHA-256
+  `84a7e8d3ed8f8bc58b6420a04798205d440de3ace19df7c15b7542bdb1e45d8f`).
+  The complete run/log roots remain retained and the artifact correctly marks
+  cleanup ineligible.
+- Root cause: the normal-only Checker branch conflates total locally processed
+  cycles with committed contributions. It conflicts with Full Protocol
+  supersession and terminal drain while duplicating stronger existing applied,
+  cursor, fate-ledger and terminal oracles.
+- Remediation: replace exact total-cycle equality with a strict normal-run
+  adjudication oracle: every receipt must map one-to-one to an exact-workload
+  proposal, exactly 16 proposals must be applied, every additional proposal
+  must be durably dropped, dropped tokens must equal processed minus applied,
+  and all other direct fates/local discards/outstanding work must be zero. Add a
+  positive aggregate terminal-overshoot fixture and a negative non-drop-fate
+  mutation before rerunning the candidate gates.

@@ -461,3 +461,19 @@
 - External review remains skipped under user direction. The next action is one
   new `functional-normal` submission to `debug-g`; fault scenarios remain
   blocked until its structured terminal artifact is PASS.
+
+## 2026-08-10T19:06:26+09:00 — P3 normal targeted remediation
+
+- The revised queue route started immediately and exercised the complete
+  five-node Full Protocol in 14 seconds. Topology, source, exact applied work,
+  publications, terminal authority, token balance and integrity all reached
+  their registered durable values.
+- The structured artifact is still `FAIL`, so no P3 requirement is promoted.
+  Its only error is a Checker-only exact-total-cycle assertion: asynchronous
+  learners produced one additional adjudicated cycle each, with all four extra
+  proposals terminal/supersession-dropped and fully balanced.
+- Transition: `STAGED_TEST_EXECUTION` -> `TARGETED_REMEDIATION` in the harness
+  domain, count 1. Preserve the complete failed run, strengthen the Checker to
+  validate exact applied work plus lawful dropped overshoot, add positive and
+  negative aggregate tests, complete Codex review, then rerun one-node
+  validation before another five-node normal attempt.

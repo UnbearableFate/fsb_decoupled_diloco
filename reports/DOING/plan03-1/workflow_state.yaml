@@ -3,20 +3,21 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P3-functional-faults
-work_unit_id: P3-W3-functional-normal-queue-routing
-state: STAGED_TEST_EXECUTION
-base_commit: 4688bedebda2cee94137bf943425ca3d9c31ed17
-target_commit: debbcdf10267c5fb786dded33c17d2caba08f198
+work_unit_id: P3-W3-functional-normal-checker-remediation
+state: TARGETED_REMEDIATION
+base_commit: 4e46b0026e044842cf3956ae7f4c95a5a8f2206b
+target_commit: null
 formal_source_commit: null
 formal_source_fingerprint: null
-experiment_id: p3-functional-fault-queue-routing-01
-experiment_domain: product
+experiment_id: p3-functional-normal-01
+experiment_domain: harness
 failure_counters:
   "harness:p2-one-node-validation-01": 0
   "harness:p2-one-node-full-suite-01": 0
   "product:p3-functional-normal-01": 0
   "product:p3-learner-replacement-01": 0
   "product:p3-syncer-takeover-01": 0
+  "harness:p3-functional-checker-01": 1
 required_tests:
   - p3-functional-normal
   - p3-learner-replacement
@@ -27,13 +28,16 @@ required_evidence:
   - reports/DOING/plan03-1/artifact-schema.md
   - reports/DOING/code_review/plan03-1/test-P3-functional-fault-design/codex-gpt_4688bedebda2cee94137bf943425ca3d9c31ed17.md
   - reports/DOING/code_review/plan03-1/critical-P3-queue-routing/codex-gpt_debbcdf10267c5fb786dded33c17d2caba08f198.md
+  - reports/DOING/plan03-1/artifacts/20260810-190552_p3-functional-normal_pass.json
+  - reports/DOING/plan03-1/artifacts/20260810-190552_p3-functional-normal_pbs.log
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
   - p2-focused-attempt-3-workload-mutation-not-committed
   - p2-full-suite-attempt-1-stale-test-surfaces
+  - p3-normal-attempt-1-checker-exact-total-cycle-false-negative
 external_review:
   pbs_job_id: null
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: submit_p3_functional_normal
+allowed_next_action: remediate_p3_normal_checker_terminal_overshoot
