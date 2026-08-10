@@ -88,8 +88,8 @@
       ],
       "tests": [
         "tests/protocol/test_accounting_selection_cursor.py",
-        "tests/protocol/test_cycle_receipt_v1.py",
-        "tests/protocol/test_proposal_v2.py",
+        "tests/protocol/test_cycle_receipt.py",
+        "tests/protocol/test_proposal.py",
         "tests/storage/test_contributor_progress.py",
         "tests/storage/test_static_contributor_binding.py"
       ]

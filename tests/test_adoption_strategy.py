@@ -29,6 +29,8 @@ def _config(strategy: str = "replace") -> Config:
     config.model.name_or_path = "synthetic-tiny"
     config.data.dataset_name = "synthetic"
     config.learner.global_adoption_strategy = strategy
+    if strategy != "replace":
+        config.learner.poll_latest_during_inner_steps = True
     config.validate()
     return config
 
@@ -79,8 +81,8 @@ def _context(
     ("strategy_name", "expected_type"),
     [
         ("replace", ReplaceGlobalAdoptionStrategy),
-        ("rebase_local", RebaseGlobalAdoptionStrategy),
-        ("predict_global", PredictGlobalAdoptionStrategy),
+        ("rebase_post_publish_delta", RebaseGlobalAdoptionStrategy),
+        ("predict_post_publish_global", PredictGlobalAdoptionStrategy),
     ],
 )
 def test_strategy_factory_dispatches(strategy_name, expected_type):
@@ -151,7 +153,7 @@ def test_replace_adoption_uses_actual_latest_returned_by_retry_helper():
 
 
 def test_rebase_context_returns_actual_latest_from_retry_helper():
-    config = _config("rebase_local")
+    config = _config("rebase_post_publish_delta")
 
     def recovered_load(**kwargs):
         recovered = {"version": 4, "weight_path": "global-4"}
@@ -180,7 +182,7 @@ def test_rebase_context_returns_actual_latest_from_retry_helper():
 
 
 def test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption():
-    config = _config("rebase_local")
+    config = _config("rebase_post_publish_delta")
     logger = RecordingLogger()
     ctx = _context(config, logger=logger)
     strategy = RebaseGlobalAdoptionStrategy()
@@ -207,7 +209,7 @@ def test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption():
 
 
 def test_prediction_strategy_starts_reconciles_and_abandons_on_stop():
-    config = _config("predict_global")
+    config = _config("predict_post_publish_global")
     logger = RecordingLogger()
     ctx = _context(config, logger=logger)
     strategy = PredictGlobalAdoptionStrategy()
@@ -240,7 +242,7 @@ def test_prediction_strategy_starts_reconciles_and_abandons_on_stop():
 
 
 def test_prediction_strategy_timeout_keeps_state_for_diagnostics():
-    config = _config("predict_global")
+    config = _config("predict_post_publish_global")
     logger = RecordingLogger()
     ctx = _context(config, logger=logger)
     strategy = PredictGlobalAdoptionStrategy()
@@ -254,7 +256,7 @@ def test_prediction_strategy_timeout_keeps_state_for_diagnostics():
 
 
 def test_prediction_reconcile_stop_during_wait_abandons_without_timeout(tmp_path):
-    config = _config("predict_global")
+    config = _config("predict_post_publish_global")
     paths = RunPaths(tmp_path)
     logger = RecordingLogger()
 
@@ -285,7 +287,7 @@ def test_prediction_reconcile_stop_during_wait_abandons_without_timeout(tmp_path
 
 
 def test_predict_after_publish_stop_skips_prediction_preparation(tmp_path):
-    config = _config("predict_global")
+    config = _config("predict_post_publish_global")
     paths = RunPaths(tmp_path)
     atomic_write_json(paths.stop_json, {"reason": "stop_after_outer_steps"})
     calls = []
@@ -314,7 +316,7 @@ def test_predict_after_publish_stop_skips_prediction_preparation(tmp_path):
 
 
 def test_rebase_after_publish_stop_skips_anchor_snapshot(tmp_path):
-    config = _config("rebase_local")
+    config = _config("rebase_post_publish_delta")
     paths = RunPaths(tmp_path)
     atomic_write_json(paths.stop_json, {"reason": "stop_after_outer_steps"})
     calls = []
@@ -344,8 +346,8 @@ def test_rebase_after_publish_stop_skips_anchor_snapshot(tmp_path):
 @pytest.mark.parametrize(
     "strategy_type,strategy_name",
     [
-        (PredictGlobalAdoptionStrategy, "predict_global"),
-        (RebaseGlobalAdoptionStrategy, "rebase_local"),
+        (PredictGlobalAdoptionStrategy, "predict_post_publish_global"),
+        (RebaseGlobalAdoptionStrategy, "rebase_post_publish_delta"),
     ],
 )
 def test_ha_adoption_ignores_polluted_fixed_stop_without_authoritative_terminal(
@@ -385,8 +387,8 @@ def test_ha_adoption_ignores_polluted_fixed_stop_without_authoritative_terminal(
 @pytest.mark.parametrize(
     "strategy_type,strategy_name",
     [
-        (PredictGlobalAdoptionStrategy, "predict_global"),
-        (RebaseGlobalAdoptionStrategy, "rebase_local"),
+        (PredictGlobalAdoptionStrategy, "predict_post_publish_global"),
+        (RebaseGlobalAdoptionStrategy, "rebase_post_publish_delta"),
     ],
 )
 def test_stop_does_not_skip_already_visible_direct_adoption(tmp_path, strategy_type, strategy_name):

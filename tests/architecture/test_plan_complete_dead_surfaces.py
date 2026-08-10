@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import re
+import subprocess
 from pathlib import Path
 
 
@@ -69,12 +70,13 @@ def test_receipt_identity_and_paths_have_one_protocol_owner() -> None:
 
 
 def test_only_unversioned_product_surfaces_exist() -> None:
-    tracked = {
-        path.relative_to(ROOT).as_posix()
-        for root in (ROOT / "fs_diloco", ROOT / "configs", ROOT / "scripts", ROOT / "tests")
-        for path in root.rglob("*")
-        if path.is_file()
-    }
+    tracked = set(
+        subprocess.check_output(
+            ["git", "ls-files", "--", "fs_diloco", "configs", "scripts", "tests"],
+            cwd=ROOT,
+            text=True,
+        ).splitlines()
+    )
     generation_suffix = re.compile(r"(?:^|[/_.-])v[0-9]+(?:$|[/_.-])")
     assert not any(generation_suffix.search(path) for path in tracked)
 

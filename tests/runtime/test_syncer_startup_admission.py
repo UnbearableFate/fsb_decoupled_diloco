@@ -33,13 +33,11 @@ class _Telemetry:
 def _loaded(mode: str = "static"):
     return SimpleNamespace(
         config=SimpleNamespace(
-            shared=SimpleNamespace(
-                membership=SimpleNamespace(
-                    mode=mode,
-                    registration_scan_interval_seconds=2.0,
-                ),
-                sync=SimpleNamespace(scan_interval_seconds=0.2),
-            )
+            membership=SimpleNamespace(
+                mode=mode,
+                registration_scan_interval_seconds=2.0,
+            ),
+            sync=SimpleNamespace(scan_interval_seconds=0.2),
         ),
         descriptor={
             "static_learner_ids": ["learner_000", "learner_001"],
