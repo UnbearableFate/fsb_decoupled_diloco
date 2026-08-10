@@ -1,0 +1,7 @@
+I'll start by exploring the repository structure and the review packet metadata.
+Let me read the key design documents first.
+Now let me explore the fs_diloco package structure.
+Let me examine the storage schema and authority files.
+Let me dispatch two exploration subagents in parallel for the tests and the learner/admission/protocol modules, while I review tools/configs/docs myself.
+The first subagent returned a detailed report; the second returned empty. Let me retry the learner/admission/protocol review.
+The subagent returned empty again. I'll review the learner and protocol data path directly.

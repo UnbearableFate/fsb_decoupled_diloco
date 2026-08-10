@@ -25,12 +25,14 @@
   contributor fence; an old attempt cannot mutate receipt/proposal/adoption
   state after replacement.
 - Fault layer: learner process/PBS actor after at least one accepted cycle.
-- Injection: terminate one learner, start a successor for the same logical
-  contributor using the current launcher, and allow the old attempt to retry a
-  fenced mutation when practical.
-- Durable success oracle: newer contributor fence in SQLite, old-fence mutation
-  rejected, successor accepted, contributor progresses to terminal ack, ledger
-  remains balanced, and no duplicate proposal becomes committed.
+- Injection: terminate one learner, then start a successor for the same logical
+  contributor using the current launcher.
+- Durable multi-node success oracle: newer contributor fence and replaced
+  binding history in SQLite, successor accepted, contributor progresses to
+  terminal ack, ledger remains balanced, and no duplicate proposal becomes
+  committed. Stale-fence mutation rejection is proven independently by
+  authority unit tests; the sequential process injection does not claim to
+  execute a live old writer after replacement.
 - Replay/recovery: immutable request/proposal IDs and fenced commands may replay
   idempotently; only the successor fence may create new accepted work.
 - Cleanup owner: the integration harness after terminal proof and artifact
@@ -40,13 +42,16 @@
 
 - Mutation authority: only the exact current `(epoch, owner_id)` may commit a
   business transaction.
-- Fault layer: syncer process/PBS actor outside a SQLite transaction, with a
-  second candidate already able to acquire after expiry/failure.
-- Injection: terminate or pause the first leader at a pre-registered safe point;
-  start/retain a second candidate and wait for a higher epoch.
-- Durable success oracle: higher successor epoch, old token rejected, one
-  predecessor-successor publication per version, no split-brain command receipt,
+- Fault layer: syncer process/PBS actor outside a SQLite transaction at the one
+  launcher-owned takeover boundary version, consumed unchanged by the Checker.
+- Injection: pause and terminate the first leader at that safe point, then start
+  a successor and wait for a higher epoch.
+- Durable multi-node success oracle: higher successor epoch, one
+  predecessor-successor publication per version, no stale-epoch publication,
   all learners adopt and acknowledge terminal, and SQLite integrity is `ok`.
+  Stale-token rejection and command-replay conflicts are proven independently
+  by authority unit tests; the sequential process injection does not claim to
+  execute a concurrent stale writer.
 - Replay/recovery: publication/merge commands use exact IDs and may replay only
   to the same committed result; successor reconciles an already-published
   immutable object rather than creating an alternate version.

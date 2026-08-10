@@ -925,3 +925,73 @@
   authority schema/recovery ownership, evidence retention and exact result.
   The canonical formal config is restored to 50 local steps and 10 global
   steps. Freeze this documentation-complete source before any final gate.
+
+## 2026-08-10T21:16:51+09:00 — FINAL_COMMON_TARGET_FREEZE
+
+- Documentation-complete final source commit:
+  `5b474d5c1735beb8cca922fd6cc7b6304926df2c`. Formal source scopes are clean.
+- Codex R2 reviewed the complete tracked current state and exact final ladder;
+  SURFACE-01, CONFIG-01, SCHEMA-01, CLEAN-01 and ARCH-01 have no open finding.
+  Verdict: `APPROVE`. External review remains skipped by user direction.
+- No formal source-scope edit is now allowed. Reports and new evidence remain
+  uncommitted/outside the fingerprint while U1, three F1 scenarios and G1 run
+  serially from this exact HEAD. U1 will capture the frozen source fingerprint,
+  which every later gate and both machine review artifacts must match.
+
+## 2026-08-10T21:23:07+09:00 — final U1 one-node validation PASS
+
+- Interactive PBS job `2520667.opbs` ran on exact one-node `interact-g`
+  topology `mg0005` with `1:ncpus=8:mem=16gb` and exited 0 after 2:19.
+- The clean final source remained
+  `5b474d5c1735beb8cca922fd6cc7b6304926df2c`, with fingerprint
+  `sha256:d824e2ae1c30346b034dbfd0e8b618910dbc7eb14e8ee5a250551051e90369ea`.
+- Ruff format and lint passed. The registered focused suite passed 169 tests;
+  the complete suite passed 527 tests. Both JUnit projections contain no
+  failure, error or skip.
+- Evidence SHA-256 values: structured artifact
+  `84f76dfceedf4e318f77dec4dfbe18a9962c913d151b7a63d9c5386e73703d15`,
+  raw log
+  `1ac4865d704db8a0f3c53f59c0b6429fa799f696ca7d3eb2e7943b8783ef33c2`,
+  focused JUnit
+  `77c205b61f82e05dd30cb8c939ae60986bc122fc3baf55ad1a1492f7ced759c0`
+  and full JUnit
+  `7dcb13d34471585d5287a52a010276d36b93a61020aad03c5bb1ce90b7c38ead`.
+- Transition: `FINAL_COMMON_TARGET_FREEZE` -> `FINAL_TEST_LADDER`. Run the
+  normal F1 scenario next, then learner replacement and syncer takeover,
+  without changing any formal source scope.
+
+## 2026-08-10T21:30:00+09:00 — PLAN_REMEDIATION from current-review audit
+
+- Final normal F1 job `2520697.opbs` completed on five `debug-g` nodes in 14
+  seconds with scheduler exit 0 and a structured PASS. It used final target
+  `5b474d5c1735beb8cca922fd6cc7b6304926df2c` and the frozen
+  `sha256:d824e2ae1c30346b034dbfd0e8b618910dbc7eb14e8ee5a250551051e90369ea`
+  fingerprint. Its result/raw/source-identity SHA-256 values are respectively
+  `b0a0605fbca3f20b71e74d29031b3705cf75c3f658503b79eaf7bb233bbafa06`,
+  `b9570a04c910fd32643045064a47efbfe1672ec90be78f9ce9107484d62975f0`
+  and `ca34a670a941feca6812fea3ff84c25b93c62863a0916b33ce02df4dbe7e330b`.
+- The user then explicitly added the retained current-review disposition file
+  to the modification list. Codex re-audited every finding against the actual
+  current tree. H1-H4 are already closed by later P4 changes; M1-M7 and L1-L6
+  remain real; L7 is informational and already documented. Independently
+  versioned receipt/proposal wire types remain intentional.
+- Because the accepted fixes change formal source scopes, R2, final U1 and the
+  just-completed normal F1 are retained but invalidated for final promotion.
+  Transition: `FINAL_TEST_LADDER` -> `PLAN_REMEDIATION`; implement and validate
+  the current-only fixes before freezing a new common source target.
+
+## 2026-08-10T21:51:14+09:00 — multi-agent review restored
+
+- The user restored external multi-agent review to the active workflow,
+  superseding the temporary Codex-only direction for all future gates.
+- The reviewer runner and workflow now consistently own four current lanes:
+  Claude Opus 5, GLM-5.2, DeepSeek V4 Flash and MiniMax M3. The old Kimi slot
+  is deleted rather than aliased.
+- The completion Checker now validates schema-2 Codex review artifacts without
+  the obsolete `skipped-by-user` field. External summary/disposition evidence
+  remains a separate best-effort input, while every valid finding still blocks
+  experimentation until disposition.
+- Static preflight found and removed one stale focused-suite path to deleted
+  `tests/test_cli.py`; shell syntax, Python compilation, focused Ruff format
+  and lint, literal PBS groups and diff whitespace checks pass. Freeze the
+  remediation target for Codex-first and then external multi-agent review.

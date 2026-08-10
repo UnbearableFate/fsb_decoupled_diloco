@@ -37,7 +37,6 @@ FOCUSED_TESTS = (
     "tests/storage/test_dynamic_admission_request.py",
     "tests/test_capture_source_identity.py",
     "tests/test_clean_run.py",
-    "tests/test_cli.py",
     "tests/test_config.py",
     "tests/tools/test_analysis.py",
     "tests/tools/test_launch_independent_run.py",

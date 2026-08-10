@@ -99,3 +99,71 @@ review stage is recorded as skipped-by-user rather than fabricated as approval.
   affected tests, 169 focused tests and 527 complete tests with all registered
   format/lint/JUnit gates passing.
 - Verdict: `APPROVE`. External review remains skipped by user direction.
+
+## 2026-08-10T21:16:51+09:00 — R2 final-target preformal review
+
+- Final source target: `5b474d5c1735beb8cca922fd6cc7b6304926df2c`.
+- Mandatory report:
+  `reports/DOING/code_review/plan03-1/plan-complete-final-target-r2/codex-gpt_5b474d5c1735beb8cca922fd6cc7b6304926df2c.md`.
+- Scope: complete tracked current repository, documentation-complete final
+  design and exact final ladder; requirements SURFACE/CONFIG/SCHEMA/CLEAN/ARCH.
+- All prior preformal findings remain closed. Verdict: `APPROVE`.
+- External review remains skipped by explicit user direction and is not a gate.
+
+## 2026-08-10T21:30:00+09:00 — current review disposition re-audit
+
+The user explicitly added
+`reports/DOING/code_review/plan03-1/critical-current-fs-diloco/finding-dispositions_4ebee6339fb76f63127874c655d7b109b2ec0b39.md`
+to the remediation inputs. This is a disposition audit of already-produced
+evidence, not a resumption of external reviewer execution.
+
+Codex checked every finding against current target
+`5b474d5c1735beb8cca922fd6cc7b6304926df2c` rather than assuming that the
+older reviewed target still described the worktree:
+
+- FSD-H1 is already closed: U1 publishes and validates nonzero JUnit test
+  totals with zero failures, errors and skips, and hash-binds both XML files.
+- FSD-H2 is already closed: the fault scenario is the sole registered input;
+  the Checker unconditionally pins binding generations and exact history.
+- FSD-H3 is already closed: contributor progress directly owns
+  `last_update_id`, admission/resume carries it, and the learner uses it for a
+  graceful terminal acknowledgement.
+- FSD-H4 is already closed: valid normal/replacement/takeover fixtures execute
+  the fault branches and targeted mutations prove rejection.
+- FSD-M1 through M7 remain real in the current state: syncer admission/ingest
+  composition lacks a behavioural owner test; the multi-node fault text
+  overclaims stale-writer evidence; config discovery is CWD-relative; the
+  generation scan is path-only and vacuous; integrity exceptions are broadly
+  swallowed; the takeover boundary is duplicated; and unused console/facade
+  surfaces remain.
+- FSD-L1 through L6 also remain real current-only cleanup defects: duplicated
+  owner-path derivation, an unwritten schema state, contradictory Python floor,
+  stale defaults, swallowed leader release failure, and repeated/inert static
+  config fields. FSD-L7 is not a defect and is already explicitly bounded to
+  unit evidence in `identity-authority.md`.
+- The recommendation to rename independently versioned `CycleReceiptV1` and
+  `FullUpdateProposalV2` remains rejected. Their wire-format identity is
+  current protocol data, not a Full Protocol product-generation suffix; the
+  repaired content oracle will encode this precise distinction.
+
+The completed final U1 and normal F1 artifacts remain valid historical results
+for their exact source but are invalidated for promotion because the accepted
+current-source remediations change formal scopes. The final ladder will restart
+only after implementation, compute-node validation and Codex rereview.
+
+## 2026-08-10T21:51:14+09:00 — multi-agent review restored
+
+- The user's temporary Codex-only direction is now superseded. External
+  multi-agent review is restored for the remaining remediation, preformal and
+  final-evidence review gates under the workflow's best-effort availability
+  rule; every valid finding remains mandatory input to Codex disposition.
+- The four current reviewer lanes are Claude Opus 5, GLM-5.2, DeepSeek V4
+  Flash and MiniMax M3. The obsolete Kimi-named runner slot and environment
+  variable are removed instead of retained as aliases.
+- Formal Codex review artifacts advance to schema 2 and no longer encode the
+  temporary `skipped-by-user` policy. External invocation summaries and
+  dispositions remain separate tracked inputs so an outage cannot be
+  represented as approval.
+- The current remediation will be frozen and reviewed by Codex before the
+  external job is submitted. Runtime validation remains blocked until any
+  valid external findings are disposed.

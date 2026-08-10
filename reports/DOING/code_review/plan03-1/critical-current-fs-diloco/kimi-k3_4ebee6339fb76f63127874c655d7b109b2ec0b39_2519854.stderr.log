@@ -1,0 +1,782 @@
+[0m
+> plan · minimax-m3
+[0m
+[0m$ [0mls -la
+total 28
+dr-xr-x--- 10 x10041 xg24i002  225 Aug 10 19:23 .
+drwx------  7 x10041 xg24i002  173 Aug 10 19:23 ..
+-r--r-----  1 x10041 xg24i002 5399 Aug 10 19:18 AGENTS.md
+dr-xr-x---  2 x10041 xg24i002  110 Aug 10 19:18 configs
+dr-xr-x---  2 x10041 xg24i002  103 Aug 10 19:18 docs
+dr-xr-x---  9 x10041 xg24i002  182 Aug 10 19:18 fs_diloco
+-r--r-----  1 x10041 xg24i002  460 Aug 10 19:18 .gitignore
+dr-xr-x---  6 x10041 xg24i002  202 Aug 10 19:18 plans
+-r--r-----  1 x10041 xg24i002 1616 Aug 10 19:18 pyproject.toml
+-r--r-----  1 x10041 xg24i002    5 Aug 10 19:18 .python-version
+-r--r-----  1 x10041 xg24i002 1944 Aug 10 19:18 README.md
+dr-xr-x---  5 x10041 xg24i002   53 Aug 10 19:18 reports
+dr-xr-x---  2 x10041 xg24i002   71 Aug 10 19:23 .review-packet
+dr-xr-x---  3 x10041 xg24i002   20 Aug 10 19:18 scripts
+dr-xr-x---  9 x10041 xg24i002 4096 Aug 10 19:18 tests
+[0m
+[0m$ [0mls -la .review-packet/ fs_diloco/ plans/ reports/ scripts/ tests/ configs/ docs/
+configs/:
+total 12
+dr-xr-x---  2 x10041 xg24i002  110 Aug 10 19:18 .
+dr-xr-x--- 10 x10041 xg24i002  225 Aug 10 19:23 ..
+-r--r-----  1 x10041 xg24i002 2493 Aug 10 19:18 full_protocol_dynamic.yaml
+-r--r-----  1 x10041 xg24i002 1855 Aug 10 19:18 full_protocol_functional.yaml
+-r--r-----  1 x10041 xg24i002 1854 Aug 10 19:18 full_protocol_static.yaml
+
+docs/:
+total 20
+dr-xr-x---  2 x10041 xg24i002  103 Aug 10 19:18 .
+dr-xr-x--- 10 x10041 xg24i002  225 Aug 10 19:23 ..
+-r--r-----  1 x10041 xg24i002 2179 Aug 10 19:18 configuration.md
+-r--r-----  1 x10041 xg24i002 3538 Aug 10 19:18 design.md
+-r--r-----  1 x10041 xg24i002 2961 Aug 10 19:18 operations.md
+-r--r-----  1 x10041 xg24i002  410 Aug 10 19:18 README.md
+-r--r-----  1 x10041 xg24i002 2807 Aug 10 19:18 testing.md
+
+fs_diloco/:
+total 20
+dr-xr-x---  9 x10041 xg24i002  182 Aug 10 19:18 .
+dr-xr-x--- 10 x10041 xg24i002  225 Aug 10 19:23 ..
+-r--r-----  1 x10041 xg24i002  821 Aug 10 19:18 cli.py
+dr-xr-x---  2 x10041 xg24i002  157 Aug 10 19:18 core
+-r--r-----  1 x10041 xg24i002  102 Aug 10 19:18 __init__.py
+-r--r-----  1 x10041 xg24i002  220 Aug 10 19:18 learner.py
+dr-xr-x---  2 x10041 xg24i002  147 Aug 10 19:18 modeling
+dr-xr-x---  2 x10041 xg24i002   49 Aug 10 19:18 observability
+dr-xr-x---  2 x10041 xg24i002  237 Aug 10 19:18 protocol
+dr-xr-x---  3 x10041 xg24i002  202 Aug 10 19:18 runtime
+dr-xr-x---  2 x10041 xg24i002 4096 Aug 10 19:18 storage
+-r--r-----  1 x10041 xg24i002  217 Aug 10 19:18 syncer.py
+dr-xr-x---  2 x10041 xg24i002  226 Aug 10 19:18 tools
+
+plans/:
+total 104
+dr-xr-x---  6 x10041 xg24i002   202 Aug 10 19:18 .
+dr-xr-x--- 10 x10041 xg24i002   225 Aug 10 19:23 ..
+-r--r-----  1 x10041 xg24i002 28376 Aug 10 19:18 00-RESEARCH_PLAN.md
+-r--r-----  1 x10041 xg24i002 29409 Aug 10 19:18 01-FULL_REFERENCE_AND_BOUNDED_STATE_PLAN.md
+-r--r-----  1 x10041 xg24i002  2695 Aug 10 19:18 AGENTS.md
+dr-xr-x---  3 x10041 xg24i002    19 Aug 10 19:18 DOING
+dr-xr-x--- 10 x10041 xg24i002   200 Aug 10 19:18 DONE
+dr-xr-x---  2 x10041 xg24i002    43 Aug 10 19:18 followups
+-r--r-----  1 x10041 xg24i002   166 Aug 10 19:18 plans_create_guide.md
+dr-xr-x---  2 x10041 xg24i002    80 Aug 10 19:18 ref
+-r--r-----  1 x10041 xg24i002 35127 Aug 10 19:18 workflow.md
+
+reports/:
+total 4
+dr-xr-x---  5 x10041 xg24i002   53 Aug 10 19:18 .
+dr-xr-x--- 10 x10041 xg24i002  225 Aug 10 19:23 ..
+dr-xr-x--- 11 x10041 xg24i002 4096 Aug 10 19:18 checked
+dr-xr-x---  4 x10041 xg24i002   41 Aug 10 19:18 DOING
+dr-xr-x---  2 x10041 xg24i002  157 Aug 10 19:18 plan_review
+
+.review-packet/:
+total 1384
+dr-xr-x---  2 x10041 xg24i002      71 Aug 10 19:23 .
+dr-xr-x--- 10 x10041 xg24i002     225 Aug 10 19:23 ..
+-r--r-----  1 x10041 xg24i002   14453 Aug 10 19:23 changed-files.txt
+-r--r-----  1 x10041 xg24i002   15084 Aug 10 19:23 diff-stat.txt
+-r--r-----  1 x10041 xg24i002 1380471 Aug 10 19:23 target.diff
+
+scripts/:
+total 0
+dr-xr-x---  3 x10041 xg24i002  20 Aug 10 19:18 .
+dr-xr-x--- 10 x10041 xg24i002 225 Aug 10 19:23 ..
+dr-xr-x---  2 x10041 xg24i002 310 Aug 10 19:18 miyabi
+
+tests/:
+total 116
+dr-xr-x---  9 x10041 xg24i002  4096 Aug 10 19:18 .
+dr-xr-x--- 10 x10041 xg24i002   225 Aug 10 19:23 ..
+dr-xr-x---  2 x10041 xg24i002   159 Aug 10 19:18 architecture
+dr-xr-x---  2 x10041 xg24i002    75 Aug 10 19:18 harness
+-r--r-----  1 x10041 xg24i002 20173 Aug 10 19:18 module_coverage.json
+dr-xr-x---  2 x10041 xg24i002   102 Aug 10 19:18 protocol
+dr-xr-x---  2 x10041 xg24i002   249 Aug 10 19:18 runtime
+dr-xr-x---  2 x10041 xg24i002  4096 Aug 10 19:18 storage
+dr-xr-x---  2 x10041 xg24i002   109 Aug 10 19:18 support
+-r--r-----  1 x10041 xg24i002 13385 Aug 10 19:18 test_adoption_strategy.py
+-r--r-----  1 x10041 xg24i002   319 Aug 10 19:18 test_atomic_io.py
+-r--r-----  1 x10041 xg24i002  4739 Aug 10 19:18 test_capture_source_identity.py
+-r--r-----  1 x10041 xg24i002 13933 Aug 10 19:18 test_clean_run.py
+-r--r-----  1 x10041 xg24i002   838 Aug 10 19:18 test_cli.py
+-r--r-----  1 x10041 xg24i002  5876 Aug 10 19:18 test_config.py
+-r--r-----  1 x10041 xg24i002  1714 Aug 10 19:18 test_data_shuffle.py
+-r--r-----  1 x10041 xg24i002  5101 Aug 10 19:18 test_hf_revision_pinning.py
+-r--r-----  1 x10041 xg24i002  4051 Aug 10 19:18 test_inner_scheduler.py
+-r--r-----  1 x10041 xg24i002   714 Aug 10 19:18 test_merge.py
+-r--r-----  1 x10041 xg24i002  1929 Aug 10 19:18 test_outer_optim.py
+-r--r-----  1 x10041 xg24i002  1497 Aug 10 19:18 test_param_index_roundtrip.py
+-r--r-----  1 x10041 xg24i002  1864 Aug 10 19:18 test_tensor_codec.py
+dr-xr-x---  2 x10041 xg24i002   193 Aug 10 19:18 tools
+[0m
+[0m$ [0mls -la fs_diloco/core/ fs_diloco/modeling/ fs_diloco/observability/ fs_diloco/protocol/ fs_diloco/runtime/ fs_diloco/storage/ fs_diloco/tools/
+fs_diloco/core/:
+total 68
+dr-xr-x--- 2 x10041 xg24i002   157 Aug 10 19:18 .
+dr-xr-x--- 9 x10041 xg24i002   182 Aug 10 19:18 ..
+-r--r----- 1 x10041 xg24i002  1277 Aug 10 19:18 adoption_rules.py
+-r--r----- 1 x10041 xg24i002 33263 Aug 10 19:18 config.py
+-r--r----- 1 x10041 xg24i002   133 Aug 10 19:18 constants.py
+-r--r----- 1 x10041 xg24i002    73 Aug 10 19:18 __init__.py
+-r--r----- 1 x10041 xg24i002 10661 Aug 10 19:18 run_descriptor.py
+-r--r----- 1 x10041 xg24i002  3655 Aug 10 19:18 source_identity.py
+-r--r----- 1 x10041 xg24i002   770 Aug 10 19:18 versions.py
+
+fs_diloco/modeling/:
+total 44
+dr-xr-x--- 2 x10041 xg24i002  147 Aug 10 19:18 .
+dr-xr-x--- 9 x10041 xg24i002  182 Aug 10 19:18 ..
+-r--r----- 1 x10041 xg24i002 8796 Aug 10 19:18 hf_data.py
+-r--r----- 1 x10041 xg24i002  989 Aug 10 19:18 hf_identity.py
+-r--r----- 1 x10041 xg24i002 3301 Aug 10 19:18 hf_model.py
+-r--r----- 1 x10041 xg24i002   62 Aug 10 19:18 __init__.py
+-r--r----- 1 x10041 xg24i002 4300 Aug 10 19:18 outer_optim.py
+-r--r----- 1 x10041 xg24i002 5672 Aug 10 19:18 param_index.py
+-r--r----- 1 x10041 xg24i002 3005 Aug 10 19:18 training.py
+
+fs_diloco/observability/:
+total 8
+dr-xr-x--- 2 x10041 xg24i002   49 Aug 10 19:18 .
+dr-xr-x--- 9 x10041 xg24i002  182 Aug 10 19:18 ..
+-r--r----- 1 x10041 xg24i002   61 Aug 10 19:18 __init__.py
+-r--r----- 1 x10041 xg24i002 3685 Aug 10 19:18 logging_utils.py
+
+fs_diloco/protocol/:
+total 84
+dr-xr-x--- 2 x10041 xg24i002   237 Aug 10 19:18 .
+dr-xr-x--- 9 x10041 xg24i002   182 Aug 10 19:18 ..
+-r--r----- 1 x10041 xg24i002 11047 Aug 10 19:18 authority.py
+-r--r----- 1 x10041 xg24i002  6514 Aug 10 19:18 contributor.py
+-r--r----- 1 x10041 xg24i002 12024 Aug 10 19:18 cycle_receipt.py
+-r--r----- 1 x10041 xg24i002  3786 Aug 10 19:18 data_cursor.py
+-r--r----- 1 x10041 xg24i002  1865 Aug 10 19:18 __init__.py
+-r--r----- 1 x10041 xg24i002  3242 Aug 10 19:18 merge.py
+-r--r----- 1 x10041 xg24i002 12399 Aug 10 19:18 proposal.py
+-r--r----- 1 x10041 xg24i002  4667 Aug 10 19:18 scheduler.py
+-r--r----- 1 x10041 xg24i002  2007 Aug 10 19:18 selection.py
+-r--r----- 1 x10041 xg24i002  6800 Aug 10 19:18 token_accounting.py
+-r--r----- 1 x10041 xg24i002  3814 Aug 10 19:18 _validation.py
+
+fs_diloco/runtime/:
+total 132
+dr-xr-x--- 3 x10041 xg24i002   202 Aug 10 19:18 .
+dr-xr-x--- 9 x10041 xg24i002   182 Aug 10 19:18 ..
+-r--r----- 1 x10041 xg24i002 23093 Aug 10 19:18 adoption.py
+-r--r----- 1 x10041 xg24i002    43 Aug 10 19:18 __init__.py
+-r--r----- 1 x10041 xg24i002   989 Aug 10 19:18 learner_control.py
+-r--r----- 1 x10041 xg24i002  7084 Aug 10 19:18 learner_entrypoint.py
+-r--r----- 1 x10041 xg24i002 30637 Aug 10 19:18 learner.py
+-r--r----- 1 x10041 xg24i002  9273 Aug 10 19:18 pbs_scheduler.py
+dr-xr-x--- 2 x10041 xg24i002   109 Aug 10 19:18 services
+-r--r----- 1 x10041 xg24i002 10101 Aug 10 19:18 syncer_entrypoint.py
+-r--r----- 1 x10041 xg24i002 35104 Aug 10 19:18 syncer.py
+
+fs_diloco/storage/:
+total 484
+dr-xr-x--- 2 x10041 xg24i002   4096 Aug 10 19:18 .
+dr-xr-x--- 9 x10041 xg24i002    182 Aug 10 19:18 ..
+-r--r----- 1 x10041 xg24i002  43824 Aug 10 19:18 admission.py
+-r--r----- 1 x10041 xg24i002   7344 Aug 10 19:18 artifact_policy.py
+-r--r----- 1 x10041 xg24i002   6740 Aug 10 19:18 atomic_io.py
+-r--r----- 1 x10041 xg24i002  15685 Aug 10 19:18 audit_archive.py
+-r--r----- 1 x10041 xg24i002 264021 Aug 10 19:18 authority.py
+-r--r----- 1 x10041 xg24i002  24409 Aug 10 19:18 control.py
+-r--r----- 1 x10041 xg24i002    244 Aug 10 19:18 __init__.py
+-r--r----- 1 x10041 xg24i002   3179 Aug 10 19:18 leader_lease.py
+-r--r----- 1 x10041 xg24i002  21063 Aug 10 19:18 object_store.py
+-r--r----- 1 x10041 xg24i002   9779 Aug 10 19:18 paths.py
+-r--r----- 1 x10041 xg24i002  25042 Aug 10 19:18 run_initializer.py
+-r--r----- 1 x10041 xg24i002   6425 Aug 10 19:18 schema_dynamic.sql
+-r--r----- 1 x10041 xg24i002  23843 Aug 10 19:18 schema.sql
+-r--r----- 1 x10041 xg24i002   6817 Aug 10 19:18 tensor_codec.py
+-r--r----- 1 x10041 xg24i002    652 Aug 10 19:18 tensor_identity.py
+-r--r----- 1 x10041 xg24i002   2958 Aug 10 19:18 terminal_request.py
+
+fs_diloco/tools/:
+total 72
+dr-xr-x--- 2 x10041 xg24i002   226 Aug 10 19:18 .
+dr-xr-x--- 9 x10041 xg24i002   182 Aug 10 19:18 ..
+-r--r----- 1 x10041 xg24i002  5399 Aug 10 19:18 analysis.py
+-r--r----- 1 x10041 xg24i002 26734 Aug 10 19:18 clean_run.py
+-r--r----- 1 x10041 xg24i002    76 Aug 10 19:18 __init__.py
+-r--r----- 1 x10041 xg24i002 11212 Aug 10 19:18 init_run.py
+-r--r----- 1 x10041 xg24i002  7412 Aug 10 19:18 launch_independent_run.py
+-r--r----- 1 x10041 xg24i002  2210 Aug 10 19:18 request_static_replacement.py
+-r--r----- 1 x10041 xg24i002  1355 Aug 10 19:18 request_terminal_close.py
+-r--r----- 1 x10041 xg24i002  3947 Aug 10 19:18 resolve_scheduler_uncertainty.py
+[0m
+[0m$ [0mls -la plans/DOING/ reports/DOING/ scripts/miyabi/ tests/architecture/ tests/harness/ tests/protocol/ tests/runtime/ tests/storage/ tests/support/ tests/tools/ fs_diloco/runtime/services/
+fs_diloco/runtime/services/:
+total 68
+dr-xr-x--- 2 x10041 xg24i002   109 Aug 10 19:18 .
+dr-xr-x--- 3 x10041 xg24i002   202 Aug 10 19:18 ..
+-r--r----- 1 x10041 xg24i002 28307 Aug 10 19:18 dynamic_capacity.py
+-r--r----- 1 x10041 xg24i002   450 Aug 10 19:18 __init__.py
+-r--r----- 1 x10041 xg24i002  8759 Aug 10 19:18 maintenance.py
+-r--r----- 1 x10041 xg24i002  7060 Aug 10 19:18 merge.py
+-r--r----- 1 x10041 xg24i002 13242 Aug 10 19:18 terminal.py
+
+plans/DOING/:
+total 0
+dr-xr-x--- 3 x10041 xg24i002  19 Aug 10 19:18 .
+dr-xr-x--- 6 x10041 xg24i002 202 Aug 10 19:18 ..
+dr-xr-x--- 2 x10041 xg24i002  25 Aug 10 19:18 plans
+
+reports/DOING/:
+total 0
+dr-xr-x--- 4 x10041 xg24i002  41 Aug 10 19:18 .
+dr-xr-x--- 5 x10041 xg24i002  53 Aug 10 19:18 ..
+dr-xr-x--- 3 x10041 xg24i002  22 Aug 10 19:18 code_review
+dr-xr-x--- 3 x10041 xg24i002 314 Aug 10 19:18 plan03-1
+
+scripts/miyabi/:
+total 124
+dr-xr-x--- 2 x10041 xg24i002   310 Aug 10 19:18 .
+dr-xr-x--- 3 x10041 xg24i002    20 Aug 10 19:18 ..
+-r-xr-x--- 1 x10041 xg24i002  2082 Aug 10 19:18 actor_identity.sh
+-r-xr-x--- 1 x10041 xg24i002  2266 Aug 10 19:18 capture_source_identity.py
+-r-xr-x--- 1 x10041 xg24i002 51247 Aug 10 19:18 check_full_protocol_run.py
+-r-xr-x--- 1 x10041 xg24i002  4701 Aug 10 19:18 run_full_protocol_allocation.sh
+-r--r----- 1 x10041 xg24i002  2772 Aug 10 19:18 run_full_protocol.pbs
+-r-xr-x--- 1 x10041 xg24i002  7951 Aug 10 19:18 run_full_protocol_rank.sh
+-r--r----- 1 x10041 xg24i002  1806 Aug 10 19:18 run_learner.pbs
+-r--r----- 1 x10041 xg24i002 22476 Aug 10 19:18 run_multi_agent_review.pbs
+-r--r----- 1 x10041 xg24i002   738 Aug 10 19:18 run_syncer.pbs
+-r--r----- 1 x10041 xg24i002 11339 Aug 10 19:18 run_validation_suite.py
+
+tests/architecture/:
+total 24
+dr-xr-x--- 2 x10041 xg24i002  159 Aug 10 19:18 .
+dr-xr-x--- 9 x10041 xg24i002 4096 Aug 10 19:18 ..
+-r--r----- 1 x10041 xg24i002 1867 Aug 10 19:18 test_authority_surface.py
+-r--r----- 1 x10041 xg24i002 1215 Aug 10 19:18 test_dependency_boundaries.py
+-r--r----- 1 x10041 xg24i002 2276 Aug 10 19:18 test_module_coverage_manifest.py
+-r--r----- 1 x10041 xg24i002 5201 Aug 10 19:18 test_plan_complete_dead_surfaces.py
+
+tests/harness/:
+total 48
+dr-xr-x--- 2 x10041 xg24i002    75 Aug 10 19:18 .
+dr-xr-x--- 9 x10041 xg24i002  4096 Aug 10 19:18 ..
+-r--r----- 1 x10041 xg24i002 32902 Aug 10 19:18 test_full_protocol_harness.py
+-r--r----- 1 x10041 xg24i002  4177 Aug 10 19:18 test_validation_suite.py
+
+tests/protocol/:
+total 28
+dr-xr-x--- 2 x10041 xg24i002   102 Aug 10 19:18 .
+dr-xr-x--- 9 x10041 xg24i002  4096 Aug 10 19:18 ..
+-r--r----- 1 x10041 xg24i002 10119 Aug 10 19:18 test_accounting_selection_cursor.py
+-r--r----- 1 x10041 xg24i002  4251 Aug 10 19:18 test_cycle_receipt.py
+-r--r----- 1 x10041 xg24i002  3566 Aug 10 19:18 test_proposal.py
+
+tests/runtime/:
+total 72
+dr-xr-x--- 2 x10041 xg24i002   249 Aug 10 19:18 .
+dr-xr-x--- 9 x10041 xg24i002  4096 Aug 10 19:18 ..
+-r--r----- 1 x10041 xg24i002 25203 Aug 10 19:18 test_dynamic_capacity_service.py
+-r--r----- 1 x10041 xg24i002  1733 Aug 10 19:18 test_learner_control.py
+-r--r----- 1 x10041 xg24i002  4176 Aug 10 19:18 test_learner_entrypoint.py
+-r--r----- 1 x10041 xg24i002  3411 Aug 10 19:18 test_pbs_scheduler.py
+-r--r----- 1 x10041 xg24i002  2901 Aug 10 19:18 test_syncer_fault_boundary.py
+-r--r----- 1 x10041 xg24i002  3406 Aug 10 19:18 test_syncer_startup_admission.py
+-r--r----- 1 x10041 xg24i002 16240 Aug 10 19:18 test_terminal_service.py
+
+tests/storage/:
+total 240
+dr-xr-x--- 2 x10041 xg24i002  4096 Aug 10 19:18 .
+dr-xr-x--- 9 x10041 xg24i002  4096 Aug 10 19:18 ..
+-r--r----- 1 x10041 xg24i002   309 Aug 10 19:18 conftest.py
+-r--r----- 1 x10041 xg24i002  1819 Aug 10 19:18 test_artifact_policy.py
+-r--r----- 1 x10041 xg24i002  3471 Aug 10 19:18 test_audit_archive.py
+-r--r----- 1 x10041 xg24i002 13960 Aug 10 19:18 test_authority_dynamic.py
+-r--r----- 1 x10041 xg24i002 63953 Aug 10 19:18 test_authority_operational.py
+-r--r----- 1 x10041 xg24i002  3799 Aug 10 19:18 test_contributor_progress.py
+-r--r----- 1 x10041 xg24i002  1196 Aug 10 19:18 test_dynamic_admission_request.py
+-r--r----- 1 x10041 xg24i002  7831 Aug 10 19:18 test_dynamic_launch_authorization.py
+-r--r----- 1 x10041 xg24i002 17709 Aug 10 19:18 test_leader_authority_commands.py
+-r--r----- 1 x10041 xg24i002  7566 Aug 10 19:18 test_object_store.py
+-r--r----- 1 x10041 xg24i002 12464 Aug 10 19:18 test_proposal_adjudication.py
+-r--r----- 1 x10041 xg24i002 13004 Aug 10 19:18 test_publication.py
+-r--r----- 1 x10041 xg24i002 17559 Aug 10 19:18 test_run_initializer.py
+-r--r----- 1 x10041 xg24i002  7606 Aug 10 19:18 test_schema.py
+-r--r----- 1 x10041 xg24i002 11330 Aug 10 19:18 test_state_machine.py
+-r--r----- 1 x10041 xg24i002  7870 Aug 10 19:18 test_static_contributor_binding.py
+-r--r----- 1 x10041 xg24i002  1480 Aug 10 19:18 test_terminal_request.py
+-r--r----- 1 x10041 xg24i002 10518 Aug 10 19:18 test_visibility.py
+
+tests/support/:
+total 32
+dr-xr-x--- 2 x10041 xg24i002  109 Aug 10 19:18 .
+dr-xr-x--- 9 x10041 xg24i002 4096 Aug 10 19:18 ..
+-r--r----- 1 x10041 xg24i002  797 Aug 10 19:18 clock.py
+-r--r----- 1 x10041 xg24i002  952 Aug 10 19:18 fault_tape.py
+-r--r----- 1 x10041 xg24i002  474 Aug 10 19:18 ids.py
+-r--r----- 1 x10041 xg24i002  282 Aug 10 19:18 __init__.py
+-r--r----- 1 x10041 xg24i002 1807 Aug 10 19:18 pbs.py
+-r--r----- 1 x10041 xg24i002 6220 Aug 10 19:18 protocol.py
+
+tests/tools/:
+total 24
+dr-xr-x--- 2 x10041 xg24i002  193 Aug 10 19:18 .
+dr-xr-x--- 9 x10041 xg24i002 4096 Aug 10 19:18 ..
+-r--r----- 1 x10041 xg24i002 3878 Aug 10 19:18 test_analysis.py
+-r--r----- 1 x10041 xg24i002 2329 Aug 10 19:18 test_launch_independent_run.py
+-r--r----- 1 x10041 xg24i002 1525 Aug 10 19:18 test_request_static_replacement.py
+-r--r----- 1 x10041 xg24i002 2462 Aug 10 19:18 test_request_terminal_close.py
+-r--r----- 1 x10041 xg24i002 2041 Aug 10 19:18 test_resolve_scheduler_uncertainty.py
+[0m
+[0m$ [0mls -la plans/DOING/plans/ reports/DOING/plan03-1/ reports/DOING/code_review/
+plans/DOING/plans/:
+total 4
+dr-xr-x--- 2 x10041 xg24i002   25 Aug 10 19:18 .
+dr-xr-x--- 3 x10041 xg24i002   19 Aug 10 19:18 ..
+-r--r----- 1 x10041 xg24i002 1373 Aug 10 19:18 plan03-1.md
+
+reports/DOING/code_review/:
+total 4
+dr-xr-x---  3 x10041 xg24i002   22 Aug 10 19:18 .
+dr-xr-x---  4 x10041 xg24i002   41 Aug 10 19:18 ..
+dr-xr-x--- 15 x10041 xg24i002 4096 Aug 10 19:18 plan03-1
+
+reports/DOING/plan03-1/:
+total 100
+dr-xr-x--- 3 x10041 xg24i002   314 Aug 10 19:18 .
+dr-xr-x--- 4 x10041 xg24i002    41 Aug 10 19:18 ..
+dr-xr-x--- 2 x10041 xg24i002  4096 Aug 10 19:18 artifacts
+-r--r----- 1 x10041 xg24i002  2436 Aug 10 19:18 artifact-schema.md
+-r--r----- 1 x10041 xg24i002  3320 Aug 10 19:18 code_review.md
+-r--r----- 1 x10041 xg24i002 11809 Aug 10 19:18 failures.md
+-r--r----- 1 x10041 xg24i002  4673 Aug 10 19:18 identity-authority.md
+-r--r----- 1 x10041 xg24i002  4441 Aug 10 19:18 inventory.md
+-r--r----- 1 x10041 xg24i002  8177 Aug 10 19:18 p3-functional-fault-manifest.json
+-r--r----- 1 x10041 xg24i002   166 Aug 10 19:18 plan-complete-remediation.md
+-r--r----- 1 x10041 xg24i002 30805 Aug 10 19:18 progress.md
+-r--r----- 1 x10041 xg24i002  5651 Aug 10 19:18 requirement-matrix.csv
+-r--r----- 1 x10041 xg24i002  2951 Aug 10 19:18 test-ladder.md
+-r--r----- 1 x10041 xg24i002  2183 Aug 10 19:18 workflow_state.yaml
+[0m
+[0m→ [0mRead plans/DOING/plans/plan03-1.md
+[0m→ [0mRead reports/DOING/plan03-1/identity-authority.md
+[0m→ [0mRead reports/DOING/plan03-1/artifact-schema.md
+[0m→ [0mRead reports/DOING/plan03-1/p3-functional-fault-manifest.json
+[0m→ [0mRead reports/DOING/plan03-1/requirement-matrix.csv
+[0m→ [0mRead reports/DOING/plan03-1/workflow_state.yaml
+[0m→ [0mRead reports/DOING/plan03-1/progress.md[90m [offset=1, limit=150][0m
+[0m→ [0mRead reports/DOING/plan03-1/progress.md[90m [offset=151, limit=200][0m
+[0m→ [0mRead reports/DOING/plan03-1/progress.md[90m [offset=351, limit=200][0m
+[0m
+[0m$ [0mls -la reports/DOING/plan03-1/artifacts/ | head -30
+total 52
+dr-xr-x--- 2 x10041 xg24i002  4096 Aug 10 19:18 .
+dr-xr-x--- 3 x10041 xg24i002   314 Aug 10 19:18 ..
+-r--r----- 1 x10041 xg24i002  3249 Aug 10 19:18 20260810-183244_p2-phase-remediation-validation_pass.json
+-r--r----- 1 x10041 xg24i002  2111 Aug 10 19:18 20260810-183244_p2-phase-remediation-validation_pass.log
+-r--r----- 1 x10041 xg24i002 21291 Aug 10 19:18 20260810-190552_p3-functional-normal_pass.json
+-r--r----- 1 x10041 xg24i002  6821 Aug 10 19:18 20260810-190552_p3-functional-normal_pbs.log
+-r--r----- 1 x10041 xg24i002  3244 Aug 10 19:18 20260810-192000_p3-checker-remediation-validation.json
+-r--r----- 1 x10041 xg24i002  2190 Aug 10 19:18 20260810-192000_p3-checker-remediation-validation.log
+[0m
+[0m→ [0mRead reports/DOING/plan03-1/artifacts/20260810-192000_p3-checker-remediation-validation.json
+[0m→ [0mRead .review-packet/diff-stat.txt
+[0m→ [0mRead .review-packet/changed-files.txt[90m [limit=200][0m
+[0m→ [0mRead scripts/miyabi/check_full_protocol_run.py
+[0m→ [0mRead scripts/miyabi/check_full_protocol_run.py[90m [offset=1200][0m
+[0m→ [0mRead fs_diloco/core/config.py
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [limit=200][0m
+[0m
+[0m$ [0mwc -l /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/storage/authority.py
+6072 /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/storage/authority.py
+[0m
+[0m✱ [0mGrep "class |^def |^    def |^_publication_commit_boundary|fenced|fence|LeaderSession|AuthorityReader|AuthorityBootstrap|LeaderCommand|LeaderSession"[90m in fs_diloco/storage/authority.py · 100 matches[0m
+[0m✱ [0mGrep "^def |^class |^    def [a-z]"[90m in fs_diloco/storage/authority.py · 100 matches[0m
+[0m
+[0m$ [0mgrep -n "^class\|^def\|^@dataclass" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/storage/authority.py
+79:def _publication_commit_boundary(_name: str) -> None:
+83:class AuthoritySchemaError(RuntimeError):
+87:class CommandConflictError(RuntimeError):
+91:class MembershipFenceError(RuntimeError):
+95:class ProposalPayloadError(RuntimeError):
+103:@dataclass(frozen=True)
+104:class AuthorityIdentity:
+121:@dataclass(frozen=True)
+122:class AuthorityMetadata:
+131:@dataclass(frozen=True)
+132:class CommittedVersion:
+149:def _schema_dir() -> Path:
+153:def _schema_text(mode: str) -> tuple[str, ...]:
+163:def canonical_features(mode: str) -> tuple[str, ...]:
+171:def _features_json(features: tuple[str, ...]) -> str:
+175:def ddl_bundle_sha256(mode: str) -> str:
+189:def _schema_fingerprint(connection: sqlite3.Connection) -> str:
+203:def _marker_path(database_path: Path, marker_path: str | Path | None) -> Path:
+211:def _path_entry_exists(path: Path) -> bool:
+219:def _same_regular_inode(left: Path, right: Path) -> bool:
+232:def _lexical_protocol_path(root: Path, relative_path: str) -> Path:
+252:def _configure_connection(connection: sqlite3.Connection, *, busy_timeout_ms: int) -> None:
+260:def _configure_read_connection(connection: sqlite3.Connection, *, busy_timeout_ms: int) -> None:
+268:def initialize_authority(
+372:def _validate_open(
+454:class AuthorityReadModel:
+730:class AuthorityReader:
+795:class LeaderAuthority:
+1079:class LeaderSession:
+5729:def _audit_history_records(
+5920:def _static_binding_command_request(
+5960:def _canonical_json(value: Any) -> str:
+5964:def _decode_committed_leader_lease(
+5975:def _decode_static_binding(row: Mapping[str, Any]) -> StaticBinding:
+5985:def _decode_progress(row: Mapping[str, Any]) -> ContributorProgress:
+5998:def _decode_publication_intent(row: Mapping[str, Any]) -> PublicationIntent:
+6021:def _decode_committed_version(row: Mapping[str, Any]) -> CommittedVersion:
+6042:def _decode_proposal(row: Mapping[str, Any]) -> FullUpdateProposalV2:
+[0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [offset=268, limit=300][0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [offset=1079, limit=300][0m
+[0m✱ [0mGrep "_command\(|_command_replay\(|_require_current_fence|_terminalize_fenced_updates|_publish_command_receipt"[90m in fs_diloco/storage/authority.py · 53 matches[0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [offset=5614, limit=200][0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [offset=5460, limit=150][0m
+[0m
+[0m$ [0mwc -l /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/runtime/syncer.py /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/runtime/learner.py /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/storage/admission.py /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/storage/paths.py /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/storage/run_initializer.py
+872 /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/runtime/syncer.py
+   780 /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/runtime/learner.py
+  1257 /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/storage/admission.py
+   313 /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/storage/paths.py
+   613 /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/storage/run_initializer.py
+  3835 total
+[0m
+[0m→ [0mRead fs_diloco/runtime/syncer.py[90m [limit=200][0m
+[0m→ [0mRead fs_diloco/runtime/syncer.py[90m [offset=200, limit=300][0m
+[0m→ [0mRead fs_diloco/runtime/syncer.py[90m [offset=500, limit=372][0m
+[0m→ [0mRead fs_diloco/storage/paths.py
+[0m→ [0mRead fs_diloco/storage/run_initializer.py
+[0m→ [0mRead scripts/miyabi/run_full_protocol.pbs
+[0m→ [0mRead scripts/miyabi/run_full_protocol_allocation.sh
+[0m→ [0mRead scripts/miyabi/run_full_protocol_rank.sh
+[0m→ [0mRead fs_diloco/storage/leader_lease.py
+[0m→ [0mRead fs_diloco/runtime/services/merge.py
+[0m→ [0mRead fs_diloco/runtime/services/terminal.py
+[0m→ [0mRead fs_diloco/runtime/learner.py
+[0m→ [0mRead fs_diloco/storage/schema.sql
+[0m→ [0mRead fs_diloco/core/versions.py
+[0m→ [0mRead fs_diloco/core/run_descriptor.py
+[0m→ [0mRead fs_diloco/storage/atomic_io.py
+[0m→ [0mRead fs_diloco/runtime/syncer_entrypoint.py
+[0m→ [0mRead fs_diloco/cli.py
+[0m
+[0m$ [0mgrep -n "_publish_command_receipt\|publish_command_receipt\|read_command_receipt" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/storage/authority.py
+58:    publish_command_receipt,
+59:    read_command_receipt,
+3782:                    publish_command_receipt(
+5632:            existing = read_command_receipt(RunPaths(self._authority._run_root), command_id)
+[0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [offset=3690, limit=100][0m
+[0m✱ [0mGrep "_publication_commit_boundary|boundary_inject|fault_hook"[90m in fs_diloco/storage/authority.py · 15 matches[0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [offset=3400, limit=120][0m
+[0m→ [0mRead tests/harness/test_full_protocol_harness.py[90m [limit=150][0m
+[0m→ [0mRead tests/harness/test_full_protocol_harness.py[90m [offset=150, limit=200][0m
+[0m→ [0mRead tests/harness/test_full_protocol_harness.py[90m [offset=350, limit=280][0m
+[0m→ [0mRead tests/harness/test_full_protocol_harness.py[90m [offset=630, limit=280][0m
+[0m→ [0mRead scripts/miyabi/run_multi_agent_review.pbs
+[0m→ [0mRead scripts/miyabi/run_validation_suite.py
+[0m→ [0mRead fs_diloco/storage/schema_dynamic.sql
+[0m→ [0mRead fs_diloco/storage/admission.py[90m [limit=200][0m
+[0m
+[0m$ [0mgrep -n "^class\|^def" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/storage/admission.py | head -60
+40:class AdmissionRejectedError(RuntimeError):
+44:class AdmissionSupersededError(RuntimeError):
+48:class AdmissionAuthorizationError(ValueError):
+53:class AdmissionContext:
+61:class AdmissionRequestObservation:
+70:def new_attempt_id() -> str:
+74:def static_logical_launch_id(*, descriptor_sha256: str, learner_id: str) -> str:
+81:def dynamic_placement_id(*, hostname: str, accelerator: str) -> str:
+87:def publish_static_request(
+109:def publish_static_request_with_sha256(
+138:def publish_dynamic_request(
+164:def publish_dynamic_request_with_sha256(
+203:def iter_admission_requests(paths: RunPaths) -> tuple[AdmissionRequestObservation, ...]:
+240:def admission_request_error(
+324:def publish_admission_response(
+377:def publish_admission_rejection(
+409:def read_admission_response(
+528:def _decode_admission_response_control(
+574:def _admission_current_payload(
+602:def _raise_valid_rejection(
+628:def _raise_durable_admission_rejection(
+715:def _validate_rejection_control(
+745:def admission_request_sha256(request: dict[str, Any]) -> str:
+749:def publish_admission_disposition(
+780:def archive_disposed_admission_request(
+805:def dispose_invalid_admission_request(
+865:def _validate_invalid_admission_disposition(
+918:def _validate_admission_disposition(
+1038:def repair_rejected_admission_control(
+1080:def publish_static_replacement_authorization(
+1112:def read_static_replacement_authorization(
+1159:def _request_actor_attempt(request: dict[str, Any]) -> tuple[str, str]:
+1168:def highest_static_generation(paths: RunPaths, learner_id: str) -> int | None:
+1185:def _canonical_json_bytes(payload: dict[str, Any], *, newline: bool) -> bytes:
+1192:def _publish_json(path: Path, payload: dict[str, Any]):
+1196:def _require_nonnegative_integer(value: Any, *, name: str) -> None:
+1201:def _require_identity(value: Any, *, name: str) -> None:
+1207:def _require_optional_string(value: Any, *, name: str) -> None:
+1212:def _require_optional_identity(value: Any, *, name: str) -> None:
+1219:def _require_timestamp(value: Any, *, name: str) -> None:
+1229:def _read_hot_request(path: Path) -> tuple[bytes, tuple[int, int]]:
+1252:def _remove_hot_request(path: Path, *, identity: tuple[int, int]) -> None:
+[0m
+[0m→ [0mRead fs_diloco/storage/admission.py[90m [offset=200, limit=100][0m
+[0m→ [0mRead fs_diloco/runtime/learner_entrypoint.py
+[0m→ [0mRead fs_diloco/runtime/services/maintenance.py
+[0m→ [0mRead fs_diloco/storage/control.py
+[0m→ [0mRead fs_diloco/tools/clean_run.py
+[0m
+[0m$ [0mgrep -n "assert_outside_transaction" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/storage/authority.py
+866:    def assert_outside_transaction(self) -> None:
+[0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [offset=860, limit=200][0m
+[0m
+[0m$ [0mgrep -n "^class\|^def" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/storage/audit_archive.py
+15:def command_receipt_path(paths: RunPaths, command_id: str) -> Path:
+22:def _ensure_real_directory(path: Path, *, create: bool) -> bool:
+36:def _command_receipt_parent(paths: RunPaths, command_id: str, *, create: bool) -> Path | None:
+46:def publish_command_receipt(paths: RunPaths, row: dict[str, Any]) -> Path:
+65:def read_command_receipt(paths: RunPaths, command_id: str) -> dict[str, Any] | None:
+109:def build_audit_batch(
+139:def publish_audit_batch(paths: RunPaths, payload: dict[str, Any]) -> tuple[Path, str]:
+151:def validate_audit_batch(payload: dict[str, Any]) -> None:
+174:def deduplicate_audit_records(payloads: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+188:def build_audit_partition(
+226:def validate_audit_partition(payload: dict[str, Any]) -> None:
+279:def publish_audit_partition(
+304:def validate_audit_partition_manifest(
+333:def delete_claimed_audit_batch_object(
+365:def _safe_component(value: Any, *, name: str) -> str:
+378:def _canonical(value: Any) -> bytes:
+[0m
+[0m→ [0mRead fs_diloco/storage/audit_archive.py[90m [limit=200][0m
+[0m→ [0mRead fs_diloco/storage/audit_archive.py[90m [offset=200, limit=180][0m
+[0m→ [0mRead fs_diloco/storage/object_store.py
+[0m→ [0mRead fs_diloco/tools/init_run.py
+[0m→ [0mRead tests/runtime/test_syncer_fault_boundary.py
+[0m→ [0mRead tests/runtime/test_syncer_startup_admission.py
+[0m→ [0mRead tests/runtime/test_terminal_service.py
+[0m→ [0mRead tests/architecture/test_plan_complete_dead_surfaces.py
+[0m
+[0m$ [0mgrep -n "v[0-9]\|versioned\|legacy" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/core/versions.py /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/storage/artifact_policy.py /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/core/run_descriptor.py 2>&1 | head -20
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/core/versions.py:1:"""Version numbers for independently versioned Full Protocol artifacts.
+[0m
+[0m$ [0mgrep -rn "config_v4\|fragment_v0\|reader_v\|legacy" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/docs 2>&1 | head -20
+(no output)
+[0m
+[0m$ [0mgrep -rn "config_v4\|fragment_v0\|reader\|legacy\|v4" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco 2>&1 | head -20
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/storage/admission.py:477:        # while this request is waiting to be processed.  The polling reader
+[0m
+[0m$ [0mgrep -n "v4\|v3\|v2\|v1\|v0" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/core/versions.py
+(no output)
+[0m
+[0m→ [0mRead fs_diloco/core/versions.py
+[0m→ [0mRead tests/architecture/test_authority_surface.py
+[0m
+[0m$ [0mgrep -rn "v4\|versioned\|legacy\|reader_v" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/docs /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/README.md /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/configs 2>&1 | head -10
+(no output)
+[0m
+[0m$ [0mgrep -rn "config_v4\|fragment_v0\|legacy\|v4_" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi 2>&1 | head -10
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/AGENTS.md:43:    * 不要添加 compatibility layer、adapter、shim、migration wrapper、fallback path 或 legacy mode。
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/plans/DONE/plan02/fsb_decoupled_diloco_plan_02-requirement-matrix.csv:24:"HA-18","Phase 1","受控DDL且pre-HA incomplete bootstrap fragment HA fail closed","init open-existing open-readonly三入口、schema_meta与run_state双版本、artifact独立版本","new run双版本；incomplete bootstrap；legacy full HA；fragment HA；read-only open不建表","Phase 1","bootstrap and compatibility report","complete","reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-1618_phase1-matched-remediation-tests_pass.json; reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-1624_phase1-completed-checker_pass.json"
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/plans/DONE/plan02/fsb_decoupled_diloco_plan_02-requirement-matrix.csv:25:"HA-19","Phase 1","legacy static full与fragment数学CLI和结果保持回归","LegacySQLiteStore独立路径且新增功能默认关闭","matched deterministic static full；fragment逐字节；static CLI；config defaults","Phase 1","legacy compatibility comparison","complete","reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-1618_phase1-matched-remediation-tests_pass.json; reports/DOING/fsb_decoupled_diloco_plan_02/artifacts/20260806-1624_phase1-completed-checker_pass.json"
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/plans/DONE/plan02/fsb_decoupled_diloco_plan_02.md:90:- HA full使用独立 `FencedSQLiteStore`，legacy full/fragment使用 `LegacySQLiteStore`；不使用 nullable token或 no-op sentinel把两种写语义混在一个 store中；
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/plans/DONE/plan02/fsb_decoupled_diloco_plan_02.md:205:| full + `syncer_ha.enabled=false` + static | 保留 legacy single-syncer，默认路径 | 保留回归 |
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/plans/DONE/plan02/fsb_decoupled_diloco_plan_02.md:229:8. pre-HA DB + HA disabled：走 legacy兼容路径；
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/plans/DONE/plan02/fsb_decoupled_diloco_plan_02.md:241:initializer在同一 transaction同时写 `schema_meta.schema_version` 和 `run_state['schema_version']`。HA open要求两者与 marker完全一致；表是否“碰巧存在”不能作为 HA 身份判据。fragment/static legacy writer通过独立 `LegacySQLiteStore` 保留当前行为，不能打开 `FencedSQLiteStore`。
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/plans/DONE/plan02/fsb_decoupled_diloco_plan_02.md:245:- legacy current schema：`user_version=1`（通过离线识别适配现有 user_version=0）；
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/plans/DONE/plan02/fsb_decoupled_diloco_plan_02.md:467:现有proposal payload的 `io.compute_sha256` 语义不被该字段改变。control JSON、source/config manifest等小文件仍强制 SHA-256。`updates` 增加 nullable `selected_by_epoch/applied_by_epoch/dropped_by_epoch`，legacy/fragment路径保持可读。
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/plans/DONE/plan02/fsb_decoupled_diloco_plan_02.md:515:fragment legacy:
+[0m
+[0m$ [0mgrep -rn "config_v4\|fragment_v0\|legacy\|v4" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/configs /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/docs /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts 2>&1 | head -10
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/run_multi_agent_review.pbs:66:OPENCODE_DEEPSEEK_MODEL="${OPENCODE_DEEPSEEK_MODEL:-opencode-go/deepseek-v4-flash}"
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/run_multi_agent_review.pbs:490:  "deepseek-v4-flash" \
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/run_multi_agent_review.pbs:526:  "$RUN_TMP/deepseek-v4-flash.tsv" \
+[0m
+[0m$ [0mls -la /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/ | head -20
+total 20
+dr-xr-x---  9 x10041 xg24i002  182 Aug 10 19:18 .
+dr-xr-x--- 10 x10041 xg24i002  225 Aug 10 19:23 ..
+-r--r-----  1 x10041 xg24i002  821 Aug 10 19:18 cli.py
+dr-xr-x---  2 x10041 xg24i002  157 Aug 10 19:18 core
+-r--r-----  1 x10041 xg24i002  102 Aug 10 19:18 __init__.py
+-r--r-----  1 x10041 xg24i002  220 Aug 10 19:18 learner.py
+dr-xr-x---  2 x10041 xg24i002  147 Aug 10 19:18 modeling
+dr-xr-x---  2 x10041 xg24i002   49 Aug 10 19:18 observability
+dr-xr-x---  2 x10041 xg24i002  237 Aug 10 19:18 protocol
+dr-xr-x---  3 x10041 xg24i002  202 Aug 10 19:18 runtime
+dr-xr-x---  2 x10041 xg24i002 4096 Aug 10 19:18 storage
+-r--r-----  1 x10041 xg24i002  217 Aug 10 19:18 syncer.py
+dr-xr-x---  2 x10041 xg24i002  226 Aug 10 19:18 tools
+[0m
+[0m→ [0mRead fs_diloco/__init__.py
+[0m→ [0mRead fs_diloco/learner.py
+[0m→ [0mRead fs_diloco/syncer.py
+[0m→ [0mRead configs/full_protocol_functional.yaml
+[0m→ [0mRead docs/design.md
+[0m→ [0mRead docs/configuration.md
+[0m→ [0mRead README.md
+[0m→ [0mRead docs/operations.md
+[0m→ [0mRead docs/testing.md
+[0m→ [0mRead docs/README.md
+[0m→ [0mRead pyproject.toml
+[0m
+[0m$ [0mgrep -rn "request_terminal_close\|manual_close\|launch_independent" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco 2>&1 | head -20
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/cli.py:25:        from .tools.request_terminal_close import main as close_main
+[0m
+[0m→ [0mRead fs_diloco/tools/request_terminal_close.py
+[0m→ [0mRead fs_diloco/tools/init_run.py[90m [offset=1, limit=50][0m
+[0m→ [0mRead fs_diloco/runtime/syncer.py[90m [offset=270, limit=15][0m
+[0m
+[0m$ [0mgrep -rn "syncer_takeover\|learner_replacement\|fault_scenario" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests 2>&1 | head -30
+(no output)
+[0m
+[0m$ [0mgrep -rn "syncer_takeover\|learner_replacement" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts 2>&1 | head -30
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/check_full_protocol_run.py:348:        log_root / "learner_replacement.json",
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/check_full_protocol_run.py:349:        log_root / "syncer_takeover.json",
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/check_full_protocol_run.py:780:        replacement_path = log_root / "learner_replacement.json"
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/check_full_protocol_run.py:814:        takeover_path = log_root / "syncer_takeover.json"
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/check_full_protocol_run.py:972:            "learner_replacement": replacement_evidence,
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/check_full_protocol_run.py:973:            "syncer_takeover": takeover_evidence,
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/run_full_protocol_rank.sh:15:  none|learner_replacement|syncer_takeover) ;;
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/run_full_protocol_rank.sh:131:  "$PYTHON_BIN" - "$LOG_ROOT/learner_replacement.json" "$learner_id" \
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/run_full_protocol_rank.sh:175:  if [[ "$scenario" == "syncer_takeover" ]]; then
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/run_full_protocol_rank.sh:208:    "$PYTHON_BIN" - "$fault_marker" "$LOG_ROOT/syncer_takeover.json" \
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/run_full_protocol_rank.sh:242:if [[ "$scenario" == "learner_replacement" && "$learner_index" -eq 0 ]]; then
+[0m
+[0m→ [0mRead tests/runtime/test_learner_entrypoint.py
+[0m→ [0mRead tests/storage/test_authority_operational.py[90m [limit=200][0m
+[0m
+[0m$ [0mgrep -n "^def test_" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/storage/test_authority_operational.py | head -40
+191:def test_authority_token_rollup_balances_receipt_only_and_applied_fates(tmp_path: Path) -> None:
+239:def test_abandoned_selection_does_not_consume_persistent_service_credit(
+276:def test_sql_fair_selection_uses_committed_count_before_version_ties(tmp_path: Path) -> None:
+365:def test_process_elapsed_safety_is_monotonic_despite_wall_clock_jumps() -> None:
+386:def test_dynamic_replacement_returns_full_contiguous_resume_state(tmp_path: Path) -> None:
+478:def test_terminal_close_freezes_fence_blocks_admission_and_accounts_hard_crash(
+539:def test_terminal_preclose_admits_only_static_requests_before_durable_cutoff(
+572:def test_terminal_preclose_admits_only_dynamic_requests_before_durable_cutoff(
+610:def test_terminal_hard_crash_gap_is_summed_per_lost_incarnation(tmp_path: Path) -> None:
+657:def test_static_restart_recovers_authoritative_cursor_and_receipt_chain(tmp_path: Path) -> None:
+684:def test_telemetry_deletion_cannot_change_authoritative_token_summary(tmp_path: Path) -> None:
+701:def test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens(
+761:def test_terminal_zero_cycle_ack_requires_no_receipt_and_preserves_zero_gap(
+791:def test_terminal_close_snapshot_cannot_be_rewritten_by_a_second_command(
+834:def test_terminal_ack_rejects_a_missing_proposal_promised_by_final_receipt(
+874:def test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_update(
+943:def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: Path) -> None:
+1087:def test_terminal_ack_can_precede_final_proposal_visibility_and_merge(tmp_path: Path) -> None:
+1138:def test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolution(
+1208:def test_immutable_audit_batch_precedes_exact_history_prune_and_preserves_rollup(
+1274:def test_online_archive_retains_each_current_receipt_until_terminal_ack(
+1367:def test_audit_archive_never_prunes_latest_version_or_blocks_next_commit(tmp_path: Path) -> None:
+1403:def test_active_leader_compacts_audit_batches_before_exact_source_gc(tmp_path: Path) -> None:
+1529:def test_fenced_maintenance_archives_history_and_successor_reclaims_artifact_gc(
+1607:def test_artifact_gc_refuses_symlinked_or_identity_changed_objects(tmp_path: Path) -> None:
+[0m
+[0m$ [0mgrep -rn "test_takeover\|test_syncer_takeover\|test_fault_takeover" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests 2>&1 | head -10
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/module_coverage.json:272:      "tests": ["tests/storage/test_publication.py::test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe"]
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/storage/test_publication.py:216:def test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe(
+[0m
+[0m→ [0mRead tests/storage/test_publication.py[90m [offset=200, limit=100][0m
+[0m→ [0mRead tests/storage/test_authority_operational.py[90m [offset=365, limit=120][0m
+[0m→ [0mRead fs_diloco/tools/request_static_replacement.py
+[0m→ [0mRead fs_diloco/storage/admission.py[90m [offset=1078, limit=80][0m
+[0m
+[0m$ [0mgrep -n "FS_DILOCO_FAULT_SCENARIO\|FS_DILOCO_FAULT_PAUSE" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/*
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/run_full_protocol_allocation.sh:103:  "FS_DILOCO_FAULT_SCENARIO=${FS_DILOCO_FAULT_SCENARIO:-none}"
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/run_full_protocol.pbs:41:export FS_DILOCO_FAULT_SCENARIO="${FS_DILOCO_FAULT_SCENARIO:-none}"
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/run_full_protocol_rank.sh:13:scenario="${FS_DILOCO_FAULT_SCENARIO:-none}"
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/run_full_protocol_rank.sh:177:    FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION=2 \
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/run_full_protocol_rank.sh:178:    FS_DILOCO_FAULT_PAUSE_MARKER_PATH="$fault_marker" \
+[0m
+[0m→ [0mRead scripts/miyabi/run_syncer.pbs
+[0m→ [0mRead scripts/miyabi/run_learner.pbs
+[0m→ [0mRead scripts/miyabi/actor_identity.sh
+[0m
+[0m$ [0mgrep -rn "FS_DILOCO_ALLOW_DIRTY_SNAPSHOT\|allow_dirty_snapshot\|--allow-dirty" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco 2>&1 | head -10
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/run_full_protocol_allocation.sh:51:if [[ "${FS_DILOCO_ALLOW_DIRTY_SNAPSHOT:-0}" == 1 ]]; then
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/scripts/miyabi/run_full_protocol_allocation.sh:52:  init_args+=(--allow-dirty-snapshot)
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/tools/init_run.py:55:    allow_dirty_snapshot: bool = False,
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/tools/init_run.py:66:    if shared.run.git_dirty is not False and not allow_dirty_snapshot:
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/tools/init_run.py:67:        raise ValueError("formal bootstrap requires clean source or --allow-dirty-snapshot")
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/tools/init_run.py:264:    parser.add_argument("--allow-dirty-snapshot", action="store_true")
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/tools/init_run.py:280:        allow_dirty_snapshot=args.allow_dirty_snapshot,
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/tools/launch_independent_run.py:73:    allow_dirty_snapshot: bool,
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/tools/launch_independent_run.py:99:        allow_dirty_snapshot=allow_dirty_snapshot,
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/fs_diloco/tools/launch_independent_run.py:189:    parser.add_argument("--allow-dirty-snapshot", action="store_true")
+[0m
+[0m→ [0mRead fs_diloco/tools/launch_independent_run.py
+[0m
+[0m$ [0mgrep -n "^def test_" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/runtime/test_dynamic_capacity_service.py | head -20
+95:def test_persistent_low_windows_plan_and_submit_exact_stream(tmp_path: Path) -> None:
+128:def test_initial_bootstrap_deadline_suppresses_ordinary_scale_out(tmp_path: Path) -> None:
+164:def test_replacement_loss_window_starts_at_its_own_admission(
+201:def test_multiple_pending_scale_outs_reserve_distinct_streams(tmp_path: Path) -> None:
+236:def test_scheduler_state_flapping_rearms_with_each_new_row_version(tmp_path: Path) -> None:
+265:def test_lost_qsub_result_never_resubmits_and_ends_in_manual_review(tmp_path: Path) -> None:
+349:def test_invalid_operator_file_is_disposed_once(tmp_path: Path) -> None:
+367:def test_operator_disposal_never_follows_processed_symlink(tmp_path: Path) -> None:
+388:def test_oversize_operator_file_is_streamed_bounded_and_disposed_once(
+416:def test_disposed_operator_file_successor_cleanup_preserves_replacement(
+461:def test_lost_qsub_result_uses_historical_request_scan_without_resubmission(
+499:def test_successor_recovers_submitting_request_without_duplicate_qsub(tmp_path: Path) -> None:
+552:def test_replacement_requires_stale_progress_and_terminal_scheduler_evidence(
+593:def test_suspended_or_unknown_scheduler_state_never_authorizes_replacement(
+625:def test_shared_running_pbs_job_never_proves_one_child_process_lost(tmp_path: Path) -> None:
+[0m
+[0m$ [0mgrep -n "^def test_" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/storage/test_run_initializer.py | head -20
+64:def test_each_precomplete_crash_prefix_is_invisible_and_same_staging_retry_recovers(
+89:def test_crash_after_complete_is_visible_and_retry_removes_staging_directory(
+108:def test_fresh_initialization_is_not_reported_as_recovery(tmp_path: Path) -> None:
+114:def test_retry_and_completed_replay_bind_the_entire_resolved_config_identity(
+136:def test_descriptor_validation_is_bounded_and_accepts_runtime_control_publications(
+165:def test_completed_descriptor_rejects_identity_mode_mismatch(tmp_path: Path) -> None:
+198:def test_every_manifest_object_link_fault_is_invisible_and_retryable(tmp_path: Path) -> None:
+221:def test_every_initializer_directory_fsync_failure_is_retryable(
+262:def test_different_inode_staging_cannot_take_an_existing_identity_reservation(
+284:def test_completed_run_reservation_repair_requires_explicit_full_self_check(
+300:def test_reservation_repair_rejects_protocol_external_entry(tmp_path: Path) -> None:
+312:def test_existing_final_race_releases_new_reservation_before_fault_hook(tmp_path: Path) -> None:
+330:def test_broken_symlink_final_collision_releases_new_reservation(tmp_path: Path) -> None:
+342:def test_retry_rejects_symlinked_manifest_directory_without_writing_outside(
+364:def test_retry_rejects_changed_staging_object_before_complete(tmp_path: Path) -> None:
+388:def test_reservation_repair_reopens_and_integrity_checks_mutable_authority_db(
+405:def test_actor_attestation_is_immutable_and_attempt_scoped(tmp_path: Path) -> None:
+451:def test_actor_attestation_requires_explicit_runtime_resource_evidence(tmp_path: Path) -> None:
+[0m
+[0m$ [0mgrep -n "^def test_" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/runtime/test_learner_control.py
+18:def test_configured_target_latest_enters_await_close_without_requiring_drain(
+27:def test_non_global_close_policy_does_not_stop_training_from_latest_alone(policy: str) -> None:
+33:def test_missing_or_pre_target_latest_does_not_enter_await_close() -> None:
+[0m
+[0m$ [0mgrep -n "^def test_" /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/storage/test_audit_archive.py /tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/test_clean_run.py
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/storage/test_audit_archive.py:21:def test_audit_identity_components_cannot_escape_the_audit_root() -> None:
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/storage/test_audit_archive.py:31:def test_audit_consumer_dedup_key_includes_record_kind() -> None:
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/storage/test_audit_archive.py:52:def test_partition_is_published_before_hashed_manifest_and_validates(tmp_path) -> None:
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/storage/test_audit_archive.py:85:def test_audit_gc_refuses_leaf_and_parent_symlinks_without_deleting_targets(tmp_path) -> None:
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/test_clean_run.py:93:def test_dry_run_preserves_authority_and_selects_only_policy_owned_redundancy(
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/test_clean_run.py:120:def test_execute_rechecks_plan_and_publishes_exact_manifest(tmp_path: Path) -> None:
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/test_clean_run.py:136:def test_live_authority_reference_blocks_cleanup(tmp_path: Path) -> None:
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/test_clean_run.py:151:def test_authority_gc_ownership_retains_candidate(tmp_path: Path, state: str) -> None:
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/test_clean_run.py:169:def test_missing_policy_or_nonpass_evidence_fails_closed(tmp_path: Path) -> None:
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/test_clean_run.py:185:def test_mismatched_evidence_and_broad_run_target_are_rejected(tmp_path: Path) -> None:
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/test_clean_run.py:195:def test_symlinked_candidate_parent_is_never_followed(tmp_path: Path) -> None:
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/test_clean_run.py:209:def test_evidence_descriptor_and_terminal_identities_must_match(tmp_path: Path) -> None:
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/test_clean_run.py:224:def test_terminal_projection_and_cleanup_target_must_match_immutable_evidence(
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/test_clean_run.py:247:def test_authority_sidecar_or_symlinked_database_blocks_cleanup(tmp_path: Path) -> None:
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/test_clean_run.py:263:def test_execute_revalidates_evidence_and_candidate_identity(tmp_path: Path) -> None:
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/test_clean_run.py:285:def test_execute_never_follows_a_parent_swapped_to_a_symlink(tmp_path: Path) -> None:
+/tmp/2519854.8693/fsdiloco-review.2519854.lgcsfn/repository-kimi/tests/test_clean_run.py:305:def test_cli_has_one_explicit_dry_run_and_execute_interface(
+[0m

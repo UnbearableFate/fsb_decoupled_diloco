@@ -42,3 +42,11 @@ promotion because the formal source and acceptance boundary change.
   `reports/DOING/code_review/plan03-1/plan-complete-preformal-remediation/codex-gpt_272fa81331a110f815a52d871c2fd61f7d1c3abb.md`.
 - Verdict: `APPROVE`; P4-R2-F1, P4-R2-F2 and P4-R2-F3 are closed.
 - External review remains `skipped-by-user` and contributes no conclusion.
+
+## Current-review remediation continuation
+
+The user subsequently restored multi-agent review. The earlier skip remains
+historical evidence for its exact gates only and is not the policy for any
+remaining review. Current remediation targets receive a Codex-first review and
+then the four-lane external reviewer job; valid external findings must be
+disposed before runtime validation or final promotion.

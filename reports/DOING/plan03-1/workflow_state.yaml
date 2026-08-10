@@ -3,13 +3,13 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P4-formal-and-docs
-work_unit_id: P4-W8-documentation-sync-and-final-freeze
+work_unit_id: P4-W10-current-review-remediation
 state: PLAN_REMEDIATION
-base_commit: e1f76a85f77c33765ebaaddb4828e40cc45d4d24
-target_commit: 563bf5298f89ff8481fe533242a4ee2c0cdd16f9
+base_commit: 5b474d5c1735beb8cca922fd6cc7b6304926df2c
+target_commit: null
 formal_source_commit: null
 formal_source_fingerprint: null
-experiment_id: p4-preliminary-9node-51x11
+experiment_id: plan03-1-current-review-remediation
 experiment_domain: product
 failure_counters:
   "harness:p2-one-node-validation-01": 0
@@ -22,6 +22,7 @@ failure_counters:
 required_tests:
   - p4-review-remediation-focused
   - p4-review-remediation-one-node-validation
+  - final-u1-one-node-validation
 required_evidence:
   - reports/DOING/plan03-1/artifact-schema.md
   - reports/DOING/plan03-1/formal-ladder-manifest.json
@@ -37,6 +38,15 @@ required_evidence:
   - reports/DOING/plan03-1/artifacts/20260810-205900_p4-preformal-remediation-validation.log.full-pytest.junit.xml
   - reports/DOING/plan03-1/artifacts/20260810-211104_p4-preliminary-9node-overbaseline_result.json
   - reports/DOING/plan03-1/artifacts/20260810-211104_p4-preliminary-9node-overbaseline_pbs.log
+  - reports/DOING/plan03-1/artifacts/20260810-211800_final-u1-one-node-validation.json
+  - reports/DOING/plan03-1/artifacts/20260810-211800_final-u1-one-node-validation.log
+  - reports/DOING/plan03-1/artifacts/20260810-211800_final-u1-one-node-validation.log.focused-pytest.junit.xml
+  - reports/DOING/plan03-1/artifacts/20260810-211800_final-u1-one-node-validation.log.full-pytest.junit.xml
+  - reports/DOING/code_review/plan03-1/plan-complete-final-target-r2/codex-gpt_5b474d5c1735beb8cca922fd6cc7b6304926df2c.md
+  - reports/DOING/plan03-1/artifacts/20260810-212307_r2-preformal-current-state_review.json
+  - reports/DOING/plan03-1/artifacts/20260810-212500_final-f1-functional-normal_result.json
+  - reports/DOING/plan03-1/artifacts/20260810-212500_final-f1-functional-normal_pbs.log
+  - reports/DOING/code_review/plan03-1/critical-current-fs-diloco/finding-dispositions_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -46,8 +56,24 @@ invalidated_evidence:
   - p3-normal-pass-invalidated-by-terminal-authority-source-fix
   - p3-learner-replacement-attempt-1-terminal-total-checker-false-pass
   - p4-candidate-validation-invalidated-by-preformal-source-and-checker-remediation
+  - final-r2-target-5b474d5-invalidated-by-current-review-remediation
+  - final-u1-target-5b474d5-invalidated-by-current-review-remediation
+  - final-f1-normal-target-5b474d5-invalidated-by-current-review-remediation
 external_review:
   pbs_job_id: null
-  status: skipped-by-user
-open_blocking_findings: []
-allowed_next_action: validate_docs_and_freeze_final_common_target
+  status: not-started
+open_blocking_findings:
+  - FSD-M1
+  - FSD-M2
+  - FSD-M3
+  - FSD-M4
+  - FSD-M5
+  - FSD-M6
+  - FSD-M7
+  - FSD-L1
+  - FSD-L2
+  - FSD-L3
+  - FSD-L4
+  - FSD-L5
+  - FSD-L6
+allowed_next_action: freeze_current_review_remediation_target

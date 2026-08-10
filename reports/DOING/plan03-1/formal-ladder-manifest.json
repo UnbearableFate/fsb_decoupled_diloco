@@ -111,6 +111,7 @@
       "workload": {
         "config": "configs/full_protocol_functional.yaml",
         "fault_scenario": "syncer_takeover",
+        "syncer_takeover_boundary_version": 2,
         "learners": 4,
         "local_optimizer_steps_per_cycle": 20,
         "committed_global_steps": 4,

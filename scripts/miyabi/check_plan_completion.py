@@ -590,7 +590,6 @@ def _validate_review(
         "plan_id",
         "reviewer",
         "review_execution",
-        "external_review_status",
         "review_kind",
         "target_commit",
         "source_fingerprint",
@@ -604,12 +603,11 @@ def _validate_review(
     }:
         raise RuntimeError(f"review artifact schema is invalid: {review['id']}")
     if (
-        payload["review_artifact_version"] != 1
+        payload["review_artifact_version"] != 2
         or payload["status"] != "PASS"
         or payload["plan_id"] != PLAN_ID
         or payload["reviewer"] != "Codex"
         or payload["review_execution"] != "internal"
-        or payload["external_review_status"] != "skipped-by-user"
         or payload["review_kind"] != contract["review_kind"]
         or payload["target_commit"] != source["commit"]
         or payload["source_fingerprint"] != source["fingerprint"]

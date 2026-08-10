@@ -41,7 +41,7 @@ Workflow version：`3`
 | Claude Code | `claude-opus-5` | 协议正确性、跨模块控制流、架构与并发/持久化不变量 | best effort |
 | OpenCode Go | `opencode-go/glm-5.2` | requirement 到测试断言的映射、oracle、覆盖和测试可维护性 | best effort |
 | OpenCode Go | `opencode-go/deepseek-v4-flash` | 错误路径、race、crash/restart、边界条件和反例 | best effort |
-| OpenCode Go | `opencode-go/kimi-k3` | 集成一致性、实验过程、artifact/Checker 证据和文档漂移 | best effort |
+| OpenCode Go | `opencode-go/minimax-m3` | 集成一致性、实验过程、artifact/Checker 证据和文档漂移 | best effort |
 
 模型名是 runner 的默认值；若 CLI 中实际标识变化，可通过 `qsub -v` 覆盖对应 `*_MODEL`，但必须在 invocation metadata 和报告中同时记录 requested/actual identity。无法核验实际模型时标为 `invalid-model-identity`，不伪造该 reviewer 报告。
 
@@ -111,7 +111,7 @@ reports/DOING/code_review/<plan-id>/<review-id>/
 ├── claude-opus-5_<target>_<pbs-job>.md
 ├── glm-5.2_<target>_<pbs-job>.md
 ├── deepseek-v4-flash_<target>_<pbs-job>.md
-├── kimi-k3_<target>_<pbs-job>.md
+├── minimax-m3_<target>_<pbs-job>.md
 ├── reviewer-job_<target>_<pbs-job>.json
 └── finding-dispositions_<target>.md
 ```
@@ -349,7 +349,7 @@ OPENCODE_BIN
 CLAUDE_MODEL
 OPENCODE_GLM_MODEL
 OPENCODE_DEEPSEEK_MODEL
-OPENCODE_KIMI_MODEL
+OPENCODE_MINIMAX_MODEL
 REVIEW_TIMEOUT_SECONDS
 ```
 

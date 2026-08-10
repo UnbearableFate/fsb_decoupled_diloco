@@ -80,3 +80,11 @@ Rules:
   unregistered replacement or takeover history.
 - Failure artifacts preserve actual identity, partial metrics, error class, raw
   paths, and cleanup eligibility; they are never overwritten by a retry.
+
+Codex review artifacts use `review_artifact_version: 2`. They bind the internal
+review report, exact source identity, covered requirements, reviewed inputs and
+empty accepted finding set. External multi-agent review is a separate
+best-effort workflow input: its invocation summary and finding disposition are
+tracked review evidence consumed by Codex, not a synthetic field on the
+internal review artifact. A reviewer outage is not approval; every valid
+external finding must be disposed before Codex can publish `APPROVE`.

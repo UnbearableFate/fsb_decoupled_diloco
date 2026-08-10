@@ -224,12 +224,11 @@ def _materialize_registered_inputs(module, tmp_path: Path):
         report_path.write_text("Codex internal review\n\nAPPROVE\n", encoding="utf-8")
         artifact_path = tmp_path / f"reviews/{review['id']}.json"
         artifact = {
-            "review_artifact_version": 1,
+            "review_artifact_version": 2,
             "status": "PASS",
             "plan_id": "plan03-1",
             "reviewer": "Codex",
             "review_execution": "internal",
-            "external_review_status": "skipped-by-user",
             "review_kind": contract["review_kind"],
             "target_commit": source["commit"],
             "source_fingerprint": source["fingerprint"],

@@ -1047,6 +1047,22 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     assert "trap publish_blocked_on_exit EXIT" in wrapper
     assert "--blocked-reason" in wrapper
 
+    review_runner = (ROOT / "scripts/miyabi/run_multi_agent_review.pbs").read_text(encoding="utf-8")
+    assert review_runner.count("run_claude &") == 1
+    assert review_runner.count("run_opencode \\") == 3
+    assert 'CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-5}"' in review_runner
+    assert 'OPENCODE_GLM_MODEL="${OPENCODE_GLM_MODEL:-opencode-go/glm-5.2}"' in review_runner
+    assert (
+        'OPENCODE_DEEPSEEK_MODEL="${OPENCODE_DEEPSEEK_MODEL:-opencode-go/deepseek-v4-flash}"'
+        in review_runner
+    )
+    assert (
+        'OPENCODE_MINIMAX_MODEL="${OPENCODE_MINIMAX_MODEL:-opencode-go/minimax-m3}"'
+        in review_runner
+    )
+    assert "OPENCODE_KIMI_MODEL" not in review_runner
+    assert '"$RUN_TMP/minimax-m3.tsv"' in review_runner
+
 
 def test_pbs_wrapper_publishes_blocked_artifact_when_allocation_exits(
     tmp_path: Path,
