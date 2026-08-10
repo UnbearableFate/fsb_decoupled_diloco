@@ -1077,3 +1077,32 @@
 - The four restored lanes are Claude Opus 5, GLM-5.2, DeepSeek V4 Flash and
   MiniMax M3. Only terminal monitoring and subsequent identity/finding
   disposition are allowed while the job is active.
+
+## 2026-08-10T23:28:39+09:00 — external unavailable; partial oracle defect fixed
+
+- Job `2521428.opbs` reached terminal orchestration state with scheduler exit
+  0 and unchanged read-only snapshot digest. Claude was capacity-blocked before
+  inference; GLM, DeepSeek and MiniMax timed out. No complete report or valid
+  external verdict exists, so the round is `completed-unavailable` rather than
+  approval.
+- Only one partial observation survived independent Codex verification:
+  FSD-R10 (Low). The dead-entrypoint test searched for `__main__` in a set that
+  could contain only function/class names. Target
+  `47662f8d872f4a5e451908796a6b677105a28c52` now inventories AST string
+  literals and therefore detects either quote form of a reintroduced guard.
+- Interactive job `2521589.opbs` on exact one-node topology `mg0009` passed the
+  corrected architecture group 7/7 and the registered producer: Ruff,
+  186 focused tests and 544 full tests, with zero failure, error or skip. Clean
+  source fingerprint:
+  `sha256:35f12615bf3fa5bd907d6d1d5e0da5911b18d480d802c30b8ddba2be5d441efd`.
+- Evidence hashes are artifact
+  `b233c36272643a0a5de0bfeb884e2f58d21b1b8ecdf8a6064de28f8a68f173f1`,
+  raw log `c46a791899dda946a84caf4a4afd4b042cf506430c4929756b87d51d5342c964`,
+  focused JUnit
+  `5ba4d1af88428b0021f97cb96d7802fc53d2db5966f3eb1346cebf8beb6a3eaf`
+  and full JUnit
+  `7f87da34a8050c5f2cc2d1f6c24a89bc9b7dfca615e09236a13cfdbb6ba223f4`.
+- Final Codex rereview closes FSD-R1 through R10. The next product gate is a
+  fresh nine-node over-baseline run because the earlier result predates the
+  current schema/Checker source; documentation synchronization follows only
+  after that verification.

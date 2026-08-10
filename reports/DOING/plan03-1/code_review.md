@@ -216,3 +216,23 @@ only after implementation, compute-node validation and Codex rereview.
   186 focused tests and all 544 tests with no failure, error or skip.
 - Verdict: `APPROVE` for restored external multi-agent rereview. No result from
   that not-yet-submitted round was read while producing this report.
+
+## 2026-08-10T23:28:39+09:00 — external rereview disposition and final Codex pass
+
+- Reviewer job `2521428.opbs` completed with unchanged snapshots. Claude Opus
+  5 was capacity-blocked before inference; GLM-5.2, DeepSeek V4 Flash and
+  MiniMax M3 timed out without complete reports. No lane produced a valid
+  verdict, and absence is not counted as approval.
+- Disposition:
+  `reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/finding-dispositions_3b99d1a995245639f236fe73efd013e4f12c910a.md`.
+- A partial MiniMax tool trace exposed a concrete vacuous entrypoint assertion.
+  Codex independently reproduced it as FSD-R10 (Low), replaced it with an AST
+  string-literal oracle and rejected unrelated partial observations about the
+  module-owner manifest and already documented takeover boundary.
+- Final tested target: `47662f8d872f4a5e451908796a6b677105a28c52`;
+  fingerprint
+  `sha256:35f12615bf3fa5bd907d6d1d5e0da5911b18d480d802c30b8ddba2be5d441efd`.
+- Final Codex report:
+  `reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/codex-gpt_47662f8d872f4a5e451908796a6b677105a28c52.md`.
+  Exact compute validation passed 186 focused and 544 complete tests. FSD-R1
+  through R10 are closed. Verdict: `APPROVE`.
