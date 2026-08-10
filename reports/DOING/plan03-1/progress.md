@@ -1283,3 +1283,14 @@
   `3a002162fd6456255a931396b67a1787ae18ec416ff945286b96a892356a2bcc`.
 - Codex verdict is `APPROVE`. Freeze this evidence packet, submit the restored
   four-lane external review, and do not stage completion before disposition.
+
+## 2026-08-11T01:13:00+09:00 — external final-evidence target frozen
+
+- Continuity base `08050eed5da6e697437f796aabb7c980311c8937` and evidence
+  target `00ba722920d01a915efa4a2a90872c46ff906aa3` are frozen for review.
+- The common prompt binds formal source/fingerprint, exact U1/F1/G1 jobs and
+  metrics, artifact/support hashes, both internal review artifacts, manifest,
+  requirement matrix and staged-preflight boundary. Prompt SHA-256:
+  `c4e9bb943aed3b2bd6c304575d1911acfda997ce618410028b1dce8c2dc189fa`.
+- Submit the four current reviewer lanes on one compute node. No staged
+  completion artifact may be published before terminal disposition.

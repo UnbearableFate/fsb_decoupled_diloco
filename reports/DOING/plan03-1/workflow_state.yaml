@@ -4,9 +4,9 @@ branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P4-formal-and-docs
 work_unit_id: P4-W19-final-evidence-review
-state: PLAN_REVIEW_TARGET
-base_commit: 5b474d5c1735beb8cca922fd6cc7b6304926df2c
-target_commit: 1558e1112108ec38388cc2361b69e2cf78d49217
+state: EXTERNAL_TEST_REVIEW
+base_commit: 08050eed5da6e697437f796aabb7c980311c8937
+target_commit: 00ba722920d01a915efa4a2a90872c46ff906aa3
 formal_source_commit: 1558e1112108ec38388cc2361b69e2cf78d49217
 formal_source_fingerprint: sha256:9fdff5a7c613e044a7f97523ede2c566f60d4fc9fbf5a5cb4edd5c416ee06337
 experiment_id: plan03-1-current-review-remediation
@@ -101,7 +101,7 @@ invalidated_evidence:
   - current-u1-target-081e81e-superseded-by-completion-contract-mutation-test
   - current-u1-target-3b99d1a-superseded-by-effective-entrypoint-oracle
 external_review:
-  pbs_job_id: 2521665.opbs
-  status: terminal-no-valid-report
+  pbs_job_id: null
+  status: pending
 open_blocking_findings: []
-allowed_next_action: freeze_and_submit_external_final_evidence_review
+allowed_next_action: submit_external_final_evidence_review
