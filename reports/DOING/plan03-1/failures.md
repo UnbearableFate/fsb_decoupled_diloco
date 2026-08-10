@@ -35,3 +35,24 @@
 - Decision: external availability is best effort. Preserve the mandatory
   review conclusion, remediate the newly identified C5-C6 acceptance gaps, and
   critically re-review their continuous diff before any runtime test.
+
+## 2026-08-10T17:50:16+09:00 — P2 one-node static attempt 1
+
+- Experiment: `p2-one-node-validation-01`; domain: `harness`.
+- Category: `valid-test-failure`; consecutive count: 1.
+- Allocation: `2519128.opbs`, one `interact-g` node `mg0012`, held by the main
+  agent with a one-hour walltime.
+- Command: `ruff format --check . && ruff check .`.
+- Result: format check failed because 26 current Python files would be
+  reformatted; lint did not run because the first command failed.
+- Evidence:
+  `artifacts/20260810-175016_p2-one-node-ruff_fail.log`.
+- Root cause: the implementation target was statically reviewed before the
+  repository-wide formatter gate had ever run on a compute node. The drift
+  spans retained current source and tests, including the two C5/C6 files; it is
+  mechanical formatting rather than a runtime semantic failure.
+- Remediation: run the configured formatter across the only current Python
+  surface, inspect the mechanical diff with mandatory Codex review, then rerun
+  format/lint and the focused tests in the same allocation. The frozen target
+  `219abe663025adc7ff8f731f65d90fb27c42c0fe` is superseded for subsequent test
+  evidence.

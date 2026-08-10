@@ -4,14 +4,15 @@ branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P2-tests-and-harness
 work_unit_id: P2-W2-one-node-validation
-state: STAGED_TEST_EXECUTION
+state: TARGETED_REMEDIATION
 base_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 target_commit: 219abe663025adc7ff8f731f65d90fb27c42c0fe
 formal_source_commit: null
 formal_source_fingerprint: null
 experiment_id: p2-one-node-validation-01
 experiment_domain: harness
-failure_counters: {}
+failure_counters:
+  "harness:p2-one-node-validation-01": 1
 required_tests:
   - s0-static-preflight
   - harness-focused-unit-tests
@@ -22,9 +23,10 @@ required_evidence:
   - reports/DOING/plan03-1/identity-authority.md
   - reports/DOING/plan03-1/test-ladder.md
   - reports/DOING/plan03-1/artifact-schema.md
-invalidated_evidence: []
+invalidated_evidence:
+  - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
 external_review:
   pbs_job_id: 2519093.opbs
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: acquire_main_one_node_interact_g
+allowed_next_action: format_current_python_surface

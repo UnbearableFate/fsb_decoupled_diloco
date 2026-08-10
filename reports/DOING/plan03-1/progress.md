@@ -179,3 +179,15 @@
   `P2-W2-one-node-validation`. The next action is to acquire the main-agent-held
   one-node `interact-g` allocation and run the focused harness/static suite,
   then the full pytest suite in the same allocation.
+
+## 2026-08-10T17:50:16+09:00 — TARGETED_REMEDIATION after static attempt 1
+
+- Acquired main-agent-held allocation `2519128.opbs`: exact one-node topology
+  on `mg0012` confirmed through `PBS_NODEFILE`; the worktree was clean and the
+  expected NVIDIA/HPC-X modules were loaded.
+- The first registered gate failed only the repository formatter check on 26
+  current Python files. This is recorded as valid failure 1; lint and runtime
+  tests have not yet run.
+- Transition: `STAGED_TEST_EXECUTION` -> `TARGETED_REMEDIATION`. The retained
+  allocation will be used to apply and verify the mechanical formatter change,
+  followed by a mandatory Codex-only incremental review before retrying tests.
