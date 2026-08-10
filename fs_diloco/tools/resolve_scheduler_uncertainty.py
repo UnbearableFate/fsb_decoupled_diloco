@@ -22,9 +22,6 @@ from ..storage.atomic_io import read_json
 from ..storage.paths import RunPaths
 
 
-PLAN03_REQUIREMENTS = frozenset({"SCHED-04", "SCHED-06"})
-
-
 def build_request(
     *,
     launch_request_id: str,

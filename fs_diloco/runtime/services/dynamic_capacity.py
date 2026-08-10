@@ -20,7 +20,6 @@ from ...storage.paths import RunPaths
 from ..pbs_scheduler import PBSJobObservation
 
 
-PLAN03_REQUIREMENTS = frozenset({"P5-ARCH", "SCHED-01", "SCHED-02", "SCHED-03", "SCHED-04"})
 _MAX_OPERATOR_REQUEST_BYTES = 1_048_576
 
 

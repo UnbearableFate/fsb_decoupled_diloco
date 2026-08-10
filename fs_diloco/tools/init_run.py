@@ -1,4 +1,4 @@
-"""Initialize an immutable full-mode HA run before submitting any PBS role."""
+"""Initialize an immutable Full Protocol run before submitting PBS actors."""
 
 from __future__ import annotations
 
@@ -12,12 +12,11 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from ..core.config_v4 import (
-    ConfigProfile,
-    ConfigV4,
-    resolve_config_v4,
-    resolved_config_v4_bytes,
-    write_resolved_config_v4,
+from ..core.config import (
+    Config,
+    resolve_config,
+    resolved_config_bytes,
+    write_resolved_config,
 )
 from ..core.versions import (
     AUTHORITY_SCHEMA_VERSION,
@@ -40,7 +39,7 @@ from ..storage.run_initializer import (
     write_complete_source,
     write_run_identity,
 )
-from ..storage.authority import AuthorityIdentity, initialize_authority_v4
+from ..storage.authority import AuthorityIdentity, initialize_authority
 
 
 def _sha256_json(payload: dict[str, Any]) -> str:
@@ -49,28 +48,28 @@ def _sha256_json(payload: dict[str, Any]) -> str:
 
 
 def initialize_run(
-    config: ConfigV4,
+    config: Config,
     *,
     project_root: str | Path,
     allow_dirty_snapshot: bool = False,
     fault_hook: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
-    config.validate(ConfigProfile.FULL_V4)
-    shared = config.shared
+    config.validate()
+    shared = config
     if not shared.run.run_id or not shared.run.shared_root:
         raise ValueError("resolved run_id and shared_root are required")
     if not shared.run.git_commit:
-        raise ValueError("HA bootstrap requires run.git_commit")
+        raise ValueError("run bootstrap requires run.git_commit")
     if not shared.run.source_fingerprint:
-        raise ValueError("HA bootstrap requires run.source_fingerprint")
+        raise ValueError("run bootstrap requires run.source_fingerprint")
     if shared.run.git_dirty is not False and not allow_dirty_snapshot:
-        raise ValueError("formal HA bootstrap requires clean source or --allow-dirty-snapshot")
+        raise ValueError("formal bootstrap requires clean source or --allow-dirty-snapshot")
 
     project_root = Path(project_root).resolve()
     final_root = Path(shared.run.shared_root).resolve()
     final_paths = RunPaths(final_root)
-    expected_config_sha256 = hashlib.sha256(resolved_config_v4_bytes(config)).hexdigest()
-    expected_mode = "full_dynamic" if shared.membership.mode == "dynamic" else "full"
+    expected_config_sha256 = hashlib.sha256(resolved_config_bytes(config)).hexdigest()
+    expected_mode = shared.membership.mode
     if final_paths.run_complete_file.is_file():
         validate_completed_run(final_root)
         completed_staging = find_reserved_staging(final_root, allow_missing_owner=True)
@@ -84,9 +83,7 @@ def initialize_run(
             "source_fingerprint": shared.run.source_fingerprint,
             "git_commit": shared.run.git_commit,
             "git_dirty": shared.run.git_dirty,
-            "mode": (
-                "full_ha_dynamic" if shared.membership.mode == "dynamic" else "full_ha_static"
-            ),
+            "mode": shared.membership.mode,
         }
         mismatches = {
             key: (descriptor.get(key), value)
@@ -146,17 +143,17 @@ def initialize_run(
 
 
 def _populate_staging(
-    config: ConfigV4,
+    config: Config,
     *,
     project_root: Path,
     staging_root: Path,
     logical_root: Path,
 ) -> None:
-    shared = config.shared
+    shared = config
     paths = RunPaths(staging_root)
     prepare_authority_dirs(paths)
-    write_resolved_config_v4(config, paths.resolved_config_yaml)
-    write_resolved_config_v4(config, paths.run_root_config_yaml)
+    write_resolved_config(config, paths.resolved_config_yaml)
+    write_resolved_config(config, paths.run_root_config_yaml)
     config_sha256 = sha256_file(paths.resolved_config_yaml)
     lock_path = project_root / "uv.lock"
     source_manifest = {
@@ -175,7 +172,7 @@ def _populate_staging(
     atomic_write_json(paths.run_source_manifest_json, source_manifest)
     dynamic = shared.membership.mode == "dynamic"
     schema_version = AUTHORITY_SCHEMA_VERSION
-    descriptor_mode = "full_ha_dynamic" if dynamic else "full_ha_static"
+    descriptor_mode = shared.membership.mode
     bootstrap_slots = shared.membership.bootstrap_instances if dynamic else shared.sync.num_learners
     descriptor = {
         "format_version": RUN_DESCRIPTOR_FORMAT_VERSION,
@@ -230,7 +227,7 @@ def _populate_staging(
             tuple(f"learner_{index:03d}" for index in range(shared.sync.num_learners))
         )
     )
-    initialize_authority_v4(
+    initialize_authority(
         paths.sqlite_db,
         identity,
         membership_scope,
@@ -246,7 +243,7 @@ def _populate_staging(
             "run_id": shared.run.run_id,
             "source_fingerprint": shared.run.source_fingerprint,
             "config_sha256": config_sha256,
-            "mode": "full_dynamic" if dynamic else "full",
+            "mode": shared.membership.mode,
             "logical_root": str(logical_root),
         },
     )
@@ -269,7 +266,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
-    config = resolve_config_v4(
+    config = resolve_config(
         args.config,
         run_id=args.run_id,
         shared_root=args.shared_root,

@@ -12,9 +12,6 @@ import math
 from dataclasses import dataclass
 
 
-PLAN03_REQUIREMENTS = frozenset({"P3-REBASE", "TOK-01", "TOK-02", "TOK-03", "TOK-06"})
-
-
 def _nonnegative_int(value: int, *, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"{name} must be a non-negative integer")

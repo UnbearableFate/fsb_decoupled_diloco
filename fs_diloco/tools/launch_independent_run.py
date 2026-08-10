@@ -1,4 +1,4 @@
-"""Initialize and submit independent HA syncer/learner PBS jobs."""
+"""Initialize and submit independent Full Protocol PBS actors."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from ..core.config_v4 import resolve_config_v4
+from ..core.config import resolve_config
 from .init_run import initialize_run
 
 
@@ -85,7 +85,7 @@ def launch(
         learner_walltime,
         required=submit,
     )
-    config = resolve_config_v4(
+    config = resolve_config(
         config_path,
         run_id=run_id,
         shared_root=shared_root,
@@ -97,7 +97,7 @@ def launch(
         allow_dirty_snapshot=allow_dirty_snapshot,
     )
     descriptor = initialized["descriptor"]
-    shared = config.shared
+    shared = config
     variables = ",".join(
         (
             f"FS_DILOCO_SHARED_ROOT={descriptor['shared_root']}",
@@ -110,7 +110,7 @@ def launch(
         *syncer_walltime_resource,
         "-v",
         variables,
-        str(project_root / "scripts/miyabi/run_syncer_candidate.pbs"),
+        str(project_root / "scripts/miyabi/run_syncer.pbs"),
     ]
     dynamic = shared.membership.mode == "dynamic"
     if dynamic:
@@ -120,7 +120,7 @@ def launch(
                 *learner_walltime_resource,
                 "-v",
                 f"{variables},BOOTSTRAP_SLOT={slot}",
-                str(project_root / "scripts/miyabi/run_dynamic_learner.pbs"),
+                str(project_root / "scripts/miyabi/run_learner.pbs"),
             ]
             for slot in range(shared.membership.bootstrap_instances)
         ]
@@ -135,7 +135,7 @@ def launch(
                 (f"{variables},FS_DILOCO_STATIC_LAUNCH_PREFIX={descriptor['descriptor_sha256']}"),
                 "-J",
                 f"0-{int(shared.sync.num_learners) - 1}",
-                str(project_root / "scripts/miyabi/run_static_learner.pbs"),
+                str(project_root / "scripts/miyabi/run_learner.pbs"),
             ]
         ]
     result: dict[str, Any] = {

@@ -1,0 +1,96 @@
+config_schema_version: 1
+run:
+  name: full_protocol_dynamic
+model:
+  name_or_path: synthetic-tiny
+  dtype: float32
+  synthetic_vocab_size: 128
+  synthetic_hidden_size: 32
+data:
+  dataset_name: synthetic
+  train_split: train
+  block_size: 16
+  shuffle_blocks: true
+sync:
+  num_learners: 4
+  quorum_min: 3
+  quorum_max: 4
+  staleness_lambda: 0.0
+  scan_interval_seconds: 0.5
+  stop_after_outer_steps: 4
+syncer:
+  device: cpu
+  compute_dtype: float32
+  publish_dtype: float32
+membership:
+  mode: dynamic
+  stream_pool_size: 4
+  bootstrap_instances: 4
+  initial_membership_deadline_seconds: 120.0
+  registration_scan_interval_seconds: 0.5
+  registration_request_ttl_seconds: 30.0
+  heartbeat_dead_after_seconds: 15.0
+scaling:
+  enabled: true
+  desired_contributors: 4
+  low_contributor_threshold: 3
+  consecutive_low_windows: 2
+  productive_window_count: 2
+  startup_grace_seconds: 15.0
+  productive_upload_grace_factor: 2.0
+  productive_upload_grace_min_seconds: 10.0
+  productive_upload_grace_max_seconds: 60.0
+  cooldown_seconds: 10.0
+  max_pending_launch_requests: 1
+  max_total_launch_requests: 2
+  launch_request_ttl_seconds: 120.0
+  capacity_observation_retention_count: 16
+  scheduler_reconcile_interval_seconds: 5.0
+  scheduler_uncertainty_timeout_seconds: 30.0
+  starvation_observation_seconds: 10.0
+  learner_pbs_script: scripts/miyabi/run_learner.pbs
+  learner_walltime: "00:10:00"
+  learner_queue: regular-g
+terminal:
+  admission_close_policy: global_target_or_launch_budget
+  drain_ack_timeout_seconds: 60.0
+  registration_visibility_grace_seconds: 2.0
+  proposal_visibility_grace_seconds: 5.0
+  max_terminal_merges: 1
+training:
+  inner_steps: 20
+  micro_batch_size: 1
+  gradient_accumulation_steps: 1
+  completion_mode: global_only
+  seed: 1337
+inner_optimizer:
+  name: adamw
+  lr: 0.00005
+  betas: [0.9, 0.95]
+  eps: 1.0e-8
+  weight_decay: 0.0
+  scheduler: none
+outer_optimizer:
+  name: nesterov
+  lr: 0.7
+  momentum: 0.9
+  weight_decay: 0.0
+io:
+  tensor_dtype: float32
+learner:
+  poll_latest_during_inner_steps: false
+  adopt_global_after_upload: true
+  global_adoption_strategy: replace
+leader:
+  lease_duration_seconds: 30.0
+  renew_interval_seconds: 5.0
+  max_clock_skew_seconds: 1.0
+  business_busy_timeout_ms: 5000
+  candidate_acquire_poll_seconds: 1.0
+  candidate_wait_seconds: 60.0
+  learner_recovery_wait_seconds: 120.0
+maintenance:
+  archive_batch_rows: 256
+  recent_batch_dedup_count: 64
+  quarantine_records_per_contributor: 64
+  publication_orphan_grace_seconds: 40.0

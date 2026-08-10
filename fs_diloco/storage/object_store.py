@@ -1,4 +1,4 @@
-"""Identity-bound reads for immutable v4 payload objects."""
+"""Identity-bound reads for immutable payload objects."""
 
 from __future__ import annotations
 

@@ -18,7 +18,7 @@ def main(argv: list[str] | None = None) -> None:
 
         learner_main(rest)
     elif args.command == "inspect":
-        from .analysis import main as inspect_main
+        from .tools.analysis import main as inspect_main
 
         inspect_main(rest)
     else:

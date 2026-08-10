@@ -21,15 +21,11 @@ from .artifact_policy import ArtifactPolicy
 from .paths import RunPaths
 
 
-PLAN03_REQUIREMENTS = frozenset({"AUDIT-01", "ENV-01", "INIT-01"})
-
-
 _MUTABLE_SUBTREES = (
     "audit",
     "control/scheduler_operator_requests",
     "control/syncer_epochs",
     "control/registration_requests",
-    "eval_checkpoints",
     "heartbeats",
     "logs",
     "metrics",
@@ -38,8 +34,7 @@ _MUTABLE_SUBTREES = (
     "weights",
 )
 _MUTABLE_FILES = (
-    "control/bootstrap_scheduler_jobs.json",
-    "control/dynamic_close_request.json",
+    "control/terminal_close_request.json",
     "control/latest.json",
     "control/param_index.json",
     "control/stop.json",
@@ -552,12 +547,9 @@ def _validate_completed_protocol_identity(final_root: Path, *, validate_authorit
         if source.get(field) != descriptor.get(field):
             raise RuntimeError(f"source manifest {field} mismatch")
     descriptor_mode = descriptor.get("mode")
-    if descriptor_mode == "full_ha_static":
-        bootstrap_mode = "full"
-    elif descriptor_mode == "full_ha_dynamic":
-        bootstrap_mode = "full_dynamic"
-    else:
+    if descriptor_mode not in {"static", "dynamic"}:
         raise RuntimeError(f"unsupported run descriptor mode: {descriptor_mode!r}")
+    bootstrap_mode = descriptor_mode
     identity = validate_identity_file(paths.run_identity_file)
     identity_checks = {
         "run_id": descriptor.get("run_id"),
@@ -579,7 +571,7 @@ def _validate_completed_protocol_identity(final_root: Path, *, validate_authorit
     from ..protocol.contributor import DynamicMembershipScope, StaticMembershipScope
     from .authority import AuthorityIdentity, LeaderAuthority
 
-    if descriptor_mode == "full_ha_dynamic":
+    if descriptor_mode == "dynamic":
         stream_pool_size = descriptor.get("stream_pool_size")
         if isinstance(stream_pool_size, bool) or not isinstance(stream_pool_size, int):
             raise RuntimeError("dynamic descriptor stream_pool_size is invalid")

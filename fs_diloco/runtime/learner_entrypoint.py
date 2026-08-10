@@ -1,4 +1,4 @@
-"""Torch-free learner admission entrypoint for mandatory Full Protocol v4."""
+"""Torch-free learner admission entrypoint for the Full Protocol."""
 
 from __future__ import annotations
 
@@ -51,9 +51,9 @@ def main(argv: list[str] | None = None) -> None:
         raise RuntimeError("learner must use the immutable resolved descriptor config")
     descriptor = loaded.descriptor
     config = loaded.config
-    shared = config.shared
+    shared = config
     dynamic = shared.membership.mode == "dynamic"
-    if dynamic != (descriptor["mode"] == "full_ha_dynamic"):
+    if dynamic != (descriptor["mode"] == "dynamic"):
         raise RuntimeError("descriptor membership mode mismatch")
     attempt_id = args.attempt_id or new_attempt_id()
     if dynamic:
@@ -197,7 +197,7 @@ def main(argv: list[str] | None = None) -> None:
             raise RuntimeError("learner admission changed while waiting at the test release gate")
     if "torch" in sys.modules:
         raise RuntimeError("learner pre-Torch release gate imported torch")
-    from .learner_v4 import run_admitted_learner
+    from .learner import run_admitted_learner
 
     run_admitted_learner(loaded, admission)
 

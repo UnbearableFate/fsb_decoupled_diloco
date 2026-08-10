@@ -12,9 +12,6 @@ from .atomic_io import fsync_directory, publish_immutable_bytes, read_json, sha2
 from .paths import RunPaths
 
 
-PLAN03_REQUIREMENTS = frozenset({"AUDIT-02", "AUDIT-04"})
-
-
 def command_receipt_path(paths: RunPaths, command_id: str) -> Path:
     if not isinstance(command_id, str) or not command_id:
         raise ValueError("command_id must not be empty")

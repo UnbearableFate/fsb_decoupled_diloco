@@ -1,4 +1,4 @@
-"""Version numbers for independently versioned Full Protocol v4 artifacts.
+"""Version numbers for independently versioned Full Protocol artifacts.
 
 Do not replace these constants with one generic format version.  Each value is
 owned by a producer/consumer boundary and may advance independently.

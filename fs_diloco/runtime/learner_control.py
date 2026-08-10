@@ -1,11 +1,8 @@
-"""Torch-free learner loop control decisions for Full Protocol v4."""
+"""Torch-free learner loop control decisions for the Full Protocol."""
 
 from __future__ import annotations
 
 from typing import Any
-
-
-PLAN03_REQUIREMENTS = frozenset({"P4-MIGRATE", "TERM-02"})
 
 
 def configured_global_close_target_visible(config: Any, current: Any) -> bool:

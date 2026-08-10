@@ -1,4 +1,4 @@
-"""Publish one immutable manual-close request for a Full Protocol v4 run."""
+"""Publish one immutable manual-close request for a Full Protocol run."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ def main(argv: list[str] | None = None) -> None:
         args.shared_root,
         expected_descriptor_sha256=args.expected_descriptor_sha256,
     )
-    if loaded.config.shared.terminal.admission_close_policy != "manual":
+    if loaded.config.terminal.admission_close_policy != "manual":
         raise RuntimeError("manual close requires terminal.admission_close_policy=manual")
     try:
         payload = publish_manual_terminal_request(

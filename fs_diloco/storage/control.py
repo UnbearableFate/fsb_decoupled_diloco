@@ -1,4 +1,4 @@
-"""Epoch-fenced v4 filesystem controls; fixed paths are repairable caches only."""
+"""Epoch-fenced filesystem controls; fixed paths are repairable caches only."""
 
 from __future__ import annotations
 
@@ -23,9 +23,6 @@ if TYPE_CHECKING:
     from .authority import CommittedVersion
 
 
-PLAN03_REQUIREMENTS = frozenset({"AUTH-04", "AUTH-07", "P4-MIGRATE", "P5-ARCH"})
-
-
 @dataclass(frozen=True)
 class CurrentControl:
     epoch: int
@@ -42,7 +39,7 @@ class ReceiptBarrierResult:
     payload: dict[str, Any]
 
 
-class V4ControlPublisher:
+class ControlPublisher:
     def __init__(
         self,
         paths: RunPaths,
@@ -128,7 +125,7 @@ class V4ControlPublisher:
             {
                 "format_version": CONTROL_FORMAT_VERSION,
                 "run_id": self.token.run_id,
-                "authority": "full_protocol_v4",
+                "authority": "full_protocol",
                 "all_learners_stopped": terminal.get("state") == "finalized",
                 "final_version": int(terminal["final_version"]),
                 "direct_weight_tokens_applied": int(terminal["direct_weight_tokens_applied"]),

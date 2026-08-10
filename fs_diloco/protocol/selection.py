@@ -8,11 +8,6 @@ from typing import Iterable
 from ._validation import identity, strict_int
 
 
-PLAN03_REQUIREMENTS = frozenset(
-    {"P3-REBASE", "SEL-01", "SEL-02", "SEL-03", "SEL-04", "SEL-05", "SEL-06"}
-)
-
-
 @dataclass
 class PersistentFairSelector:
     """Select least-served contributors with deterministic persistent ties."""

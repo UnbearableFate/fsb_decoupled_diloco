@@ -11,9 +11,6 @@ from pathlib import PurePosixPath
 from typing import Any, Mapping
 
 
-PLAN03_REQUIREMENTS = frozenset({"AUDIT-01", "FS-05"})
-
-
 class ArtifactClass(str, Enum):
     AUTHORITY = "authority"
     AUDIT = "audit"
@@ -119,12 +116,11 @@ def build_artifact_policy() -> dict[str, Any]:
                 "control/artifact_policy.json",
                 "control/syncer_metadata.sqlite3",
                 "control/param_index.json",
-                "control/bootstrap_scheduler_jobs.json",
-                "control/dynamic_close_request.json",
+                "control/terminal_close_request.json",
                 "control/scheduler_operator_requests/**",
                 "control/registration_requests/**",
-                "control/registration_history_v4/**",
-                "control/registration_dispositions_v4/**",
+                "control/registration_history/**",
+                "control/registration_dispositions/**",
                 "control/static_replacement_requests/**",
                 "control/syncer_epochs/**",
                 "updates/receipts/**",
@@ -146,7 +142,6 @@ def build_artifact_policy() -> dict[str, Any]:
                 "weights/**",
                 "optim/**",
                 "updates/payloads/**",
-                "eval_checkpoints/**",
             ],
             "temporary": ["**/*.tmp", "**/*.part", "**/*.staging", "**/.tmp-*"],
         },

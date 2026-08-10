@@ -1,4 +1,4 @@
-"""Narrow stateful services composed by the Full Protocol v4 runtime."""
+"""Narrow stateful services composed by the Full Protocol runtime."""
 
 from .dynamic_capacity import DynamicCapacityService
 from .maintenance import MaintenanceService

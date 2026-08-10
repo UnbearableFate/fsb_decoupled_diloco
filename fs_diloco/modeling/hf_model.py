@@ -47,23 +47,18 @@ class SyntheticTokenizer:
 
 
 def is_synthetic_model(name_or_path: str) -> bool:
-    return name_or_path in {"synthetic-tiny", "tiny-synthetic", "tiny-local"}
+    return name_or_path == "synthetic-tiny"
 
 
 def model_dtype(dtype_name: str) -> torch.dtype:
-    normalized = dtype_name.lower()
-    if normalized in {"bf16", "bfloat16"}:
+    if dtype_name == "bfloat16":
         return torch.bfloat16
-    if normalized in {"fp16", "float16"}:
-        return torch.float16
-    return torch.float32
+    if dtype_name == "float32":
+        return torch.float32
+    raise ValueError(f"unsupported model dtype: {dtype_name}")
 
 
-def load_causal_lm_and_tokenizer(
-    config: Any,
-    *,
-    require_frozen_identity: bool = False,
-) -> tuple[torch.nn.Module, Any]:
+def load_causal_lm_and_tokenizer(config: Any) -> tuple[torch.nn.Module, Any]:
     name = config.name_or_path
     if is_synthetic_model(name):
         model = TinyCausalLM(
@@ -72,8 +67,7 @@ def load_causal_lm_and_tokenizer(
         ).to(dtype=model_dtype(getattr(config, "dtype", "float32")))
         return model, SyntheticTokenizer(model.config.vocab_size)
 
-    if require_frozen_identity:
-        reject_local_reference(name, kind="model")
+    reject_local_reference(name, kind="model")
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained(

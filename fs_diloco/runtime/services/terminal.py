@@ -1,4 +1,4 @@
-"""Shared Full Protocol v4 terminal close, drain, and bounded final merge service."""
+"""Full Protocol terminal close, drain, and bounded final merge service."""
 
 from __future__ import annotations
 
@@ -11,12 +11,9 @@ from ...core.run_descriptor import LoadedRunDescriptor
 from ...core.versions import CONTROL_FORMAT_VERSION
 from ...protocol.contributor import decode_contributor_fence
 from ...storage.authority import LeaderAuthority, LeaderSession
-from ...storage.control import V4ControlPublisher, iter_terminal_acks
+from ...storage.control import ControlPublisher, iter_terminal_acks
 from ...storage.terminal_request import read_manual_terminal_request
 from .merge import MergeAttemptStatus, MergeService
-
-
-PLAN03_REQUIREMENTS = frozenset({"DMB-09", "P5-ARCH", "TERM-01", "TERM-02", "TERM-03"})
 
 
 def terminal_close_reason(
@@ -32,9 +29,9 @@ def terminal_close_reason(
     controller = authority.read.controller_status()
     if controller["state"] in {"preclosing", "closing", "draining"}:
         return str(controller.get("reason") or "resumed_terminal_close")
-    policy = config.shared.terminal.admission_close_policy
-    target = config.shared.sync.stop_after_outer_steps
-    token_target = config.stop_after_direct_weight_tokens_applied
+    policy = config.terminal.admission_close_policy
+    target = config.sync.stop_after_outer_steps
+    token_target = config.sync.stop_after_direct_weight_tokens_applied
     target_reached = (target is not None and version >= target) or (
         token_target is not None
         and authority.read.token_ledger_summary().direct_applied >= token_target
@@ -52,10 +49,10 @@ def terminal_close_reason(
     if policy == "deadline":
         started = authority.read.v0_committed_at()
         if started is not None and float(now if now is not None else time.time()) >= (
-            started + float(config.shared.terminal.deadline_seconds)
+            started + float(config.terminal.deadline_seconds)
         ):
             return "configured_deadline"
-    if policy == "global_target_or_launch_budget" and config.shared.scaling.enabled:
+    if policy == "global_target_or_launch_budget" and config.scaling.enabled:
         launches = [
             row for row in authority.read.dynamic_launch_requests() if row["role"] != "bootstrap"
         ]
@@ -68,7 +65,7 @@ def terminal_close_reason(
             < int(latest_capacity["desired_contributors"])
         )
         if (
-            len(launches) >= config.shared.scaling.max_total_launch_requests
+            len(launches) >= config.scaling.max_total_launch_requests
             and not active
             and capacity_still_low
         ):
@@ -83,7 +80,7 @@ class TerminalService:
         loaded: LoadedRunDescriptor,
         authority: LeaderAuthority,
         leader: LeaderSession,
-        control: V4ControlPublisher,
+        control: ControlPublisher,
         telemetry: Any,
         merge: MergeService,
         ingest: Callable[[], None],
@@ -105,13 +102,13 @@ class TerminalService:
         self.sleep = sleep
 
     def finalize(self, *, reason: str) -> dict[str, Any]:
-        terminal_config = self.loaded.config.shared.terminal
+        terminal_config = self.loaded.config.terminal
         controller = self.authority.read.controller_status()
         cycle_token_budget = (
-            int(self.loaded.config.shared.training.inner_steps)
-            * int(self.loaded.config.shared.training.gradient_accumulation_steps)
-            * int(self.loaded.config.shared.training.micro_batch_size)
-            * int(self.loaded.config.shared.training.block_size)
+            int(self.loaded.config.training.inner_steps)
+            * int(self.loaded.config.training.gradient_accumulation_steps)
+            * int(self.loaded.config.training.micro_batch_size)
+            * int(self.loaded.config.data.block_size)
         )
         close_command = self._command_id("terminal-close", reason)
         preclose_command = self._command_id("terminal-preclose", reason)
@@ -138,7 +135,7 @@ class TerminalService:
                 self.sleep(
                     min(
                         remaining,
-                        float(self.loaded.config.shared.sync.scan_interval_seconds),
+                        float(self.loaded.config.sync.scan_interval_seconds),
                     )
                 )
             controller = self.authority.read.controller_status()
@@ -163,7 +160,7 @@ class TerminalService:
             remaining = ack_deadline - float(self.wall_clock())
             if remaining <= 0.0:
                 break
-            self.sleep(min(remaining, float(self.loaded.config.shared.sync.scan_interval_seconds)))
+            self.sleep(min(remaining, float(self.loaded.config.sync.scan_interval_seconds)))
         self._adjudicate_hard_crashes(cycle_token_budget)
 
         controller = self.authority.read.controller_status()
@@ -182,7 +179,7 @@ class TerminalService:
             remaining = proposal_deadline - float(self.wall_clock())
             if remaining <= 0.0:
                 break
-            self.sleep(min(remaining, float(self.loaded.config.shared.sync.scan_interval_seconds)))
+            self.sleep(min(remaining, float(self.loaded.config.sync.scan_interval_seconds)))
         maximum = int(terminal_config.max_terminal_merges)
         controller = self.authority.read.controller_status()
         remaining_merges = maximum - int(controller["terminal_merge_count"])
@@ -191,7 +188,7 @@ class TerminalService:
             self.ingest()
             outcome = self.merge.merge_once(
                 quorum_min=1,
-                quorum_max=self.loaded.config.shared.sync.quorum_max,
+                quorum_max=self.loaded.config.sync.quorum_max,
                 purpose="terminal",
             )
             if outcome is MergeAttemptStatus.NO_BATCH:

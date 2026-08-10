@@ -20,7 +20,7 @@ def validate_global_adoption_config(config: Any) -> None:
             "poll_latest_during_inner_steps=true"
         )
     if strategy == "predict_post_publish_global":
-        if config.outer_optimizer.name.lower() != "nesterov":
+        if config.outer_optimizer.name != "nesterov":
             raise ValueError("predict_post_publish_global currently requires outer nesterov")
         if config.outer_optimizer.weight_decay != 0.0:
             raise ValueError("predict_post_publish_global currently requires outer weight_decay=0")

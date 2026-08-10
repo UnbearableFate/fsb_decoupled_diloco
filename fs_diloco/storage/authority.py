@@ -1,4 +1,4 @@
-"""Fresh v4 authority bootstrap, typed read model, and explicit fenced commands.
+"""Fresh authority bootstrap, typed read model, and explicit fenced commands.
 
 Only this module owns the writable SQLite connection.  Application code gets a
 ``LeaderSession`` with named commands or an ``AuthorityReadModel``; neither
@@ -70,41 +70,10 @@ from .leader_lease import (
 from .paths import RunPaths
 
 
-PLAN03_REQUIREMENTS = frozenset(
-    {
-        "AUDIT-02",
-        "AUDIT-04",
-        "AUTH-02",
-        "AUTH-03",
-        "AUTH-05",
-        "AUTH-09",
-        "AUTH-10",
-        "AUTH-11",
-        "DATA-02",
-        "DATA-03",
-        "DMB-05",
-        "DMB-09",
-        "DMB-10",
-        "SCHED-01",
-        "SCHED-02",
-        "SCHED-03",
-        "SCHED-04",
-        "SCHED-05",
-        "SEL-03",
-        "SEL-04",
-        "TERM-01",
-        "TERM-02",
-        "TERM-03",
-        "TOK-05",
-        "TOK-08",
-    }
-)
-
-
-AUTHORITY_APPLICATION_ID = 0x46534434  # "FSD4"
-BASE_SCHEMA_NAME = "schema_v4.sql"
-DYNAMIC_SCHEMA_NAME = "schema_v4_dynamic.sql"
-V4_BOOTSTRAP_MARKER_NAME = "authority_v4_bootstrap_complete.json"
+AUTHORITY_APPLICATION_ID = 0x46534450  # "FSDP"
+BASE_SCHEMA_NAME = "schema.sql"
+DYNAMIC_SCHEMA_NAME = "schema_dynamic.sql"
+BOOTSTRAP_MARKER_NAME = "bootstrap_complete.json"
 
 
 def _publication_commit_boundary(_name: str) -> None:
@@ -112,7 +81,7 @@ def _publication_commit_boundary(_name: str) -> None:
 
 
 class AuthoritySchemaError(RuntimeError):
-    """The on-disk schema or immutable identity is not the requested v4 authority."""
+    """The on-disk schema or immutable identity is not the requested authority."""
 
 
 class CommandConflictError(RuntimeError):
@@ -235,7 +204,7 @@ def _marker_path(database_path: Path, marker_path: str | Path | None) -> Path:
     return (
         Path(marker_path)
         if marker_path is not None
-        else database_path.with_name(V4_BOOTSTRAP_MARKER_NAME)
+        else database_path.with_name(BOOTSTRAP_MARKER_NAME)
     )
 
 
@@ -288,7 +257,7 @@ def _configure_connection(connection: sqlite3.Connection, *, busy_timeout_ms: in
     connection.execute(f"PRAGMA busy_timeout={int(busy_timeout_ms)}")
 
 
-def initialize_authority_v4(
+def initialize_authority(
     database_path: str | Path,
     identity: AuthorityIdentity,
     membership_scope: StaticMembershipScope | DynamicMembershipScope,
@@ -297,12 +266,12 @@ def initialize_authority_v4(
     busy_timeout_ms: int = 60_000,
     wall_clock: Callable[[], float] = time.time,
 ) -> AuthorityMetadata:
-    """Create a fresh complete v4 DB without executing any legacy DDL."""
+    """Create one fresh complete authority database."""
 
     path = Path(database_path)
     marker = _marker_path(path, marker_path)
     if _path_entry_exists(path) or _path_entry_exists(marker):
-        raise FileExistsError(f"v4 authority target already exists: {path}")
+        raise FileExistsError(f"authority target already exists: {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
     mode = "static" if isinstance(membership_scope, StaticMembershipScope) else "dynamic"
     schemas = _schema_text(mode)
@@ -403,13 +372,13 @@ def _validate_open(
 ) -> AuthorityMetadata:
     marker_payload = read_json(marker)
     if not isinstance(marker_payload, Mapping):
-        raise AuthoritySchemaError(f"missing or malformed v4 bootstrap marker: {marker}")
+        raise AuthoritySchemaError(f"missing or malformed bootstrap marker: {marker}")
     expected_features = canonical_features(mode)
     expected_ddl = ddl_bundle_sha256(mode)
     row = connection.execute("SELECT * FROM schema_meta WHERE singleton = 1").fetchone()
     identity_row = connection.execute("SELECT * FROM run_identity WHERE singleton = 1").fetchone()
     if row is None or identity_row is None:
-        raise AuthoritySchemaError("v4 authority metadata is incomplete")
+        raise AuthoritySchemaError("authority metadata is incomplete")
     try:
         stored_features = tuple(json.loads(str(row["features_json"])))
     except (json.JSONDecodeError, TypeError) as exc:
@@ -469,7 +438,7 @@ def _validate_open(
 
 
 class AuthorityReadModel:
-    """Typed, query-only view over the v4 authority."""
+    """Typed, query-only view over the authority."""
 
     def __init__(self, authority: "LeaderAuthority") -> None:
         self._authority = authority
@@ -745,7 +714,7 @@ class AuthorityReadModel:
 
 
 class LeaderAuthority:
-    """Owner of a validated writable v4 connection and lease lifecycle."""
+    """Owner of a validated writable connection and lease lifecycle."""
 
     def __init__(
         self,

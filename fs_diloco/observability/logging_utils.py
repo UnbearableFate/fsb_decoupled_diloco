@@ -15,9 +15,6 @@ from ..storage.atomic_io import ensure_dir
 from ..storage.atomic_io import fsync_directory
 
 
-PLAN03_REQUIREMENTS = frozenset({"AUDIT-05"})
-
-
 class JsonlLogger:
     def __init__(self, path: str | Path, actor: str, mirror_stdout: bool = True) -> None:
         self.path = Path(path)

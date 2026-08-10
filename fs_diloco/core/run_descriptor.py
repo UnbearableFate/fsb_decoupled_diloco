@@ -13,14 +13,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .config_v4 import ConfigProfile, ConfigV4, load_config_v4
+from .config import Config, load_config
 from .versions import AUTHORITY_SCHEMA_VERSION, PROTOCOL_VERSION
 from ..storage.atomic_io import publish_immutable_bytes, read_json, sha256_file
 from ..storage.paths import RunPaths
 from ..storage.run_initializer import validate_completed_run_for_actor
-
-
-PLAN03_REQUIREMENTS = frozenset({"ENV-01"})
 
 
 def _sha256_json_without(payload: dict[str, Any], field: str) -> str:
@@ -45,7 +42,7 @@ def _optional_environment_flag(name: str) -> bool | None:
 class LoadedRunDescriptor:
     paths: RunPaths
     descriptor: dict[str, Any]
-    config: ConfigV4
+    config: Config
     identity: "DescriptorAuthorityIdentity"
 
 
@@ -84,9 +81,9 @@ def load_run_descriptor(
     ):
         raise RuntimeError("run descriptor does not match the submitted job identity")
     descriptor_mode = str(descriptor.get("mode", ""))
-    if descriptor_mode == "full_ha_static":
+    if descriptor_mode == "static":
         expected_schema_version = AUTHORITY_SCHEMA_VERSION
-    elif descriptor_mode == "full_ha_dynamic":
+    elif descriptor_mode == "dynamic":
         expected_schema_version = AUTHORITY_SCHEMA_VERSION
     else:
         raise RuntimeError(f"unsupported run descriptor mode: {descriptor_mode!r}")
@@ -127,20 +124,18 @@ def load_run_descriptor(
     for key in ("git_commit", "git_dirty", "source_fingerprint"):
         if source.get(key) != descriptor.get(key):
             raise RuntimeError(f"source manifest {key} mismatch")
-    config = load_config_v4(config_path, profile=ConfigProfile.FULL_V4)
-    shared = config.shared
-    expected_config_mode = "dynamic" if descriptor_mode == "full_ha_dynamic" else "static"
-    if shared.membership.mode != expected_config_mode:
+    config = load_config(config_path)
+    if config.membership.mode != descriptor_mode:
         raise RuntimeError("resolved config membership mode does not match descriptor")
-    if shared.run.run_id != descriptor.get("run_id"):
+    if config.run.run_id != descriptor.get("run_id"):
         raise RuntimeError("resolved config run_id mismatch")
-    if Path(str(shared.run.shared_root)).resolve() != paths.shared_root:
+    if Path(str(config.run.shared_root)).resolve() != paths.shared_root:
         raise RuntimeError("resolved config shared_root mismatch")
-    if shared.run.git_commit != descriptor.get("git_commit"):
+    if config.run.git_commit != descriptor.get("git_commit"):
         raise RuntimeError("resolved config git_commit mismatch")
-    if shared.run.git_dirty != descriptor.get("git_dirty"):
+    if config.run.git_dirty != descriptor.get("git_dirty"):
         raise RuntimeError("resolved config git_dirty mismatch")
-    if shared.run.source_fingerprint != descriptor.get("source_fingerprint"):
+    if config.run.source_fingerprint != descriptor.get("source_fingerprint"):
         raise RuntimeError("resolved config source fingerprint mismatch")
     identity = DescriptorAuthorityIdentity(
         run_id=str(descriptor["run_id"]),

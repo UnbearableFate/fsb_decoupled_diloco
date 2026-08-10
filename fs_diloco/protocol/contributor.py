@@ -1,4 +1,4 @@
-"""Typed static and dynamic contributor fences for Full Protocol v4."""
+"""Typed static and dynamic contributor fences for the Full Protocol."""
 
 from __future__ import annotations
 

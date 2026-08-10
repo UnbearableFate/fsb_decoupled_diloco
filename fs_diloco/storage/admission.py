@@ -1170,7 +1170,7 @@ def highest_static_generation(paths: RunPaths, learner_id: str) -> int | None:
     if not paths.syncer_epochs.is_dir():
         return None
     for path in paths.syncer_epochs.glob(
-        f"e*_*/membership/admissions_v4/responses/{learner_id}/**/*.json"
+        f"e*_*/membership/admissions/responses/{learner_id}/**/*.json"
     ):
         payload = safe_read_json(path)
         if not isinstance(payload, dict):

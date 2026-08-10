@@ -20,19 +20,13 @@ from ..modeling.param_index import flat_to_named_tensors, named_tensors_to_flat
 
 
 def dtype_from_name(name: str) -> torch.dtype:
-    normalized = name.lower().replace("torch.", "")
     mapping = {
         "float32": torch.float32,
-        "fp32": torch.float32,
-        "float": torch.float32,
         "bfloat16": torch.bfloat16,
-        "bf16": torch.bfloat16,
-        "float16": torch.float16,
-        "fp16": torch.float16,
     }
-    if normalized not in mapping:
+    if name not in mapping:
         raise ValueError(f"unsupported tensor dtype: {name}")
-    return mapping[normalized]
+    return mapping[name]
 
 
 def save_safetensors_atomic(path: str | Path, tensors: dict[str, torch.Tensor]) -> Path:

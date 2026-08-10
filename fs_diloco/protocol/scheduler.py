@@ -11,9 +11,6 @@ from typing import Any
 from ._validation import identity, require_exact_fields, require_mapping, sha256, strict_float
 
 
-PLAN03_REQUIREMENTS = frozenset({"SCHED-04", "SCHED-05"})
-
-
 class SchedulerLaunchState(str, Enum):
     PLANNED = "planned"
     SUBMITTING = "submitting"

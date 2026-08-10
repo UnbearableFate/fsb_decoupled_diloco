@@ -1,4 +1,4 @@
-"""Pure Full Protocol v4 authority, accounting, selection, and merge objects."""
+"""Pure Full Protocol authority, accounting, selection, and merge objects."""
 
 from .authority import (
     ContributorProgress,

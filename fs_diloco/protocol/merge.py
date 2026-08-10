@@ -6,9 +6,6 @@ import math
 from typing import Any
 
 
-PLAN03_REQUIREMENTS = frozenset({"P6-QUALITY", "TOK-04"})
-
-
 def staleness(current_version: int, base_global_version: int) -> int:
     return max(0, current_version - base_global_version)
 

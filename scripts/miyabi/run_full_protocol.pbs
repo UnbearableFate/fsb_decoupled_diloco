@@ -1,0 +1,52 @@
+#!/bin/bash
+#PBS -N fsdiloco_full_protocol
+#PBS -q regular-g
+#PBS -W group_list=xg24i002
+#PBS -l select=9:mpiprocs=1
+#PBS -l walltime=00:15:00
+#PBS -j oe
+#PBS -m ae
+
+set -eEuo pipefail
+trap 'echo "[ERROR] Full Protocol job failed at line $LINENO" >&2' ERR
+
+: "${EVIDENCE_OUTPUT:?EVIDENCE_OUTPUT is required}"
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PRIMARY_WORKTREE_ROOT="${PRIMARY_WORKTREE_ROOT:-$PROJECT_ROOT}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+CONFIG="${CONFIG:-$PROJECT_ROOT/configs/full_protocol_static.yaml}"
+RUN_ID="${RUN_ID:-full_protocol_${PBS_JOBID%%.*}}"
+SHARED_ROOT="${SHARED_ROOT:-$PRIMARY_WORKTREE_ROOT/runs/full_protocol/$RUN_ID}"
+LOG_ROOT="${LOG_ROOT:-$PRIMARY_WORKTREE_ROOT/logs/qsub_${RUN_ID}}"
+EXPECTED_NODES="${EXPECTED_NODES:-9}"
+NUM_LEARNERS="${NUM_LEARNERS:-8}"
+EXPECTED_INNER_STEPS="${EXPECTED_INNER_STEPS:-50}"
+EXPECTED_GLOBAL_STEPS="${EXPECTED_GLOBAL_STEPS:-10}"
+EXPECTED_MIN_SYNCER_EPOCHS="${EXPECTED_MIN_SYNCER_EPOCHS:-1}"
+SYNCER_CUDA_VISIBLE_DEVICES="${SYNCER_CUDA_VISIBLE_DEVICES:-0}"
+LEARNER_CUDA_VISIBLE_DEVICES="${LEARNER_CUDA_VISIBLE_DEVICES:-0}"
+
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+module list 2>&1 | cat
+export PROJECT_ROOT PRIMARY_WORKTREE_ROOT PYTHON_BIN CONFIG RUN_ID SHARED_ROOT LOG_ROOT
+export EXPECTED_NODES NUM_LEARNERS
+export SYNCER_CUDA_VISIBLE_DEVICES LEARNER_CUDA_VISIBLE_DEVICES
+export FS_DILOCO_FAULT_SCENARIO="${FS_DILOCO_FAULT_SCENARIO:-none}"
+
+bash "$PROJECT_ROOT/scripts/miyabi/run_full_protocol_allocation.sh"
+
+checker=(
+  "$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/check_full_protocol_run.py"
+  --project-root "$PROJECT_ROOT"
+  --run-root "$SHARED_ROOT"
+  --expected-global-steps "$EXPECTED_GLOBAL_STEPS"
+  --expected-inner-steps "$EXPECTED_INNER_STEPS"
+  --expected-contributors "$NUM_LEARNERS"
+  --expected-hosts "$EXPECTED_NODES"
+  --expected-min-syncer-epochs "$EXPECTED_MIN_SYNCER_EPOCHS"
+  --output "$EVIDENCE_OUTPUT"
+)
+if [[ -n "${EXPECTED_REPLACED_LEARNER:-}" ]]; then
+  checker+=(--expected-replaced-learner "$EXPECTED_REPLACED_LEARNER")
+fi
+"${checker[@]}"

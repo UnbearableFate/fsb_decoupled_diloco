@@ -61,18 +61,12 @@ def _chunks(tokens: list[int], block_size: int) -> list[list[int]]:
     return [tokens[i : i + block_size] for i in range(0, usable, block_size)]
 
 
-def load_text_split(
-    data_config: Any,
-    split: str,
-    *,
-    require_frozen_identity: bool = False,
-) -> Any:
+def load_text_split(data_config: Any, split: str) -> Any:
     """Load one configured text split with the same WikiText fallback as training."""
     dataset_name = data_config.dataset_name
     if dataset_name == "wikitext" and os.environ.get("FS_DILOCO_HF_WIKITEXT_REPO"):
         dataset_name = os.environ["FS_DILOCO_HF_WIKITEXT_REPO"]
-    if require_frozen_identity:
-        reject_local_reference(str(dataset_name), kind="dataset")
+    reject_local_reference(str(dataset_name), kind="dataset")
 
     from datasets import load_dataset
 
@@ -83,13 +77,11 @@ def load_text_split(
             revision=data_config.revision,
             split=split,
             cache_dir=data_config.cache_dir,
-            streaming=bool(data_config.streaming),
         )
     except Exception as exc:
         if data_config.dataset_name != "wikitext" or "/" in str(dataset_name):
             raise
-        if require_frozen_identity:
-            reject_local_reference("Salesforce/wikitext", kind="dataset")
+        reject_local_reference("Salesforce/wikitext", kind="dataset")
         try:
             return load_dataset(
                 "Salesforce/wikitext",
@@ -97,7 +89,6 @@ def load_text_split(
                 revision=data_config.revision,
                 split=split,
                 cache_dir=data_config.cache_dir,
-                streaming=bool(data_config.streaming),
             )
         except Exception:
             raise exc
@@ -192,7 +183,7 @@ def build_batch_iterator(
         vocab_size = int(getattr(tokenizer, "vocab_size", config.model.synthetic_vocab_size))
         return synthetic_batches(
             vocab_size=vocab_size,
-            block_size=config.training.block_size,
+            block_size=config.data.block_size,
             micro_batch_size=config.training.micro_batch_size,
             seed=config.training.seed,
             learner_index=learner_index,
@@ -203,7 +194,7 @@ def build_batch_iterator(
         learner_index=learner_index,
         num_learners=num_learners,
         micro_batch_size=config.training.micro_batch_size,
-        block_size=config.training.block_size,
+        block_size=config.data.block_size,
         seed=config.training.seed,
     )
 
@@ -236,7 +227,7 @@ def build_indexed_batch_iterator(
     *,
     cursor: IndexedBlockCursor,
 ) -> Iterator[Batch]:
-    """Build a random-access resumable stream from the explicit v4 cursor.
+    """Build a random-access resumable stream from the explicit cursor.
 
     The authority cursor counts optimizer micro-batches.  Each batch expands
     into ``micro_batch_size`` adjacent logical block positions before the
@@ -244,24 +235,18 @@ def build_indexed_batch_iterator(
     finite block set wraps.
     """
 
-    if config.data.streaming:
-        raise ValueError("indexed v4 data does not support streaming datasets")
     micro_batch_size = int(config.training.micro_batch_size)
-    block_size = int(config.training.block_size)
+    block_size = int(config.data.block_size)
     if config.data.dataset_name == "synthetic":
         vocab_size = int(getattr(tokenizer, "vocab_size", config.model.synthetic_vocab_size))
         dataset_blocks = 2**31 - 1
         materialized_blocks: list[list[int]] | None = None
     else:
-        dataset = load_text_split(
-            config.data,
-            config.data.train_split,
-            require_frozen_identity=True,
-        )
+        dataset = load_text_split(config.data, config.data.train_split)
         materialized_blocks = text_rows_to_blocks(dataset, tokenizer, block_size)
         dataset_blocks = len(materialized_blocks)
         if dataset_blocks < cursor.shard_count:
-            raise ValueError("tokenized dataset has fewer blocks than v4 data shards")
+            raise ValueError("tokenized dataset has fewer blocks than configured data shards")
 
     next_cursor = cursor
     while True:

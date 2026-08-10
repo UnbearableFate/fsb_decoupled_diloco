@@ -15,7 +15,7 @@ from ...protocol.authority import MergeFenceConflict
 from ...protocol.merge import normalized_update_weights, weighted_average_tensors
 from ...storage.atomic_io import publish_immutable_bytes
 from ...storage.authority import CommittedVersion, LeaderAuthority, LeaderSession
-from ...storage.control import V4ControlPublisher
+from ...storage.control import ControlPublisher
 from ...storage.tensor_codec import (
     dtype_from_name,
     encode_global_weights,
@@ -23,9 +23,6 @@ from ...storage.tensor_codec import (
     load_outer_state,
     load_update_vector,
 )
-
-
-PLAN03_REQUIREMENTS = frozenset({"DMB-06", "P5-ARCH", "PUB-01", "TERM-03"})
 
 
 class MergeAttemptStatus(str, Enum):
@@ -40,7 +37,7 @@ class MergeService:
         loaded: LoadedRunDescriptor,
         authority: LeaderAuthority,
         leader: LeaderSession,
-        control: V4ControlPublisher,
+        control: ControlPublisher,
         telemetry: Any,
         theta: torch.Tensor,
         outer_state: dict[str, torch.Tensor],
@@ -64,7 +61,7 @@ class MergeService:
     ) -> CommittedVersion | MergeAttemptStatus:
         if purpose not in {"normal", "terminal"}:
             raise ValueError("merge purpose must be normal or terminal")
-        config = self.loaded.config.shared
+        config = self.loaded.config
         paths = self.loaded.paths
         self.sequence += 1
         selection = self.leader.try_select_batch(

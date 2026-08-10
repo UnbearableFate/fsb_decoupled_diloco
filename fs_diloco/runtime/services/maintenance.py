@@ -8,7 +8,7 @@ import stat
 from pathlib import PurePosixPath
 from typing import Any
 
-from ...core.config_v4 import MaintenanceSection
+from ...core.config import MaintenanceSection
 from ...storage.atomic_io import fsync_directory, read_json, sha256_file
 from ...storage.audit_archive import (
     build_audit_batch,
@@ -19,11 +19,6 @@ from ...storage.audit_archive import (
 )
 from ...storage.authority import LeaderAuthority, LeaderSession
 from ...storage.paths import RunPaths
-
-
-PLAN03_REQUIREMENTS = frozenset(
-    {"AUDIT-02", "AUDIT-04", "P6-ACCEPTANCE", "P6-DYNAMIC-9N", "P6-STATIC-9N"}
-)
 
 
 def delete_claimed_artifact_object(

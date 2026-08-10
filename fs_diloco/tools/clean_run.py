@@ -24,9 +24,6 @@ from typing import Any, Iterable
 from ..storage.artifact_policy import ArtifactClass, ArtifactPolicy
 
 
-PLAN03_REQUIREMENTS = frozenset({"AUDIT-03", "FS-05"})
-
-
 class CleanupRefusedError(RuntimeError):
     """Raised when a target cannot be proven to be a completed owned run."""
 
@@ -59,8 +56,7 @@ class CleanupPlan:
     evidence_path: Path
     run_id: str
     evidence_sha256: str
-    artifact_policy_sha256: str | None
-    legacy_policy_override: bool
+    artifact_policy_sha256: str
     candidates: tuple[CleanupCandidate, ...]
     retained_representative_learner_log: str | None
     retained_authority_owned_gc_paths: tuple[str, ...]
@@ -287,17 +283,11 @@ def _candidate(
     )
 
 
-def _load_artifact_policy(
-    run_root: Path,
-    *,
-    allow_legacy_run_without_policy: bool,
-) -> ArtifactPolicy | None:
+def _load_artifact_policy(run_root: Path) -> ArtifactPolicy:
     path = run_root / "control" / "artifact_policy.json"
     try:
         metadata = path.lstat()
     except FileNotFoundError:
-        if allow_legacy_run_without_policy:
-            return None
         raise CleanupRefusedError("artifact policy is required to prove generic cleanup safety")
     if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
         raise CleanupRefusedError("artifact policy must be an immutable regular file")
@@ -374,7 +364,7 @@ def _authority_live_paths(run_root: Path) -> tuple[set[str], set[str]]:
 def _validate_policy_candidates(
     *,
     run_root: Path,
-    policy: ArtifactPolicy | None,
+    policy: ArtifactPolicy,
     candidates: tuple[CleanupCandidate, ...],
 ) -> None:
     blocking, authority_owned_gc = _authority_live_paths(run_root)
@@ -383,22 +373,6 @@ def _validate_policy_candidates(
             raise CleanupRefusedError(
                 f"authority still references cleanup candidate: {candidate.relative_path}"
             )
-        if policy is None:
-            legacy_safe = (
-                candidate.relative_path.startswith("logs/wandb/"),
-                candidate.relative_path.startswith("logs/learner"),
-                candidate.relative_path
-                in {"metrics/learner_metrics.csv", "metrics/update_manifest.csv"},
-                candidate.relative_path.startswith("heartbeats/"),
-                candidate.relative_path.startswith("updates/latest/"),
-                candidate.relative_path.startswith("updates/payloads/"),
-            )
-            if not any(legacy_safe):
-                raise CleanupRefusedError(
-                    "legacy policy override cannot prove cleanup safety for: "
-                    f"{candidate.relative_path}"
-                )
-            continue
         try:
             artifact_class = policy.classify(candidate.relative_path)
             allowed = policy.allows_generic_cleanup(candidate.relative_path)
@@ -421,8 +395,6 @@ def build_cleanup_plan(
     project_root: str | Path,
     run_root: str | Path,
     evidence_path: str | Path,
-    *,
-    allow_legacy_run_without_policy: bool = False,
 ) -> CleanupPlan:
     """Resolve and inventory safe cleanup candidates without deleting anything."""
 
@@ -448,10 +420,7 @@ def build_cleanup_plan(
 
     run_id, summary, _stop = _terminal_identity(run)
     _matching_pass_evidence(evidence, run, run_id, summary)
-    artifact_policy = _load_artifact_policy(
-        run,
-        allow_legacy_run_without_policy=allow_legacy_run_without_policy,
-    )
+    artifact_policy = _load_artifact_policy(run)
 
     selected: dict[Path, str] = {}
 
@@ -459,10 +428,6 @@ def build_cleanup_plan(
         for path in paths:
             selected[path] = reason
 
-    select(
-        _files_below(run / "logs" / "wandb", run_root=run),
-        "offline experiment cache",
-    )
     learner_logs = sorted(
         (
             path
@@ -473,13 +438,6 @@ def build_cleanup_plan(
     )
     representative = learner_logs[0] if learner_logs else None
     select(learner_logs[1:], "repeated successful learner log")
-    for relative in (
-        "metrics/learner_metrics.csv",
-        "metrics/update_manifest.csv",
-    ):
-        path = run / relative
-        if path.is_file() and not path.is_symlink():
-            selected[path] = "superseded raw telemetry"
     select(_files_below(run / "heartbeats", run_root=run), "terminal heartbeat cache")
     select(
         _files_below(run / "updates" / "latest", run_root=run),
@@ -489,10 +447,9 @@ def build_cleanup_plan(
         _files_below(run / "updates" / "payloads", run_root=run),
         "terminal update payload",
     )
-    if artifact_policy is not None:
-        for path in _files_below(run, run_root=run):
-            if path.name.endswith((".tmp", ".part", ".staging")) or path.name.startswith(".tmp-"):
-                selected[path] = "temporary or staging file"
+    for path in _files_below(run, run_root=run):
+        if path.name.endswith((".tmp", ".part", ".staging")) or path.name.startswith(".tmp-"):
+            selected[path] = "temporary or staging file"
 
     blocking, authority_owned_gc = _authority_live_paths(run)
     selected_relative_paths = {path.relative_to(run).as_posix(): path for path in selected}
@@ -520,8 +477,7 @@ def build_cleanup_plan(
         evidence_path=evidence,
         run_id=run_id,
         evidence_sha256=_sha256(evidence),
-        artifact_policy_sha256=(None if artifact_policy is None else artifact_policy.policy_sha256),
-        legacy_policy_override=artifact_policy is None,
+        artifact_policy_sha256=artifact_policy.policy_sha256,
         candidates=candidates,
         retained_representative_learner_log=(
             None if representative is None else representative.relative_to(run).as_posix()
@@ -540,7 +496,6 @@ def _manifest(plan: CleanupPlan, *, status: str) -> dict[str, Any]:
         "completion_evidence": str(plan.evidence_path),
         "completion_evidence_sha256": plan.evidence_sha256,
         "artifact_policy_sha256": plan.artifact_policy_sha256,
-        "legacy_policy_override": plan.legacy_policy_override,
         "candidate_count": len(plan.candidates),
         "candidate_bytes": plan.total_bytes,
         "retained_representative_learner_log": plan.retained_representative_learner_log,
@@ -596,7 +551,6 @@ def execute_cleanup(plan: CleanupPlan, manifest_path: str | Path) -> dict[str, A
             plan.project_root,
             plan.run_root,
             plan.evidence_path,
-            allow_legacy_run_without_policy=plan.legacy_policy_override,
         )
         if refreshed != plan:
             raise CleanupRefusedError(
@@ -668,11 +622,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--delete", action="store_true", help="perform the inventoried deletion")
     parser.add_argument(
-        "--allow-legacy-run-without-policy",
-        action="store_true",
-        help="explicitly allow a pre-policy run using the conservative legacy allowlist",
-    )
-    parser.add_argument(
         "--manifest-output",
         type=Path,
         help="new report-side cleanup manifest (required with --delete)",
@@ -687,7 +636,6 @@ def main(argv: list[str] | None = None) -> int:
             args.project_root,
             args.run_root,
             args.evidence,
-            allow_legacy_run_without_policy=args.allow_legacy_run_without_policy,
         )
         if args.delete:
             if args.manifest_output is None:

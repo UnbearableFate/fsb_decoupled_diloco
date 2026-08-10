@@ -1,10 +1,11 @@
-"""YAML configuration loading and runtime resolution."""
+"""Strict Full Protocol configuration loading and runtime resolution."""
 
 from __future__ import annotations
 
 import dataclasses
 import math
 import os
+import re
 import time
 import types
 from dataclasses import dataclass, field
@@ -18,23 +19,6 @@ from .constants import DEFAULT_RUNS_DIR
 from .versions import CONFIG_SCHEMA_VERSION
 
 T = TypeVar("T")
-
-REMOVED_CONFIG_KEYS: dict[str, str | None] = {
-    "init": None,
-    "fragments": None,
-    "failure_sim": None,
-    "coordination": None,
-    "sync.stop_after_global_tokens": "sync.stop_after_direct_weight_tokens_applied",
-    "sync.capture_terminal_predecessor_for_eval": None,
-    "sync.upload_mode": None,
-    "liveness.quorum_policy": None,
-    "inner_optimizer.reset_on_global_update": None,
-    "learner.prediction_reconcile_timeout_seconds": (
-        "learner.prediction.reconcile_timeout_seconds"
-    ),
-    "syncer.parallel_checkpoint_writes": None,
-}
-
 
 class ConfigSection:
     """Pure structural validation shared by every dataclass config section."""
@@ -52,10 +36,6 @@ class ConfigSection:
 
 
 def _validate_config_value(value: Any, annotation: Any, path: str) -> None:
-    if path == "io.checkpoint_digest_mode" and value is False:
-        # PyYAML 1.1 decodes an unquoted ``off`` as false.  The resolver
-        # normalizes this one historical spelling before semantic validation.
-        return
     origin = get_origin(annotation)
     args = get_args(annotation)
     if origin in {types.UnionType, Union}:
@@ -117,7 +97,6 @@ class RunSection(ConfigSection):
     name: str = "fs_diloco_gpt2_wikitext2_8l"
     run_id: str | None = None
     shared_root: str | None = None
-    log_level: str = "INFO"
     git_commit: str | None = None
     git_dirty: bool | None = None
     source_fingerprint: str | None = None
@@ -141,21 +120,9 @@ class DataSection(ConfigSection):
     dataset_config_name: str | None = "wikitext-2-raw-v1"
     revision: str | None = None
     train_split: str = "train"
-    validation_split: str = "validation"
     block_size: int = 1024
-    num_proc: int = 4
     cache_dir: str | None = None
-    streaming: bool = False
     shuffle_blocks: bool = True
-    synthetic_num_batches: int = 128
-
-
-@dataclass
-class GraceWindowSection(ConfigSection):
-    mode: str = "fixed"
-    fixed_seconds: float = 20.0
-    initial_seconds: float = 10.0
-    max_seconds: float = 60.0
 
 
 @dataclass
@@ -163,14 +130,10 @@ class SyncSection(ConfigSection):
     num_learners: int = 8
     quorum_min: int = 4
     quorum_max: int = 8
-    max_staleness_versions: int = 2
     staleness_lambda: float = 0.25
-    selection_policy: str = "most_recent_per_learner"
     scan_interval_seconds: float = 2.0
-    ingest_during_publish: bool = False
-    grace_window: GraceWindowSection = field(default_factory=GraceWindowSection)
     stop_after_outer_steps: int | None = 20
-    stop_file_poll_seconds: float = 5.0
+    stop_after_direct_weight_tokens_applied: int | None = None
 
 
 @dataclass
@@ -188,14 +151,7 @@ class MembershipSection(ConfigSection):
     initial_membership_deadline_seconds: float = 1800.0
     registration_scan_interval_seconds: float = 2.0
     registration_request_ttl_seconds: float = 120.0
-    heartbeat_stale_after_seconds: float = 120.0
     heartbeat_dead_after_seconds: float = 300.0
-    revocation_grace_seconds: float = 60.0
-    expired_retention_seconds: float = 600.0
-    max_active_instance_records: int = 16
-    allow_unsolicited_registration: bool = False
-    allow_healthy_placement_replacement: bool = False
-    reuse_stream_for_same_placement: bool = True
 
 
 @dataclass
@@ -217,7 +173,7 @@ class ScalingSection(ConfigSection):
     scheduler_reconcile_interval_seconds: float = 30.0
     scheduler_uncertainty_timeout_seconds: float = 300.0
     starvation_observation_seconds: float = 120.0
-    learner_pbs_script: str = "scripts/miyabi/run_dynamic_learner.pbs"
+    learner_pbs_script: str = "scripts/miyabi/run_learner.pbs"
     learner_walltime: str | None = None
     learner_queue: str | None = None
 
@@ -234,26 +190,13 @@ class TerminalSection(ConfigSection):
 
 
 @dataclass
-class LivenessSection(ConfigSection):
-    heartbeat_interval_seconds: float = 30.0
-    stale_after_seconds: float = 120.0
-    dead_after_seconds: float = 300.0
-    no_progress_timeout_seconds: float = 600.0
-    syncer_unresponsive_timeout_seconds: float | None = None
-    learner_shutdown_timeout_seconds: float | None = None
-
-
-@dataclass
 class TrainingSection(ConfigSection):
     inner_steps: int = 100
     micro_batch_size: int = 2
     gradient_accumulation_steps: int = 8
-    block_size: int = 1024
     max_local_steps: int | None = None
     completion_mode: str = "local_or_global"
-    precision: str = "bf16"
     seed: int = 1337
-    log_every_steps: int = 10
     grad_clip: float | None = None
 
 
@@ -283,9 +226,6 @@ class OuterOptimizerSection(ConfigSection):
 @dataclass
 class IOSection(ConfigSection):
     tensor_dtype: str = "float32"
-    atomic_write: bool = True
-    compute_sha256: bool = False
-    checkpoint_digest_mode: str = "off"
 
 
 @dataclass
@@ -304,19 +244,22 @@ class LearnerSection(ConfigSection):
 
 
 @dataclass
-class WandbSection(ConfigSection):
-    enabled: bool = True
-    mode: str | None = "offline"
-    entity: str | None = None
-    group: str | None = None
-    tags: list[str] = field(default_factory=list)
+class LeaderSection(ConfigSection):
+    lease_duration_seconds: float = 90.0
+    renew_interval_seconds: float = 10.0
+    max_clock_skew_seconds: float = 2.0
+    business_busy_timeout_ms: int = 60_000
+    candidate_acquire_poll_seconds: float = 5.0
+    candidate_wait_seconds: float = 180.0
+    learner_recovery_wait_seconds: float = 1800.0
 
 
 @dataclass
-class TorchBaselineSection(ConfigSection):
-    enabled: bool = False
-    backend: str = "nccl"
-    require_distinct_hosts: bool = True
+class MaintenanceSection(ConfigSection):
+    archive_batch_rows: int = 256
+    recent_batch_dedup_count: int = 64
+    quarantine_records_per_contributor: int = 64
+    publication_orphan_grace_seconds: float = 120.0
 
 
 @dataclass
@@ -330,28 +273,24 @@ class Config(ConfigSection):
     membership: MembershipSection = field(default_factory=MembershipSection)
     scaling: ScalingSection = field(default_factory=ScalingSection)
     terminal: TerminalSection = field(default_factory=TerminalSection)
-    liveness: LivenessSection = field(default_factory=LivenessSection)
     training: TrainingSection = field(default_factory=TrainingSection)
     inner_optimizer: InnerOptimizerSection = field(default_factory=InnerOptimizerSection)
     outer_optimizer: OuterOptimizerSection = field(default_factory=OuterOptimizerSection)
     io: IOSection = field(default_factory=IOSection)
     learner: LearnerSection = field(default_factory=LearnerSection)
-    wandb: WandbSection = field(default_factory=WandbSection)
-    torch_baseline: TorchBaselineSection = field(default_factory=TorchBaselineSection)
+    leader: LeaderSection = field(default_factory=LeaderSection)
+    maintenance: MaintenanceSection = field(default_factory=MaintenanceSection)
 
-    def validate(self, *, profile: str = "full_v4_shared", path: str | None = None) -> None:
-        if profile not in {"full_v4_shared", "torch_baseline"}:
-            raise ValueError(f"unknown config validation profile: {profile}")
+    def validate(self, *, path: str | None = None) -> None:
+        _normalize_and_validate(self)
+
+    def _validate_structure(self) -> None:
         for field_info in dataclasses.fields(self):
             section = getattr(self, field_info.name)
             if isinstance(section, ConfigSection):
                 section.validate(path=field_info.name)
         if self.config_schema_version != CONFIG_SCHEMA_VERSION:
             raise ValueError(f"config_schema_version must be exactly {CONFIG_SCHEMA_VERSION}")
-        if profile == "torch_baseline" and not self.torch_baseline.enabled:
-            raise ValueError("torch_baseline profile requires torch_baseline.enabled=true")
-        if profile != "torch_baseline" and self.torch_baseline.enabled:
-            raise ValueError(f"{profile} profile cannot validate a torch baseline config")
 
 
 def _coerce_scalar(value: Any, target_type: Any) -> Any:
@@ -378,20 +317,8 @@ def _from_dict(
     field_names = {field_info.name for field_info in dataclasses.fields(cls)}
     unknown = sorted(set(data) - field_names)
     if unknown:
-        messages: list[str] = []
-        for key in unknown:
-            dotted = ".".join((*path, key))
-            replacement = REMOVED_CONFIG_KEYS.get(dotted)
-            if dotted in REMOVED_CONFIG_KEYS:
-                message = f"config key {dotted} 字段已移除"
-                if replacement is not None:
-                    message += f"; use {replacement} instead"
-                else:
-                    message += "; it has no replacement"
-                messages.append(message)
-            else:
-                messages.append(f"unknown config key: {dotted}")
-        raise ValueError("; ".join(messages))
+        dotted = [".".join((*path, key)) for key in unknown]
+        raise ValueError("unknown config keys: " + ", ".join(dotted))
     kwargs: dict[str, Any] = {}
     for field_info in dataclasses.fields(cls):
         if field_info.name not in data:
@@ -413,34 +340,22 @@ def config_to_dict(config: Config) -> dict[str, Any]:
     return dataclasses.asdict(config)
 
 
-def load_config(path: str | Path | None = None) -> Config:
-    """Load shared v4/baseline settings without exposing removed runtime modes.
+def _parse_config(path: str | Path) -> Config:
+    with Path(path).open("r", encoding="utf-8") as handle:
+        loaded = yaml.safe_load(handle) or {}
+    if not isinstance(loaded, dict):
+        raise ValueError(f"config {path} must contain a mapping")
+    return _from_dict(Config, loaded)
 
-    Repository full-runtime configs are parsed through the complete v4 envelope.
-    Partial mappings remain useful for shared modeling tests and baseline tooling,
-    but the ``Config`` schema itself has no classic, fragment, or legacy-HA fields.
-    """
 
-    data: dict[str, Any] = {}
-    if path:
-        with Path(path).open("r", encoding="utf-8") as handle:
-            loaded = yaml.safe_load(handle) or {}
-        if not isinstance(loaded, dict):
-            raise ValueError(f"config {path} must contain a mapping")
-        data = loaded
-        coordination = data.get("coordination")
-        if "maintenance" in data or (isinstance(coordination, dict) and "leader" in coordination):
-            from .config_v4 import ConfigProfile, load_config_v4
+def load_config(path: str | Path) -> Config:
+    """Load and fully validate one current Full Protocol config."""
 
-            loaded_v4 = load_config_v4(path, profile=ConfigProfile.FULL_V4)
-            return loaded_v4.shared
-    config = _from_dict(Config, data)
-    config.validate(profile="torch_baseline" if config.torch_baseline.enabled else "full_v4_shared")
-    return config
+    return _normalize_and_validate(_parse_config(path))
 
 
 def load_resolved_config_snapshot(path: str | Path) -> Config:
-    """Load a current strict snapshot; old run roots use ``legacy.reader`` instead."""
+    """Load an immutable resolved config snapshot."""
 
     return load_config(path)
 
@@ -462,24 +377,13 @@ def _environment_flag(name: str, *, default: bool = False) -> bool:
 
 
 def resolve_config(
-    path: str | Path | None = None,
+    path: str | Path,
     *,
     run_id: str | None = None,
     shared_root: str | None = None,
-    num_learners: int | None = None,
-    training_seed: int | None = None,
-    scan_interval_seconds: float | None = None,
-    ingest_during_publish: bool | None = None,
-    syncer_device: str | None = None,
-    syncer_publish_dtype: str | None = None,
-    staleness_lambda: float | None = None,
-    max_staleness_versions: int | None = None,
-    global_adoption_strategy: str | None = None,
-    completion_mode: str | None = None,
     project_root: str | Path | None = None,
-    profile: str | None = None,
 ) -> Config:
-    config = load_config(path)
+    config = _parse_config(path)
     git_commit = os.environ.get("FS_DILOCO_GIT_COMMIT")
     source_fingerprint = os.environ.get("FS_DILOCO_SOURCE_FINGERPRINT")
     if git_commit:
@@ -506,67 +410,53 @@ def resolve_config(
         config.run.shared_root = str(root / DEFAULT_RUNS_DIR / config.run.run_id)
     else:
         config.run.shared_root = config.run.shared_root.replace("{run_id}", config.run.run_id)
-    if num_learners is not None:
-        config.sync.num_learners = int(num_learners)
-        config.sync.quorum_max = min(config.sync.quorum_max, config.sync.num_learners)
-        config.sync.quorum_min = min(config.sync.quorum_min, config.sync.num_learners)
-    if training_seed is not None:
-        config.training.seed = int(training_seed)
-    if scan_interval_seconds is not None:
-        config.sync.scan_interval_seconds = float(scan_interval_seconds)
-    if ingest_during_publish is not None:
-        config.sync.ingest_during_publish = bool(ingest_during_publish)
-    if syncer_device is not None:
-        config.syncer.device = str(syncer_device)
-    if syncer_publish_dtype is not None:
-        config.syncer.publish_dtype = str(syncer_publish_dtype)
-    if staleness_lambda is not None:
-        config.sync.staleness_lambda = float(staleness_lambda)
-    if max_staleness_versions is not None:
-        config.sync.max_staleness_versions = int(max_staleness_versions)
-    if global_adoption_strategy is not None:
-        config.learner.global_adoption_strategy = str(global_adoption_strategy)
-    if completion_mode is not None:
-        config.training.completion_mode = str(completion_mode)
+    return _normalize_and_validate(config)
+
+
+def _normalize_and_validate(config: Config) -> Config:
+    config._validate_structure()
+    if not config.run.name:
+        raise ValueError("run.name must not be empty")
+    for name, value in (
+        ("model.synthetic_vocab_size", config.model.synthetic_vocab_size),
+        ("model.synthetic_hidden_size", config.model.synthetic_hidden_size),
+        ("data.block_size", config.data.block_size),
+    ):
+        if value < 2:
+            raise ValueError(f"{name} must be >= 2")
+    allowed_dtypes = {"float32", "bfloat16"}
+    if config.model.dtype not in allowed_dtypes:
+        raise ValueError(f"unsupported model.dtype: {config.model.dtype}")
+    if config.io.tensor_dtype not in allowed_dtypes:
+        raise ValueError(f"unsupported io.tensor_dtype: {config.io.tensor_dtype}")
     if config.sync.scan_interval_seconds <= 0.0:
         raise ValueError("sync.scan_interval_seconds must be > 0")
     if config.sync.staleness_lambda < 0.0:
         raise ValueError("sync.staleness_lambda must be >= 0")
-    if config.sync.max_staleness_versions < 0:
-        raise ValueError("sync.max_staleness_versions must be >= 0")
-    config.syncer.device = config.syncer.device.lower()
     if config.syncer.device not in {"auto", "cpu", "cuda"}:
         raise ValueError(f"unsupported syncer.device: {config.syncer.device}")
-    dtype_aliases = {
-        "float32": "float32",
-        "fp32": "float32",
-        "float": "float32",
-        "bfloat16": "bfloat16",
-        "bf16": "bfloat16",
-    }
     for field_name in ("compute_dtype", "publish_dtype"):
-        configured = getattr(config.syncer, field_name).lower().replace("torch.", "")
-        if configured not in dtype_aliases:
+        configured = getattr(config.syncer, field_name)
+        if configured not in allowed_dtypes:
             raise ValueError(f"unsupported syncer.{field_name}: {configured}")
-        setattr(config.syncer, field_name, dtype_aliases[configured])
-    if config.sync.grace_window.mode not in {"fixed", "adaptive_fastest_upload_eta"}:
-        raise ValueError(f"unsupported sync.grace_window.mode: {config.sync.grace_window.mode}")
-    for field_name in ("fixed_seconds", "initial_seconds", "max_seconds"):
-        if float(getattr(config.sync.grace_window, field_name)) < 0.0:
-            raise ValueError(f"sync.grace_window.{field_name} must be >= 0")
     if config.training.completion_mode not in {"local_or_global", "global_only"}:
         raise ValueError(f"unsupported training.completion_mode: {config.training.completion_mode}")
-    if (
-        config.liveness.syncer_unresponsive_timeout_seconds is not None
-        and config.liveness.syncer_unresponsive_timeout_seconds <= 0.0
+    if config.training.max_local_steps is not None and config.training.max_local_steps <= 0:
+        raise ValueError("training.max_local_steps must be > 0 when set")
+    if config.training.grad_clip is not None and config.training.grad_clip <= 0.0:
+        raise ValueError("training.grad_clip must be > 0 when set")
+    if config.inner_optimizer.name != "adamw":
+        raise ValueError(f"unsupported inner_optimizer.name: {config.inner_optimizer.name}")
+    if config.inner_optimizer.lr <= 0.0:
+        raise ValueError("inner_optimizer.lr must be > 0")
+    if config.inner_optimizer.eps <= 0.0:
+        raise ValueError("inner_optimizer.eps must be > 0")
+    if config.inner_optimizer.weight_decay < 0.0:
+        raise ValueError("inner_optimizer.weight_decay must be >= 0")
+    if len(config.inner_optimizer.betas) != 2 or not all(
+        0.0 <= beta < 1.0 for beta in config.inner_optimizer.betas
     ):
-        raise ValueError("liveness.syncer_unresponsive_timeout_seconds must be > 0 when set")
-    if (
-        config.liveness.learner_shutdown_timeout_seconds is not None
-        and config.liveness.learner_shutdown_timeout_seconds <= 0.0
-    ):
-        raise ValueError("liveness.learner_shutdown_timeout_seconds must be > 0 when set")
-    config.inner_optimizer.scheduler = config.inner_optimizer.scheduler.lower()
+        raise ValueError("inner_optimizer.betas must contain two values in [0, 1)")
     if config.inner_optimizer.scheduler not in {"none", "cosine"}:
         raise ValueError(
             f"unsupported inner_optimizer.scheduler: {config.inner_optimizer.scheduler}"
@@ -589,10 +479,13 @@ def resolve_config(
     membership = config.membership
     scaling = config.scaling
     terminal = config.terminal
-    membership.mode = membership.mode.lower()
     if membership.mode not in {"static", "dynamic"}:
         raise ValueError("membership.mode must be one of: static, dynamic")
     dynamic = membership.mode == "dynamic"
+    if config.sync.num_learners != membership.stream_pool_size:
+        raise ValueError("sync.num_learners must equal membership.stream_pool_size")
+    if not dynamic and membership.bootstrap_instances != config.sync.num_learners:
+        raise ValueError("static membership.bootstrap_instances must equal sync.num_learners")
     if scaling.enabled and not dynamic:
         raise ValueError("scaling.enabled requires membership.mode=dynamic")
     if membership.stream_pool_size < membership.bootstrap_instances:
@@ -611,12 +504,6 @@ def resolve_config(
             "dynamic capacity requires quorum_min <= desired_contributors <= "
             "quorum_max <= stream_pool_size"
         )
-    if membership.max_active_instance_records < membership.stream_pool_size:
-        raise ValueError("membership.max_active_instance_records must be >= stream_pool_size")
-    if membership.heartbeat_dead_after_seconds <= membership.heartbeat_stale_after_seconds:
-        raise ValueError("membership heartbeat_dead_after_seconds must exceed stale timeout")
-    if membership.expired_retention_seconds < membership.revocation_grace_seconds:
-        raise ValueError("membership expired_retention_seconds must cover revocation_grace_seconds")
     if membership.initial_membership_deadline_seconds < membership.registration_request_ttl_seconds:
         raise ValueError(
             "membership initial_membership_deadline_seconds must cover registration request TTL"
@@ -625,10 +512,7 @@ def resolve_config(
         "initial_membership_deadline_seconds",
         "registration_scan_interval_seconds",
         "registration_request_ttl_seconds",
-        "heartbeat_stale_after_seconds",
         "heartbeat_dead_after_seconds",
-        "revocation_grace_seconds",
-        "expired_retention_seconds",
     ):
         if float(getattr(membership, field_name)) <= 0.0:
             raise ValueError(f"membership.{field_name} must be > 0")
@@ -645,6 +529,8 @@ def resolve_config(
         raise ValueError("scaling scheduler uncertainty timeout must cover three reconciliations")
     if scaling.low_contributor_threshold >= scaling.desired_contributors:
         raise ValueError("scaling low_contributor_threshold must be below desired_contributors")
+    if scaling.low_contributor_threshold < 0 or scaling.desired_contributors < 1:
+        raise ValueError("scaling contributor thresholds are invalid")
     if scaling.consecutive_low_windows < 2:
         raise ValueError("scaling.consecutive_low_windows must be >= 2")
     if (
@@ -654,6 +540,10 @@ def resolve_config(
         raise ValueError("scaling capacity observation retention is too small")
     if scaling.productive_window_count < 1:
         raise ValueError("scaling.productive_window_count must be >= 1")
+    if not scaling.learner_pbs_script or Path(scaling.learner_pbs_script).is_absolute() or any(
+        part == ".." for part in Path(scaling.learner_pbs_script).parts
+    ):
+        raise ValueError("scaling.learner_pbs_script must be a safe relative path")
     if scaling.productive_upload_grace_min_seconds <= 0.0:
         raise ValueError("scaling productive upload grace minimum must be > 0")
     if scaling.productive_upload_grace_max_seconds < scaling.productive_upload_grace_min_seconds:
@@ -727,43 +617,135 @@ def resolve_config(
     ):
         if float(getattr(terminal, field_name)) <= 0.0:
             raise ValueError(f"terminal.{field_name} must be > 0")
-    if config.io.checkpoint_digest_mode is False:
-        # PyYAML 1.1 treats an unquoted ``off`` scalar as boolean false.
-        config.io.checkpoint_digest_mode = "off"
-    elif not isinstance(config.io.checkpoint_digest_mode, str):
-        raise ValueError("io.checkpoint_digest_mode must be a string")
-    config.io.checkpoint_digest_mode = config.io.checkpoint_digest_mode.lower()
-    if config.io.checkpoint_digest_mode not in {"off", "checker", "always"}:
-        raise ValueError("io.checkpoint_digest_mode must be one of: off, checker, always")
     validate_global_adoption_config(config)
     if config.learner.post_publish_latest_wait_seconds < 0.0:
         raise ValueError("learner.post_publish_latest_wait_seconds must be >= 0")
     if config.learner.post_publish_latest_poll_seconds <= 0.0:
         raise ValueError("learner.post_publish_latest_poll_seconds must be > 0")
-    config.torch_baseline.backend = config.torch_baseline.backend.lower()
-    if config.torch_baseline.backend not in {"gloo", "nccl"}:
-        raise ValueError(f"unsupported torch_baseline.backend: {config.torch_baseline.backend}")
-    if config.torch_baseline.enabled:
-        if config.sync.num_learners < 1:
-            raise ValueError("torch baseline requires sync.num_learners >= 1")
-        if config.training.max_local_steps is None:
-            raise ValueError("torch baseline requires training.max_local_steps to be configured")
-        if int(config.training.max_local_steps) <= 0:
-            raise ValueError("torch baseline training.max_local_steps must be > 0")
-        if int(config.training.inner_steps) <= 0:
-            raise ValueError("torch baseline training.inner_steps must be > 0")
-    config.training.block_size = config.data.block_size
-    selected_profile = profile or (
-        "torch_baseline" if config.torch_baseline.enabled else "full_v4_shared"
-    )
-    config.validate(profile=selected_profile)
+    if not 1 <= config.sync.quorum_min <= config.sync.quorum_max <= config.sync.num_learners:
+        raise ValueError("sync quorum must satisfy 1 <= min <= max <= num_learners")
+    for name, value in (
+        ("training.inner_steps", config.training.inner_steps),
+        ("training.micro_batch_size", config.training.micro_batch_size),
+        (
+            "training.gradient_accumulation_steps",
+            config.training.gradient_accumulation_steps,
+        ),
+    ):
+        if value <= 0:
+            raise ValueError(f"{name} must be > 0")
+    direct_token_target = config.sync.stop_after_direct_weight_tokens_applied
+    if direct_token_target is not None and direct_token_target <= 0:
+        raise ValueError("sync.stop_after_direct_weight_tokens_applied must be > 0")
+    if (
+        config.training.completion_mode == "global_only"
+        and config.sync.stop_after_outer_steps is None
+        and direct_token_target is None
+    ):
+        raise ValueError("global_only completion requires a global stop target")
+    if config.sync.stop_after_outer_steps is not None and config.sync.stop_after_outer_steps <= 0:
+        raise ValueError("sync.stop_after_outer_steps must be > 0 when set")
+    outer = config.outer_optimizer
+    if outer.name not in {"sgd", "momentum", "nesterov", "adamw"}:
+        raise ValueError(f"unsupported outer_optimizer.name: {outer.name}")
+    if outer.lr <= 0.0:
+        raise ValueError("outer_optimizer.lr must be > 0")
+    if not 0.0 <= outer.momentum < 1.0:
+        raise ValueError("outer_optimizer.momentum must be in [0, 1)")
+    if outer.weight_decay < 0.0:
+        raise ValueError("outer_optimizer.weight_decay must be >= 0")
+    if len(outer.betas) != 2 or not all(0.0 <= beta < 1.0 for beta in outer.betas):
+        raise ValueError("outer_optimizer.betas must contain two values in [0, 1)")
+    if outer.eps <= 0.0:
+        raise ValueError("outer_optimizer.eps must be > 0")
+    _validate_leader(config.leader)
+    _validate_maintenance(config.maintenance, config.leader)
+    _validate_input_revisions(config)
     return config
+
+
+def _validate_leader(leader: LeaderSection) -> None:
+    positive = (
+        "lease_duration_seconds",
+        "renew_interval_seconds",
+        "candidate_acquire_poll_seconds",
+        "candidate_wait_seconds",
+        "learner_recovery_wait_seconds",
+    )
+    for name in positive:
+        if float(getattr(leader, name)) <= 0.0:
+            raise ValueError(f"leader.{name} must be > 0")
+    if leader.max_clock_skew_seconds < 0.0:
+        raise ValueError("leader.max_clock_skew_seconds must be >= 0")
+    for name in ("business_busy_timeout_ms",):
+        if getattr(leader, name) <= 0:
+            raise ValueError(f"leader.{name} must be > 0")
+    if leader.lease_duration_seconds < 5.0 * leader.renew_interval_seconds:
+        raise ValueError("leader lease duration must be at least 5 * renew interval")
+    if leader.lease_duration_seconds < 2.0 * leader.max_clock_skew_seconds:
+        raise ValueError("leader lease must cover clock skew")
+    if leader.candidate_acquire_poll_seconds > leader.renew_interval_seconds:
+        raise ValueError("leader candidate polling must not exceed renew interval")
+    if leader.candidate_wait_seconds < (
+        leader.lease_duration_seconds + leader.max_clock_skew_seconds
+    ):
+        raise ValueError("leader candidate wait must cover lease duration and clock skew")
+    if leader.learner_recovery_wait_seconds < leader.candidate_wait_seconds:
+        raise ValueError("leader learner recovery wait must cover candidate wait")
+
+
+def _validate_maintenance(maintenance: MaintenanceSection, leader: LeaderSection) -> None:
+    for name in (
+        "archive_batch_rows",
+        "recent_batch_dedup_count",
+        "quarantine_records_per_contributor",
+    ):
+        if getattr(maintenance, name) <= 0:
+            raise ValueError(f"maintenance.{name} must be > 0")
+    minimum = leader.lease_duration_seconds + 2.0 * leader.max_clock_skew_seconds
+    if maintenance.publication_orphan_grace_seconds < minimum:
+        raise ValueError(
+            "maintenance.publication_orphan_grace_seconds must cover "
+            "lease_duration_seconds + 2 * max_clock_skew_seconds"
+        )
+
+
+_IMMUTABLE_HUB_REVISION = re.compile(r"[0-9a-f]{40}\Z")
+_SYNTHETIC_MODEL = "synthetic-tiny"
+
+
+def _is_explicit_local_reference(value: str) -> bool:
+    return value.startswith(("/", "./", "../", "file://"))
+
+
+def _require_immutable_hub_revision(value: str | None, *, name: str) -> None:
+    if not isinstance(value, str) or _IMMUTABLE_HUB_REVISION.fullmatch(value) is None:
+        raise ValueError(f"{name} must be a 40-character lowercase Hub commit SHA")
+
+
+def _validate_input_revisions(config: Config) -> None:
+    model_name = config.model.name_or_path
+    if _is_explicit_local_reference(model_name):
+        raise ValueError("local model input requires descriptor-bound content identity")
+    if model_name != _SYNTHETIC_MODEL:
+        _require_immutable_hub_revision(config.model.revision, name="model.revision")
+        _require_immutable_hub_revision(
+            config.model.tokenizer_revision or config.model.revision,
+            name="model.tokenizer_revision",
+        )
+    dataset_name = config.data.dataset_name
+    if _is_explicit_local_reference(dataset_name):
+        raise ValueError("local data input requires descriptor-bound content identity")
+    if dataset_name != "synthetic":
+        _require_immutable_hub_revision(config.data.revision, name="data.revision")
 
 
 def resolved_config_bytes(config: Config) -> bytes:
     """Return the canonical bytes used by the immutable run snapshot."""
 
-    return yaml.safe_dump(config_to_dict(config), sort_keys=False).encode("utf-8")
+    return yaml.safe_dump(config_to_dict(config), sort_keys=False, allow_unicode=True).encode(
+        "utf-8"
+    )
 
 
 def write_resolved_config(config: Config, path: str | Path) -> None:

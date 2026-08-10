@@ -46,14 +46,14 @@ def publish_manual_terminal_request(
     encoded = (
         json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n"
     ).encode()
-    publish_immutable_bytes(paths.dynamic_close_request_json, encoded)
+    publish_immutable_bytes(paths.terminal_close_request_json, encoded)
     return payload
 
 
 def read_manual_terminal_request(
     paths: RunPaths, *, run_id: str, descriptor_sha256: str
 ) -> dict[str, Any] | None:
-    payload = safe_read_json(paths.dynamic_close_request_json)
+    payload = safe_read_json(paths.terminal_close_request_json)
     if payload is None:
         return None
     required = {

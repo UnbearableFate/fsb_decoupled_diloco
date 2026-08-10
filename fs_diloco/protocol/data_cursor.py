@@ -9,9 +9,6 @@ from dataclasses import dataclass
 from ._validation import identity, sha256, strict_int
 
 
-PLAN03_REQUIREMENTS = frozenset({"DATA-01"})
-
-
 @dataclass(frozen=True, order=True)
 class IndexedBlockCursor:
     """The next block position for one stable contributor stream."""

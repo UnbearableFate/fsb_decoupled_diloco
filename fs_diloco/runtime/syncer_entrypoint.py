@@ -1,4 +1,4 @@
-"""Candidate/lease composition entrypoint for mandatory Full Protocol v4."""
+"""Candidate/lease composition entrypoint for the Full Protocol."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ class _LeaseRenewer:
         self._stop = threading.Event()
         self._failed: BaseException | None = None
         self._renewal_lock = threading.Lock()
-        self._thread = threading.Thread(target=self._run, name="v4-lease-renewer", daemon=True)
+        self._thread = threading.Thread(target=self._run, name="lease-renewer", daemon=True)
 
     def start(self) -> None:
         self._thread.start()
@@ -50,7 +50,7 @@ class _LeaseRenewer:
     def quiesce_for_test_pause(self) -> Any:
         """Exclude an in-flight renewal transaction around a test-only SIGSTOP.
 
-        The production loop never calls this unless the explicit Plan 03 test
+        The production loop never calls this unless the explicit fault-test
         injection environment is present.  Holding the lock across SIGSTOP
         proves that neither the main authority connection nor the renewer can
         retain a SQLite write transaction while the candidate is paused.
@@ -85,14 +85,14 @@ def build_parser() -> argparse.ArgumentParser:
 def _scope(loaded: LoadedRunDescriptor) -> Any:
     from ..protocol.contributor import DynamicMembershipScope, StaticMembershipScope
 
-    if loaded.config.shared.membership.mode == "dynamic":
+    if loaded.config.membership.mode == "dynamic":
         return DynamicMembershipScope(int(loaded.descriptor["stream_pool_size"]))
     return StaticMembershipScope(tuple(loaded.descriptor["static_learner_ids"]))
 
 
 def _initial_admission_ready(loaded: LoadedRunDescriptor, authority: Any) -> bool:
     fences = authority.read.current_contributor_fences()
-    if loaded.config.shared.membership.mode == "static":
+    if loaded.config.membership.mode == "static":
         return {fence.stable_contributor_key for fence in fences} == set(
             loaded.descriptor["static_learner_ids"]
         )
@@ -116,7 +116,7 @@ def _admit_before_runtime_import(
     nor lost when the bounded window expires.
     """
 
-    shared = loaded.config.shared
+    shared = loaded.config
     poll_seconds = min(
         float(shared.sync.scan_interval_seconds),
         float(shared.membership.registration_scan_interval_seconds),
@@ -155,7 +155,7 @@ def main(argv: list[str] | None = None) -> None:
         raise RuntimeError("syncer candidate must use the immutable descriptor config")
     # Opening the strict authority is deliberately after the immutable
     # descriptor/bootstrap gate. It is the only writable runtime adapter.
-    from ..storage.control import V4ControlPublisher
+    from ..storage.control import ControlPublisher
     from ..storage.authority import AuthorityIdentity, LeaderAuthority
     from ..storage.leader_lease import LeaseUnavailableError
 
@@ -197,7 +197,7 @@ def main(argv: list[str] | None = None) -> None:
                     raise TimeoutError("syncer candidate timed out waiting for leader lease")
                 time.sleep(config.leader.candidate_acquire_poll_seconds)
         leader = authority.open_leader(token)
-        control = V4ControlPublisher(loaded.paths, token)
+        control = ControlPublisher(loaded.paths, token)
         control.publish_heartbeat(authority.committed_leader_lease(token))
         renewer = _LeaseRenewer(
             authority_factory=authority_factory,
@@ -214,10 +214,10 @@ def main(argv: list[str] | None = None) -> None:
             attempt_id=attempt_id,
         )
         telemetry.event("leadership_acquired", epoch=token.epoch)
-        from .syncer_v4 import _admit_requests, run_fenced_syncer
+        from .syncer import _admit_requests, run_fenced_syncer
 
         try:
-            if config.shared.membership.mode == "dynamic":
+            if config.membership.mode == "dynamic":
                 leader.initialize_dynamic_membership(
                     command_id=f"initialize-dynamic-membership-e{token.epoch}"
                 )

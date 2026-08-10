@@ -1,4 +1,4 @@
-"""Typed application objects exchanged with the v4 authority boundary."""
+"""Typed application objects exchanged with the authority boundary."""
 
 from __future__ import annotations
 

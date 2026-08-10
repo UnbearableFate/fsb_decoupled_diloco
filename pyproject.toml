@@ -14,11 +14,6 @@ dependencies = [
     "datasets",
     "safetensors",
     "pyyaml",
-    "numpy",
-    "tqdm",
-    "typing-extensions",
-    "wandb",
-    "nvidia-ml-py",
 ]
 
 [project.optional-dependencies]
@@ -28,22 +23,14 @@ dev = [
     "pytest-timeout>=2.3",
     "ruff",
 ]
-eval = [
-    "lm-eval[hf]>=0.4.12",
-]
 
 [project.scripts]
+fs-diloco = "fs_diloco.cli:main"
 fs-diloco-syncer = "fs_diloco.syncer:main"
 fs-diloco-learner = "fs_diloco.learner:main"
 fs-diloco-init-run = "fs_diloco.tools.init_run:main"
 fs-diloco-launch-run = "fs_diloco.tools.launch_independent_run:main"
-fs-diloco-migrate-config-v3-to-v4 = "fs_diloco.tools.migrate_config_v3_to_v4:main"
 fs-diloco-inspect = "fs_diloco.tools.analysis:main"
-fs-diloco-export-run-metrics = "fs_diloco.tools.run_metrics_csv:main"
-fs-diloco-lm-eval = "fs_diloco.tools.eval_lm_harness:main"
-fs-diloco-validation-eval = "fs_diloco.tools.validation_eval:main"
-fs-diloco-publish-quality-gate = "fs_diloco.tools.publish_quality_gate:main"
-fs-diloco-torch-baseline = "fs_diloco.baselines.train:main"
 
 [tool.ruff]
 line-length = 100
@@ -56,16 +43,14 @@ timeout = 300
 timeout_method = "thread"
 xfail_strict = true
 markers = [
-    "plan03_red: pre-fix characterization for a Plan 03 accepted behavior defect",
     "state_machine: bounded generated protocol state-machine validation",
-    "p6_formal: expensive formal Plan 03 P6 gate disabled from the default suite",
     "crash_matrix: deterministic publication crash-point validation",
     "integration: multi-component or real pipeline validation",
     "performance: paired performance or boundedness measurement",
 ]
 
 [tool.setuptools.package-data]
-"fs_diloco.storage" = ["schema.sql", "schema_v4.sql", "schema_v4_dynamic.sql"]
+"fs_diloco.storage" = ["schema.sql", "schema_dynamic.sql"]
 
 [tool.setuptools.packages.find]
 include = ["fs_diloco*"]

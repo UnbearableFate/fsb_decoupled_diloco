@@ -1,4 +1,4 @@
-"""Optimizer/scheduler helpers shared by full and torch-baseline training."""
+"""Optimizer and scheduler helpers for Full Protocol learners."""
 
 from __future__ import annotations
 
@@ -9,20 +9,13 @@ import torch
 from ..core.config import Config
 
 
-def maybe_autocast(device: torch.device, precision: str) -> torch.autocast:
-    """Return the configured training autocast context without a runtime dependency."""
-
-    enabled = device.type == "cuda" and precision.lower() in {"bf16", "bfloat16"}
-    return torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=enabled)
-
-
 def build_inner_optimizer_and_scheduler(
     model: torch.nn.Module,
     config: Config,
     *,
     completed_local_steps: int,
 ) -> tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LRScheduler | None]:
-    name = config.inner_optimizer.name.lower()
+    name = config.inner_optimizer.name
     if name != "adamw":
         raise ValueError(f"unsupported inner optimizer: {config.inner_optimizer.name}")
     optimizer = torch.optim.AdamW(

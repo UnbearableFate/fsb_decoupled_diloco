@@ -9,9 +9,6 @@ from dataclasses import dataclass
 from typing import Callable
 
 
-PLAN03_REQUIREMENTS = frozenset({"CLOCK-01"})
-
-
 class LeaseUnavailableError(RuntimeError):
     """Raised when another non-expired owner holds the lease."""
 
@@ -29,7 +26,7 @@ class LeaderToken:
 
 @dataclass(frozen=True)
 class CommittedLeaderLease:
-    """Exact lease lifetime committed by the v4 authority transaction."""
+    """Exact lease lifetime committed by the authority transaction."""
 
     token: LeaderToken
     renewed_at: float
