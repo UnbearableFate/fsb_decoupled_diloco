@@ -69,6 +69,22 @@ def test_receipt_identity_and_paths_have_one_protocol_owner() -> None:
     assert "canonical_receipt_id" not in admission
 
 
+def test_runtime_composition_has_one_current_actor_boundary() -> None:
+    learner = _top_level_definitions("fs_diloco/runtime/learner.py")
+    syncer = _top_level_definitions("fs_diloco/runtime/syncer.py")
+    learner_entrypoint = _top_level_definitions("fs_diloco/runtime/learner_entrypoint.py")
+    syncer_entrypoint = _top_level_definitions("fs_diloco/runtime/syncer_entrypoint.py")
+    public_learner = _top_level_definitions("fs_diloco/learner.py")
+    public_syncer = _top_level_definitions("fs_diloco/syncer.py")
+
+    assert "run_admitted_learner" in learner
+    assert "run_fenced_syncer" in syncer
+    assert {"build_parser", "main"} <= learner_entrypoint
+    assert {"build_parser", "main"} <= syncer_entrypoint
+    assert public_learner == set()
+    assert public_syncer == set()
+
+
 def test_only_unversioned_product_surfaces_exist() -> None:
     tracked = set(
         subprocess.check_output(

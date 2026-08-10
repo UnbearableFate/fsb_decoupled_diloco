@@ -685,6 +685,55 @@ def test_checker_rejects_unregistered_epoch_count() -> None:
         module._registered_epoch_states(3)
 
 
+def test_actor_identity_shell_exports_exact_descriptor_bound_source(tmp_path: Path) -> None:
+    identity = capture_source_identity(ROOT)
+    descriptor = tmp_path / "run_descriptor.json"
+    descriptor.write_text(
+        json.dumps(
+            {
+                "resolved_config_path": str(tmp_path / "run_config.resolved.yaml"),
+                "descriptor_sha256": "d" * 64,
+                "git_commit": identity["git_commit"],
+                "source_fingerprint": identity["source_fingerprint"],
+                "git_dirty": identity["git_dirty"],
+                "mode": "static",
+            }
+        ),
+        encoding="utf-8",
+    )
+    script = ROOT / "scripts/miyabi/actor_identity.sh"
+    probe = """
+set -eu
+source "$1"
+prepare_actor_identity "$2" "$3" "$4"
+printf '%s\n' \
+  "$FS_DILOCO_RESOLVED_CONFIG" \
+  "$FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256" \
+  "$FS_DILOCO_EXPECTED_GIT_COMMIT" \
+  "$FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT" \
+  "$FS_DILOCO_EXPECTED_GIT_DIRTY" \
+  "$FS_DILOCO_MEMBERSHIP_MODE" \
+  "$FS_DILOCO_REQUIRE_SOURCE_IDENTITY"
+"""
+
+    completed = subprocess.run(
+        ["bash", "-c", probe, "probe", str(script), str(descriptor), str(ROOT), sys.executable],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.stdout.splitlines() == [
+        str(tmp_path / "run_config.resolved.yaml"),
+        "d" * 64,
+        identity["git_commit"],
+        identity["source_fingerprint"],
+        str(int(identity["git_dirty"])),
+        "static",
+        "1",
+    ]
+
+
 def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner() -> None:
     pbs_scripts = tuple(sorted((ROOT / "scripts/miyabi").glob("*.pbs")))
     assert pbs_scripts
