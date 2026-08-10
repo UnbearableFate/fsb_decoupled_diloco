@@ -368,3 +368,27 @@
 - Transition: `PHASE_REMEDIATION_AND_RETEST` -> `STAGED_TEST_EXECUTION`. Acquire
   a main-agent-held one-node allocation and execute the new producer once from
   this clean source target.
+
+## 2026-08-10T18:35:12+09:00 — P2 remediation validation PASS
+
+- Main-agent-held allocation: `2519464.opbs`, one `interact-g` node `mg0012`,
+  requested walltime `01:00:00`; exact PBS nodefile and default NVIDIA
+  25.9/HPC-X 25.9 modules verified before execution.
+- Source: clean commit `8d92bcbe2c16cc813fc5cdca6273e869617401ea`,
+  scopes `fs_diloco`, `configs`, `scripts/miyabi`, `tests`, `pyproject.toml`,
+  `README.md`, `docs`; fingerprint
+  `sha256:07fdb8bf2ad92104b9ddb8de0fd2afd24ee7541cd7e5648ed58cb936c74ddaa0`.
+- Producer result: `PASS`, no errors. Ruff format covered 127 files, Ruff lint
+  passed, the explicit focused group passed 118 tests in 11.83 seconds, and the
+  complete suite passed 504 tests in 22.63 seconds.
+- Environment: Python 3.13.13, pytest 9.1.1, pytest-timeout 2.4.0, Ruff 0.15.21
+  and Torch 2.13.0+cu132 from the project `.venv`.
+- Evidence:
+  - `artifacts/20260810-183244_p2-phase-remediation-validation_pass.log`
+    (`sha256:d74ed3f323865a92ca8360a3c8edc6ed74ca9c5de4bde7520a6db0879b375f7a`);
+  - `artifacts/20260810-183244_p2-phase-remediation-validation_pass.json`
+    (`sha256:12bbc2bd669bfc858db3ce59d9a84ce496995fbe2e6197773dcfd7ab4dbec6a1`).
+- `qsub` reported normal job completion and login-node `qstat` confirms no
+  unfinished allocation. P2-F1 and P2-F2 are runtime-verified.
+- Transition: `STAGED_TEST_EXECUTION` -> `PHASE_REVIEW_TARGET`. Freeze the
+  tracked evidence and perform Codex-only P2 phase closure review.
