@@ -89,9 +89,7 @@ def _build_valid_checker_fixture(
         config_sha256=str(descriptor["resolved_config_sha256"]),
     )
     scope = StaticMembershipScope(("learner_000",))
-    scheduler_job_id = (
-        "fixture-syncer.opbs" if independent_scheduler_jobs else "fixture.opbs"
-    )
+    scheduler_job_id = "fixture-syncer.opbs" if independent_scheduler_jobs else "fixture.opbs"
     learner_scheduler_job_id = (
         "fixture-learner.opbs" if independent_scheduler_jobs else scheduler_job_id
     )
@@ -474,9 +472,9 @@ def test_aggregate_checker_rejects_submission_receipt_mismatch(tmp_path: Path) -
 
     assert completed.returncode == 1
     assert artifact["status"] == "FAIL"
-    assert "actor attestations do not match the independent submission receipt" in artifact[
-        "errors"
-    ]
+    assert (
+        "actor attestations do not match the independent submission receipt" in artifact["errors"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -1157,25 +1155,25 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     assert "trap publish_blocked_on_exit EXIT" in wrapper
     assert "--blocked-reason" in wrapper
 
-    independent_launcher = (
-        ROOT / "scripts/miyabi/run_independent_launcher.pbs"
-    ).read_text(encoding="utf-8")
+    independent_launcher = (ROOT / "scripts/miyabi/run_independent_launcher.pbs").read_text(
+        encoding="utf-8"
+    )
     assert "fs_diloco.tools.launch_independent_run" in independent_launcher
     assert '--log-root "$LOG_ROOT"' in independent_launcher
     assert 'cp -- "$LAUNCH_RECEIPT" "$LOG_ROOT/init_run.json"' in independent_launcher
-    independent_checker = (
-        ROOT / "scripts/miyabi/check_independent_run.pbs"
-    ).read_text(encoding="utf-8")
+    independent_checker = (ROOT / "scripts/miyabi/check_independent_run.pbs").read_text(
+        encoding="utf-8"
+    )
     assert '--expected-scheduler-jobs "$EXPECTED_SCHEDULER_JOBS"' in independent_checker
     assert "capture_source_identity.py" in independent_checker
     assert "trap publish_blocked_on_exit EXIT" in independent_checker
 
-    validation_wrapper = (
-        ROOT / "scripts/miyabi/run_validation_suite.pbs"
-    ).read_text(encoding="utf-8")
+    validation_wrapper = (ROOT / "scripts/miyabi/run_validation_suite.pbs").read_text(
+        encoding="utf-8"
+    )
     assert "run_validation_suite.py" in validation_wrapper
-    assert '${VALIDATION_RAW_LOG:?VALIDATION_RAW_LOG is required}' in validation_wrapper
-    assert '${VALIDATION_OUTPUT:?VALIDATION_OUTPUT is required}' in validation_wrapper
+    assert "${VALIDATION_RAW_LOG:?VALIDATION_RAW_LOG is required}" in validation_wrapper
+    assert "${VALIDATION_OUTPUT:?VALIDATION_OUTPUT is required}" in validation_wrapper
 
     review_runner = (ROOT / "scripts/miyabi/run_multi_agent_review.pbs").read_text(encoding="utf-8")
     assert review_runner.count("run_claude &") == 1

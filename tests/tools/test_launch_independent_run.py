@@ -71,19 +71,18 @@ def test_launch_uses_one_syncer_and_scalar_learner_jobs(
     if mode == "static":
         assert len(result["learner_qsubs"]) == config.sync.num_learners
         variables = [command[command.index("-v") + 1] for command in result["learner_qsubs"]]
-        assert {
-            item.rsplit("LEARNER_INDEX=", 1)[1] for item in variables
-        } == {str(index) for index in range(config.sync.num_learners)}
+        assert {item.rsplit("LEARNER_INDEX=", 1)[1] for item in variables} == {
+            str(index) for index in range(config.sync.num_learners)
+        }
         assert all(
-            "-J" not in command and "-r" not in command
-            for command in result["learner_qsubs"]
+            "-J" not in command and "-r" not in command for command in result["learner_qsubs"]
         )
     else:
         assert len(result["learner_qsubs"]) == config.membership.bootstrap_instances
         variables = [command[command.index("-v") + 1] for command in result["learner_qsubs"]]
-        assert {
-            item.rsplit("BOOTSTRAP_SLOT=", 1)[1] for item in variables
-        } == {str(index) for index in range(config.membership.bootstrap_instances)}
+        assert {item.rsplit("BOOTSTRAP_SLOT=", 1)[1] for item in variables} == {
+            str(index) for index in range(config.membership.bootstrap_instances)
+        }
 
 
 def test_submit_returns_every_scalar_actor_job_id(

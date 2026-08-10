@@ -787,11 +787,7 @@ def validate_run(
     }
     scheduler_job_hosts = {
         job_id: sorted(
-            {
-                str(row["hostname"])
-                for row in attestations
-                if row.get("scheduler_job_id") == job_id
-            }
+            {str(row["hostname"]) for row in attestations if row.get("scheduler_job_id") == job_id}
         )
         for job_id in sorted(scheduler_job_ids)
     }
