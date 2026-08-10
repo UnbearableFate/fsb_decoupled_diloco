@@ -311,3 +311,18 @@ only after implementation, compute-node validation and Codex rereview.
 - Disposition:
   `reports/DOING/code_review/plan03-1/final-evidence-r3/finding-dispositions_00ba722920d01a915efa4a2a90872c46ff906aa3.md`.
   No blocking finding is open; staged completion may proceed.
+
+## 2026-08-11T01:31:00+09:00 — completed Checker PASS
+
+- The create-only staged artifact binds manifest SHA-256
+  `06ed7a04b237a4d6d374fd2c243c68fd30aaeb138ee552d9990ec1c95e6060bc`,
+  the pending-final matrix and every exact gate/review artifact. Its SHA-256 is
+  `305e6fded75b87fa82ba372e84540976027a9930f6769ac69bbb11600fbf479e`.
+- After binding `FINAL-01` to that tracked staged artifact, completed mode
+  returned `PASS` with all twelve requirements complete. Completed artifact
+  SHA-256:
+  `a8dc5e3e797699dca39451698307f35bb0059615ea6f0443a7ae534b1310dae9`;
+  final matrix SHA-256:
+  `e17158d1a1c962ea19efd827c6319fb6c76cc71a1998a64e2107832222d4096e`.
+- All source, test, runtime, documentation, review and aggregate gates are
+  closed. Plan-final may be committed and then archived in a separate move.

@@ -1,0 +1,96 @@
+{
+  "artifact_version": 1,
+  "cleanup": {
+    "eligible": false,
+    "owner": "plan_completion",
+    "targets": []
+  },
+  "errors": [],
+  "evidence_paths": [
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/formal-ladder-manifest.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/requirement-matrix.csv",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/20260810-235300_final-u1-one-node-validation.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/20260810-235500_final-f1-functional-normal_result.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/20260810-235800_final-f1-learner-replacement_result.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/20260810-235900_final-f1-syncer-takeover_result.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/20260811-000100_final-g1-formal-8l1s_result.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/20260811-000200_r2-preformal-current-state_review.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/20260811-011000_r3-final-evidence_review.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/20260811-013000_plan-completion-staged.json"
+  ],
+  "experiment_id": "plan03-1-completed-completion",
+  "gate": "P4-plan-completion-completed",
+  "gate_artifacts": {
+    "F1-final-functional-normal": {
+      "path": "reports/DOING/plan03-1/artifacts/20260810-235500_final-f1-functional-normal_result.json",
+      "sha256": "5db6765f74621aa57ba45a7c7f0bf2e49eff71cae61441698b2d5bf439b58bb4"
+    },
+    "F1-final-learner-replacement": {
+      "path": "reports/DOING/plan03-1/artifacts/20260810-235800_final-f1-learner-replacement_result.json",
+      "sha256": "d660dda11bf1fdaceec5a30c6f3cdd2373c09f7651cb5e7975514e8465454736"
+    },
+    "F1-final-syncer-takeover": {
+      "path": "reports/DOING/plan03-1/artifacts/20260810-235900_final-f1-syncer-takeover_result.json",
+      "sha256": "ed7c1127f693603f27659e4f424a18136265de07f9bf37dcc2749bca1eb473c2"
+    },
+    "G1-final-formal-8l1s": {
+      "path": "reports/DOING/plan03-1/artifacts/20260811-000100_final-g1-formal-8l1s_result.json",
+      "sha256": "9f88e4166a3141a7dc1b1b7bd3a5ad358158541039d7263e3c29357624160db1"
+    },
+    "U1-final-one-node-validation": {
+      "path": "reports/DOING/plan03-1/artifacts/20260810-235300_final-u1-one-node-validation.json",
+      "sha256": "c9a69d2d1469584c917b89482af30c849bb0b9301cf3aa56a97f4a702a13033b"
+    }
+  },
+  "manifest": {
+    "path": "reports/DOING/plan03-1/formal-ladder-manifest.json",
+    "sha256": "06ed7a04b237a4d6d374fd2c243c68fd30aaeb138ee552d9990ec1c95e6060bc"
+  },
+  "matrix": {
+    "path": "reports/DOING/plan03-1/requirement-matrix.csv",
+    "sha256": "e17158d1a1c962ea19efd827c6319fb6c76cc71a1998a64e2107832222d4096e",
+    "statuses": {
+      "ARCH-01": "complete",
+      "CLEAN-01": "complete",
+      "CONFIG-01": "complete",
+      "DOCS-01": "complete",
+      "FAULT-4L1S-01": "complete",
+      "FINAL-01": "complete",
+      "FORMAL-8L1S-01": "complete",
+      "FUNC-4L1S-01": "complete",
+      "HARNESS-01": "complete",
+      "SCHEMA-01": "complete",
+      "SURFACE-01": "complete",
+      "UNIT-01": "complete"
+    }
+  },
+  "requirements_covered": [
+    "FINAL-01"
+  ],
+  "review_artifacts": {
+    "R2-preformal-current-state": {
+      "path": "reports/DOING/plan03-1/artifacts/20260811-000200_r2-preformal-current-state_review.json",
+      "sha256": "23bf04611fe220777022426b6f95f951aa528c78201940ac083c32c4740cb0bc"
+    },
+    "R3-final-evidence": {
+      "path": "reports/DOING/plan03-1/artifacts/20260811-011000_r3-final-evidence_review.json",
+      "sha256": "ab1bc3f01de095b9a6b3c93fd26dda122deae554be9f0cc2c3723357f231ea5a"
+    }
+  },
+  "source_identity": {
+    "commit": "1558e1112108ec38388cc2361b69e2cf78d49217",
+    "dirty": false,
+    "fingerprint": "sha256:9fdff5a7c613e044a7f97523ede2c566f60d4fc9fbf5a5cb4edd5c416ee06337",
+    "scopes": [
+      "fs_diloco",
+      "configs",
+      "scripts/miyabi",
+      "tests",
+      "pyproject.toml",
+      "README.md",
+      "docs"
+    ]
+  },
+  "staged_artifact": "reports/DOING/plan03-1/artifacts/20260811-013000_plan-completion-staged.json",
+  "status": "PASS"
+}

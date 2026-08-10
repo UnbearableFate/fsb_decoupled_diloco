@@ -3,8 +3,8 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P4-formal-and-docs
-work_unit_id: P4-W19-final-evidence-review
-state: EXTERNAL_TEST_REVIEW
+work_unit_id: P4-W20-plan-final
+state: PLAN_FINAL
 base_commit: 08050eed5da6e697437f796aabb7c980311c8937
 target_commit: 00ba722920d01a915efa4a2a90872c46ff906aa3
 formal_source_commit: 1558e1112108ec38388cc2361b69e2cf78d49217
@@ -86,6 +86,8 @@ required_evidence:
   - logs/qsub_plan03_1_final_g1_formal_8l1s_20260811_000100/source_identity.json
   - reports/DOING/code_review/plan03-1/final-evidence-r3/codex-gpt_1558e1112108ec38388cc2361b69e2cf78d49217.md
   - reports/DOING/plan03-1/artifacts/20260811-011000_r3-final-evidence_review.json
+  - reports/DOING/plan03-1/artifacts/20260811-013000_plan-completion-staged.json
+  - reports/DOING/plan03-1/artifacts/20260811-013100_plan-completion-completed.json
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -104,4 +106,4 @@ external_review:
   pbs_job_id: 2522308.opbs
   status: terminal-no-valid-report
 open_blocking_findings: []
-allowed_next_action: publish_staged_plan_completion
+allowed_next_action: commit_plan_final_then_archive

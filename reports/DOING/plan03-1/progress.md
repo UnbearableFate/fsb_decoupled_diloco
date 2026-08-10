@@ -1317,3 +1317,19 @@
 - The restored multi-agent gate has therefore been executed and disposed under
   the best-effort policy without fabricating approval. Publish the create-only
   staged completion artifact next.
+
+## 2026-08-11T01:31:00+09:00 — PLAN_FINAL
+
+- `P4-plan-completion-staged` returned `PASS` with `FINAL-01` pending and
+  produced artifact SHA-256
+  `305e6fded75b87fa82ba372e84540976027a9930f6769ac69bbb11600fbf479e`.
+- The matrix then bound `FINAL-01` to that tracked staged artifact and marked
+  every requirement complete. `P4-plan-completion-completed` returned `PASS`;
+  artifact SHA-256 is
+  `a8dc5e3e797699dca39451698307f35bb0059615ea6f0443a7ae534b1310dae9`
+  and final matrix SHA-256 is
+  `e17158d1a1c962ea19efd827c6319fb6c76cc71a1998a64e2107832222d4096e`.
+- The completed artifact rejects self-proof, binds the unchanged formal
+  source, all five fresh gate artifacts, both schema-2 Codex reviews and the
+  immutable manifest. All findings are closed. Commit plan-final, then perform
+  the required independent archive/move and evidence-path mapping.
