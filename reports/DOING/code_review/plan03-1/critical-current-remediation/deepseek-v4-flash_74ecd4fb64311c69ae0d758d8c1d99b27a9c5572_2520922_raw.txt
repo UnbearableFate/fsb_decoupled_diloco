@@ -1,0 +1,9 @@
+Let me examine the current state of the product code files.
+Now let me verify key invariants across the codebase. Let me check imports and references to the removed surfaces and schema changes.
+Now let me verify the FSD-H1-H4 items remain intact, and check the run_validation_suite and the takeover/learner replacement fixtures.
+Let me verify the content-scan regex against the actual tree and check the manifest/checker workload consistency.
+Let me check the top of test_plan_completion.py and search for remaining schema-version-10 references.
+Let me verify FSD-L1 (RunPaths.epoch_stop_path) and the checkpoint on the checkout of the code-review report. Also checking the diff for check_plan_completion and formal-ladder manifest consistency.
+Let me verify the manifest/checker workload consistency issue by examining the exact comparison logic and running a lightweight check.
+Let me verify the manifest/aggregate-checker workload consistency, which is a key FSD-M6 interaction.
+Let me check the tests.support.protocol module and other supporting test utilities referenced by the new tests.

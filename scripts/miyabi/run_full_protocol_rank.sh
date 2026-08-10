@@ -8,6 +8,7 @@ trap 'echo "[ERROR] Full Protocol rank failed at line $LINENO" >&2' ERR
 : "${SHARED_ROOT:?SHARED_ROOT is required}"
 : "${LOG_ROOT:?LOG_ROOT is required}"
 : "${PBS_JOBID:?PBS_JOBID is required}"
+: "${SYNCER_TAKEOVER_BOUNDARY_VERSION:?SYNCER_TAKEOVER_BOUNDARY_VERSION is required}"
 
 rank="$OMPI_COMM_WORLD_RANK"
 scenario="${FS_DILOCO_FAULT_SCENARIO:-none}"

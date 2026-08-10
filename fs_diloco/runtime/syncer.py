@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import sqlite3
 import time
 import uuid
 from typing import TYPE_CHECKING, Any
@@ -817,6 +818,14 @@ def _resume_from_progress(fence: ContributorFence, progress: Any) -> Contributor
     )
 
 
+def _is_retryable_sqlite_contention(exc: sqlite3.OperationalError) -> bool:
+    code = getattr(exc, "sqlite_errorcode", None)
+    return isinstance(code, int) and code & 0xFF in {
+        sqlite3.SQLITE_BUSY,
+        sqlite3.SQLITE_LOCKED,
+    }
+
+
 def _ingest_proposals(
     loaded: LoadedRunDescriptor,
     authority: LeaderAuthority,
@@ -849,6 +858,15 @@ def _ingest_proposals(
                 )
             except (AuthoritySchemaError, CommandConflictError, StaleLeaderTokenError):
                 raise
+            except sqlite3.OperationalError as exc:
+                if not _is_retryable_sqlite_contention(exc):
+                    raise
+                telemetry.event(
+                    "receipt_ingest_rejected",
+                    path=str(path),
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
             except (MembershipFenceError, OSError, ValueError) as exc:
                 telemetry.event(
                     "receipt_ingest_rejected",
@@ -872,6 +890,15 @@ def _ingest_proposals(
                     )
             except (AuthoritySchemaError, CommandConflictError, StaleLeaderTokenError):
                 raise
+            except sqlite3.OperationalError as exc:
+                if not _is_retryable_sqlite_contention(exc):
+                    raise
+                telemetry.event(
+                    "proposal_ingest_rejected",
+                    path=str(path),
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
             except (MembershipFenceError, ProposalPayloadError, OSError, ValueError) as exc:
                 telemetry.event(
                     "proposal_ingest_rejected",

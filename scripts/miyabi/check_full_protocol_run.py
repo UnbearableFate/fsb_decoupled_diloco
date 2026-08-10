@@ -909,6 +909,7 @@ def validate_run(
         "experiment_id": experiment_id,
         "requirements_covered": [requirement_id],
         "fault_scenario": fault_scenario,
+        "syncer_takeover_boundary_version": syncer_takeover_boundary_version,
         "run_root": str(run_root),
         "source_identity": source,
         "config_schema_identity": {
@@ -1059,6 +1060,7 @@ def _diagnostic_artifact(
         "experiment_id": args.experiment_id,
         "requirements_covered": [args.requirement_id],
         "fault_scenario": args.fault_scenario,
+        "syncer_takeover_boundary_version": args.syncer_takeover_boundary_version,
         "run_root": str(args.run_root.resolve()),
         "source_identity": source,
         "config_schema_identity": None,
@@ -1091,6 +1093,7 @@ _REQUIRED_ARTIFACT_FIELDS = {
     "experiment_id",
     "requirements_covered",
     "fault_scenario",
+    "syncer_takeover_boundary_version",
     "source_identity",
     "config_schema_identity",
     "protocol_schema_identity",
@@ -1109,6 +1112,12 @@ def validate_gate_artifact(payload: dict[str, Any], *, output: Path) -> None:
         raise RuntimeError(f"gate artifact is missing fields: {missing}")
     if payload["artifact_version"] != 1:
         raise RuntimeError("gate artifact version must be 1")
+    if (
+        isinstance(payload["syncer_takeover_boundary_version"], bool)
+        or not isinstance(payload["syncer_takeover_boundary_version"], int)
+        or payload["syncer_takeover_boundary_version"] < 1
+    ):
+        raise RuntimeError("gate artifact takeover boundary is invalid")
     if payload["status"] not in {"PASS", "FAIL", "BLOCKED", "REVIEW"}:
         raise RuntimeError("gate artifact status is invalid")
     requirements = payload["requirements_covered"]

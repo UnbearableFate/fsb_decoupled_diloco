@@ -1,0 +1,2684 @@
+[0m
+> plan · deepseek-v4-flash
+[0m
+[0m$ [0mls -la /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/
+total 28
+dr-xr-x--- 10 x10041 xg24i002  225 Aug 10 21:58 .
+drwx------  7 x10041 xg24i002  176 Aug 10 21:58 ..
+-r--r-----  1 x10041 xg24i002 5399 Aug 10 21:55 AGENTS.md
+dr-xr-x---  2 x10041 xg24i002  110 Aug 10 21:55 configs
+dr-xr-x---  2 x10041 xg24i002  103 Aug 10 21:55 docs
+dr-xr-x---  9 x10041 xg24i002  168 Aug 10 21:55 fs_diloco
+-r--r-----  1 x10041 xg24i002  460 Aug 10 21:55 .gitignore
+dr-xr-x---  6 x10041 xg24i002  202 Aug 10 21:55 plans
+-r--r-----  1 x10041 xg24i002 1302 Aug 10 21:55 pyproject.toml
+-r--r-----  1 x10041 xg24i002    5 Aug 10 21:55 .python-version
+-r--r-----  1 x10041 xg24i002 2339 Aug 10 21:55 README.md
+dr-xr-x---  5 x10041 xg24i002   53 Aug 10 21:55 reports
+dr-xr-x---  2 x10041 xg24i002   71 Aug 10 21:58 .review-packet
+dr-xr-x---  3 x10041 xg24i002   20 Aug 10 21:55 scripts
+dr-xr-x---  9 x10041 xg24i002 4096 Aug 10 21:55 tests
+[0m
+[0m$ [0mls -la /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/.review-packet/ 2>/dev/null || echo "no review-packet here"
+total 392
+dr-xr-x---  2 x10041 xg24i002     71 Aug 10 21:58 .
+dr-xr-x--- 10 x10041 xg24i002    225 Aug 10 21:58 ..
+-r--r-----  1 x10041 xg24i002   3368 Aug 10 21:58 changed-files.txt
+-r--r-----  1 x10041 xg24i002   3420 Aug 10 21:58 diff-stat.txt
+-r--r-----  1 x10041 xg24i002 390484 Aug 10 21:58 target.diff
+[0m
+[0m$ [0mcat /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/.review-packet/changed-files.txt
+M	README.md
+M	configs/full_protocol_functional.yaml
+M	configs/full_protocol_static.yaml
+M	docs/configuration.md
+M	docs/design.md
+M	docs/operations.md
+D	fs_diloco/cli.py
+M	fs_diloco/core/config.py
+M	fs_diloco/core/versions.py
+M	fs_diloco/protocol/__init__.py
+M	fs_diloco/runtime/syncer.py
+M	fs_diloco/runtime/syncer_entrypoint.py
+M	fs_diloco/storage/schema.sql
+M	plans/workflow.md
+M	pyproject.toml
+A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.md
+A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log
+A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.json
+A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/codex-gpt_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
+A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/deepseek-v4-flash_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log
+A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/deepseek-v4-flash_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt
+A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/finding-dispositions_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
+A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/glm-5.2_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log
+A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/glm-5.2_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt
+A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/kimi-k3_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log
+A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/kimi-k3_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt
+A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/prompt-source_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
+A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/review-request_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.md
+A	reports/DOING/code_review/plan03-1/critical-current-fs-diloco/reviewer-job_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.json
+A	reports/DOING/code_review/plan03-1/plan-complete-final-target-r2/codex-gpt_5b474d5c1735beb8cca922fd6cc7b6304926df2c.md
+M	reports/DOING/plan03-1/artifact-schema.md
+M	reports/DOING/plan03-1/code_review.md
+M	reports/DOING/plan03-1/formal-ladder-manifest.json
+M	reports/DOING/plan03-1/identity-authority.md
+M	reports/DOING/plan03-1/plan-complete-remediation.md
+M	reports/DOING/plan03-1/progress.md
+M	reports/DOING/plan03-1/workflow_state.yaml
+M	scripts/miyabi/check_full_protocol_run.py
+M	scripts/miyabi/check_plan_completion.py
+M	scripts/miyabi/run_full_protocol.pbs
+M	scripts/miyabi/run_full_protocol_allocation.sh
+M	scripts/miyabi/run_full_protocol_rank.sh
+M	scripts/miyabi/run_multi_agent_review.pbs
+M	scripts/miyabi/run_validation_suite.py
+M	tests/architecture/test_plan_complete_dead_surfaces.py
+M	tests/harness/test_full_protocol_harness.py
+M	tests/harness/test_plan_completion.py
+M	tests/module_coverage.json
+A	tests/runtime/test_syncer_composition.py
+M	tests/runtime/test_syncer_startup_admission.py
+M	tests/storage/test_schema.py
+D	tests/test_cli.py
+M	tests/test_config.py
+M	tests/tools/test_resolve_scheduler_uncertainty.py
+[0m
+[0m$ [0mcat /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/.review-packet/diff-stat.txt
+README.md                                          |    2 +-
+ configs/full_protocol_functional.yaml              |    6 -
+ configs/full_protocol_static.yaml                  |    6 -
+ docs/configuration.md                              |    6 +-
+ docs/design.md                                     |    3 +-
+ docs/operations.md                                 |    2 +-
+ fs_diloco/cli.py                                   |   31 -
+ fs_diloco/core/config.py                           |  161 +--
+ fs_diloco/core/versions.py                         |    2 +-
+ fs_diloco/protocol/__init__.py                     |   73 +-
+ fs_diloco/runtime/syncer.py                        |    9 +-
+ fs_diloco/runtime/syncer_entrypoint.py             |   14 +-
+ fs_diloco/storage/schema.sql                       |    4 +-
+ plans/workflow.md                                  |    6 +-
+ pyproject.toml                                     |   10 +-
+ ...e6339fb76f63127874c655d7b109b2ec0b39_2519854.md |  339 ++++++
+ ...6f63127874c655d7b109b2ec0b39_2519854.stderr.log |    0
+ ...b76f63127874c655d7b109b2ec0b39_2519854_raw.json |    1 +
+ ...gpt_4ebee6339fb76f63127874c655d7b109b2ec0b39.md |   58 +
+ ...6f63127874c655d7b109b2ec0b39_2519854.stderr.log | 1198 ++++++++++++++++++++
+ ...fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt |    7 +
+ ...ons_4ebee6339fb76f63127874c655d7b109b2ec0b39.md |   70 ++
+ ...6f63127874c655d7b109b2ec0b39_2519854.stderr.log |   70 ++
+ ...fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt |    3 +
+ ...6f63127874c655d7b109b2ec0b39_2519854.stderr.log |  782 +++++++++++++
+ ...fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt |    0
+ ...rce_4ebee6339fb76f63127874c655d7b109b2ec0b39.md |   82 ++
+ ...e6339fb76f63127874c655d7b109b2ec0b39_2519854.md |   97 ++
+ ...339fb76f63127874c655d7b109b2ec0b39_2519854.json |   88 ++
+ ...gpt_5b474d5c1735beb8cca922fd6cc7b6304926df2c.md |   97 ++
+ reports/DOING/plan03-1/artifact-schema.md          |    8 +
+ reports/DOING/plan03-1/code_review.md              |   68 ++
+ reports/DOING/plan03-1/formal-ladder-manifest.json |    1 +
+ reports/DOING/plan03-1/identity-authority.md       |   29 +-
+ .../DOING/plan03-1/plan-complete-remediation.md    |    8 +
+ reports/DOING/plan03-1/progress.md                 |   70 ++
+ reports/DOING/plan03-1/workflow_state.yaml         |   40 +-
+ scripts/miyabi/check_full_protocol_run.py          |   21 +-
+ scripts/miyabi/check_plan_completion.py            |    4 +-
+ scripts/miyabi/run_full_protocol.pbs               |    3 +
+ scripts/miyabi/run_full_protocol_allocation.sh     |    2 +
+ scripts/miyabi/run_full_protocol_rank.sh           |    2 +-
+ scripts/miyabi/run_multi_agent_review.pbs          |   22 +-
+ scripts/miyabi/run_validation_suite.py             |    2 +-
+ .../test_plan_complete_dead_surfaces.py            |   65 +-
+ tests/harness/test_full_protocol_harness.py        |   29 +-
+ tests/harness/test_plan_completion.py              |    3 +-
+ tests/module_coverage.json                         |    9 +-
+ tests/runtime/test_syncer_composition.py           |  153 +++
+ tests/runtime/test_syncer_startup_admission.py     |  102 ++
+ tests/storage/test_schema.py                       |    9 +-
+ tests/test_cli.py                                  |   32 -
+ tests/test_config.py                               |   28 +-
+ tests/tools/test_resolve_scheduler_uncertainty.py  |    4 +-
+ 54 files changed, 3640 insertions(+), 301 deletions(-)
+[0m
+[0m→ [0mRead reports/DOING/code_review/plan03-1/critical-current-fs-diloco/finding-dispositions_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
+[0m→ [0mRead plans/DOING/plans/plan03-1.md
+[0m→ [0mRead plans/workflow.md
+[0m→ [0mRead reports/DOING/plan03-1/identity-authority.md
+[0m→ [0mRead reports/DOING/plan03-1/artifact-schema.md
+[0m→ [0mRead reports/DOING/plan03-1/code_review.md
+[0m
+[0m$ [0mgrep -n "^diff --git" /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/.review-packet/target.diff
+1:diff --git a/README.md b/README.md
+14:diff --git a/configs/full_protocol_functional.yaml b/configs/full_protocol_functional.yaml
+35:diff --git a/configs/full_protocol_static.yaml b/configs/full_protocol_static.yaml
+56:diff --git a/docs/configuration.md b/docs/configuration.md
+70:diff --git a/docs/design.md b/docs/design.md
+84:diff --git a/docs/operations.md b/docs/operations.md
+97:diff --git a/fs_diloco/cli.py b/fs_diloco/cli.py
+134:diff --git a/fs_diloco/core/config.py b/fs_diloco/core/config.py
+361:diff --git a/fs_diloco/core/versions.py b/fs_diloco/core/versions.py
+374:diff --git a/fs_diloco/protocol/__init__.py b/fs_diloco/protocol/__init__.py
+452:diff --git a/fs_diloco/runtime/syncer.py b/fs_diloco/runtime/syncer.py
+486:diff --git a/fs_diloco/runtime/syncer_entrypoint.py b/fs_diloco/runtime/syncer_entrypoint.py
+512:diff --git a/fs_diloco/storage/schema.sql b/fs_diloco/storage/schema.sql
+533:diff --git a/plans/workflow.md b/plans/workflow.md
+564:diff --git a/pyproject.toml b/pyproject.toml
+592:diff --git a/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.md b/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.md
+937:diff --git a/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log
+940:diff --git a/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.json b/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.json
+947:diff --git a/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/codex-gpt_4ebee6339fb76f63127874c655d7b109b2ec0b39.md b/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/codex-gpt_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
+1011:diff --git a/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/deepseek-v4-flash_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/deepseek-v4-flash_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log
+2215:diff --git a/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/deepseek-v4-flash_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/deepseek-v4-flash_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt
+2228:diff --git a/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/finding-dispositions_4ebee6339fb76f63127874c655d7b109b2ec0b39.md b/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/finding-dispositions_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
+2304:diff --git a/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/glm-5.2_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/glm-5.2_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log
+2380:diff --git a/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/glm-5.2_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/glm-5.2_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt
+2389:diff --git a/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/kimi-k3_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log b/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/kimi-k3_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log
+3177:diff --git a/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/kimi-k3_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt b/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/kimi-k3_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt
+3180:diff --git a/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/prompt-source_4ebee6339fb76f63127874c655d7b109b2ec0b39.md b/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/prompt-source_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
+3268:diff --git a/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/review-request_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.md b/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/review-request_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.md
+3371:diff --git a/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/reviewer-job_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.json b/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/reviewer-job_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.json
+3465:diff --git a/reports/DOING/code_review/plan03-1/plan-complete-final-target-r2/codex-gpt_5b474d5c1735beb8cca922fd6cc7b6304926df2c.md b/reports/DOING/code_review/plan03-1/plan-complete-final-target-r2/codex-gpt_5b474d5c1735beb8cca922fd6cc7b6304926df2c.md
+3568:diff --git a/reports/DOING/plan03-1/artifact-schema.md b/reports/DOING/plan03-1/artifact-schema.md
+3584:diff --git a/reports/DOING/plan03-1/code_review.md b/reports/DOING/plan03-1/code_review.md
+3660:diff --git a/reports/DOING/plan03-1/formal-ladder-manifest.json b/reports/DOING/plan03-1/formal-ladder-manifest.json
+3672:diff --git a/reports/DOING/plan03-1/identity-authority.md b/reports/DOING/plan03-1/identity-authority.md
+3720:diff --git a/reports/DOING/plan03-1/plan-complete-remediation.md b/reports/DOING/plan03-1/plan-complete-remediation.md
+3736:diff --git a/reports/DOING/plan03-1/progress.md b/reports/DOING/plan03-1/progress.md
+3814:diff --git a/reports/DOING/plan03-1/workflow_state.yaml b/reports/DOING/plan03-1/workflow_state.yaml
+3888:diff --git a/scripts/miyabi/check_full_protocol_run.py b/scripts/miyabi/check_full_protocol_run.py
+3948:diff --git a/scripts/miyabi/check_plan_completion.py b/scripts/miyabi/check_plan_completion.py
+3974:diff --git a/scripts/miyabi/run_full_protocol.pbs b/scripts/miyabi/run_full_protocol.pbs
+4002:diff --git a/scripts/miyabi/run_full_protocol_allocation.sh b/scripts/miyabi/run_full_protocol_allocation.sh
+4022:diff --git a/scripts/miyabi/run_full_protocol_rank.sh b/scripts/miyabi/run_full_protocol_rank.sh
+4035:diff --git a/scripts/miyabi/run_multi_agent_review.pbs b/scripts/miyabi/run_multi_agent_review.pbs
+4104:diff --git a/scripts/miyabi/run_validation_suite.py b/scripts/miyabi/run_validation_suite.py
+4124:diff --git a/tests/architecture/test_plan_complete_dead_surfaces.py b/tests/architecture/test_plan_complete_dead_surfaces.py
+4210:diff --git a/tests/harness/test_full_protocol_harness.py b/tests/harness/test_full_protocol_harness.py
+4282:diff --git a/tests/harness/test_plan_completion.py b/tests/harness/test_plan_completion.py
+4300:diff --git a/tests/module_coverage.json b/tests/module_coverage.json
+4327:diff --git a/tests/runtime/test_syncer_composition.py b/tests/runtime/test_syncer_composition.py
+4486:diff --git a/tests/runtime/test_syncer_startup_admission.py b/tests/runtime/test_syncer_startup_admission.py
+4604:diff --git a/tests/storage/test_schema.py b/tests/storage/test_schema.py
+4632:diff --git a/tests/test_cli.py b/tests/test_cli.py
+4670:diff --git a/tests/test_config.py b/tests/test_config.py
+4716:diff --git a/tests/tools/test_resolve_scheduler_uncertainty.py b/tests/tools/test_resolve_scheduler_uncertainty.py
+[0m
+[0m$ [0mfind /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco -type f -name "*.py" | sort && echo "---" && find /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco -type f ! -name "*.py" | sort
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/core/adoption_rules.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/core/config.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/core/constants.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/core/__init__.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/core/run_descriptor.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/core/source_identity.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/core/versions.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/__init__.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/learner.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/modeling/hf_data.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/modeling/hf_identity.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/modeling/hf_model.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/modeling/__init__.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/modeling/outer_optim.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/modeling/param_index.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/modeling/training.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/observability/__init__.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/observability/logging_utils.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/authority.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/contributor.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/cycle_receipt.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/data_cursor.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/__init__.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/merge.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/proposal.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/scheduler.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/selection.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/token_accounting.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/_validation.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/adoption.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/__init__.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/learner_control.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/learner_entrypoint.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/learner.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/pbs_scheduler.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/services/dynamic_capacity.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/services/__init__.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/services/maintenance.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/services/merge.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/services/terminal.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/syncer_entrypoint.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/syncer.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/admission.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/artifact_policy.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/atomic_io.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/audit_archive.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/authority.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/control.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/__init__.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/leader_lease.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/object_store.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/paths.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/run_initializer.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/tensor_codec.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/tensor_identity.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/terminal_request.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/syncer.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/tools/analysis.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/tools/clean_run.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/tools/__init__.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/tools/init_run.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/tools/launch_independent_run.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/tools/request_static_replacement.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/tools/request_terminal_close.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/tools/resolve_scheduler_uncertainty.py
+---
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/schema_dynamic.sql
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/schema.sql
+[0m
+[0m$ [0mwc -l /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/*.py /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/core/*.py /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/*.py /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/*.py
+642 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/adoption.py
+     1 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/__init__.py
+    27 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/learner_control.py
+   167 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/learner_entrypoint.py
+   780 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/learner.py
+   270 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/pbs_scheduler.py
+   268 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/syncer_entrypoint.py
+   881 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/runtime/syncer.py
+    28 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/core/adoption_rules.py
+   810 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/core/config.py
+     5 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/core/constants.py
+     1 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/core/__init__.py
+   246 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/core/run_descriptor.py
+   132 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/core/source_identity.py
+    23 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/core/versions.py
+   321 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/authority.py
+   180 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/contributor.py
+   274 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/cycle_receipt.py
+    96 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/data_cursor.py
+     1 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/__init__.py
+    71 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/merge.py
+   286 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/proposal.py
+   127 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/scheduler.py
+    43 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/selection.py
+   180 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/token_accounting.py
+   118 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/protocol/_validation.py
+  1260 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/admission.py
+   186 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/artifact_policy.py
+   213 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/atomic_io.py
+   379 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/audit_archive.py
+  6087 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/authority.py
+   697 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/control.py
+     6 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/__init__.py
+    92 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/leader_lease.py
+   521 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/object_store.py
+   313 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/paths.py
+   613 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/run_initializer.py
+   213 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/tensor_codec.py
+    21 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/tensor_identity.py
+    94 /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/terminal_request.py
+ 16673 total
+[0m
+[0m$ [0msed -n '134,373p' /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/.review-packet/target.diff
+diff --git a/fs_diloco/core/config.py b/fs_diloco/core/config.py
+index d29a9e0..fd1a976 100644
+--- a/fs_diloco/core/config.py
++++ b/fs_diloco/core/config.py
+@@ -95,7 +95,7 @@ def _validate_config_value(value: Any, annotation: Any, path: str) -> None:
+ 
+ @dataclass
+ class RunSection(ConfigSection):
+-    name: str = "fs_diloco_gpt2_wikitext2_8l"
++    name: str = "full_protocol"
+     run_id: str | None = None
+     shared_root: str | None = None
+     git_commit: str | None = None
+@@ -105,11 +105,11 @@ class RunSection(ConfigSection):
+ 
+ @dataclass
+ class ModelSection(ConfigSection):
+-    name_or_path: str = "gpt2"
++    name_or_path: str = "synthetic-tiny"
+     revision: str | None = None
+     tokenizer_revision: str | None = None
+     trust_remote_code: bool = False
+-    dtype: str = "bfloat16"
++    dtype: str = "float32"
+     compile: bool = False
+     synthetic_vocab_size: int = 128
+     synthetic_hidden_size: int = 32
+@@ -117,11 +117,11 @@ class ModelSection(ConfigSection):
+ 
+ @dataclass
+ class DataSection(ConfigSection):
+-    dataset_name: str = "Salesforce/wikitext"
+-    dataset_config_name: str | None = "wikitext-2-raw-v1"
++    dataset_name: str = "synthetic"
++    dataset_config_name: str | None = None
+     revision: str | None = None
+     train_split: str = "train"
+-    block_size: int = 1024
++    block_size: int = 16
+     cache_dir: str | None = None
+     shuffle_blocks: bool = True
+ 
+@@ -341,7 +341,28 @@ def _from_dict(
+ 
+ 
+ def config_to_dict(config: Config) -> dict[str, Any]:
+-    return dataclasses.asdict(config)
++    payload = dataclasses.asdict(config)
++    if config.membership.mode == "static":
++        payload["membership"].pop("stream_pool_size")
++        payload["membership"].pop("bootstrap_instances")
++        payload.pop("scaling")
++    return payload
++
++
++def _validate_source_shape(data: dict[str, Any]) -> None:
++    membership = data.get("membership") or {}
++    if not isinstance(membership, dict):
++        return
++    mode = membership.get("mode", "static")
++    if mode == "static":
++        repeated = sorted({"stream_pool_size", "bootstrap_instances"} & set(membership))
++        if repeated:
++            raise ValueError(
++                "static membership derives contributor counts from sync.num_learners; "
++                f"remove: {', '.join(repeated)}"
++            )
++        if "scaling" in data:
++            raise ValueError("static membership must not declare inert scaling configuration")
+ 
+ 
+ def _parse_config(path: str | Path) -> Config:
+@@ -349,6 +370,7 @@ def _parse_config(path: str | Path) -> Config:
+         loaded = yaml.safe_load(handle) or {}
+     if not isinstance(loaded, dict):
+         raise ValueError(f"config {path} must contain a mapping")
++    _validate_source_shape(loaded)
+     return _from_dict(Config, loaded)
+ 
+ 
+@@ -508,10 +530,11 @@ def _normalize_and_validate(config: Config) -> Config:
+     if membership.mode not in {"static", "dynamic"}:
+         raise ValueError("membership.mode must be one of: static, dynamic")
+     dynamic = membership.mode == "dynamic"
+-    if config.sync.num_learners != membership.stream_pool_size:
++    if dynamic and config.sync.num_learners != membership.stream_pool_size:
+         raise ValueError("sync.num_learners must equal membership.stream_pool_size")
+-    if not dynamic and membership.bootstrap_instances != config.sync.num_learners:
+-        raise ValueError("static membership.bootstrap_instances must equal sync.num_learners")
++    if not dynamic:
++        membership.stream_pool_size = config.sync.num_learners
++        membership.bootstrap_instances = config.sync.num_learners
+     if scaling.enabled and not dynamic:
+         raise ValueError("scaling.enabled requires membership.mode=dynamic")
+     if membership.stream_pool_size < membership.bootstrap_instances:
+@@ -542,44 +565,49 @@ def _normalize_and_validate(config: Config) -> Config:
+     ):
+         if float(getattr(membership, field_name)) <= 0.0:
+             raise ValueError(f"membership.{field_name} must be > 0")
+-    if scaling.max_pending_launch_requests > scaling.max_total_launch_requests:
+-        raise ValueError("scaling max_pending_launch_requests must not exceed max_total")
+-    if scaling.max_pending_launch_requests < 0 or scaling.max_total_launch_requests < 0:
+-        raise ValueError("scaling launch request budgets must be non-negative")
+-    if scaling.launch_request_ttl_seconds < 2.0 * scaling.scheduler_reconcile_interval_seconds:
+-        raise ValueError("scaling launch_request_ttl_seconds must cover two reconciliations")
+-    if (
+-        scaling.scheduler_uncertainty_timeout_seconds
+-        < 3.0 * scaling.scheduler_reconcile_interval_seconds
+-    ):
+-        raise ValueError("scaling scheduler uncertainty timeout must cover three reconciliations")
+-    if scaling.low_contributor_threshold >= scaling.desired_contributors:
+-        raise ValueError("scaling low_contributor_threshold must be below desired_contributors")
+-    if scaling.low_contributor_threshold < 0 or scaling.desired_contributors < 1:
+-        raise ValueError("scaling contributor thresholds are invalid")
+-    if scaling.consecutive_low_windows < 2:
+-        raise ValueError("scaling.consecutive_low_windows must be >= 2")
+-    if (
+-        scaling.capacity_observation_retention_count
+-        < scaling.consecutive_low_windows + scaling.productive_window_count
+-    ):
+-        raise ValueError("scaling capacity observation retention is too small")
+-    if scaling.productive_window_count < 1:
+-        raise ValueError("scaling.productive_window_count must be >= 1")
+-    if (
+-        not scaling.learner_pbs_script
+-        or Path(scaling.learner_pbs_script).is_absolute()
+-        or any(part == ".." for part in Path(scaling.learner_pbs_script).parts)
+-    ):
+-        raise ValueError("scaling.learner_pbs_script must be a safe relative path")
+-    if scaling.productive_upload_grace_min_seconds <= 0.0:
+-        raise ValueError("scaling productive upload grace minimum must be > 0")
+-    if scaling.productive_upload_grace_max_seconds < scaling.productive_upload_grace_min_seconds:
+-        raise ValueError("scaling productive upload grace maximum must cover minimum")
+-    learner_walltime = scaling.learner_walltime
+-    if scaling.enabled and learner_walltime is None:
+-        raise ValueError("scaling.learner_walltime is required when scaling is enabled")
+-    if learner_walltime is not None:
++    if scaling.enabled:
++        if scaling.max_pending_launch_requests > scaling.max_total_launch_requests:
++            raise ValueError("scaling max_pending_launch_requests must not exceed max_total")
++        if scaling.max_pending_launch_requests < 0 or scaling.max_total_launch_requests < 0:
++            raise ValueError("scaling launch request budgets must be non-negative")
++        if scaling.launch_request_ttl_seconds < 2.0 * scaling.scheduler_reconcile_interval_seconds:
++            raise ValueError("scaling launch_request_ttl_seconds must cover two reconciliations")
++        if (
++            scaling.scheduler_uncertainty_timeout_seconds
++            < 3.0 * scaling.scheduler_reconcile_interval_seconds
++        ):
++            raise ValueError(
++                "scaling scheduler uncertainty timeout must cover three reconciliations"
++            )
++        if scaling.low_contributor_threshold >= scaling.desired_contributors:
++            raise ValueError("scaling low_contributor_threshold must be below desired_contributors")
++        if scaling.low_contributor_threshold < 0 or scaling.desired_contributors < 1:
++            raise ValueError("scaling contributor thresholds are invalid")
++        if scaling.consecutive_low_windows < 2:
++            raise ValueError("scaling.consecutive_low_windows must be >= 2")
++        if (
++            scaling.capacity_observation_retention_count
++            < scaling.consecutive_low_windows + scaling.productive_window_count
++        ):
++            raise ValueError("scaling capacity observation retention is too small")
++        if scaling.productive_window_count < 1:
++            raise ValueError("scaling.productive_window_count must be >= 1")
++        if (
++            not scaling.learner_pbs_script
++            or Path(scaling.learner_pbs_script).is_absolute()
++            or any(part == ".." for part in Path(scaling.learner_pbs_script).parts)
++        ):
++            raise ValueError("scaling.learner_pbs_script must be a safe relative path")
++        if scaling.productive_upload_grace_min_seconds <= 0.0:
++            raise ValueError("scaling productive upload grace minimum must be > 0")
++        if (
++            scaling.productive_upload_grace_max_seconds
++            < scaling.productive_upload_grace_min_seconds
++        ):
++            raise ValueError("scaling productive upload grace maximum must cover minimum")
++        learner_walltime = scaling.learner_walltime
++        if learner_walltime is None:
++            raise ValueError("scaling.learner_walltime is required when scaling is enabled")
+         parts = learner_walltime.split(":")
+         if (
+             len(parts) != 3
+@@ -595,24 +623,25 @@ def _normalize_and_validate(config: Config) -> Config:
+         walltime_seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+         if walltime_seconds < 600:
+             raise ValueError("scaling.learner_walltime must be at least 00:10:00")
+-    if scaling.learner_queue is not None and (
+-        not scaling.learner_queue
+-        or any(
+-            not (character.isalnum() or character in "_.-") for character in scaling.learner_queue
+-        )
+-    ):
+-        raise ValueError("scaling.learner_queue contains unsafe PBS characters")
+-    for field_name in (
+-        "startup_grace_seconds",
+-        "productive_upload_grace_factor",
+-        "cooldown_seconds",
+-        "launch_request_ttl_seconds",
+-        "scheduler_reconcile_interval_seconds",
+-        "scheduler_uncertainty_timeout_seconds",
+-        "starvation_observation_seconds",
+-    ):
+-        if float(getattr(scaling, field_name)) <= 0.0:
+-            raise ValueError(f"scaling.{field_name} must be > 0")
++        if scaling.learner_queue is not None and (
++            not scaling.learner_queue
++            or any(
++                not (character.isalnum() or character in "_.-")
++                for character in scaling.learner_queue
++            )
++        ):
++            raise ValueError("scaling.learner_queue contains unsafe PBS characters")
++        for field_name in (
++            "startup_grace_seconds",
++            "productive_upload_grace_factor",
++            "cooldown_seconds",
++            "launch_request_ttl_seconds",
++            "scheduler_reconcile_interval_seconds",
++            "scheduler_uncertainty_timeout_seconds",
++            "starvation_observation_seconds",
++        ):
++            if float(getattr(scaling, field_name)) <= 0.0:
++                raise ValueError(f"scaling.{field_name} must be > 0")
+     if terminal.admission_close_policy not in {
+         "global_target_or_launch_budget",
+         "global_target",
+diff --git a/fs_diloco/core/versions.py b/fs_diloco/core/versions.py
+index 96c30e0..54e93f1 100644
+--- a/fs_diloco/core/versions.py
++++ b/fs_diloco/core/versions.py
+@@ -5,7 +5,7 @@ owned by a producer/consumer boundary and may advance independently.
+ """
+ 
+ PROTOCOL_VERSION = 4
+-AUTHORITY_SCHEMA_VERSION = 10
++AUTHORITY_SCHEMA_VERSION = 11
+ CONFIG_SCHEMA_VERSION = 1
+ PROPOSAL_FORMAT_VERSION = 2
+ PROPOSAL_POINTER_FORMAT_VERSION = 2
+[0m
+[0m$ [0msed -n '374,565p' /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/.review-packet/target.diff
+diff --git a/fs_diloco/protocol/__init__.py b/fs_diloco/protocol/__init__.py
+index 643e7a9..0f2c0fb 100644
+--- a/fs_diloco/protocol/__init__.py
++++ b/fs_diloco/protocol/__init__.py
+@@ -1,72 +1 @@
+-"""Pure Full Protocol authority, accounting, selection, and merge objects."""
+-
+-from .authority import (
+-    ContributorProgress,
+-    DynamicAdmission,
+-    LaunchState,
+-    ProposalDisposition,
+-    PublicationIntent,
+-    ReadResult,
+-    ReadStatus,
+-    MergeFenceConflict,
+-    SelectionAttempt,
+-    SelectionBatch,
+-    SelectionCandidate,
+-    StaticBinding,
+-    TerminalState,
+-    TokenLedgerSummary,
+-    VisibilityDecision,
+-)
+-from .contributor import (
+-    ContributorFence,
+-    DynamicContributorFence,
+-    DynamicMembershipScope,
+-    StaticContributorFence,
+-    StaticMembershipScope,
+-)
+-from .cycle_receipt import CycleReceiptV1
+-from .data_cursor import ContributorResumeState, IndexedBlockCursor
+-from .proposal import FullUpdateProposalV2
+-from .scheduler import (
+-    SchedulerLaunchState,
+-    SchedulerOperatorAction,
+-    SchedulerOperatorRequest,
+-    scheduler_state_sha256,
+-)
+-from .selection import PersistentFairSelector
+-from .token_accounting import CycleAccounting, SegmentSnapshot, TrainingSegmentAccumulator
+-
+-__all__ = [
+-    "ContributorFence",
+-    "ContributorProgress",
+-    "CycleReceiptV1",
+-    "ContributorResumeState",
+-    "IndexedBlockCursor",
+-    "DynamicContributorFence",
+-    "DynamicAdmission",
+-    "DynamicMembershipScope",
+-    "FullUpdateProposalV2",
+-    "SchedulerLaunchState",
+-    "SchedulerOperatorAction",
+-    "SchedulerOperatorRequest",
+-    "scheduler_state_sha256",
+-    "PersistentFairSelector",
+-    "CycleAccounting",
+-    "SegmentSnapshot",
+-    "TrainingSegmentAccumulator",
+-    "LaunchState",
+-    "MergeFenceConflict",
+-    "ProposalDisposition",
+-    "PublicationIntent",
+-    "ReadResult",
+-    "ReadStatus",
+-    "SelectionBatch",
+-    "SelectionAttempt",
+-    "SelectionCandidate",
+-    "StaticBinding",
+-    "StaticContributorFence",
+-    "StaticMembershipScope",
+-    "TerminalState",
+-    "TokenLedgerSummary",
+-    "VisibilityDecision",
+-]
++"""Pure Full Protocol values; import concrete types from their owning modules."""
+diff --git a/fs_diloco/runtime/syncer.py b/fs_diloco/runtime/syncer.py
+index 118c27f..dccd699 100644
+--- a/fs_diloco/runtime/syncer.py
++++ b/fs_diloco/runtime/syncer.py
+@@ -49,6 +49,7 @@ from ..storage.authority import (
+     LeaderAuthority,
+     LeaderSession,
+     MembershipFenceError,
++    ProposalPayloadError,
+ )
+ from ..storage.leader_lease import StaleLeaderTokenError
+ from .pbs_scheduler import PBSScheduler
+@@ -846,7 +847,9 @@ def _ingest_proposals(
+                     receipt,
+                     descriptor_sha256=str(loaded.descriptor["descriptor_sha256"]),
+                 )
+-            except Exception as exc:
++            except (AuthoritySchemaError, CommandConflictError, StaleLeaderTokenError):
++                raise
++            except (MembershipFenceError, OSError, ValueError) as exc:
+                 telemetry.event(
+                     "receipt_ingest_rejected",
+                     path=str(path),
+@@ -867,7 +870,9 @@ def _ingest_proposals(
+                         update_id=proposal.update_id,
+                         disposition=disposition.value,
+                     )
+-            except Exception as exc:
++            except (AuthoritySchemaError, CommandConflictError, StaleLeaderTokenError):
++                raise
++            except (MembershipFenceError, ProposalPayloadError, OSError, ValueError) as exc:
+                 telemetry.event(
+                     "proposal_ingest_rejected",
+                     path=str(path),
+diff --git a/fs_diloco/runtime/syncer_entrypoint.py b/fs_diloco/runtime/syncer_entrypoint.py
+index b9b30bd..e5adc3c 100644
+--- a/fs_diloco/runtime/syncer_entrypoint.py
++++ b/fs_diloco/runtime/syncer_entrypoint.py
+@@ -255,15 +255,13 @@ def main(argv: list[str] | None = None) -> None:
+                 exc.add_note(f"candidate error fencing also failed: {failure_error!r}")
+             raise
+     finally:
+-        if renewer is not None:
+-            renewer.stop()
+-        if token is not None and not candidate_failed:
+-            try:
++        try:
++            if renewer is not None:
++                renewer.stop()
++            if token is not None and not candidate_failed:
+                 authority.release_leader(token)
+-            except Exception:
+-                # A successor may already have fenced an expired/failed owner.
+-                pass
+-        authority.close()
++        finally:
++            authority.close()
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/fs_diloco/storage/schema.sql b/fs_diloco/storage/schema.sql
+index 3694402..d8e00b1 100644
+--- a/fs_diloco/storage/schema.sql
++++ b/fs_diloco/storage/schema.sql
+@@ -1,6 +1,6 @@
+ CREATE TABLE schema_meta (
+     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+-    schema_version INTEGER NOT NULL CHECK (schema_version = 10),
++    schema_version INTEGER NOT NULL CHECK (schema_version = 11),
+     protocol_version INTEGER NOT NULL CHECK (protocol_version = 4),
+     mode TEXT NOT NULL CHECK (mode IN ('static', 'dynamic')),
+     features_json TEXT NOT NULL,
+@@ -49,7 +49,7 @@ CREATE TABLE syncer_epochs (
+     pid INTEGER NOT NULL CHECK (pid >= 0),
+     acquired_at REAL NOT NULL,
+     last_renewed_at REAL NOT NULL,
+-    final_state TEXT CHECK (final_state IN ('released', 'expired', 'terminal', 'error')),
++    final_state TEXT CHECK (final_state IN ('released', 'expired', 'error')),
+     final_at REAL,
+     superseded_by_epoch INTEGER,
+     source_fingerprint TEXT NOT NULL,
+diff --git a/plans/workflow.md b/plans/workflow.md
+index 311a868..361ade3 100644
+--- a/plans/workflow.md
++++ b/plans/workflow.md
+@@ -41,7 +41,7 @@ Workflow version：`3`
+ | Claude Code | `claude-opus-5` | 协议正确性、跨模块控制流、架构与并发/持久化不变量 | best effort |
+ | OpenCode Go | `opencode-go/glm-5.2` | requirement 到测试断言的映射、oracle、覆盖和测试可维护性 | best effort |
+ | OpenCode Go | `opencode-go/deepseek-v4-flash` | 错误路径、race、crash/restart、边界条件和反例 | best effort |
+-| OpenCode Go | `opencode-go/kimi-k3` | 集成一致性、实验过程、artifact/Checker 证据和文档漂移 | best effort |
++| OpenCode Go | `opencode-go/minimax-m3` | 集成一致性、实验过程、artifact/Checker 证据和文档漂移 | best effort |
+ 
+ 模型名是 runner 的默认值；若 CLI 中实际标识变化，可通过 `qsub -v` 覆盖对应 `*_MODEL`，但必须在 invocation metadata 和报告中同时记录 requested/actual identity。无法核验实际模型时标为 `invalid-model-identity`，不伪造该 reviewer 报告。
+ 
+@@ -111,7 +111,7 @@ reports/DOING/code_review/<plan-id>/<review-id>/
+ ├── claude-opus-5_<target>_<pbs-job>.md
+ ├── glm-5.2_<target>_<pbs-job>.md
+ ├── deepseek-v4-flash_<target>_<pbs-job>.md
+-├── kimi-k3_<target>_<pbs-job>.md
++├── minimax-m3_<target>_<pbs-job>.md
+ ├── reviewer-job_<target>_<pbs-job>.json
+ └── finding-dispositions_<target>.md
+ ```
+@@ -349,7 +349,7 @@ OPENCODE_BIN
+ CLAUDE_MODEL
+ OPENCODE_GLM_MODEL
+ OPENCODE_DEEPSEEK_MODEL
+-OPENCODE_KIMI_MODEL
++OPENCODE_MINIMAX_MODEL
+ REVIEW_TIMEOUT_SECONDS
+ ```
+ 
+diff --git a/pyproject.toml b/pyproject.toml
+index 8775125..702d1ca 100644
+[0m
+[0m→ [0mRead fs_diloco/runtime/syncer.py
+[0m
+[0m$ [0msed -n '1,133p' /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/.review-packet/target.diff
+diff --git a/README.md b/README.md
+index 28758e0..a3ff91a 100644
+--- a/README.md
++++ b/README.md
+@@ -21,7 +21,7 @@ python -m fs_diloco.tools.launch_independent_run \
+ 
+ 加上 `--submit --syncer-walltime HH:MM:SS --learner-walltime HH:MM:SS` 才会提交独立 PBS actor；两个 walltime 都必须显式给出且至少十分钟。正式 9-node 配置是 `configs/full_protocol_static.yaml`，工作量固定为每轮 50 个 local optimizer steps、10 个 committed global steps。
+ 
+-当前 schema revision 10 和恢复路径已在 9 个独立 Miyabi GPU 节点上通过超过正式基线的 51-local-step × 11-global-step 验证：8 个 learner 各贡献 11 个 committed update，累计 71,808 direct applied tokens，版本连续到 11，token balance 和 outstanding 均为零。正式验收仍使用上面的唯一 50 × 10 配置，并在最终 source target 上重新执行。
++当前 authority schema revision 11 删除了从未写入的 epoch 终态，并继续由 contributor progress 直接持有恢复所需的最后 update 身份。上一轮 9 节点 51-local-step × 11-global-step 结果属于 revision 10 的历史证据；revision 11 会在新的最终 source target 冻结前重新执行超过基线的验证，正式验收仍使用唯一的 50 × 10 配置。
+ 
+ 运行根目录中的权威状态是 `control/syncer_metadata.sqlite3`。配置、descriptor、source manifest、artifact policy 和 bootstrap marker 都在初始化时不可变发布；weights、outer optimizer state、receipt、proposal、control publication 和 audit history 都通过内容哈希或 authority row 绑定。
+ 
+diff --git a/configs/full_protocol_functional.yaml b/configs/full_protocol_functional.yaml
+index f4d3a13..cc835d4 100644
+--- a/configs/full_protocol_functional.yaml
++++ b/configs/full_protocol_functional.yaml
+@@ -24,16 +24,10 @@ syncer:
+   publish_dtype: float32
+ membership:
+   mode: static
+-  stream_pool_size: 4
+-  bootstrap_instances: 4
+   initial_membership_deadline_seconds: 60.0
+   registration_scan_interval_seconds: 0.2
+   registration_request_ttl_seconds: 20.0
+   heartbeat_dead_after_seconds: 20.0
+-scaling:
+-  enabled: false
+-  desired_contributors: 4
+-  low_contributor_threshold: 3
+ terminal:
+   admission_close_policy: global_target
+   drain_ack_timeout_seconds: 30.0
+diff --git a/configs/full_protocol_static.yaml b/configs/full_protocol_static.yaml
+index e61da40..826f02b 100644
+--- a/configs/full_protocol_static.yaml
++++ b/configs/full_protocol_static.yaml
+@@ -24,16 +24,10 @@ syncer:
+   publish_dtype: float32
+ membership:
+   mode: static
+-  stream_pool_size: 8
+-  bootstrap_instances: 8
+   initial_membership_deadline_seconds: 120.0
+   registration_scan_interval_seconds: 0.5
+   registration_request_ttl_seconds: 30.0
+   heartbeat_dead_after_seconds: 30.0
+-scaling:
+-  enabled: false
+-  desired_contributors: 8
+-  low_contributor_threshold: 7
+ terminal:
+   admission_close_policy: global_target
+   drain_ack_timeout_seconds: 60.0
+diff --git a/docs/configuration.md b/docs/configuration.md
+index 3326dbe..003ae31 100644
+--- a/docs/configuration.md
++++ b/docs/configuration.md
+@@ -29,4 +29,8 @@ unknown key、错误类型、非有限数、非法枚举、可移动 Hub revisio
+ - `configs/full_protocol_functional.yaml`：4 learners，full quorum，20 local steps，4 global steps；5-node normal/replacement/takeover harness。
+ - `configs/full_protocol_dynamic.yaml`：4 个 bootstrap instances 的 dynamic membership 示例，使用 `scripts/miyabi/run_learner.pbs` 扩容或替换。
+ 
+-static mode 不允许 scaling。dynamic mode 要求 `quorum_min <= desired_contributors <= quorum_max <= stream_pool_size`，启用 scaling 时必须显式设置至少十分钟的 learner walltime。
++static mode 不允许 scaling，也不重复声明 `stream_pool_size` 或
++`bootstrap_instances`；两者在内部唯一地由 `sync.num_learners` 推导。
++dynamic mode 要求
++`quorum_min <= desired_contributors <= quorum_max <= stream_pool_size`，启用
++scaling 时必须显式设置至少十分钟的 learner walltime。
+diff --git a/docs/design.md b/docs/design.md
+index f47c130..fd723be 100644
+--- a/docs/design.md
++++ b/docs/design.md
+@@ -52,7 +52,8 @@ descriptor 绑定 run ID、规范化 shared root、配置哈希、Git commit、s
+ 4. 先发布 immutable weight/outer-state objects，再以一个 fenced transaction 提交 publication intent、global version、selection credit 和 token fate。
+ 5. 发布 latest control；重复命令通过 command receipt 幂等返回。
+ 
+-syncer 异常时会把当前 epoch 标为 failed。successor 获得更高 epoch 后先 reconcile prepared/committed publications，再继续推进；旧 token 不能提交后续版本。
++syncer 异常时会把当前 epoch 标为 `error`。successor 获得更高 epoch 后先
++reconcile prepared/committed publications，再继续推进；旧 token 不能提交后续版本。
+ 
+ ## Token 与终态
+ 
+diff --git a/docs/operations.md b/docs/operations.md
+index 08fad91..1527c9a 100644
+--- a/docs/operations.md
++++ b/docs/operations.md
+@@ -59,7 +59,7 @@ python -m fs_diloco.tools.request_static_replacement \
+ 
+ ```bash
+ python -m fs_diloco.tools.analysis RUN_ROOT
+-python -m fs_diloco.cli close --shared-root RUN_ROOT --reason REASON
++python -m fs_diloco.tools.request_terminal_close --shared-root RUN_ROOT --reason REASON
+ python -m fs_diloco.tools.resolve_scheduler_uncertainty --help
+ ```
+ 
+diff --git a/fs_diloco/cli.py b/fs_diloco/cli.py
+deleted file mode 100644
+index 860ac10..0000000
+--- a/fs_diloco/cli.py
++++ /dev/null
+@@ -1,31 +0,0 @@
+-"""Convenience command dispatcher."""
+-
+-from __future__ import annotations
+-
+-import argparse
+-
+-
+-def main(argv: list[str] | None = None) -> None:
+-    parser = argparse.ArgumentParser(description=__doc__)
+-    parser.add_argument("command", choices=["syncer", "learner", "inspect", "close"])
+-    args, rest = parser.parse_known_args(argv)
+-    if args.command == "syncer":
+-        from .syncer import main as syncer_main
+-
+-        syncer_main(rest)
+-    elif args.command == "learner":
+-        from .learner import main as learner_main
+-
+-        learner_main(rest)
+-    elif args.command == "inspect":
+-        from .tools.analysis import main as inspect_main
+-
+-        inspect_main(rest)
+-    else:
+-        from .tools.request_terminal_close import main as close_main
+-
+-        close_main(rest)
+-
+-
+-if __name__ == "__main__":
+-    main()
+[0m
+[0m$ [0msed -n '3888,4327p' /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/.review-packet/target.diff
+diff --git a/scripts/miyabi/check_full_protocol_run.py b/scripts/miyabi/check_full_protocol_run.py
+index 65a9f4f..f120fb2 100755
+--- a/scripts/miyabi/check_full_protocol_run.py
++++ b/scripts/miyabi/check_full_protocol_run.py
+@@ -386,6 +386,7 @@ def validate_run(
+     expected_contributors: int,
+     expected_hosts: int,
+     fault_scenario: str,
++    syncer_takeover_boundary_version: int,
+ ) -> dict[str, Any]:
+     validate_completed_run_for_actor(run_root)
+     descriptor_path = run_root / "control/run_descriptor.json"
+@@ -594,14 +595,10 @@ def validate_run(
+             errors.append("terminal stop is not the exact authority projection")
+         if summary != expected_summary:
+             errors.append("terminal summary is not the exact authority projection")
+-        owner_id = str(terminal_row["finalized_by_owner_id"])
+-        owner_short = hashlib.sha256(owner_id.encode("utf-8")).hexdigest()[:12]
+-        immutable_stop = (
+-            run_root
+-            / "control/syncer_epochs"
+-            / f"e{int(terminal_row['finalized_by_epoch']):06d}_{owner_short}"
+-            / "terminal"
+-            / f"stop_g{int(terminal_row['generation']):06d}.json"
++        immutable_stop = RunPaths(run_root).epoch_stop_path(
++            int(terminal_row["finalized_by_epoch"]),
++            str(terminal_row["finalized_by_owner_id"]),
++            int(terminal_row["generation"]),
+         )
+         try:
+             _require_immutable_file(immutable_stop, label="immutable terminal control")
+@@ -850,7 +847,7 @@ def validate_run(
+                 or not isinstance(boundary, dict)
+                 or boundary.get("sqlite_transaction_active") is not False
+                 or boundary.get("lease_renewer_quiesced") is not True
+-                or int(boundary.get("committed_version", -1)) != 2
++                or int(boundary.get("committed_version", -1)) != syncer_takeover_boundary_version
+                 or int(boundary.get("pid", -1)) != int(takeover_evidence.get("primary_pid", -2))
+                 or not epochs
+                 or int(boundary.get("epoch", -1)) >= int(epochs[-1]["epoch"])
+@@ -1178,6 +1175,11 @@ def build_parser() -> argparse.ArgumentParser:
+         choices=("none", "learner_replacement", "syncer_takeover"),
+         required=True,
+     )
++    parser.add_argument(
++        "--syncer-takeover-boundary-version",
++        type=_positive_integer,
++        required=True,
++    )
+     parser.add_argument("--blocked-reason")
+     parser.add_argument("--output", type=Path, required=True)
+     return parser
+@@ -1216,6 +1218,7 @@ def main(argv: list[str] | None = None) -> None:
+                 expected_contributors=args.expected_contributors,
+                 expected_hosts=args.expected_hosts,
+                 fault_scenario=args.fault_scenario,
++                syncer_takeover_boundary_version=args.syncer_takeover_boundary_version,
+             )
+         except GatePrerequisiteUnavailable as exc:
+             payload = _diagnostic_artifact(args, exc, status="BLOCKED")
+diff --git a/scripts/miyabi/check_plan_completion.py b/scripts/miyabi/check_plan_completion.py
+index 316c486..e8e70ce 100644
+--- a/scripts/miyabi/check_plan_completion.py
++++ b/scripts/miyabi/check_plan_completion.py
+@@ -590,7 +590,6 @@ def _validate_review(
+         "plan_id",
+         "reviewer",
+         "review_execution",
+-        "external_review_status",
+         "review_kind",
+         "target_commit",
+         "source_fingerprint",
+@@ -604,12 +603,11 @@ def _validate_review(
+     }:
+         raise RuntimeError(f"review artifact schema is invalid: {review['id']}")
+     if (
+-        payload["review_artifact_version"] != 1
++        payload["review_artifact_version"] != 2
+         or payload["status"] != "PASS"
+         or payload["plan_id"] != PLAN_ID
+         or payload["reviewer"] != "Codex"
+         or payload["review_execution"] != "internal"
+-        or payload["external_review_status"] != "skipped-by-user"
+         or payload["review_kind"] != contract["review_kind"]
+         or payload["target_commit"] != source["commit"]
+         or payload["source_fingerprint"] != source["fingerprint"]
+diff --git a/scripts/miyabi/run_full_protocol.pbs b/scripts/miyabi/run_full_protocol.pbs
+index 0e07ac2..12769a4 100644
+--- a/scripts/miyabi/run_full_protocol.pbs
++++ b/scripts/miyabi/run_full_protocol.pbs
+@@ -25,6 +25,7 @@ EXPECTED_NODES="${EXPECTED_NODES:-9}"
+ NUM_LEARNERS="${NUM_LEARNERS:-8}"
+ EXPECTED_INNER_STEPS="${EXPECTED_INNER_STEPS:-50}"
+ EXPECTED_GLOBAL_STEPS="${EXPECTED_GLOBAL_STEPS:-10}"
++readonly SYNCER_TAKEOVER_BOUNDARY_VERSION=2
+ SYNCER_CUDA_VISIBLE_DEVICES="${SYNCER_CUDA_VISIBLE_DEVICES:-0}"
+ LEARNER_CUDA_VISIBLE_DEVICES="${LEARNER_CUDA_VISIBLE_DEVICES:-0}"
+ [[ ! -e "$EVIDENCE_OUTPUT" ]] || {
+@@ -36,6 +37,7 @@ export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+ module list 2>&1 | cat
+ export PROJECT_ROOT PRIMARY_WORKTREE_ROOT PYTHON_BIN CONFIG RUN_ID SHARED_ROOT LOG_ROOT
+ export EXPECTED_NODES NUM_LEARNERS
++export SYNCER_TAKEOVER_BOUNDARY_VERSION
+ export SYNCER_CUDA_VISIBLE_DEVICES LEARNER_CUDA_VISIBLE_DEVICES
+ export FS_DILOCO_FAULT_SCENARIO="${FS_DILOCO_FAULT_SCENARIO:-none}"
+ 
+@@ -52,6 +54,7 @@ checker=(
+   --expected-contributors "$NUM_LEARNERS"
+   --expected-hosts "$EXPECTED_NODES"
+   --fault-scenario "$FS_DILOCO_FAULT_SCENARIO"
++  --syncer-takeover-boundary-version "$SYNCER_TAKEOVER_BOUNDARY_VERSION"
+   --output "$EVIDENCE_OUTPUT"
+ )
+ 
+diff --git a/scripts/miyabi/run_full_protocol_allocation.sh b/scripts/miyabi/run_full_protocol_allocation.sh
+index a118dd7..e614163 100755
+--- a/scripts/miyabi/run_full_protocol_allocation.sh
++++ b/scripts/miyabi/run_full_protocol_allocation.sh
+@@ -9,6 +9,7 @@ trap 'echo "[ERROR] Full Protocol allocation failed at line $LINENO" >&2' ERR
+ : "${SHARED_ROOT:?SHARED_ROOT is required}"
+ : "${EXPECTED_NODES:?EXPECTED_NODES is required}"
+ : "${NUM_LEARNERS:?NUM_LEARNERS is required}"
++: "${SYNCER_TAKEOVER_BOUNDARY_VERSION:?SYNCER_TAKEOVER_BOUNDARY_VERSION is required}"
+ : "${PBS_NODEFILE:?PBS_NODEFILE is required}"
+ 
+ PRIMARY_WORKTREE_ROOT="${PRIMARY_WORKTREE_ROOT:-$PROJECT_ROOT}"
+@@ -101,6 +102,7 @@ MPI_ENV_ARGS=(
+   "FS_DILOCO_GIT_DIRTY=$FS_DILOCO_GIT_DIRTY"
+   "FS_DILOCO_REQUIRE_SOURCE_IDENTITY=1"
+   "FS_DILOCO_FAULT_SCENARIO=${FS_DILOCO_FAULT_SCENARIO:-none}"
++  "SYNCER_TAKEOVER_BOUNDARY_VERSION=$SYNCER_TAKEOVER_BOUNDARY_VERSION"
+   "HF_HOME=${HF_HOME:-}"
+   "HF_DATASETS_CACHE=${HF_DATASETS_CACHE:-}"
+   "HF_HUB_CACHE=${HF_HUB_CACHE:-}"
+diff --git a/scripts/miyabi/run_full_protocol_rank.sh b/scripts/miyabi/run_full_protocol_rank.sh
+index 284e267..7b8f835 100755
+--- a/scripts/miyabi/run_full_protocol_rank.sh
++++ b/scripts/miyabi/run_full_protocol_rank.sh
+@@ -174,7 +174,7 @@ run_syncer() {
+ if [[ "$rank" -eq 0 ]]; then
+   if [[ "$scenario" == "syncer_takeover" ]]; then
+     fault_marker="$LOG_ROOT/syncer_primary_fault_boundary.json"
+-    FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION=2 \
++    FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION="$SYNCER_TAKEOVER_BOUNDARY_VERSION" \
+     FS_DILOCO_FAULT_PAUSE_MARKER_PATH="$fault_marker" \
+     CUDA_VISIBLE_DEVICES="$SYNCER_CUDA_VISIBLE_DEVICES" \
+     OMP_NUM_THREADS="$SYNCER_OMP_NUM_THREADS" \
+diff --git a/scripts/miyabi/run_multi_agent_review.pbs b/scripts/miyabi/run_multi_agent_review.pbs
+index 2daf1fd..bb2098a 100644
+--- a/scripts/miyabi/run_multi_agent_review.pbs
++++ b/scripts/miyabi/run_multi_agent_review.pbs
+@@ -64,7 +64,7 @@ OPENCODE_BIN="${OPENCODE_BIN:-opencode}"
+ CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-5}"
+ OPENCODE_GLM_MODEL="${OPENCODE_GLM_MODEL:-opencode-go/glm-5.2}"
+ OPENCODE_DEEPSEEK_MODEL="${OPENCODE_DEEPSEEK_MODEL:-opencode-go/deepseek-v4-flash}"
+-OPENCODE_KIMI_MODEL="${OPENCODE_KIMI_MODEL:-opencode-go/kimi-k3}"
++OPENCODE_MINIMAX_MODEL="${OPENCODE_MINIMAX_MODEL:-opencode-go/minimax-m3}"
+ REVIEW_TIMEOUT_SECONDS="${REVIEW_TIMEOUT_SECONDS:-1500}"
+ 
+ HOST_NAME="$(hostname)"
+@@ -100,7 +100,7 @@ RUN_TMP="$(mktemp -d "$TASK_TMP_ROOT/fsdiloco-review.${JOB_STEM}.XXXXXX")"
+ SNAPSHOT_CLAUDE="$RUN_TMP/repository-claude"
+ SNAPSHOT_GLM="$RUN_TMP/repository-glm"
+ SNAPSHOT_DEEPSEEK="$RUN_TMP/repository-deepseek"
+-SNAPSHOT_KIMI="$RUN_TMP/repository-kimi"
++SNAPSHOT_MINIMAX="$RUN_TMP/repository-minimax"
+ 
+ cleanup() {
+   if [[ -n "${RUN_TMP:-}" && -d "$RUN_TMP" && "$RUN_TMP" == "$TASK_TMP_ROOT"/fsdiloco-review.* ]]; then
+@@ -188,11 +188,11 @@ prepare_snapshot() {
+ prepare_snapshot "$SNAPSHOT_CLAUDE"
+ prepare_snapshot "$SNAPSHOT_GLM"
+ prepare_snapshot "$SNAPSHOT_DEEPSEEK"
+-prepare_snapshot "$SNAPSHOT_KIMI"
++prepare_snapshot "$SNAPSHOT_MINIMAX"
+ SNAPSHOT_CLAUDE_SHA256="$(snapshot_digest "$SNAPSHOT_CLAUDE")"
+ SNAPSHOT_GLM_SHA256="$(snapshot_digest "$SNAPSHOT_GLM")"
+ SNAPSHOT_DEEPSEEK_SHA256="$(snapshot_digest "$SNAPSHOT_DEEPSEEK")"
+-SNAPSHOT_KIMI_SHA256="$(snapshot_digest "$SNAPSHOT_KIMI")"
++SNAPSHOT_MINIMAX_SHA256="$(snapshot_digest "$SNAPSHOT_MINIMAX")"
+ 
+ REQUEST_RECORD="$REPORT_DIR/review-request_${TARGET_COMMIT}_${JOB_STEM}.md"
+ REQUEST_RECORD_TMP="$RUN_TMP/review-request.md"
+@@ -494,17 +494,17 @@ run_opencode \
+   "$SNAPSHOT_DEEPSEEK_SHA256" &
+ pid_deepseek=$!
+ run_opencode \
+-  "kimi-k3" \
+-  "$OPENCODE_KIMI_MODEL" \
++  "minimax-m3" \
++  "$OPENCODE_MINIMAX_MODEL" \
+   "cross-module integration, experiment validity, artifact/Checker evidence, and documentation drift" \
+-  "$SNAPSHOT_KIMI" \
+-  "$SNAPSHOT_KIMI_SHA256" &
+-pid_kimi=$!
++  "$SNAPSHOT_MINIMAX" \
++  "$SNAPSHOT_MINIMAX_SHA256" &
++pid_minimax=$!
+ 
+ wait "$pid_claude" || true
+ wait "$pid_glm" || true
+ wait "$pid_deepseek" || true
+-wait "$pid_kimi" || true
++wait "$pid_minimax" || true
+ 
+ SUMMARY_FILE="$REPORT_DIR/reviewer-job_${TARGET_COMMIT}_${JOB_STEM}.json"
+ SUMMARY_TMP="$RUN_TMP/reviewer-job.json"
+@@ -524,7 +524,7 @@ python3 - \
+   "$RUN_TMP/claude-opus-5.tsv" \
+   "$RUN_TMP/glm-5.2.tsv" \
+   "$RUN_TMP/deepseek-v4-flash.tsv" \
+-  "$RUN_TMP/kimi-k3.tsv" <<'PY'
++  "$RUN_TMP/minimax-m3.tsv" <<'PY'
+ import json
+ import pathlib
+ import sys
+diff --git a/scripts/miyabi/run_validation_suite.py b/scripts/miyabi/run_validation_suite.py
+index a3f7ac4..b6a588f 100644
+--- a/scripts/miyabi/run_validation_suite.py
++++ b/scripts/miyabi/run_validation_suite.py
+@@ -29,6 +29,7 @@ FOCUSED_TESTS = (
+     "tests/harness/test_validation_suite.py",
+     "tests/runtime/test_learner_entrypoint.py",
+     "tests/runtime/test_syncer_fault_boundary.py",
++    "tests/runtime/test_syncer_composition.py",
+     "tests/runtime/test_syncer_startup_admission.py",
+     "tests/runtime/test_terminal_service.py",
+     "tests/storage/test_authority_operational.py",
+@@ -36,7 +37,6 @@ FOCUSED_TESTS = (
+     "tests/storage/test_dynamic_admission_request.py",
+     "tests/test_capture_source_identity.py",
+     "tests/test_clean_run.py",
+-    "tests/test_cli.py",
+     "tests/test_config.py",
+     "tests/tools/test_analysis.py",
+     "tests/tools/test_launch_independent_run.py",
+diff --git a/tests/architecture/test_plan_complete_dead_surfaces.py b/tests/architecture/test_plan_complete_dead_surfaces.py
+index 733a354..a1b5d4e 100644
+--- a/tests/architecture/test_plan_complete_dead_surfaces.py
++++ b/tests/architecture/test_plan_complete_dead_surfaces.py
+@@ -3,6 +3,7 @@ from __future__ import annotations
+ import ast
+ import re
+ import subprocess
++import tomllib
+ from pathlib import Path
+ 
+ 
+@@ -95,10 +96,72 @@ def test_only_unversioned_product_surfaces_exist() -> None:
+             text=True,
+         ).splitlines()
+     )
+-    generation_suffix = re.compile(r"(?:^|[/_.-])v[0-9]+(?:$|[/_.-])")
++    assert tracked, "current source inventory is empty"
++    generation_suffix = re.compile(r"(?:^|[/_.-])v[0-9]+(?:$|[/_.-])", re.IGNORECASE)
+     assert not any(generation_suffix.search(path) for path in tracked)
+ 
+ 
++def test_no_product_generation_suffix_in_tracked_contents() -> None:
++    tracked = tuple(
++        subprocess.check_output(
++            [
++                "git",
++                "ls-files",
++                "--",
++                "fs_diloco",
++                "configs",
++                "scripts/miyabi",
++                "tests",
++                "docs",
++                "README.md",
++                "pyproject.toml",
++            ],
++            cwd=ROOT,
++            text=True,
++        ).splitlines()
++    )
++    assert tracked, "current source inventory is empty"
++    text_files = tuple(
++        path
++        for relative in tracked
++        if (path := ROOT / relative).suffix
++        in {".py", ".yaml", ".sql", ".sh", ".pbs", ".md", ".toml"}
++    )
++    assert text_files, "current text-source inventory is empty"
++    product_generation = re.compile(
++        r"(?i)\b(?:full[ _-]?protocol|fs[ _-]?diloco|protocol|schema|config)"
++        r"[ _.-]*v[0-9]+\b|\bv[0-9]+[ _.-]*(?:full[ _-]?protocol|fs[ _-]?diloco|"
++        r"legacy|protocol|schema|config)\b"
++    )
++    violations = {
++        path.relative_to(ROOT).as_posix(): match.group(0)
++        for path in text_files
++        if (match := product_generation.search(path.read_text(encoding="utf-8")))
++    }
++    assert violations == {}
++
++    versioned_wire_types: set[str] = set()
++    for path in (ROOT / "fs_diloco").rglob("*.py"):
++        tree = ast.parse(path.read_text(encoding="utf-8"))
++        versioned_wire_types.update(
++            node.name
++            for node in ast.walk(tree)
++            if isinstance(node, ast.ClassDef) and re.search(r"V[0-9]+$", node.name)
++        )
++    assert versioned_wire_types == {"CycleReceiptV1", "FullUpdateProposalV2"}
++
++
++def test_python_floor_and_public_invocation_surface_are_unique() -> None:
++    metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
++    assert metadata["project"]["requires-python"] == ">=3.13"
++    assert metadata["tool"]["ruff"]["target-version"] == "py313"
++    assert (ROOT / ".python-version").read_text(encoding="utf-8").strip() == "3.13"
++    assert "scripts" not in metadata["project"]
++    assert not (ROOT / "fs_diloco/cli.py").exists()
++    protocol_init = ast.parse((ROOT / "fs_diloco/protocol/__init__.py").read_text(encoding="utf-8"))
++    assert len(protocol_init.body) == 1 and isinstance(protocol_init.body[0], ast.Expr)
++
++
+ def test_artifact_versions_and_run_paths_have_explicit_owners() -> None:
+     constants = ast.parse((ROOT / "fs_diloco/core/constants.py").read_text(encoding="utf-8"))
+     versions = ast.parse((ROOT / "fs_diloco/core/versions.py").read_text(encoding="utf-8"))
+diff --git a/tests/harness/test_full_protocol_harness.py b/tests/harness/test_full_protocol_harness.py
+index deff71e..7fb5817 100644
+--- a/tests/harness/test_full_protocol_harness.py
++++ b/tests/harness/test_full_protocol_harness.py
+@@ -355,6 +355,8 @@ def _build_valid_checker_fixture(
+         "1",
+         "--fault-scenario",
+         fault_scenario,
++        "--syncer-takeover-boundary-version",
++        "2",
+         "--output",
+         str(output),
+     ]
+@@ -670,6 +672,8 @@ def test_checker_parser_freezes_topology_workload_and_fault_oracles(tmp_path: Pa
+             "5",
+             "--fault-scenario",
+             "learner_replacement",
++            "--syncer-takeover-boundary-version",
++            "2",
+             "--output",
+             str(tmp_path / "evidence.json"),
+         ]
+@@ -687,6 +691,7 @@ def test_checker_parser_freezes_topology_workload_and_fault_oracles(tmp_path: Pa
+         "expected_contributors": 4,
+         "expected_hosts": 5,
+         "fault_scenario": "learner_replacement",
++        "syncer_takeover_boundary_version": 2,
+         "blocked_reason": None,
+         "output": tmp_path / "evidence.json",
+     }
+@@ -1024,6 +1029,7 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
+     assert '--fault-scenario "$FS_DILOCO_FAULT_SCENARIO"' in wrapper
+     assert "EXPECTED_SYNCER_EPOCHS" not in wrapper
+     assert "EXPECTED_REPLACED_LEARNER" not in wrapper
++    assert "readonly SYNCER_TAKEOVER_BOUNDARY_VERSION=2" in wrapper
+     allocation = (ROOT / "scripts/miyabi/run_full_protocol_allocation.sh").read_text(
+         encoding="utf-8"
+     )
+@@ -1031,11 +1037,32 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
+     assert "--map-by ppr:1:node" in allocation
+     rank_runner = (ROOT / "scripts/miyabi/run_full_protocol_rank.sh").read_text(encoding="utf-8")
+     assert "request_static_replacement" in rank_runner
+-    assert "FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION=2" in rank_runner
++    assert (
++        'FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION="$SYNCER_TAKEOVER_BOUNDARY_VERSION"'
++        in rank_runner
++    )
++    assert '--syncer-takeover-boundary-version "$SYNCER_TAKEOVER_BOUNDARY_VERSION"' in wrapper
++    assert '"SYNCER_TAKEOVER_BOUNDARY_VERSION=$SYNCER_TAKEOVER_BOUNDARY_VERSION"' in allocation
+     assert 'kill -KILL "$primary_pid"' in rank_runner
+     assert "trap publish_blocked_on_exit EXIT" in wrapper
+     assert "--blocked-reason" in wrapper
+ 
++    review_runner = (ROOT / "scripts/miyabi/run_multi_agent_review.pbs").read_text(encoding="utf-8")
++    assert review_runner.count("run_claude &") == 1
++    assert review_runner.count("run_opencode \\") == 3
++    assert 'CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-5}"' in review_runner
++    assert 'OPENCODE_GLM_MODEL="${OPENCODE_GLM_MODEL:-opencode-go/glm-5.2}"' in review_runner
++    assert (
++        'OPENCODE_DEEPSEEK_MODEL="${OPENCODE_DEEPSEEK_MODEL:-opencode-go/deepseek-v4-flash}"'
++        in review_runner
++    )
++    assert (
++        'OPENCODE_MINIMAX_MODEL="${OPENCODE_MINIMAX_MODEL:-opencode-go/minimax-m3}"'
++        in review_runner
++    )
++    assert "OPENCODE_KIMI_MODEL" not in review_runner
++    assert '"$RUN_TMP/minimax-m3.tsv"' in review_runner
++
+ 
+ def test_pbs_wrapper_publishes_blocked_artifact_when_allocation_exits(
+     tmp_path: Path,
+diff --git a/tests/harness/test_plan_completion.py b/tests/harness/test_plan_completion.py
+index c8e59e1..fac9911 100644
+--- a/tests/harness/test_plan_completion.py
++++ b/tests/harness/test_plan_completion.py
+@@ -224,12 +224,11 @@ def _materialize_registered_inputs(module, tmp_path: Path):
+         report_path.write_text("Codex internal review\n\nAPPROVE\n", encoding="utf-8")
+         artifact_path = tmp_path / f"reviews/{review['id']}.json"
+         artifact = {
+-            "review_artifact_version": 1,
++            "review_artifact_version": 2,
+             "status": "PASS",
+             "plan_id": "plan03-1",
+             "reviewer": "Codex",
+             "review_execution": "internal",
+-            "external_review_status": "skipped-by-user",
+             "review_kind": contract["review_kind"],
+             "target_commit": source["commit"],
+             "source_fingerprint": source["fingerprint"],
+diff --git a/tests/module_coverage.json b/tests/module_coverage.json
+index 14f6ba4..efab6ec 100644
+--- a/tests/module_coverage.json
++++ b/tests/module_coverage.json
+@@ -21,11 +21,6 @@
+       "boundary": "current package declaration",
+       "tests": ["tests/architecture/test_plan_complete_dead_surfaces.py::test_only_unversioned_product_surfaces_exist"]
+     },
+-    {
+-      "surface": "fs_diloco/cli.py",
+-      "boundary": "single public command dispatcher",
+-      "tests": ["tests/test_cli.py::test_dispatch_forwards_remaining_arguments"]
+-    },
+     {
+       "surface": "fs_diloco/core/__init__.py",
+       "boundary": "current core package declaration",
+@@ -223,8 +218,8 @@
+     },
+     {
+       "surface": "fs_diloco/runtime/syncer.py",
+-      "boundary": "single fenced syncer runtime composition and fault seam",
+-      "tests": ["tests/runtime/test_syncer_fault_boundary.py::test_syncer_fault_boundary_orders_quiesce_marker_and_sigstop"]
++      "boundary": "single fenced syncer admission and ingest composition",
++      "tests": ["tests/runtime/test_syncer_composition.py::test_active_static_attempt_replacement_requires_matching_authorization"]
+     },
+     {
+       "surface": "fs_diloco/runtime/syncer_entrypoint.py",
+diff --git a/tests/runtime/test_syncer_composition.py b/tests/runtime/test_syncer_composition.py
+[0m
+[0m$ [0msed -n '4327,4716p' /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/.review-packet/target.diff
+diff --git a/tests/runtime/test_syncer_composition.py b/tests/runtime/test_syncer_composition.py
+new file mode 100644
+index 0000000..0a1d776
+--- /dev/null
++++ b/tests/runtime/test_syncer_composition.py
+@@ -0,0 +1,153 @@
++from __future__ import annotations
++
++import hashlib
++from pathlib import Path
++from types import SimpleNamespace
++
++import pytest
++
++from fs_diloco.core.config import Config
++from fs_diloco.core.run_descriptor import DescriptorAuthorityIdentity, LoadedRunDescriptor
++from fs_diloco.protocol.contributor import StaticContributorFence, StaticMembershipScope
++from fs_diloco.protocol.cycle_receipt import CycleReceiptV1, canonical_receipt_relative_path
++from fs_diloco.runtime.syncer import _admit_requests, _ingest_proposals
++from fs_diloco.storage.admission import publish_static_request_with_sha256
++from fs_diloco.storage.atomic_io import read_json
++from fs_diloco.storage.authority import (
++    AuthorityIdentity,
++    CommandConflictError,
++    LeaderAuthority,
++    initialize_authority,
++)
++from fs_diloco.storage.paths import RunPaths, prepare_authority_dirs
++from tests.support.protocol import proposal, receipt_payload
++
++
++class _Telemetry:
++    def __init__(self) -> None:
++        self.events: list[tuple[str, dict[str, object]]] = []
++
++    def event(self, name: str, **fields: object) -> None:
++        self.events.append((name, fields))
++
++
++def _loaded(paths: RunPaths, *, config_sha256: str) -> LoadedRunDescriptor:
++    return LoadedRunDescriptor(
++        paths=paths,
++        descriptor={"run_id": "run-current", "descriptor_sha256": "d" * 64},
++        config=Config(),
++        identity=DescriptorAuthorityIdentity(
++            run_id="run-current",
++            source_fingerprint="source",
++            config_sha256=config_sha256,
++        ),
++    )
++
++
++def test_active_static_attempt_replacement_requires_matching_authorization(
++    tmp_path: Path,
++) -> None:
++    paths = RunPaths(tmp_path)
++    prepare_authority_dirs(paths)
++    config_sha256 = hashlib.sha256(b"config").hexdigest()
++    identity = AuthorityIdentity("run-current", "source", config_sha256)
++    scope = StaticMembershipScope(("learner_000",))
++    initialize_authority(paths.sqlite_db, identity, scope)
++    telemetry = _Telemetry()
++
++    with LeaderAuthority(paths.sqlite_db, identity, scope) as authority:
++        leader = authority.open_leader(
++            authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
++        )
++        loaded = _loaded(paths, config_sha256=config_sha256)
++        publish_static_request_with_sha256(
++            paths,
++            run_id="run-current",
++            descriptor_sha256="d" * 64,
++            learner_id="learner_000",
++            logical_launch_id="logical-1",
++            attempt_id="attempt-1",
++            expected_generation=None,
++        )
++        _admit_requests(loaded, authority, leader, telemetry)
++
++        first = authority.read.static_binding("learner_000")
++        assert first is not None and first.binding_generation == 1
++        _path, request_sha256 = publish_static_request_with_sha256(
++            paths,
++            run_id="run-current",
++            descriptor_sha256="d" * 64,
++            learner_id="learner_000",
++            logical_launch_id="logical-2",
++            attempt_id="attempt-2",
++            expected_generation=1,
++        )
++        _admit_requests(loaded, authority, leader, telemetry)
++
++        current = authority.read.static_binding("learner_000")
++        assert current == first
++        disposition = read_json(paths.registration_disposition_path(request_sha256))
++        assert disposition["outcome"] == "rejected"
++        assert disposition["error_type"] == "MembershipFenceError"
++        assert telemetry.events[-1][0] == "admission_rejected"
++
++
++def test_ingest_proposals_propagates_command_conflict(tmp_path: Path) -> None:
++    paths = RunPaths(tmp_path)
++    prepare_authority_dirs(paths)
++    fence = StaticContributorFence(
++        kind="static",
++        learner_id="learner-0",
++        logical_launch_id="launch-0",
++        attempt_id="attempt-1",
++        binding_generation=1,
++    )
++    receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence.as_dict()))
++    receipt_path = paths.shared_root / canonical_receipt_relative_path(fence, 1)
++    receipt_path.parent.mkdir(parents=True, exist_ok=True)
++    receipt_path.write_bytes(receipt.canonical_bytes())
++    authority = SimpleNamespace(
++        read=SimpleNamespace(
++            current_contributor_fences=lambda: (fence,),
++            contributor_progress=lambda _key: None,
++        )
++    )
++    leader = SimpleNamespace(
++        ingest_cycle_receipt=lambda **_kwargs: (_ for _ in ()).throw(
++            CommandConflictError("conflicting receipt command")
++        )
++    )
++    control = SimpleNamespace(publish_receipt_ack=lambda *_args, **_kwargs: None)
++
++    with pytest.raises(CommandConflictError, match="conflicting receipt command"):
++        _ingest_proposals(
++            _loaded(paths, config_sha256=hashlib.sha256(b"config").hexdigest()),
++            authority,
++            leader,
++            control,
++            _Telemetry(),
++        )
++
++
++def test_proposal_ingest_propagates_command_conflict(tmp_path: Path) -> None:
++    paths = RunPaths(tmp_path)
++    prepare_authority_dirs(paths)
++    candidate = proposal()
++    proposal_path = paths.shared_root / "updates/proposals/learner-0/proposal.json"
++    proposal_path.parent.mkdir(parents=True, exist_ok=True)
++    proposal_path.write_bytes(candidate.canonical_bytes())
++    authority = SimpleNamespace(read=SimpleNamespace(current_contributor_fences=lambda: ()))
++    leader = SimpleNamespace(
++        ingest_proposal=lambda **_kwargs: (_ for _ in ()).throw(
++            CommandConflictError("conflicting proposal command")
++        )
++    )
++
++    with pytest.raises(CommandConflictError, match="conflicting proposal command"):
++        _ingest_proposals(
++            _loaded(paths, config_sha256=hashlib.sha256(b"config").hexdigest()),
++            authority,
++            leader,
++            SimpleNamespace(),
++            _Telemetry(),
++        )
+diff --git a/tests/runtime/test_syncer_startup_admission.py b/tests/runtime/test_syncer_startup_admission.py
+index 1adda5d..c916cf0 100644
+--- a/tests/runtime/test_syncer_startup_admission.py
++++ b/tests/runtime/test_syncer_startup_admission.py
+@@ -5,7 +5,11 @@ import sys
+ from pathlib import Path
+ from types import SimpleNamespace
+ 
++import pytest
++
++from fs_diloco.runtime import syncer_entrypoint
+ from fs_diloco.runtime.syncer_entrypoint import _admit_before_runtime_import
++from fs_diloco.storage.leader_lease import StaleLeaderTokenError
+ 
+ 
+ PROJECT_ROOT = Path(__file__).resolve().parents[2]
+@@ -128,3 +132,101 @@ def test_syncer_admission_modules_load_without_torch() -> None:
+     )
+ 
+     assert probe.returncode == 0, probe.stdout + probe.stderr
++
++
++def test_successful_candidate_does_not_swallow_release_failure(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    config_path = tmp_path / "resolved.yaml"
++    config_path.write_text("config_schema_version: 1\n", encoding="utf-8")
++    token = SimpleNamespace(epoch=1, owner_id="owner-1")
++    closed: list[bool] = []
++
++    class FakeAuthority:
++        def __init__(self, *_args, **_kwargs) -> None:
++            pass
++
++        def acquire_leader(self, **_kwargs):
++            return token
++
++        def open_leader(self, _token):
++            return SimpleNamespace()
++
++        def committed_leader_lease(self, _token):
++            return SimpleNamespace()
++
++        def release_leader(self, _token) -> None:
++            raise StaleLeaderTokenError("release crossed the safety boundary")
++
++        def close(self) -> None:
++            closed.append(True)
++
++    class FakeControl:
++        def __init__(self, *_args, **_kwargs) -> None:
++            pass
++
++        def publish_heartbeat(self, _lease) -> None:
++            pass
++
++    class FakeRenewer:
++        def __init__(self, **_kwargs) -> None:
++            pass
++
++        def start(self) -> None:
++            pass
++
++        def stop(self) -> None:
++            pass
++
++    loaded = SimpleNamespace(
++        paths=SimpleNamespace(
++            resolved_config_yaml=config_path,
++            sqlite_db=tmp_path / "authority.sqlite3",
++            shared_root=tmp_path,
++            actor_metrics_path=lambda *_args: tmp_path / "syncer.jsonl",
++        ),
++        config=SimpleNamespace(
++            membership=SimpleNamespace(mode="static"),
++            leader=SimpleNamespace(
++                lease_duration_seconds=30.0,
++                max_clock_skew_seconds=1.0,
++                business_busy_timeout_ms=5000,
++                candidate_wait_seconds=60.0,
++                candidate_acquire_poll_seconds=1.0,
++                renew_interval_seconds=5.0,
++            ),
++            maintenance=SimpleNamespace(
++                publication_orphan_grace_seconds=40.0,
++                quarantine_records_per_contributor=64,
++            ),
++        ),
++        descriptor={"static_learner_ids": ["learner_000"], "bootstrap_slots": 1},
++        identity=SimpleNamespace(
++            as_dict=lambda: {
++                "run_id": "run-current",
++                "source_fingerprint": "source",
++                "config_sha256": "a" * 64,
++            }
++        ),
++    )
++    monkeypatch.setattr(syncer_entrypoint, "load_run_descriptor", lambda *_args, **_kwargs: loaded)
++    monkeypatch.setattr(syncer_entrypoint, "_LeaseRenewer", FakeRenewer)
++    monkeypatch.setattr(
++        syncer_entrypoint, "_admit_before_runtime_import", lambda *_args, **_kwargs: None
++    )
++    monkeypatch.setattr(
++        syncer_entrypoint,
++        "ActorTelemetryWriter",
++        lambda *_args, **_kwargs: SimpleNamespace(event=lambda *_args, **_kwargs: None),
++    )
++    monkeypatch.setattr("fs_diloco.storage.authority.LeaderAuthority", FakeAuthority)
++    monkeypatch.setattr("fs_diloco.storage.control.ControlPublisher", FakeControl)
++    monkeypatch.setattr("fs_diloco.runtime.syncer._admit_requests", lambda *_args, **_kwargs: None)
++    monkeypatch.setattr(
++        "fs_diloco.runtime.syncer.run_fenced_syncer", lambda *_args, **_kwargs: None
++    )
++
++    with pytest.raises(StaleLeaderTokenError, match="release crossed"):
++        syncer_entrypoint.main(["--config", str(config_path), "--shared-root", str(tmp_path)])
++
++    assert closed == [True]
+diff --git a/tests/storage/test_schema.py b/tests/storage/test_schema.py
+index 825a334..badad08 100644
+--- a/tests/storage/test_schema.py
++++ b/tests/storage/test_schema.py
+@@ -43,8 +43,8 @@ def test_fresh_schema_initializes_reopens_and_is_integral(
+         tables = set(authority.read.table_names())
+         assert authority.read.integrity_check() == ("ok",)
+         assert metadata.ddl_sha256 == ddl_bundle_sha256(metadata.mode)
+-        assert AUTHORITY_SCHEMA_VERSION == 10
+-        assert metadata.schema_version == 10
++        assert AUTHORITY_SCHEMA_VERSION == 11
++        assert metadata.schema_version == 11
+         assert ("learner_instances" in tables) is dynamic_expected
+         assert "static_contributor_bindings" in tables
+         assert "publication_intents" in tables
+@@ -63,7 +63,12 @@ def test_fresh_schema_initializes_reopens_and_is_integral(
+                 str(row[1])
+                 for row in connection.execute("PRAGMA table_info(contributor_progress)").fetchall()
+             }
++            epoch_sql = connection.execute(
++                "SELECT sql FROM sqlite_master WHERE type='table' AND name='syncer_epochs'"
++            ).fetchone()[0]
+         assert "last_update_id" in progress_columns
++        assert "'terminal'" not in epoch_sql
++        assert all(value in epoch_sql for value in ("'released'", "'expired'", "'error'"))
+     marker = database.with_name("bootstrap_complete.json")
+     assert marker.stat().st_mode & 0o222 == 0
+ 
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+deleted file mode 100644
+index 2e24743..0000000
+--- a/tests/test_cli.py
++++ /dev/null
+@@ -1,32 +0,0 @@
+-from __future__ import annotations
+-
+-import sys
+-from types import ModuleType
+-
+-import pytest
+-
+-from fs_diloco import cli
+-
+-
+-@pytest.mark.parametrize(
+-    ("command", "module_name"),
+-    [
+-        ("syncer", "fs_diloco.syncer"),
+-        ("learner", "fs_diloco.learner"),
+-        ("inspect", "fs_diloco.tools.analysis"),
+-        ("close", "fs_diloco.tools.request_terminal_close"),
+-    ],
+-)
+-def test_dispatch_forwards_remaining_arguments(
+-    command: str,
+-    module_name: str,
+-    monkeypatch: pytest.MonkeyPatch,
+-) -> None:
+-    received: list[list[str] | None] = []
+-    fake = ModuleType(module_name)
+-    fake.main = lambda argv=None: received.append(argv)  # type: ignore[attr-defined]
+-    monkeypatch.setitem(sys.modules, module_name, fake)
+-
+-    cli.main([command, "--sentinel", "value"])
+-
+-    assert received == [["--sentinel", "value"]]
+diff --git a/tests/test_config.py b/tests/test_config.py
+index d944126..1b37b5f 100644
+--- a/tests/test_config.py
++++ b/tests/test_config.py
+@@ -17,7 +17,9 @@ from fs_diloco.core.config import (
+ )
+ 
+ 
+-CONFIGS = tuple(sorted(Path("configs").glob("full_protocol_*.yaml")))
++ROOT = Path(__file__).resolve().parents[1]
++CONFIGS = tuple(sorted((ROOT / "configs").glob("full_protocol_*.yaml")))
++assert CONFIGS, "no repository configs discovered"
+ HUB_COMMIT = "a" * 40
+ 
+ 
+@@ -36,6 +38,30 @@ def test_repository_configs_use_the_one_strict_schema(path: Path) -> None:
+     assert config.config_schema_version == 1
+     assert payload["config_schema_version"] == 1
+     assert set(payload) <= {field.name for field in dataclasses.fields(Config)}
++    if config.membership.mode == "static":
++        assert "scaling" not in payload
++        assert "stream_pool_size" not in payload["membership"]
++        assert "bootstrap_instances" not in payload["membership"]
++        assert config.membership.stream_pool_size == config.sync.num_learners
++        assert config.membership.bootstrap_instances == config.sync.num_learners
++
++
++@pytest.mark.parametrize(
++    "extra",
++    [
++        "membership:\n  mode: static\n  stream_pool_size: 4\n",
++        "membership:\n  mode: static\n  bootstrap_instances: 4\n",
++        "membership:\n  mode: static\nscaling:\n  enabled: false\n",
++    ],
++)
++def test_static_config_rejects_repeated_or_inert_capacity_fields(
++    tmp_path: Path, extra: str
++) -> None:
++    path = tmp_path / "config.yaml"
++    path.write_text(extra, encoding="utf-8")
++
++    with pytest.raises(ValueError, match="static membership"):
++        load_config(path)
+ 
+ 
+ @pytest.mark.parametrize("revision", [None, "main", "v1.0", "A" * 40, "a" * 39])
+diff --git a/tests/tools/test_resolve_scheduler_uncertainty.py b/tests/tools/test_resolve_scheduler_uncertainty.py
+[0m
+[0m$ [0msed -n '3568,3888p' /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/.review-packet/target.diff
+diff --git a/reports/DOING/plan03-1/artifact-schema.md b/reports/DOING/plan03-1/artifact-schema.md
+index df7b3ed..04f1ddb 100644
+--- a/reports/DOING/plan03-1/artifact-schema.md
++++ b/reports/DOING/plan03-1/artifact-schema.md
+@@ -80,3 +80,11 @@ Rules:
+   unregistered replacement or takeover history.
+ - Failure artifacts preserve actual identity, partial metrics, error class, raw
+   paths, and cleanup eligibility; they are never overwritten by a retry.
++
++Codex review artifacts use `review_artifact_version: 2`. They bind the internal
++review report, exact source identity, covered requirements, reviewed inputs and
++empty accepted finding set. External multi-agent review is a separate
++best-effort workflow input: its invocation summary and finding disposition are
++tracked review evidence consumed by Codex, not a synthetic field on the
++internal review artifact. A reviewer outage is not approval; every valid
++external finding must be disposed before Codex can publish `APPROVE`.
+diff --git a/reports/DOING/plan03-1/code_review.md b/reports/DOING/plan03-1/code_review.md
+index 76c21b2..eef2449 100644
+--- a/reports/DOING/plan03-1/code_review.md
++++ b/reports/DOING/plan03-1/code_review.md
+@@ -99,3 +99,71 @@ review stage is recorded as skipped-by-user rather than fabricated as approval.
+   affected tests, 169 focused tests and 527 complete tests with all registered
+   format/lint/JUnit gates passing.
+ - Verdict: `APPROVE`. External review remains skipped by user direction.
++
++## 2026-08-10T21:16:51+09:00 — R2 final-target preformal review
++
++- Final source target: `5b474d5c1735beb8cca922fd6cc7b6304926df2c`.
++- Mandatory report:
++  `reports/DOING/code_review/plan03-1/plan-complete-final-target-r2/codex-gpt_5b474d5c1735beb8cca922fd6cc7b6304926df2c.md`.
++- Scope: complete tracked current repository, documentation-complete final
++  design and exact final ladder; requirements SURFACE/CONFIG/SCHEMA/CLEAN/ARCH.
++- All prior preformal findings remain closed. Verdict: `APPROVE`.
++- External review remains skipped by explicit user direction and is not a gate.
++
++## 2026-08-10T21:30:00+09:00 — current review disposition re-audit
++
++The user explicitly added
++`reports/DOING/code_review/plan03-1/critical-current-fs-diloco/finding-dispositions_4ebee6339fb76f63127874c655d7b109b2ec0b39.md`
++to the remediation inputs. This is a disposition audit of already-produced
++evidence, not a resumption of external reviewer execution.
++
++Codex checked every finding against current target
++`5b474d5c1735beb8cca922fd6cc7b6304926df2c` rather than assuming that the
++older reviewed target still described the worktree:
++
++- FSD-H1 is already closed: U1 publishes and validates nonzero JUnit test
++  totals with zero failures, errors and skips, and hash-binds both XML files.
++- FSD-H2 is already closed: the fault scenario is the sole registered input;
++  the Checker unconditionally pins binding generations and exact history.
++- FSD-H3 is already closed: contributor progress directly owns
++  `last_update_id`, admission/resume carries it, and the learner uses it for a
++  graceful terminal acknowledgement.
++- FSD-H4 is already closed: valid normal/replacement/takeover fixtures execute
++  the fault branches and targeted mutations prove rejection.
++- FSD-M1 through M7 remain real in the current state: syncer admission/ingest
++  composition lacks a behavioural owner test; the multi-node fault text
++  overclaims stale-writer evidence; config discovery is CWD-relative; the
++  generation scan is path-only and vacuous; integrity exceptions are broadly
++  swallowed; the takeover boundary is duplicated; and unused console/facade
++  surfaces remain.
++- FSD-L1 through L6 also remain real current-only cleanup defects: duplicated
++  owner-path derivation, an unwritten schema state, contradictory Python floor,
++  stale defaults, swallowed leader release failure, and repeated/inert static
++  config fields. FSD-L7 is not a defect and is already explicitly bounded to
++  unit evidence in `identity-authority.md`.
++- The recommendation to rename independently versioned `CycleReceiptV1` and
++  `FullUpdateProposalV2` remains rejected. Their wire-format identity is
++  current protocol data, not a Full Protocol product-generation suffix; the
++  repaired content oracle will encode this precise distinction.
++
++The completed final U1 and normal F1 artifacts remain valid historical results
++for their exact source but are invalidated for promotion because the accepted
++current-source remediations change formal scopes. The final ladder will restart
++only after implementation, compute-node validation and Codex rereview.
++
++## 2026-08-10T21:51:14+09:00 — multi-agent review restored
++
++- The user's temporary Codex-only direction is now superseded. External
++  multi-agent review is restored for the remaining remediation, preformal and
++  final-evidence review gates under the workflow's best-effort availability
++  rule; every valid finding remains mandatory input to Codex disposition.
++- The four current reviewer lanes are Claude Opus 5, GLM-5.2, DeepSeek V4
++  Flash and MiniMax M3. The obsolete Kimi-named runner slot and environment
++  variable are removed instead of retained as aliases.
++- Formal Codex review artifacts advance to schema 2 and no longer encode the
++  temporary `skipped-by-user` policy. External invocation summaries and
++  dispositions remain separate tracked inputs so an outage cannot be
++  represented as approval.
++- The current remediation will be frozen and reviewed by Codex before the
++  external job is submitted. Runtime validation remains blocked until any
++  valid external findings are disposed.
+diff --git a/reports/DOING/plan03-1/formal-ladder-manifest.json b/reports/DOING/plan03-1/formal-ladder-manifest.json
+index 2b580ac..aab558d 100644
+--- a/reports/DOING/plan03-1/formal-ladder-manifest.json
++++ b/reports/DOING/plan03-1/formal-ladder-manifest.json
+@@ -111,6 +111,7 @@
+       "workload": {
+         "config": "configs/full_protocol_functional.yaml",
+         "fault_scenario": "syncer_takeover",
++        "syncer_takeover_boundary_version": 2,
+         "learners": 4,
+         "local_optimizer_steps_per_cycle": 20,
+         "committed_global_steps": 4,
+diff --git a/reports/DOING/plan03-1/identity-authority.md b/reports/DOING/plan03-1/identity-authority.md
+index 0def781..1c9fd65 100644
+--- a/reports/DOING/plan03-1/identity-authority.md
++++ b/reports/DOING/plan03-1/identity-authority.md
+@@ -25,12 +25,14 @@
+   contributor fence; an old attempt cannot mutate receipt/proposal/adoption
+   state after replacement.
+ - Fault layer: learner process/PBS actor after at least one accepted cycle.
+-- Injection: terminate one learner, start a successor for the same logical
+-  contributor using the current launcher, and allow the old attempt to retry a
+-  fenced mutation when practical.
+-- Durable success oracle: newer contributor fence in SQLite, old-fence mutation
+-  rejected, successor accepted, contributor progresses to terminal ack, ledger
+-  remains balanced, and no duplicate proposal becomes committed.
++- Injection: terminate one learner, then start a successor for the same logical
++  contributor using the current launcher.
++- Durable multi-node success oracle: newer contributor fence and replaced
++  binding history in SQLite, successor accepted, contributor progresses to
++  terminal ack, ledger remains balanced, and no duplicate proposal becomes
++  committed. Stale-fence mutation rejection is proven independently by
++  authority unit tests; the sequential process injection does not claim to
++  execute a live old writer after replacement.
+ - Replay/recovery: immutable request/proposal IDs and fenced commands may replay
+   idempotently; only the successor fence may create new accepted work.
+ - Cleanup owner: the integration harness after terminal proof and artifact
+@@ -40,13 +42,16 @@
+ 
+ - Mutation authority: only the exact current `(epoch, owner_id)` may commit a
+   business transaction.
+-- Fault layer: syncer process/PBS actor outside a SQLite transaction, with a
+-  second candidate already able to acquire after expiry/failure.
+-- Injection: terminate or pause the first leader at a pre-registered safe point;
+-  start/retain a second candidate and wait for a higher epoch.
+-- Durable success oracle: higher successor epoch, old token rejected, one
+-  predecessor-successor publication per version, no split-brain command receipt,
++- Fault layer: syncer process/PBS actor outside a SQLite transaction at the one
++  launcher-owned takeover boundary version, consumed unchanged by the Checker.
++- Injection: pause and terminate the first leader at that safe point, then start
++  a successor and wait for a higher epoch.
++- Durable multi-node success oracle: higher successor epoch, one
++  predecessor-successor publication per version, no stale-epoch publication,
+   all learners adopt and acknowledge terminal, and SQLite integrity is `ok`.
++  Stale-token rejection and command-replay conflicts are proven independently
++  by authority unit tests; the sequential process injection does not claim to
++  execute a concurrent stale writer.
+ - Replay/recovery: publication/merge commands use exact IDs and may replay only
+   to the same committed result; successor reconciles an already-published
+   immutable object rather than creating an alternate version.
+diff --git a/reports/DOING/plan03-1/plan-complete-remediation.md b/reports/DOING/plan03-1/plan-complete-remediation.md
+index 2e4f01e..bbb8fec 100644
+--- a/reports/DOING/plan03-1/plan-complete-remediation.md
++++ b/reports/DOING/plan03-1/plan-complete-remediation.md
+@@ -42,3 +42,11 @@ promotion because the formal source and acceptance boundary change.
+   `reports/DOING/code_review/plan03-1/plan-complete-preformal-remediation/codex-gpt_272fa81331a110f815a52d871c2fd61f7d1c3abb.md`.
+ - Verdict: `APPROVE`; P4-R2-F1, P4-R2-F2 and P4-R2-F3 are closed.
+ - External review remains `skipped-by-user` and contributes no conclusion.
++
++## Current-review remediation continuation
++
++The user subsequently restored multi-agent review. The earlier skip remains
++historical evidence for its exact gates only and is not the policy for any
++remaining review. Current remediation targets receive a Codex-first review and
++then the four-lane external reviewer job; valid external findings must be
++disposed before runtime validation or final promotion.
+diff --git a/reports/DOING/plan03-1/progress.md b/reports/DOING/plan03-1/progress.md
+index e2e62d8..82c31dd 100644
+--- a/reports/DOING/plan03-1/progress.md
++++ b/reports/DOING/plan03-1/progress.md
+@@ -925,3 +925,73 @@
+   authority schema/recovery ownership, evidence retention and exact result.
+   The canonical formal config is restored to 50 local steps and 10 global
+   steps. Freeze this documentation-complete source before any final gate.
++
++## 2026-08-10T21:16:51+09:00 — FINAL_COMMON_TARGET_FREEZE
++
++- Documentation-complete final source commit:
++  `5b474d5c1735beb8cca922fd6cc7b6304926df2c`. Formal source scopes are clean.
++- Codex R2 reviewed the complete tracked current state and exact final ladder;
++  SURFACE-01, CONFIG-01, SCHEMA-01, CLEAN-01 and ARCH-01 have no open finding.
++  Verdict: `APPROVE`. External review remains skipped by user direction.
++- No formal source-scope edit is now allowed. Reports and new evidence remain
++  uncommitted/outside the fingerprint while U1, three F1 scenarios and G1 run
++  serially from this exact HEAD. U1 will capture the frozen source fingerprint,
++  which every later gate and both machine review artifacts must match.
++
++## 2026-08-10T21:23:07+09:00 — final U1 one-node validation PASS
++
++- Interactive PBS job `2520667.opbs` ran on exact one-node `interact-g`
++  topology `mg0005` with `1:ncpus=8:mem=16gb` and exited 0 after 2:19.
++- The clean final source remained
++  `5b474d5c1735beb8cca922fd6cc7b6304926df2c`, with fingerprint
++  `sha256:d824e2ae1c30346b034dbfd0e8b618910dbc7eb14e8ee5a250551051e90369ea`.
++- Ruff format and lint passed. The registered focused suite passed 169 tests;
++  the complete suite passed 527 tests. Both JUnit projections contain no
++  failure, error or skip.
++- Evidence SHA-256 values: structured artifact
++  `84f76dfceedf4e318f77dec4dfbe18a9962c913d151b7a63d9c5386e73703d15`,
++  raw log
++  `1ac4865d704db8a0f3c53f59c0b6429fa799f696ca7d3eb2e7943b8783ef33c2`,
++  focused JUnit
++  `77c205b61f82e05dd30cb8c939ae60986bc122fc3baf55ad1a1492f7ced759c0`
++  and full JUnit
++  `7dcb13d34471585d5287a52a010276d36b93a61020aad03c5bb1ce90b7c38ead`.
++- Transition: `FINAL_COMMON_TARGET_FREEZE` -> `FINAL_TEST_LADDER`. Run the
++  normal F1 scenario next, then learner replacement and syncer takeover,
++  without changing any formal source scope.
++
++## 2026-08-10T21:30:00+09:00 — PLAN_REMEDIATION from current-review audit
++
++- Final normal F1 job `2520697.opbs` completed on five `debug-g` nodes in 14
++  seconds with scheduler exit 0 and a structured PASS. It used final target
++  `5b474d5c1735beb8cca922fd6cc7b6304926df2c` and the frozen
++  `sha256:d824e2ae1c30346b034dbfd0e8b618910dbc7eb14e8ee5a250551051e90369ea`
++  fingerprint. Its result/raw/source-identity SHA-256 values are respectively
++  `b0a0605fbca3f20b71e74d29031b3705cf75c3f658503b79eaf7bb233bbafa06`,
++  `b9570a04c910fd32643045064a47efbfe1672ec90be78f9ce9107484d62975f0`
++  and `ca34a670a941feca6812fea3ff84c25b93c62863a0916b33ce02df4dbe7e330b`.
++- The user then explicitly added the retained current-review disposition file
++  to the modification list. Codex re-audited every finding against the actual
++  current tree. H1-H4 are already closed by later P4 changes; M1-M7 and L1-L6
++  remain real; L7 is informational and already documented. Independently
++  versioned receipt/proposal wire types remain intentional.
++- Because the accepted fixes change formal source scopes, R2, final U1 and the
++  just-completed normal F1 are retained but invalidated for final promotion.
++  Transition: `FINAL_TEST_LADDER` -> `PLAN_REMEDIATION`; implement and validate
++  the current-only fixes before freezing a new common source target.
++
++## 2026-08-10T21:51:14+09:00 — multi-agent review restored
++
++- The user restored external multi-agent review to the active workflow,
++  superseding the temporary Codex-only direction for all future gates.
++- The reviewer runner and workflow now consistently own four current lanes:
++  Claude Opus 5, GLM-5.2, DeepSeek V4 Flash and MiniMax M3. The old Kimi slot
++  is deleted rather than aliased.
++- The completion Checker now validates schema-2 Codex review artifacts without
++  the obsolete `skipped-by-user` field. External summary/disposition evidence
++  remains a separate best-effort input, while every valid finding still blocks
++  experimentation until disposition.
++- Static preflight found and removed one stale focused-suite path to deleted
++  `tests/test_cli.py`; shell syntax, Python compilation, focused Ruff format
++  and lint, literal PBS groups and diff whitespace checks pass. Freeze the
++  remediation target for Codex-first and then external multi-agent review.
+diff --git a/reports/DOING/plan03-1/workflow_state.yaml b/reports/DOING/plan03-1/workflow_state.yaml
+index 81c680e..2734608 100644
+--- a/reports/DOING/plan03-1/workflow_state.yaml
++++ b/reports/DOING/plan03-1/workflow_state.yaml
+@@ -3,13 +3,13 @@ plan_id: plan03-1
+ branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
+ workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
+ phase_id: P4-formal-and-docs
+-work_unit_id: P4-W8-documentation-sync-and-final-freeze
++work_unit_id: P4-W10-current-review-remediation
+ state: PLAN_REMEDIATION
+-base_commit: e1f76a85f77c33765ebaaddb4828e40cc45d4d24
+-target_commit: 563bf5298f89ff8481fe533242a4ee2c0cdd16f9
++base_commit: 5b474d5c1735beb8cca922fd6cc7b6304926df2c
++target_commit: null
+ formal_source_commit: null
+ formal_source_fingerprint: null
+-experiment_id: p4-preliminary-9node-51x11
++experiment_id: plan03-1-current-review-remediation
+ experiment_domain: product
+ failure_counters:
+   "harness:p2-one-node-validation-01": 0
+@@ -22,6 +22,7 @@ failure_counters:
+ required_tests:
+   - p4-review-remediation-focused
+   - p4-review-remediation-one-node-validation
++  - final-u1-one-node-validation
+ required_evidence:
+   - reports/DOING/plan03-1/artifact-schema.md
+   - reports/DOING/plan03-1/formal-ladder-manifest.json
+@@ -37,6 +38,15 @@ required_evidence:
+   - reports/DOING/plan03-1/artifacts/20260810-205900_p4-preformal-remediation-validation.log.full-pytest.junit.xml
+   - reports/DOING/plan03-1/artifacts/20260810-211104_p4-preliminary-9node-overbaseline_result.json
+   - reports/DOING/plan03-1/artifacts/20260810-211104_p4-preliminary-9node-overbaseline_pbs.log
++  - reports/DOING/plan03-1/artifacts/20260810-211800_final-u1-one-node-validation.json
++  - reports/DOING/plan03-1/artifacts/20260810-211800_final-u1-one-node-validation.log
++  - reports/DOING/plan03-1/artifacts/20260810-211800_final-u1-one-node-validation.log.focused-pytest.junit.xml
++  - reports/DOING/plan03-1/artifacts/20260810-211800_final-u1-one-node-validation.log.full-pytest.junit.xml
++  - reports/DOING/code_review/plan03-1/plan-complete-final-target-r2/codex-gpt_5b474d5c1735beb8cca922fd6cc7b6304926df2c.md
++  - reports/DOING/plan03-1/artifacts/20260810-212307_r2-preformal-current-state_review.json
++  - reports/DOING/plan03-1/artifacts/20260810-212500_final-f1-functional-normal_result.json
++  - reports/DOING/plan03-1/artifacts/20260810-212500_final-f1-functional-normal_pbs.log
++  - reports/DOING/code_review/plan03-1/critical-current-fs-diloco/finding-dispositions_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
+ invalidated_evidence:
+   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
+   - p2-focused-attempt-2-collection-failed
+@@ -46,8 +56,24 @@ invalidated_evidence:
+   - p3-normal-pass-invalidated-by-terminal-authority-source-fix
+   - p3-learner-replacement-attempt-1-terminal-total-checker-false-pass
+   - p4-candidate-validation-invalidated-by-preformal-source-and-checker-remediation
++  - final-r2-target-5b474d5-invalidated-by-current-review-remediation
++  - final-u1-target-5b474d5-invalidated-by-current-review-remediation
++  - final-f1-normal-target-5b474d5-invalidated-by-current-review-remediation
+ external_review:
+   pbs_job_id: null
+-  status: skipped-by-user
+-open_blocking_findings: []
+-allowed_next_action: validate_docs_and_freeze_final_common_target
++  status: not-started
++open_blocking_findings:
++  - FSD-M1
++  - FSD-M2
++  - FSD-M3
++  - FSD-M4
++  - FSD-M5
++  - FSD-M6
++  - FSD-M7
++  - FSD-L1
++  - FSD-L2
++  - FSD-L3
++  - FSD-L4
++  - FSD-L5
++  - FSD-L6
++allowed_next_action: freeze_current_review_remediation_target
+diff --git a/scripts/miyabi/check_full_protocol_run.py b/scripts/miyabi/check_full_protocol_run.py
+[0m
+[0m$ [0msed -n '564,592p' /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/.review-packet/target.diff
+diff --git a/pyproject.toml b/pyproject.toml
+index 8775125..702d1ca 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -7,7 +7,7 @@ name = "fs-diloco-miyabi"
+ version = "0.1.0"
+ description = "Filesystem-backed Decoupled DiLoCo prototype for Miyabi"
+ readme = "README.md"
+-requires-python = ">=3.10"
++requires-python = ">=3.13"
+ dependencies = [
+     "torch",
+     "transformers",
+@@ -24,14 +24,6 @@ dev = [
+     "ruff",
+ ]
+ 
+-[project.scripts]
+-fs-diloco = "fs_diloco.cli:main"
+-fs-diloco-syncer = "fs_diloco.syncer:main"
+-fs-diloco-learner = "fs_diloco.learner:main"
+-fs-diloco-init-run = "fs_diloco.tools.init_run:main"
+-fs-diloco-launch-run = "fs_diloco.tools.launch_independent_run:main"
+-fs-diloco-inspect = "fs_diloco.tools.analysis:main"
+-
+ [tool.ruff]
+ line-length = 100
+ target-version = "py313"
+diff --git a/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.md b/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.md
+[0m
+[0m$ [0msed -n '4716,4750p' /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/.review-packet/target.diff
+diff --git a/tests/tools/test_resolve_scheduler_uncertainty.py b/tests/tools/test_resolve_scheduler_uncertainty.py
+index f95aefd..d93f8a5 100644
+--- a/tests/tools/test_resolve_scheduler_uncertainty.py
++++ b/tests/tools/test_resolve_scheduler_uncertainty.py
+@@ -39,7 +39,9 @@ def test_scheduler_resolution_is_dry_run_by_default_and_apply_is_create_no_repla
+ 
+ 
+ def test_scheduler_resolution_module_has_no_db_pbs_or_cancel_capability() -> None:
+-    source = Path("fs_diloco/tools/resolve_scheduler_uncertainty.py").read_text(encoding="utf-8")
++    source = (
++        Path(__file__).resolve().parents[2] / "fs_diloco/tools/resolve_scheduler_uncertainty.py"
++    ).read_text(encoding="utf-8")
+     for forbidden in ("sqlite3", "qstat", "qsub", "qdel", "admit_dynamic"):
+         assert forbidden not in source
+[0m
+[0m$ [0mgrep -n "class .*Error" /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/authority.py /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/leader_lease.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/authority.py:83:class AuthoritySchemaError(RuntimeError):
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/authority.py:87:class CommandConflictError(RuntimeError):
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/authority.py:91:class MembershipFenceError(RuntimeError):
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/authority.py:95:class ProposalPayloadError(RuntimeError):
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/leader_lease.py:12:class LeaseUnavailableError(RuntimeError):
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/leader_lease.py:16:class StaleLeaderTokenError(RuntimeError):
+[0m
+[0m→ [0mRead fs_diloco/core/versions.py
+[0m→ [0mRead fs_diloco/runtime/syncer_entrypoint.py
+[0m✱ [0mGrep "def ingest_cycle_receipt|def ingest_proposal"[90m in fs_diloco/storage/authority.py · 2 matches[0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [offset=1290, limit=260][0m
+[0m✱ [0mGrep "def _require_current_fence|def _command\(|def _command_replay|raise StaleLeaderTokenError|raise AuthoritySchemaError"[90m in fs_diloco/storage/authority.py · 45 matches[0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [limit=190, offset=5478][0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [limit=120, offset=5667][0m
+[0m→ [0mRead fs_diloco/core/config.py
+[0m
+[0m$ [0mls -la /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/configs/
+total 12
+dr-xr-x---  2 x10041 xg24i002  110 Aug 10 21:55 .
+dr-xr-x--- 10 x10041 xg24i002  225 Aug 10 21:58 ..
+-r--r-----  1 x10041 xg24i002 2493 Aug 10 21:55 full_protocol_dynamic.yaml
+-r--r-----  1 x10041 xg24i002 1725 Aug 10 21:55 full_protocol_functional.yaml
+-r--r-----  1 x10041 xg24i002 1724 Aug 10 21:55 full_protocol_static.yaml
+[0m
+[0m$ [0mcat /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/configs/full_protocol_functional.yaml
+config_schema_version: 1
+run:
+  name: full_protocol_functional
+model:
+  name_or_path: synthetic-tiny
+  dtype: float32
+  synthetic_vocab_size: 128
+  synthetic_hidden_size: 32
+data:
+  dataset_name: synthetic
+  train_split: train
+  block_size: 16
+  shuffle_blocks: true
+sync:
+  num_learners: 4
+  quorum_min: 4
+  quorum_max: 4
+  staleness_lambda: 0.0
+  scan_interval_seconds: 0.2
+  stop_after_outer_steps: 4
+syncer:
+  device: cpu
+  compute_dtype: float32
+  publish_dtype: float32
+membership:
+  mode: static
+  initial_membership_deadline_seconds: 60.0
+  registration_scan_interval_seconds: 0.2
+  registration_request_ttl_seconds: 20.0
+  heartbeat_dead_after_seconds: 20.0
+terminal:
+  admission_close_policy: global_target
+  drain_ack_timeout_seconds: 30.0
+  registration_visibility_grace_seconds: 1.0
+  proposal_visibility_grace_seconds: 2.0
+  max_terminal_merges: 0
+training:
+  inner_steps: 20
+  micro_batch_size: 1
+  gradient_accumulation_steps: 1
+  completion_mode: global_only
+  seed: 1337
+inner_optimizer:
+  name: adamw
+  lr: 0.00005
+  betas: [0.9, 0.95]
+  eps: 1.0e-8
+  weight_decay: 0.0
+  scheduler: none
+outer_optimizer:
+  name: nesterov
+  lr: 0.7
+  momentum: 0.9
+  weight_decay: 0.0
+io:
+  tensor_dtype: float32
+learner:
+  poll_latest_during_inner_steps: false
+  adopt_global_after_upload: true
+  global_adoption_strategy: replace
+leader:
+  lease_duration_seconds: 15.0
+  renew_interval_seconds: 2.0
+  max_clock_skew_seconds: 1.0
+  business_busy_timeout_ms: 5000
+  candidate_acquire_poll_seconds: 0.5
+  candidate_wait_seconds: 30.0
+  learner_recovery_wait_seconds: 60.0
+maintenance:
+  archive_batch_rows: 256
+  recent_batch_dedup_count: 64
+  quarantine_records_per_contributor: 64
+  publication_orphan_grace_seconds: 20.0
+[0m
+[0m$ [0mcat /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/configs/full_protocol_dynamic.yaml /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/configs/full_protocol_static.yaml
+config_schema_version: 1
+run:
+  name: full_protocol_dynamic
+model:
+  name_or_path: synthetic-tiny
+  dtype: float32
+  synthetic_vocab_size: 128
+  synthetic_hidden_size: 32
+data:
+  dataset_name: synthetic
+  train_split: train
+  block_size: 16
+  shuffle_blocks: true
+sync:
+  num_learners: 4
+  quorum_min: 3
+  quorum_max: 4
+  staleness_lambda: 0.0
+  scan_interval_seconds: 0.5
+  stop_after_outer_steps: 4
+syncer:
+  device: cpu
+  compute_dtype: float32
+  publish_dtype: float32
+membership:
+  mode: dynamic
+  stream_pool_size: 4
+  bootstrap_instances: 4
+  initial_membership_deadline_seconds: 120.0
+  registration_scan_interval_seconds: 0.5
+  registration_request_ttl_seconds: 30.0
+  heartbeat_dead_after_seconds: 15.0
+scaling:
+  enabled: true
+  desired_contributors: 4
+  low_contributor_threshold: 3
+  consecutive_low_windows: 2
+  productive_window_count: 2
+  startup_grace_seconds: 15.0
+  productive_upload_grace_factor: 2.0
+  productive_upload_grace_min_seconds: 10.0
+  productive_upload_grace_max_seconds: 60.0
+  cooldown_seconds: 10.0
+  max_pending_launch_requests: 1
+  max_total_launch_requests: 2
+  launch_request_ttl_seconds: 120.0
+  capacity_observation_retention_count: 16
+  scheduler_reconcile_interval_seconds: 5.0
+  scheduler_uncertainty_timeout_seconds: 30.0
+  starvation_observation_seconds: 10.0
+  learner_pbs_script: scripts/miyabi/run_learner.pbs
+  learner_walltime: "00:10:00"
+  learner_queue: regular-g
+terminal:
+  admission_close_policy: global_target_or_launch_budget
+  drain_ack_timeout_seconds: 60.0
+  registration_visibility_grace_seconds: 2.0
+  proposal_visibility_grace_seconds: 5.0
+  max_terminal_merges: 1
+training:
+  inner_steps: 20
+  micro_batch_size: 1
+  gradient_accumulation_steps: 1
+  completion_mode: global_only
+  seed: 1337
+inner_optimizer:
+  name: adamw
+  lr: 0.00005
+  betas: [0.9, 0.95]
+  eps: 1.0e-8
+  weight_decay: 0.0
+  scheduler: none
+outer_optimizer:
+  name: nesterov
+  lr: 0.7
+  momentum: 0.9
+  weight_decay: 0.0
+io:
+  tensor_dtype: float32
+learner:
+  poll_latest_during_inner_steps: false
+  adopt_global_after_upload: true
+  global_adoption_strategy: replace
+leader:
+  lease_duration_seconds: 30.0
+  renew_interval_seconds: 5.0
+  max_clock_skew_seconds: 1.0
+  business_busy_timeout_ms: 5000
+  candidate_acquire_poll_seconds: 1.0
+  candidate_wait_seconds: 60.0
+  learner_recovery_wait_seconds: 120.0
+maintenance:
+  archive_batch_rows: 256
+  recent_batch_dedup_count: 64
+  quarantine_records_per_contributor: 64
+  publication_orphan_grace_seconds: 40.0
+config_schema_version: 1
+run:
+  name: full_protocol_static
+model:
+  name_or_path: synthetic-tiny
+  dtype: float32
+  synthetic_vocab_size: 128
+  synthetic_hidden_size: 32
+data:
+  dataset_name: synthetic
+  train_split: train
+  block_size: 16
+  shuffle_blocks: true
+sync:
+  num_learners: 8
+  quorum_min: 8
+  quorum_max: 8
+  staleness_lambda: 0.0
+  scan_interval_seconds: 0.5
+  stop_after_outer_steps: 10
+syncer:
+  device: cpu
+  compute_dtype: float32
+  publish_dtype: float32
+membership:
+  mode: static
+  initial_membership_deadline_seconds: 120.0
+  registration_scan_interval_seconds: 0.5
+  registration_request_ttl_seconds: 30.0
+  heartbeat_dead_after_seconds: 30.0
+terminal:
+  admission_close_policy: global_target
+  drain_ack_timeout_seconds: 60.0
+  registration_visibility_grace_seconds: 2.0
+  proposal_visibility_grace_seconds: 5.0
+  max_terminal_merges: 0
+training:
+  inner_steps: 50
+  micro_batch_size: 1
+  gradient_accumulation_steps: 1
+  completion_mode: global_only
+  seed: 1337
+inner_optimizer:
+  name: adamw
+  lr: 0.00005
+  betas: [0.9, 0.95]
+  eps: 1.0e-8
+  weight_decay: 0.0
+  scheduler: none
+outer_optimizer:
+  name: nesterov
+  lr: 0.7
+  momentum: 0.9
+  weight_decay: 0.0
+io:
+  tensor_dtype: float32
+learner:
+  poll_latest_during_inner_steps: false
+  adopt_global_after_upload: true
+  global_adoption_strategy: replace
+leader:
+  lease_duration_seconds: 30.0
+  renew_interval_seconds: 5.0
+  max_clock_skew_seconds: 1.0
+  business_busy_timeout_ms: 5000
+  candidate_acquire_poll_seconds: 1.0
+  candidate_wait_seconds: 60.0
+  learner_recovery_wait_seconds: 120.0
+maintenance:
+  archive_batch_rows: 256
+  recent_batch_dedup_count: 64
+  quarantine_records_per_contributor: 64
+  publication_orphan_grace_seconds: 40.0
+[0m
+[0m✱ [0mGrep "stream_pool_size|bootstrap_instances|bootstrap_slots"[90m in fs_diloco · 48 matches[0m
+[0m→ [0mRead scripts/miyabi/check_full_protocol_run.py
+[0m✱ [0mGrep "final_state"[90m in fs_diloco/storage/authority.py · 6 matches[0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [limit=180, offset=880][0m
+[0m→ [0mRead fs_diloco/storage/schema.sql
+[0m→ [0mRead fs_diloco/syncer.py
+[0m→ [0mRead fs_diloco/learner.py
+[0m→ [0mRead scripts/miyabi/run_full_protocol_rank.sh
+[0m→ [0mRead reports/DOING/code_review/plan03-1/critical-current-fs-diloco/codex-gpt_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
+[0m→ [0mRead scripts/miyabi/check_plan_completion.py
+[0m→ [0mRead tests/architecture/test_plan_complete_dead_surfaces.py
+[0m✱ [0mGrep "fs_diloco\.cli|from fs_diloco import cli|import cli"[90m 6 matches[0m
+[0m✱ [0mGrep "from \.protocol import|from fs_diloco\.protocol import"[90m 4 matches[0m
+[0m
+[0m$ [0mgrep -rn "review_artifact_version" /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/reports/ /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/scripts/ 2>/dev/null | grep -v ".diff" | grep -v ".stderr.log"
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/reports/DOING/plan03-1/artifact-schema.md:84:Codex review artifacts use `review_artifact_version: 2`. They bind the internal
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/scripts/miyabi/check_plan_completion.py:588:        "review_artifact_version",
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/scripts/miyabi/check_plan_completion.py:606:        payload["review_artifact_version"] != 2
+[0m
+[0m→ [0mRead reports/DOING/plan03-1/formal-ladder-manifest.json
+[0m
+[0m$ [0mls -la /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/reports/DOING/plan03-1/ /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/reports/DOING/code_review/plan03-1/critical-current-fs-diloco/:
+total 324
+dr-xr-x---  2 x10041 xg24i002   4096 Aug 10 21:55 .
+dr-xr-x--- 21 x10041 xg24i002   4096 Aug 10 21:55 ..
+-r--r-----  1 x10041 xg24i002  49486 Aug 10 21:55 claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.md
+-r--r-----  1 x10041 xg24i002  51385 Aug 10 21:55 claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.json
+-r--r-----  1 x10041 xg24i002      0 Aug 10 21:55 claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log
+-r--r-----  1 x10041 xg24i002   3087 Aug 10 21:55 codex-gpt_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
+-r--r-----  1 x10041 xg24i002    604 Aug 10 21:55 deepseek-v4-flash_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt
+-r--r-----  1 x10041 xg24i002 114245 Aug 10 21:55 deepseek-v4-flash_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log
+-r--r-----  1 x10041 xg24i002   4814 Aug 10 21:55 finding-dispositions_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
+-r--r-----  1 x10041 xg24i002    460 Aug 10 21:55 glm-5.2_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt
+-r--r-----  1 x10041 xg24i002   3284 Aug 10 21:55 glm-5.2_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log
+-r--r-----  1 x10041 xg24i002      0 Aug 10 21:55 kimi-k3_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854_raw.txt
+-r--r-----  1 x10041 xg24i002  54328 Aug 10 21:55 kimi-k3_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.stderr.log
+-r--r-----  1 x10041 xg24i002   3771 Aug 10 21:55 prompt-source_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
+-r--r-----  1 x10041 xg24i002   5791 Aug 10 21:55 reviewer-job_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.json
+-r--r-----  1 x10041 xg24i002   4331 Aug 10 21:55 review-request_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.md
+
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/reports/DOING/plan03-1/:
+total 156
+dr-xr-x--- 3 x10041 xg24i002  4096 Aug 10 21:55 .
+dr-xr-x--- 4 x10041 xg24i002    41 Aug 10 21:55 ..
+dr-xr-x--- 2 x10041 xg24i002  4096 Aug 10 21:55 artifacts
+-r--r----- 1 x10041 xg24i002  4197 Aug 10 21:55 artifact-schema.md
+-r--r----- 1 x10041 xg24i002  9598 Aug 10 21:55 code_review.md
+-r--r----- 1 x10041 xg24i002 15089 Aug 10 21:55 failures.md
+-r--r----- 1 x10041 xg24i002  6949 Aug 10 21:55 formal-ladder-manifest.json
+-r--r----- 1 x10041 xg24i002  4977 Aug 10 21:55 identity-authority.md
+-r--r----- 1 x10041 xg24i002  4441 Aug 10 21:55 inventory.md
+-r--r----- 1 x10041 xg24i002  8035 Aug 10 21:55 p3-functional-fault-manifest.json
+-r--r----- 1 x10041 xg24i002  2690 Aug 10 21:55 plan-complete-remediation.md
+-r--r----- 1 x10041 xg24i002 58572 Aug 10 21:55 progress.md
+-r--r----- 1 x10041 xg24i002  6124 Aug 10 21:55 requirement-matrix.csv
+-r--r----- 1 x10041 xg24i002  2625 Aug 10 21:55 test-ladder.md
+-r--r----- 1 x10041 xg24i002  4037 Aug 10 21:55 workflow_state.yaml
+[0m
+[0m→ [0mRead reports/DOING/code_review/plan03-1/critical-current-fs-diloco/reviewer-job_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.json
+[0m→ [0mRead reports/DOING/code_review/plan03-1/critical-current-fs-diloco/claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.md
+[0m
+[0m$ [0mgrep -n "schema_version\|final_state\|syncer_epochs" /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/schema_dynamic.sql
+(no output)
+[0m
+[0m$ [0mgrep -rn "AUTHORITY_SCHEMA_VERSION\|ddl_bundle_sha256" /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/fs_diloco/storage/authority.py | head -20
+23:from ..core.versions import AUTHORITY_SCHEMA_VERSION, PROTOCOL_VERSION
+175:def ddl_bundle_sha256(mode: str) -> str:
+286:    ddl_sha = ddl_bundle_sha256(mode)
+300:            connection.execute(f"PRAGMA user_version={AUTHORITY_SCHEMA_VERSION}")
+312:                    AUTHORITY_SCHEMA_VERSION,
+341:            "authority_schema_version": AUTHORITY_SCHEMA_VERSION,
+363:        schema_version=AUTHORITY_SCHEMA_VERSION,
+391:    expected_ddl = ddl_bundle_sha256(mode)
+402:        "schema_version": AUTHORITY_SCHEMA_VERSION,
+420:        "authority_schema_version": AUTHORITY_SCHEMA_VERSION,
+434:    if int(connection.execute("PRAGMA user_version").fetchone()[0]) != AUTHORITY_SCHEMA_VERSION:
+445:        schema_version=AUTHORITY_SCHEMA_VERSION,
+[0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [limit=130, offset=160][0m
+[0m→ [0mRead fs_diloco/storage/schema_dynamic.sql
+[0m→ [0mRead scripts/miyabi/run_validation_suite.py
+[0m✱ [0mGrep "def test_|syncer_epochs|replaced_learner|takeover|replacement"[90m in tests/harness/test_full_protocol_harness.py · 95 matches[0m
+[0m→ [0mRead tests/harness/test_full_protocol_harness.py[90m [limit=200, offset=40][0m
+[0m→ [0mRead tests/harness/test_full_protocol_harness.py[90m [limit=200, offset=240][0m
+[0m→ [0mRead tests/harness/test_full_protocol_harness.py[90m [limit=180, offset=440][0m
+[0m→ [0mRead tests/harness/test_plan_completion.py[90m [limit=160, offset=40][0m
+[0m→ [0mRead tests/harness/test_plan_completion.py[90m [limit=140, offset=200][0m
+[0m
+[0m$ [0mrg -in --glob '*.py' --glob '*.yaml' --glob '*.sql' --glob '*.sh' --glob '*.pbs' --glob '*.md' --glob '*.toml' '(?i)\b(?:full[ _-]?protocol|fs[ _-]?diloco|protocol|schema|config)[ _.-]*v[0-9]+\b|\bv[0-9]+[ _.-]*(?:full[ _-]?protocol|fs[ _-]?diloco|legacy|protocol|schema|config)\b' fs_diloco configs scripts/miyabi tests docs README.md pyproject.toml 2>/dev/null | grep -v ".diff" || echo "NO MATCHES"
+NO MATCHES
+[0m
+[0m$ [0mcd /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek && python3 -c "
+import re
+pattern = re.compile(r'(?i)\b(?:full[ _-]?protocol|fs[ _-]?diloco|protocol|schema|config)[ _.-]*v[0-9]+\b|\bv[0-9]+[ _.-]*(?:full[ _-]?protocol|fs[ _-]?diloco|legacy|protocol|schema|config)\b')
+import pathlib
+exts = {'.py','.yaml','.sql','.sh','.pbs','.md','.toml'}
+count=0
+for p in pathlib.Path('.').rglob('*'):
+    if p.suffix not in exts: continue
+    text=p.read_text(encoding='utf-8')
+    m=pattern.search(text)
+    if m:
+        print(p, repr(m.group(0))); count+=1
+print('total', count)
+"
+plans/DOING/plans/plan03-1.md 'Full Protocol v4'
+plans/DONE/plan03/fsb_decoupled_diloco_code_architecture_review.md 'FullProtocolV1'
+plans/DONE/plan03/fsb_decoupled_diloco_plan_03_unified_ha.md 'protocol-v2'
+reports/DOING/code_review/plan03-1/critical-current-fs-diloco/claude-opus-5_4ebee6339fb76f63127874c655d7b109b2ec0b39_2519854.md 'Full Protocol v4'
+reports/DOING/plan03-1/inventory.md 'config_v4'
+reports/checked/code_review/fsb_decoupled_diloco_plan_02/phase-2/gpt-5.6-sol_7feb09992b7f40b255e0858020a50d811a602b9c.md 'schema v3'
+reports/checked/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P1-typed-foundation/gpt-5.6-sol_0fa1286b7da1782a913fb02f56a1a8d1b27a2c4e.md 'schema_v4'
+reports/checked/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P2-correctness-measurement/gpt-5.6-sol_e4aba3ee0aee804b8deabb77a9b28bafcbcac7ef.md 'schema_v4'
+reports/checked/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P3-operational-robustness/claude-opus-5_9e1b8238c11b15b88883dffc868ef2cd89adb1b9.md 'schema_v4'
+reports/checked/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P3-operational-robustness/claude-opus-5_de3d27879fdef188afa03a233acd4b40d90e5feb.md 'schema_v4'
+reports/checked/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P4-mandatory-fenced-runtime/gpt-5.6-sol_0e8b14ed08eacda710a0f1b4ebf3b19f921f31e4.md 'v4 config'
+reports/checked/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P5-delete-classic-refactor/claude-opus-5_d2dbfed19eb5e9e0835167c13da40a80bc15273a.md 'config_v4'
+reports/checked/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P5-delete-classic-refactor/claude-opus-5_eb56219e13817b1f659921ea093c2dfdfa473abd.md 'schema_v4'
+reports/checked/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P6-acceptance-final-review/claude-opus-5_557874c1761e10dcc0243f0f315742b386d553d8.md 'schema_v4'
+reports/checked/code_review/fsb_decoupled_diloco_plan_03_unified_ha/P6-acceptance-final-review/claude-opus-5_e3a89c784005acb6c92603d6fea24170bea4daf5.md 'schema_v4'
+reports/checked/code_review/fsb_decoupled_diloco_plan_03_unified_ha/plan-complete-remediation/gpt-5.6-sol_397e2b7d96d339b69bbb8f6f9e78a024346786c8.md 'v4 config'
+reports/checked/code_review/fsb_decoupled_diloco_plan_03_unified_ha/plan-complete-remediation/gpt-5.6-sol_3cd7dab0ca846a9914b8e6784c7fc11e818a7ade.md 'v4 config'
+reports/checked/code_review/fsb_decoupled_diloco_plan_03_unified_ha/plan-complete-remediation/gpt-5.6-sol_9b7e1dacdecbea8951121b3f70a6caece481a380.md 'full-protocol-v4'
+reports/checked/code_review/fsb_decoupled_diloco_plan_03_unified_ha/plan-complete/gpt-5.6-sol_e0f4c9b88eab4a462c49e9746d8ac5da8fb8c6b0.md 'config_v4'
+reports/checked/fsb_decoupled_diloco_plan_02/progress.md 'schema v2'
+reports/checked/fsb_decoupled_diloco_plan_03_unified_ha/code_review.md 'ConfigV4'
+reports/checked/fsb_decoupled_diloco_plan_03_unified_ha/failures.md 'ConfigV4'
+reports/checked/fsb_decoupled_diloco_plan_03_unified_ha/implementation-retrospective.md 'Full Protocol v4'
+reports/checked/fsb_decoupled_diloco_plan_03_unified_ha/plan-complete-remediation.md 'config_v4'
+reports/checked/fsb_decoupled_diloco_plan_03_unified_ha/progress.md 'v4 config'
+total 25
+[0m
+[0m$ [0mcd /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek && python3 -c "
+import ast, pathlib
+types = set()
+for p in pathlib.Path('fs_diloco').rglob('*.py'):
+    tree = ast.parse(p.read_text(encoding='utf-8'))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and __import__('re').search(r'V[0-9]+\$', node.name):
+            types.add(node.name)
+print(sorted(types))
+"
+['CycleReceiptV1', 'FullUpdateProposalV2']
+[0m
+[0m$ [0mcd /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek && python3 -c "
+import tomllib
+with open('pyproject.toml','rb') as f:
+    m = tomllib.load(f)
+print('requires-python:', m['project'].get('requires-python'))
+print('scripts:', m['project'].get('scripts'))
+print('ruff target-version:', m['tool']['ruff'].get('target-version'))
+print('.python-version:', open('.python-version').read().strip())
+"
+Traceback (most recent call last):
+  File "<string>", line 2, in <module>
+ModuleNotFoundError: No module named 'tomllib'
+[0m
+[0m→ [0mRead tests/harness/test_plan_completion.py[90m [limit=30][0m
+[0m✱ [0mGrep "schema_version = 10|SCHEMA_VERSION == 10|= 10\b|'terminal'"[90m 26 matches[0m
+[0m✱ [0mGrep "def epoch_stop_path|def owner_short|def epoch_membership_dir"[90m in fs_diloco/storage/paths.py · 3 matches[0m
+[0m✱ [0mGrep "syncer_takeover_boundary_version"[90m in reports/DOING/plan03-1/formal-ladder-manifest.json · 1 match[0m
+[0m→ [0mRead fs_diloco/storage/paths.py[90m [limit=70, offset=155][0m
+[0m→ [0mRead scripts/miyabi/check_plan_completion.py[90m [limit=30, offset=146][0m
+[0m
+[0m$ [0mcd /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek && python3 -c "
+import json
+manifest = json.load(open('reports/DOING/plan03-1/formal-ladder-manifest.json'))
+for gate in manifest['gates']:
+    if gate['id'] == 'F1-final-syncer-takeover':
+        print(json.dumps(gate['workload'], indent=2, sort_keys=True))
+"
+{
+  "committed_global_steps": 4,
+  "config": "configs/full_protocol_functional.yaml",
+  "direct_weight_tokens_applied": 5120,
+  "fault_scenario": "syncer_takeover",
+  "learners": 4,
+  "local_optimizer_steps_per_cycle": 20,
+  "syncer_takeover_boundary_version": 2
+}
+[0m
+[0m$ [0mcd /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek && python3 -c "
+import json
+manifest = json.load(open('reports/DOING/plan03-1/formal-ladder-manifest.json'))
+# reconstruct _manifest_workload from check_plan_completion GATE_CONTRACTS
+contracts = {
+ 'F1-final-syncer-takeover': {'config':'configs/full_protocol_functional.yaml','fault_scenario':'syncer_takeover','contributors':4,'inner_steps':20,'global_steps':4,'direct_tokens':5120},
+}
+for gate in manifest['gates']:
+    if gate['id'] == 'F1-final-syncer-takeover':
+        c = contracts['F1-final-syncer-takeover']
+        projected = {'config':c['config'],'fault_scenario':c['fault_scenario'],'learners':c['contributors'],'local_optimizer_steps_per_cycle':c['inner_steps'],'committed_global_steps':c['global_steps'],'direct_weight_tokens_applied':c['direct_tokens']}
+        print('manifest workload == projected?', gate['workload'] == projected)
+        print('manifest keys:', sorted(gate['workload'].keys()))
+        print('projected keys:', sorted(projected.keys()))
+"
+manifest workload == projected? False
+manifest keys: ['committed_global_steps', 'config', 'direct_weight_tokens_applied', 'fault_scenario', 'learners', 'local_optimizer_steps_per_cycle', 'syncer_takeover_boundary_version']
+projected keys: ['committed_global_steps', 'config', 'direct_weight_tokens_applied', 'fault_scenario', 'learners', 'local_optimizer_steps_per_cycle']
+[0m
+[0m$ [0mcd /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek && python3 -c "
+import json
+manifest = json.load(open('reports/DOING/plan03-1/formal-ladder-manifest.json'))
+contracts = {
+ 'F1-final-functional-normal': {'config':'configs/full_protocol_functional.yaml','fault_scenario':'none','contributors':4,'inner_steps':20,'global_steps':4,'direct_tokens':5120},
+ 'F1-final-learner-replacement': {'config':'configs/full_protocol_functional.yaml','fault_scenario':'learner_replacement','contributors':4,'inner_steps':20,'global_steps':4,'direct_tokens':5120},
+ 'F1-final-syncer-takeover': {'config':'configs/full_protocol_functional.yaml','fault_scenario':'syncer_takeover','contributors':4,'inner_steps':20,'global_steps':4,'direct_tokens':5120},
+ 'G1-final-formal-8l1s': {'config':'configs/full_protocol_static.yaml','fault_scenario':'none','contributors':8,'inner_steps':50,'global_steps':10,'direct_tokens':64000},
+}
+for gate in manifest['gates']:
+    if gate['id'] in contracts:
+        c = contracts[gate['id']]
+        projected = {'config':c['config'],'fault_scenario':c['fault_scenario'],'learners':c['contributors'],'local_optimizer_steps_per_cycle':c['inner_steps'],'committed_global_steps':c['global_steps'],'direct_weight_tokens_applied':c['direct_tokens']}
+        print(gate['id'], gate['workload'] == projected)
+"
+F1-final-functional-normal True
+F1-final-learner-replacement True
+F1-final-syncer-takeover False
+G1-final-formal-8l1s True
+[0m
+[0m$ [0mfind /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/tests -type d | sort && echo "---support---" && find /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/tests/support -type f 2>/dev/null
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/tests
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/tests/architecture
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/tests/harness
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/tests/protocol
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/tests/runtime
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/tests/storage
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/tests/support
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/tests/tools
+---support---
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/tests/support/__init__.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/tests/support/clock.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/tests/support/fault_tape.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/tests/support/ids.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/tests/support/pbs.py
+/tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek/tests/support/protocol.py
+[0m
+[0m$ [0mcd /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek && python3 -c "
+import ast
+src = open('tests/runtime/test_syncer_composition.py').read()
+tree = ast.parse(src)
+imports = [n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)]
+for i in imports:
+    print(i.module, [a.name for a in i.names])
+"
+__future__ ['annotations']
+pathlib ['Path']
+types ['SimpleNamespace']
+fs_diloco.core.config ['Config']
+fs_diloco.core.run_descriptor ['DescriptorAuthorityIdentity', 'LoadedRunDescriptor']
+fs_diloco.protocol.contributor ['StaticContributorFence', 'StaticMembershipScope']
+fs_diloco.protocol.cycle_receipt ['CycleReceiptV1', 'canonical_receipt_relative_path']
+fs_diloco.runtime.syncer ['_admit_requests', '_ingest_proposals']
+fs_diloco.storage.admission ['publish_static_request_with_sha256']
+fs_diloco.storage.atomic_io ['read_json']
+fs_diloco.storage.authority ['AuthorityIdentity', 'CommandConflictError', 'LeaderAuthority', 'initialize_authority']
+fs_diloco.storage.paths ['RunPaths', 'prepare_authority_dirs']
+tests.support.protocol ['proposal', 'receipt_payload']
+[0m
+[0m$ [0mcd /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek && grep -n "def publish_static_request_with_sha256\|def read_json" fs_diloco/storage/admission.py fs_diloco/storage/atomic_io.py && grep -n "class DescriptorAuthorityIdentity\|class LoadedRunDescriptor" fs_diloco/core/run_descriptor.py && grep -n "def proposal\|def receipt_payload" tests/support/protocol.py
+fs_diloco/storage/admission.py:109:def publish_static_request_with_sha256(
+fs_diloco/storage/atomic_io.py:189:def read_json(path: str | Path) -> dict[str, Any]:
+42:class LoadedRunDescriptor:
+50:class DescriptorAuthorityIdentity:
+46:def receipt_payload(
+82:def proposal_payload(
+128:def proposal(**kwargs: Any) -> FullUpdateProposalV2:
+[0m
+[0m$ [0mcd /tmp/2520922.7876/fsdiloco-review.2520922.u8Ncni/repository-deepseek && grep -n "def __init__" fs_diloco/storage/authority.py | head -3 && sed -n '680,720p' fs_diloco/storage/authority.py
+98:    def __init__(self, result: ReadResult[Any]) -> None:
+457:    def __init__(self, authority: "AuthorityReader | LeaderAuthority") -> None:
+733:    def __init__(
+        if cutoff_version < 0:
+            return ()
+        return tuple(_audit_history_records(self._authority._connection, cutoff_version))
+
+    def audit_archive_summary(self) -> dict[str, int]:
+        row = self._authority._fetchone(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM archive_batches) AS hot_batches,
+                (SELECT COUNT(*) FROM archive_partitions WHERE state='committed') AS partitions,
+                (SELECT COALESCE(SUM(source_batch_count), 0) FROM archive_partitions
+                    WHERE state='committed') AS folded_batches,
+                (SELECT COUNT(*) FROM audit_partition_batches) AS folded_batch_index_rows,
+                (SELECT COUNT(*) FROM audit_gc_candidates WHERE state='pending') AS pending_gc,
+                (SELECT COUNT(*) FROM audit_gc_candidates WHERE state='claimed') AS claimed_gc
+            """
+        )
+        assert row is not None
+        return {key: int(row[key]) for key in row.keys()}
+
+    def audit_hot_batches(self) -> tuple[dict[str, Any], ...]:
+        rows = self._authority._fetchall(
+            "SELECT * FROM archive_batches WHERE state='committed' "
+            "ORDER BY cutoff_version, archive_batch_id"
+        )
+        return tuple(dict(row) for row in rows)
+
+    def artifact_gc_ready(self, *, claimant_epoch: int) -> bool:
+        now = float(self._authority._wall_clock())
+        return (
+            self._authority._fetchone(
+                "SELECT 1 FROM gc_candidates "
+                "WHERE not_before<=? AND (state='pending' "
+                "OR (state='claimed' AND claimed_by_epoch<>?)) LIMIT 1",
+                (now, claimant_epoch),
+            )
+            is not None
+        )
+
+    def audit_gc_ready(self, *, claimant_epoch: int) -> bool:
+        return (
+[0m
+[0m✱ [0mGrep "def bind_or_replace_static_attempt|def replay_committed_static_binding"[90m in fs_diloco/storage/authority.py · 2 matches[0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [limit=190, offset=1086][0m
+[0m→ [0mRead tests/support/protocol.py

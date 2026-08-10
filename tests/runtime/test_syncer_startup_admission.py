@@ -9,6 +9,7 @@ import pytest
 
 from fs_diloco.runtime import syncer_entrypoint
 from fs_diloco.runtime.syncer_entrypoint import _admit_before_runtime_import
+from fs_diloco.storage.authority import AuthoritySchemaError
 from fs_diloco.storage.leader_lease import StaleLeaderTokenError
 
 
@@ -134,13 +135,16 @@ def test_syncer_admission_modules_load_without_torch() -> None:
     assert probe.returncode == 0, probe.stdout + probe.stderr
 
 
-def test_successful_candidate_does_not_swallow_release_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("body_failure", [False, True])
+def test_candidate_cleanup_preserves_primary_failure_and_surfaces_release_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body_failure: bool
 ) -> None:
     config_path = tmp_path / "resolved.yaml"
     config_path.write_text("config_schema_version: 1\n", encoding="utf-8")
     token = SimpleNamespace(epoch=1, owner_id="owner-1")
     closed: list[bool] = []
+    release_calls: list[bool] = []
+    failure_calls: list[bool] = []
 
     class FakeAuthority:
         def __init__(self, *_args, **_kwargs) -> None:
@@ -156,7 +160,12 @@ def test_successful_candidate_does_not_swallow_release_failure(
             return SimpleNamespace()
 
         def release_leader(self, _token) -> None:
+            release_calls.append(True)
             raise StaleLeaderTokenError("release crossed the safety boundary")
+
+        def fail_leader(self, _token) -> None:
+            failure_calls.append(True)
+            raise RuntimeError("error fencing failed")
 
         def close(self) -> None:
             closed.append(True)
@@ -166,6 +175,9 @@ def test_successful_candidate_does_not_swallow_release_failure(
             pass
 
         def publish_heartbeat(self, _lease) -> None:
+            pass
+
+        def publish_error(self, **_kwargs) -> None:
             pass
 
     class FakeRenewer:
@@ -222,11 +234,18 @@ def test_successful_candidate_does_not_swallow_release_failure(
     monkeypatch.setattr("fs_diloco.storage.authority.LeaderAuthority", FakeAuthority)
     monkeypatch.setattr("fs_diloco.storage.control.ControlPublisher", FakeControl)
     monkeypatch.setattr("fs_diloco.runtime.syncer._admit_requests", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(
-        "fs_diloco.runtime.syncer.run_fenced_syncer", lambda *_args, **_kwargs: None
-    )
 
-    with pytest.raises(StaleLeaderTokenError, match="release crossed"):
+    def run_candidate(*_args, **_kwargs) -> None:
+        if body_failure:
+            raise AuthoritySchemaError("primary candidate failure")
+
+    monkeypatch.setattr("fs_diloco.runtime.syncer.run_fenced_syncer", run_candidate)
+
+    expected_type = AuthoritySchemaError if body_failure else StaleLeaderTokenError
+    expected_message = "primary candidate failure" if body_failure else "release crossed"
+    with pytest.raises(expected_type, match=expected_message):
         syncer_entrypoint.main(["--config", str(config_path), "--shared-root", str(tmp_path)])
 
     assert closed == [True]
+    assert failure_calls == ([True] if body_failure else [])
+    assert release_calls == ([] if body_failure else [True])

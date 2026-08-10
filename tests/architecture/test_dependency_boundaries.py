@@ -33,5 +33,7 @@ def test_protocol_is_dependency_free_of_runtime_storage_and_pathlib() -> None:
 
 
 def test_storage_does_not_import_runtime() -> None:
-    for path in (ROOT / "fs_diloco/storage").glob("*.py"):
+    storage_modules = tuple((ROOT / "fs_diloco/storage").glob("*.py"))
+    assert storage_modules, "storage module inventory is empty"
+    for path in storage_modules:
         assert not any("runtime" in item for item in imports(path)), path

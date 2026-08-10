@@ -238,6 +238,7 @@ def main(argv: list[str] | None = None) -> None:
                 telemetry=telemetry,
             )
         except BaseException as exc:
+            candidate_failed = True
             try:
                 control.publish_error(
                     attempt_id=attempt_id,
@@ -250,7 +251,6 @@ def main(argv: list[str] | None = None) -> None:
                 )
             try:
                 authority.fail_leader(token)
-                candidate_failed = True
             except Exception as failure_error:
                 exc.add_note(f"candidate error fencing also failed: {failure_error!r}")
             raise
@@ -262,7 +262,3 @@ def main(argv: list[str] | None = None) -> None:
                 authority.release_leader(token)
         finally:
             authority.close()
-
-
-if __name__ == "__main__":
-    main()

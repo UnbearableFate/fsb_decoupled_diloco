@@ -158,6 +158,10 @@ def _gate_payload(contract: dict[str, object], source: dict[str, object], raw: P
         }
     else:
         common["fault_scenario"] = contract["fault_scenario"]
+        if "syncer_takeover_boundary_version" in contract:
+            common["syncer_takeover_boundary_version"] = contract[
+                "syncer_takeover_boundary_version"
+            ]
         common["workload_identity"] = {
             "configured_local_steps": contract["inner_steps"],
             "committed_global_steps": contract["global_steps"],

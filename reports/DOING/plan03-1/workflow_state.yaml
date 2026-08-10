@@ -4,7 +4,7 @@ branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P4-formal-and-docs
 work_unit_id: P4-W10-current-review-remediation
-state: EXTERNAL_TEST_REVIEW
+state: TEST_REMEDIATION
 base_commit: 5b474d5c1735beb8cca922fd6cc7b6304926df2c
 target_commit: 74ecd4fb64311c69ae0d758d8c1d99b27a9c5572
 formal_source_commit: null
@@ -62,19 +62,15 @@ invalidated_evidence:
   - final-f1-normal-target-5b474d5-invalidated-by-current-review-remediation
 external_review:
   pbs_job_id: 2520922.opbs
-  status: running
+  status: completed-with-findings
 open_blocking_findings:
-  - FSD-M1
-  - FSD-M2
-  - FSD-M3
-  - FSD-M4
-  - FSD-M5
-  - FSD-M6
-  - FSD-M7
-  - FSD-L1
-  - FSD-L2
-  - FSD-L3
-  - FSD-L4
-  - FSD-L5
-  - FSD-L6
-allowed_next_action: await_current_review_remediation_multi_agent_review
+  - FSD-R1
+  - FSD-R2
+  - FSD-R3
+  - FSD-R4
+  - FSD-R5
+  - FSD-R6
+  - FSD-R7
+  - FSD-R8
+  - FSD-R9
+allowed_next_action: implement_external_current_review_findings

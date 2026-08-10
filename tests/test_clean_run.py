@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import sqlite3
 from pathlib import Path
@@ -8,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from fs_diloco.storage.artifact_policy import build_artifact_policy
+from fs_diloco.storage.paths import RunPaths
 from fs_diloco.tools.clean_run import (
     CleanupRefusedError,
     build_cleanup_plan,
@@ -55,10 +55,7 @@ def _completed_run(project: Path, name: str = "completed-run") -> tuple[Path, Pa
             """
         )
         connection.execute("UPDATE run_identity SET run_id=?", (name,))
-    owner_short = hashlib.sha256(b"syncer-owner").hexdigest()[:12]
-    immutable_stop = (
-        run / "control/syncer_epochs" / f"e000001_{owner_short}" / "terminal/stop_g000001.json"
-    )
+    immutable_stop = RunPaths(run).epoch_stop_path(1, "syncer-owner", 1)
     immutable_stop.parent.mkdir(parents=True)
     immutable_stop.write_text(json.dumps(stop), encoding="utf-8")
     immutable_stop.chmod(0o444)

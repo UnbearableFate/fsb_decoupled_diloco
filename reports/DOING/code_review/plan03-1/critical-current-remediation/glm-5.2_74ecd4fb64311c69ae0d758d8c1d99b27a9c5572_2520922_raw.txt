@@ -1,0 +1,16 @@
+I'll start by exploring the repository structure and reading the key files mentioned in the reviewrequest.
+This is a read-only code review task. Let me thoroughly inspect the target snapshot. I'll read the key files inparallel.
+Let me read the key implementation files and the diff for the corechanges.
+Let me read the runtime syncer files, schema, versions, and the new tests.
+Now let me read the test files, configs, and checkers.
+Let me read the configs, dead-surfaces test, checkers, and protocol cycle_receipt/proposal modules.
+Let me look at the protocol wire-type modules and search for the content-scan test (FSD-M4).
+Let me read the checkers, harness test, schema test, and the diff for the cli/config/remediation areas.
+Let me look at the diff sections for the remediation and the remaining tests. Let me read the harness test, schema test, and the diff for the changed testfiles.
+Let me examine the diff for key changed files to understand the remediation scope.
+Let me verify there are no lingering obsolete references and check the config.py diff for FSD-L1/L6.
+Let me read the config.py diff to verify the FSD-L1/L6 source validation.
+Let me check whether dynamic-scaling-strict-when-enabled has test coverage and verify the tools resolve_scheduler_uncertainty test.
+Let me check the identity-authority.md and code_review.md diffs to verify FSD-M2 oracle documentation and the reviewer-lane representation.
+Let me verify the code_review.md and formal-ladder-manifest diffs for the reviewer-lane representation invariant.
+Let me check whether the authorized positive static-replacement admission path through `_admit_requests` has unit coverage anywhere.

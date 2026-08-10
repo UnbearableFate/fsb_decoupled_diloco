@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from ..storage.artifact_policy import ArtifactClass, ArtifactPolicy
+from ..storage.paths import RunPaths
 
 
 class CleanupRefusedError(RuntimeError):
@@ -204,16 +205,10 @@ def _terminal_identity(run_root: Path) -> tuple[str, dict[str, Any], dict[str, A
         or int(terminal["final_version"]) != int(summary["final_version"])
     ):
         raise CleanupRefusedError("terminal filesystem controls do not match durable authority")
-    owner_short = hashlib.sha256(
-        str(terminal["finalized_by_owner_id"]).encode("utf-8")
-    ).hexdigest()[:12]
-    immutable_stop = (
-        run_root
-        / "control"
-        / "syncer_epochs"
-        / f"e{int(terminal['finalized_by_epoch']):06d}_{owner_short}"
-        / "terminal"
-        / f"stop_g{int(terminal['generation']):06d}.json"
+    immutable_stop = RunPaths(run_root).epoch_stop_path(
+        int(terminal["finalized_by_epoch"]),
+        str(terminal["finalized_by_owner_id"]),
+        int(terminal["generation"]),
     )
     try:
         immutable_metadata = immutable_stop.lstat()

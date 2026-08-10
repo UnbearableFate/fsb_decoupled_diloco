@@ -49,6 +49,7 @@ def _build_valid_checker_fixture(
     tmp_path: Path,
     *,
     fault_scenario: str = "none",
+    syncer_takeover_boundary_version: int = 2,
 ) -> tuple[Path, Path, list[str], dict[str, str]]:
     global_steps_by_scenario = {
         "none": 1,
@@ -249,7 +250,7 @@ def _build_valid_checker_fixture(
                     "fault_boundary": {
                         "sqlite_transaction_active": False,
                         "lease_renewer_quiesced": True,
-                        "committed_version": 2,
+                        "committed_version": syncer_takeover_boundary_version,
                         "pid": 101,
                         "epoch": token.epoch,
                     },
@@ -356,7 +357,7 @@ def _build_valid_checker_fixture(
         "--fault-scenario",
         fault_scenario,
         "--syncer-takeover-boundary-version",
-        "2",
+        str(syncer_takeover_boundary_version),
         "--output",
         str(output),
     ]
@@ -445,6 +446,36 @@ def test_aggregate_checker_accepts_registered_fault_behavior(
         assert artifact["fault_evidence"]["learner_replacement"] is not None
     else:
         assert artifact["fault_evidence"]["syncer_takeover"] is not None
+
+
+def test_syncer_takeover_boundary_is_argument_bound_and_durable(tmp_path: Path) -> None:
+    _run_root, output, command, environment = _build_valid_checker_fixture(
+        tmp_path / "matching",
+        fault_scenario="syncer_takeover",
+        syncer_takeover_boundary_version=3,
+    )
+
+    completed, artifact = _run_checker(command, environment, output)
+
+    assert completed.returncode == 0, completed.stderr
+    assert artifact["status"] == "PASS"
+    assert artifact["syncer_takeover_boundary_version"] == 3
+
+    _run_root, output, command, environment = _build_valid_checker_fixture(
+        tmp_path / "mismatch",
+        fault_scenario="syncer_takeover",
+        syncer_takeover_boundary_version=3,
+    )
+    boundary_index = command.index("--syncer-takeover-boundary-version") + 1
+    command[boundary_index] = "2"
+
+    completed, artifact = _run_checker(command, environment, output)
+
+    assert completed.returncode == 1
+    assert artifact["status"] == "FAIL"
+    assert (
+        "syncer takeover evidence does not prove the registered fault layer" in artifact["errors"]
+    )
 
 
 @pytest.mark.parametrize(

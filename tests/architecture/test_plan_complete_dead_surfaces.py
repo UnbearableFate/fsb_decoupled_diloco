@@ -82,6 +82,8 @@ def test_runtime_composition_has_one_current_actor_boundary() -> None:
     assert "run_fenced_syncer" in syncer
     assert {"build_parser", "main"} <= learner_entrypoint
     assert {"build_parser", "main"} <= syncer_entrypoint
+    assert "__main__" not in learner_entrypoint
+    assert "__main__" not in syncer_entrypoint
     assert "from .runtime.learner_entrypoint import main" in public_learner_source
     assert '"main"' in public_learner_source
     assert "from .runtime.syncer_entrypoint import main" in public_syncer_source

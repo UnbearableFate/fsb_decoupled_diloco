@@ -161,7 +161,3 @@ def main(argv: list[str] | None = None) -> None:
     from .learner import run_admitted_learner
 
     run_admitted_learner(loaded, admission)
-
-
-if __name__ == "__main__":
-    main()

@@ -1021,3 +1021,20 @@
   `74ecd4fb64311c69ae0d758d8c1d99b27a9c5572` using the four current lanes.
 - Runtime testing remains blocked until the terminal summary, model identity,
   snapshot integrity and every valid finding are checked.
+
+## 2026-08-10T22:29:50+09:00 — external review terminal and remediation resumed
+
+- The restored four-lane reviewer job `2520922.opbs` reached terminal state on
+  `mg0011` with scheduler exit 0 after 20:14. Claude Opus 5 and MiniMax M3
+  produced valid reports; GLM-5.2 and DeepSeek V4 Flash produced invalid output.
+- Claude identified one completion-contract failure, two missing composition
+  oracles and six lower-severity current inconsistencies. Codex accepted every
+  concrete issue, while narrowing the SQLite recommendation to retry only
+  `BUSY`/`LOCKED` rather than reinstating a catch-all.
+- Implementation now binds the takeover boundary through manifest, Checker and
+  artifact; covers exact positive/mismatched static authorization and all three
+  integrity exception classes; centralizes cleanup paths; preserves primary
+  candidate failures; deletes duplicate actor module entrypoints; and makes the
+  remaining dependency scan non-vacuous.
+- These edits invalidate reviewed target `74ecd4f`. Next gate is focused and
+  full one-node compute validation, then a Codex rereview of the tested target.

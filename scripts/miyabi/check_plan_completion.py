@@ -109,6 +109,7 @@ GATE_CONTRACTS = {
         "artifact_gate": "F1-final-syncer-takeover",
         "nodes": 5,
         "fault_scenario": "syncer_takeover",
+        "syncer_takeover_boundary_version": 2,
         "contributors": 4,
         "inner_steps": 20,
         "global_steps": 4,
@@ -146,7 +147,7 @@ GATE_CONTRACTS = {
 def _manifest_workload(contract: dict[str, Any]) -> dict[str, Any]:
     if contract["kind"] == "validation":
         return contract["workload"]
-    return {
+    workload = {
         "config": contract["config"],
         "fault_scenario": contract["fault_scenario"],
         "learners": contract["contributors"],
@@ -154,6 +155,9 @@ def _manifest_workload(contract: dict[str, Any]) -> dict[str, Any]:
         "committed_global_steps": contract["global_steps"],
         "direct_weight_tokens_applied": contract["direct_tokens"],
     }
+    if "syncer_takeover_boundary_version" in contract:
+        workload["syncer_takeover_boundary_version"] = contract["syncer_takeover_boundary_version"]
+    return workload
 
 
 REVIEW_CONTRACTS = {
@@ -468,6 +472,12 @@ def _validate_validation_gate(payload: dict[str, Any], *, evidence_paths: set[Pa
 def _validate_runtime_gate(payload: dict[str, Any], contract: dict[str, Any]) -> None:
     if payload.get("fault_scenario") != contract["fault_scenario"]:
         raise RuntimeError("runtime gate fault scenario is not exact")
+    if (
+        "syncer_takeover_boundary_version" in contract
+        and payload.get("syncer_takeover_boundary_version")
+        != contract["syncer_takeover_boundary_version"]
+    ):
+        raise RuntimeError("runtime gate takeover boundary is not exact")
     environment = payload.get("environment")
     workload = payload.get("workload_identity")
     metrics = payload.get("metrics")

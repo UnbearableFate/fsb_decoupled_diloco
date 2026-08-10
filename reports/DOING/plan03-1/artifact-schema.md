@@ -35,6 +35,7 @@ workload_identity:
   direct_weight_tokens_applied: integer
   cursor_terminal: per-contributor terminal cursor
 fault_scenario: none | learner_replacement | syncer_takeover for runtime gates
+syncer_takeover_boundary_version: positive integer passed from the launcher
 metrics: object
 errors: list
 evidence_paths: non-empty list of pre-existing raw evidence paths

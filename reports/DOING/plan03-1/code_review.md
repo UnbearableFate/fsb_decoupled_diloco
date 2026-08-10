@@ -183,3 +183,19 @@ only after implementation, compute-node validation and Codex rereview.
   after disposition, compute validation.
 - This report was saved before submitting or reading any external result from
   this review round.
+
+## 2026-08-10T22:29:50+09:00 — external remediation review disposition
+
+- PBS job `2520922.opbs` finished on `mg0011` with scheduler exit 0 after
+  20:14. Every reviewer snapshot digest was unchanged.
+- Claude Opus 5 produced a valid model-verified `CHANGES_REQUIRED` report with
+  FSD-R1 through R9. MiniMax M3 produced a valid `APPROVE` report. GLM-5.2 and
+  DeepSeek V4 Flash returned `invalid-output`, not approval.
+- Dispositions are tracked in
+  `reports/DOING/code_review/plan03-1/critical-current-remediation/finding-dispositions_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md`.
+  R1 and R3 through R9 are accepted. R2 is accepted only for retryable SQLite
+  contention; its proposed catch-all is rejected because it would swallow
+  unexpected storage/integrity failures again.
+- Target `74ecd4f` is not promotable. Transition:
+  `EXTERNAL_TEST_REVIEW` -> `TEST_REMEDIATION`; close the accepted findings and
+  run compute-node validation before rereview.
