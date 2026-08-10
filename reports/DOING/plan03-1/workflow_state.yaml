@@ -1,0 +1,29 @@
+workflow_version: 3
+plan_id: plan03-1
+branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
+workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
+phase_id: P1-current-protocol
+work_unit_id: P1-W1-unversioned-surface
+state: IMPLEMENT_AND_DRAFT_TESTS
+base_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
+target_commit: null
+formal_source_commit: null
+formal_source_fingerprint: null
+experiment_id: null
+experiment_domain: null
+failure_counters: {}
+required_tests:
+  - p1-static-contracts
+  - p1-focused-unit-tests
+required_evidence:
+  - reports/DOING/plan03-1/inventory.md
+  - reports/DOING/plan03-1/requirement-matrix.csv
+  - reports/DOING/plan03-1/identity-authority.md
+  - reports/DOING/plan03-1/test-ladder.md
+  - reports/DOING/plan03-1/artifact-schema.md
+invalidated_evidence: []
+external_review:
+  pbs_job_id: null
+  status: not-started
+open_blocking_findings: []
+allowed_next_action: implement_unversioned_current_protocol_and_tests
