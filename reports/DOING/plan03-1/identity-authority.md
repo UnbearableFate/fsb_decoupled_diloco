@@ -53,18 +53,7 @@
 - Cleanup owner: the integration harness after terminal and successor-epoch
   evidence has been projected.
 
-### F-DYNAMIC-CAPACITY
-
-- Mutation authority: a stream reservation and exact launch request authorize a
-  new instance; scheduler observation alone never admits it.
-- Fault layer: scheduler/PBS observation and dynamic learner process lifecycle.
-- Injection: a reviewed 4+1 dynamic scenario changes active instance state
-  through bootstrap, replacement, and terminal drain without editing authority
-  rows out of band.
-- Durable success oracle: reservation/launch/admission rows form one identity
-  chain, no stream has two current fences, requested replacement becomes
-  productive, bounded pending counts drain, and terminal accounting closes.
-- Replay/recovery: scheduler reconciliation is keyed by exact request and full
-  PBS ID; unknown scheduler state does not produce a second submit.
-- Cleanup owner: dynamic harness only after terminal proof and scheduler/run
-  identity projection.
+Dynamic membership remains part of the single current Full Protocol and has
+focused capacity, scheduler, admission, fencing, replay and terminal unit
+coverage. It is not a registered plan03-1 multi-node fault scenario: the
+`FAULT-4L1S-01` acceptance topology is the two static scenarios above.

@@ -4,7 +4,7 @@ branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P2-tests-and-harness
 work_unit_id: P2-W1-reviewed-test-design
-state: EXTERNAL_TEST_REVIEW
+state: TEST_REMEDIATION
 base_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 target_commit: f14847498d0055e9efbd9639a4e73ec3cfebfb6b
 formal_source_commit: null
@@ -25,10 +25,13 @@ required_evidence:
 invalidated_evidence: []
 external_review:
   pbs_job_id: 2518445.opbs
-  status: running
+  status: complete-no-valid-report
 open_blocking_findings:
   - C1-aggregate-checker-acceptance-untested
   - C2-validation-failures-classified-blocked
   - C3-takeover-epoch-lifecycle-not-asserted
   - C4-module-coverage-inventory-missing
-allowed_next_action: monitor_external_test_design_review
+  - A1-allocation-failure-artifact-missing
+  - A2-fault-injection-seam-untested
+  - A4-obsolete-dynamic-runtime-scenario-registration
+allowed_next_action: implement_test_design_remediation

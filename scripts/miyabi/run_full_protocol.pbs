@@ -28,6 +28,10 @@ EXPECTED_GLOBAL_STEPS="${EXPECTED_GLOBAL_STEPS:-10}"
 EXPECTED_SYNCER_EPOCHS="${EXPECTED_SYNCER_EPOCHS:-1}"
 SYNCER_CUDA_VISIBLE_DEVICES="${SYNCER_CUDA_VISIBLE_DEVICES:-0}"
 LEARNER_CUDA_VISIBLE_DEVICES="${LEARNER_CUDA_VISIBLE_DEVICES:-0}"
+[[ ! -e "$EVIDENCE_OUTPUT" ]] || {
+  echo "EVIDENCE_OUTPUT already exists: $EVIDENCE_OUTPUT" >&2
+  exit 2
+}
 
 export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
 module list 2>&1 | cat
@@ -35,8 +39,6 @@ export PROJECT_ROOT PRIMARY_WORKTREE_ROOT PYTHON_BIN CONFIG RUN_ID SHARED_ROOT L
 export EXPECTED_NODES NUM_LEARNERS
 export SYNCER_CUDA_VISIBLE_DEVICES LEARNER_CUDA_VISIBLE_DEVICES
 export FS_DILOCO_FAULT_SCENARIO="${FS_DILOCO_FAULT_SCENARIO:-none}"
-
-bash "$PROJECT_ROOT/scripts/miyabi/run_full_protocol_allocation.sh"
 
 checker=(
   "$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/check_full_protocol_run.py"
@@ -56,4 +58,20 @@ checker=(
 if [[ -n "${EXPECTED_REPLACED_LEARNER:-}" ]]; then
   checker+=(--expected-replaced-learner "$EXPECTED_REPLACED_LEARNER")
 fi
+
+publish_blocked_on_exit() {
+  local exit_status=$?
+  trap - EXIT
+  if [[ "$exit_status" -ne 0 && ! -e "$EVIDENCE_OUTPUT" ]]; then
+    "${checker[@]}" \
+      --blocked-reason \
+      "Full Protocol execution exited before gate evidence publication (exit=$exit_status)" \
+      || true
+  fi
+  exit "$exit_status"
+}
+trap publish_blocked_on_exit EXIT
+
+bash "$PROJECT_ROOT/scripts/miyabi/run_full_protocol_allocation.sh"
 "${checker[@]}"
+trap - EXIT

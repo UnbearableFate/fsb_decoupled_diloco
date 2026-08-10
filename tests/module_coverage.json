@@ -1,0 +1,250 @@
+{
+  "schema_version": 1,
+  "groups": [
+    {
+      "boundary": "package declarations and exported current surface",
+      "surfaces": [
+        "fs_diloco/__init__.py",
+        "fs_diloco/core/__init__.py",
+        "fs_diloco/modeling/__init__.py",
+        "fs_diloco/observability/__init__.py",
+        "fs_diloco/protocol/__init__.py",
+        "fs_diloco/runtime/__init__.py",
+        "fs_diloco/runtime/services/__init__.py",
+        "fs_diloco/storage/__init__.py",
+        "fs_diloco/tools/__init__.py"
+      ],
+      "tests": [
+        "tests/architecture/test_dependency_boundaries.py",
+        "tests/architecture/test_plan_complete_dead_surfaces.py"
+      ]
+    },
+    {
+      "boundary": "public CLI and actor module entrypoints",
+      "surfaces": [
+        "fs_diloco/cli.py",
+        "fs_diloco/learner.py",
+        "fs_diloco/syncer.py"
+      ],
+      "tests": [
+        "tests/architecture/test_plan_complete_dead_surfaces.py",
+        "tests/runtime/test_syncer_startup_admission.py",
+        "tests/tools/test_launch_independent_run.py"
+      ]
+    },
+    {
+      "boundary": "configuration, descriptor, adoption, source and contract identities",
+      "surfaces": [
+        "fs_diloco/core/adoption_rules.py",
+        "fs_diloco/core/config.py",
+        "fs_diloco/core/constants.py",
+        "fs_diloco/core/run_descriptor.py",
+        "fs_diloco/core/source_identity.py",
+        "fs_diloco/core/versions.py"
+      ],
+      "tests": [
+        "tests/test_adoption_strategy.py",
+        "tests/test_capture_source_identity.py",
+        "tests/test_config.py",
+        "tests/storage/test_run_initializer.py",
+        "tests/storage/test_schema.py"
+      ]
+    },
+    {
+      "boundary": "model/data identity, construction, training and optimizer transforms",
+      "surfaces": [
+        "fs_diloco/modeling/hf_data.py",
+        "fs_diloco/modeling/hf_identity.py",
+        "fs_diloco/modeling/hf_model.py",
+        "fs_diloco/modeling/outer_optim.py",
+        "fs_diloco/modeling/param_index.py",
+        "fs_diloco/modeling/training.py"
+      ],
+      "tests": [
+        "tests/test_data_shuffle.py",
+        "tests/test_hf_revision_pinning.py",
+        "tests/test_inner_scheduler.py",
+        "tests/test_outer_optim.py",
+        "tests/test_param_index_roundtrip.py"
+      ]
+    },
+    {
+      "boundary": "structured actor telemetry publication",
+      "surfaces": ["fs_diloco/observability/logging_utils.py"],
+      "tests": [
+        "tests/runtime/test_syncer_startup_admission.py",
+        "tests/storage/test_run_initializer.py"
+      ]
+    },
+    {
+      "boundary": "typed protocol validation, contributor fences, receipts and proposals",
+      "surfaces": [
+        "fs_diloco/protocol/_validation.py",
+        "fs_diloco/protocol/authority.py",
+        "fs_diloco/protocol/contributor.py",
+        "fs_diloco/protocol/cycle_receipt.py",
+        "fs_diloco/protocol/data_cursor.py",
+        "fs_diloco/protocol/proposal.py"
+      ],
+      "tests": [
+        "tests/protocol/test_accounting_selection_cursor.py",
+        "tests/protocol/test_cycle_receipt_v1.py",
+        "tests/protocol/test_proposal_v2.py",
+        "tests/storage/test_contributor_progress.py",
+        "tests/storage/test_static_contributor_binding.py"
+      ]
+    },
+    {
+      "boundary": "merge, selection, scheduling and token-accounting pure rules",
+      "surfaces": [
+        "fs_diloco/protocol/merge.py",
+        "fs_diloco/protocol/scheduler.py",
+        "fs_diloco/protocol/selection.py",
+        "fs_diloco/protocol/token_accounting.py"
+      ],
+      "tests": [
+        "tests/protocol/test_accounting_selection_cursor.py",
+        "tests/test_merge.py"
+      ]
+    },
+    {
+      "boundary": "learner/syncer runtime composition, admission and adoption",
+      "surfaces": [
+        "fs_diloco/runtime/adoption.py",
+        "fs_diloco/runtime/learner.py",
+        "fs_diloco/runtime/learner_control.py",
+        "fs_diloco/runtime/learner_entrypoint.py",
+        "fs_diloco/runtime/syncer.py",
+        "fs_diloco/runtime/syncer_entrypoint.py"
+      ],
+      "tests": [
+        "tests/runtime/test_learner_control.py",
+        "tests/runtime/test_syncer_fault_boundary.py",
+        "tests/runtime/test_syncer_startup_admission.py",
+        "tests/runtime/test_terminal_service.py"
+      ]
+    },
+    {
+      "boundary": "PBS state normalization and scheduler uncertainty",
+      "surfaces": ["fs_diloco/runtime/pbs_scheduler.py"],
+      "tests": [
+        "tests/runtime/test_pbs_scheduler.py",
+        "tests/tools/test_resolve_scheduler_uncertainty.py"
+      ]
+    },
+    {
+      "boundary": "runtime capacity, maintenance, merge and terminal services",
+      "surfaces": [
+        "fs_diloco/runtime/services/dynamic_capacity.py",
+        "fs_diloco/runtime/services/maintenance.py",
+        "fs_diloco/runtime/services/merge.py",
+        "fs_diloco/runtime/services/terminal.py"
+      ],
+      "tests": [
+        "tests/runtime/test_dynamic_capacity_service.py",
+        "tests/runtime/test_terminal_service.py",
+        "tests/storage/test_authority_operational.py",
+        "tests/storage/test_publication.py"
+      ]
+    },
+    {
+      "boundary": "admission, authority, lease, control and terminal mutation owners",
+      "surfaces": [
+        "fs_diloco/storage/admission.py",
+        "fs_diloco/storage/authority.py",
+        "fs_diloco/storage/control.py",
+        "fs_diloco/storage/leader_lease.py",
+        "fs_diloco/storage/terminal_request.py"
+      ],
+      "tests": [
+        "tests/storage/test_authority_dynamic.py",
+        "tests/storage/test_authority_operational.py",
+        "tests/storage/test_leader_authority_commands.py",
+        "tests/storage/test_state_machine.py",
+        "tests/storage/test_terminal_request.py"
+      ]
+    },
+    {
+      "boundary": "atomic objects, tensors, policy, paths and audit retention",
+      "surfaces": [
+        "fs_diloco/storage/artifact_policy.py",
+        "fs_diloco/storage/atomic_io.py",
+        "fs_diloco/storage/audit_archive.py",
+        "fs_diloco/storage/object_store.py",
+        "fs_diloco/storage/paths.py",
+        "fs_diloco/storage/tensor_codec.py",
+        "fs_diloco/storage/tensor_identity.py"
+      ],
+      "tests": [
+        "tests/storage/test_artifact_policy.py",
+        "tests/storage/test_audit_archive.py",
+        "tests/storage/test_object_store.py",
+        "tests/test_atomic_io.py",
+        "tests/test_tensor_codec.py"
+      ]
+    },
+    {
+      "boundary": "fresh run bootstrap and current static/dynamic DDL",
+      "surfaces": [
+        "fs_diloco/storage/run_initializer.py",
+        "fs_diloco/storage/schema.sql",
+        "fs_diloco/storage/schema_dynamic.sql"
+      ],
+      "tests": [
+        "tests/storage/test_run_initializer.py",
+        "tests/storage/test_schema.py"
+      ]
+    },
+    {
+      "boundary": "current operator inspection, initialization, launch, cleanup and requests",
+      "surfaces": [
+        "fs_diloco/tools/analysis.py",
+        "fs_diloco/tools/clean_run.py",
+        "fs_diloco/tools/init_run.py",
+        "fs_diloco/tools/launch_independent_run.py",
+        "fs_diloco/tools/request_static_replacement.py",
+        "fs_diloco/tools/request_terminal_close.py",
+        "fs_diloco/tools/resolve_scheduler_uncertainty.py"
+      ],
+      "tests": [
+        "tests/test_clean_run.py",
+        "tests/storage/test_run_initializer.py",
+        "tests/storage/test_terminal_request.py",
+        "tests/tools/test_launch_independent_run.py",
+        "tests/tools/test_request_static_replacement.py",
+        "tests/tools/test_resolve_scheduler_uncertainty.py"
+      ]
+    },
+    {
+      "boundary": "Miyabi source/actor identity, launch, fault and evidence harness",
+      "surfaces": [
+        "scripts/miyabi/actor_identity.sh",
+        "scripts/miyabi/capture_source_identity.py",
+        "scripts/miyabi/check_full_protocol_run.py",
+        "scripts/miyabi/run_full_protocol.pbs",
+        "scripts/miyabi/run_full_protocol_allocation.sh",
+        "scripts/miyabi/run_full_protocol_rank.sh",
+        "scripts/miyabi/run_learner.pbs",
+        "scripts/miyabi/run_multi_agent_review.pbs",
+        "scripts/miyabi/run_syncer.pbs"
+      ],
+      "tests": [
+        "tests/harness/test_full_protocol_harness.py",
+        "tests/test_capture_source_identity.py",
+        "tests/tools/test_launch_independent_run.py"
+      ]
+    },
+    {
+      "boundary": "the only current dynamic, functional and formal resolved config inputs",
+      "surfaces": [
+        "configs/full_protocol_dynamic.yaml",
+        "configs/full_protocol_functional.yaml",
+        "configs/full_protocol_static.yaml"
+      ],
+      "tests": [
+        "tests/harness/test_full_protocol_harness.py",
+        "tests/test_config.py"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,956 @@
+[0m
+> plan · deepseek-v4-flash
+[0m
+[0m$ [0mls -la /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/
+total 28
+dr-xr-x--- 10 x10041 xg24i002  225 Aug 10 16:35 .
+drwx------  7 x10041 xg24i002  198 Aug 10 16:35 ..
+-r--r-----  1 x10041 xg24i002 5399 Aug 10 16:30 AGENTS.md
+dr-xr-x---  2 x10041 xg24i002  110 Aug 10 16:30 configs
+dr-xr-x---  2 x10041 xg24i002  103 Aug 10 16:30 docs
+dr-xr-x---  9 x10041 xg24i002  182 Aug 10 16:30 fs_diloco
+-r--r-----  1 x10041 xg24i002  460 Aug 10 16:30 .gitignore
+dr-xr-x---  6 x10041 xg24i002  202 Aug 10 16:30 plans
+-r--r-----  1 x10041 xg24i002 1616 Aug 10 16:30 pyproject.toml
+-r--r-----  1 x10041 xg24i002    5 Aug 10 16:30 .python-version
+-r--r-----  1 x10041 xg24i002 1944 Aug 10 16:30 README.md
+dr-xr-x---  5 x10041 xg24i002   53 Aug 10 16:30 reports
+dr-xr-x---  2 x10041 xg24i002   71 Aug 10 16:35 .review-packet
+dr-xr-x---  3 x10041 xg24i002   20 Aug 10 16:30 scripts
+dr-xr-x---  9 x10041 xg24i002 4096 Aug 10 16:30 tests
+[0m
+[0m$ [0mls -la /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/.review-packet/ 2>/dev/null || echo "no review-packet"
+total 968
+dr-xr-x---  2 x10041 xg24i002     71 Aug 10 16:35 .
+dr-xr-x--- 10 x10041 xg24i002    225 Aug 10 16:35 ..
+-r--r-----  1 x10041 xg24i002   6416 Aug 10 16:35 changed-files.txt
+-r--r-----  1 x10041 xg24i002  10952 Aug 10 16:35 diff-stat.txt
+-r--r-----  1 x10041 xg24i002 970116 Aug 10 16:35 target.diff
+[0m
+[0m$ [0mcat /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/.review-packet/diff-stat.txt
+README.md                                          |   58 +-
+ baselines/__init__.py                              |    1 -
+ baselines/artifacts.py                             |  221 ---
+ baselines/health.py                                |  336 ----
+ baselines/protocol.py                              |  178 ---
+ baselines/train.py                                 |  551 -------
+ configs/full_protocol_dynamic.yaml                 |   96 ++
+ configs/full_protocol_functional.yaml              |   79 +
+ configs/full_protocol_static.yaml                  |   79 +
+ docs/00-glossary.md                                |   20 -
+ docs/01-overview.md                                |   37 -
+ docs/02-architecture.md                            |   55 -
+ docs/03-runtime-flow.md                            |   40 -
+ docs/04-data-flow.md                               |   98 --
+ docs/05-code-structure.md                          |   54 -
+ docs/06-configuration.md                           |   66 -
+ docs/07-operations.md                              |   76 -
+ docs/README.md                                     |   29 +-
+ docs/configuration.md                              |   32 +
+ docs/design.md                                     |   63 +
+ docs/modules/core.md                               |   19 -
+ docs/modules/modeling.md                           |   11 -
+ docs/modules/observability.md                      |    9 -
+ docs/modules/protocol.md                           |   15 -
+ docs/modules/runtime-learner.md                    |   24 -
+ docs/modules/runtime-syncer.md                     |   24 -
+ docs/modules/scripts.md                            |   19 -
+ docs/modules/storage.md                            |   29 -
+ docs/modules/tools.md                              |   17 -
+ docs/operations.md                                 |   79 +
+ docs/testing.md                                    |   34 +
+ fs_diloco/analysis.py                              |   11 -
+ fs_diloco/cli.py                                   |    2 +-
+ fs_diloco/core/__init__.py                         |    2 +-
+ fs_diloco/core/adoption_rules.py                   |    2 +-
+ fs_diloco/core/config.py                           |  490 +++---
+ fs_diloco/core/config_v4.py                        |  572 -------
+ fs_diloco/core/run_descriptor.py                   |   27 +-
+ fs_diloco/core/source_identity.py                  |  133 ++
+ fs_diloco/core/versions.py                         |    2 +-
+ fs_diloco/eval_lm_harness.py                       |   11 -
+ fs_diloco/legacy/__init__.py                       |   20 -
+ fs_diloco/legacy/config_v1_v3.py                   |  119 --
+ fs_diloco/legacy/fragment_v0.py                    |   95 --
+ fs_diloco/legacy/reader.py                         |  195 ---
+ fs_diloco/modeling/hf_data.py                      |   70 +-
+ fs_diloco/modeling/hf_identity.py                  |    6 +-
+ fs_diloco/modeling/hf_model.py                     |   20 +-
+ fs_diloco/modeling/outer_optim.py                  |   65 +-
+ fs_diloco/modeling/param_index.py                  |    2 +-
+ fs_diloco/modeling/training.py                     |   11 +-
+ fs_diloco/observability/__init__.py                |    2 +-
+ fs_diloco/observability/logging_utils.py           |    3 -
+ fs_diloco/observability/resource_monitor.py        |  193 ---
+ fs_diloco/observability/wandb_logging.py           |  140 --
+ fs_diloco/protocol/__init__.py                     |    2 +-
+ fs_diloco/protocol/authority.py                    |    4 +-
+ fs_diloco/protocol/contributor.py                  |    2 +-
+ fs_diloco/protocol/data_cursor.py                  |    3 -
+ fs_diloco/protocol/merge.py                        |    3 -
+ fs_diloco/protocol/scheduler.py                    |    3 -
+ fs_diloco/protocol/selection.py                    |    5 -
+ fs_diloco/protocol/token_accounting.py             |    3 -
+ fs_diloco/runtime/{learner_v4.py => learner.py}    |   20 +-
+ fs_diloco/runtime/learner_control.py               |    5 +-
+ fs_diloco/runtime/learner_entrypoint.py            |   47 +-
+ fs_diloco/runtime/services/__init__.py             |    2 +-
+ fs_diloco/runtime/services/dynamic_capacity.py     |    1 -
+ fs_diloco/runtime/services/maintenance.py          |   11 +-
+ fs_diloco/runtime/services/merge.py                |    9 +-
+ fs_diloco/runtime/services/terminal.py             |   41 +-
+ fs_diloco/runtime/{syncer_v4.py => syncer.py}      |   96 +-
+ fs_diloco/runtime/syncer_entrypoint.py             |   26 +-
+ fs_diloco/storage/admission.py                     |    2 +-
+ fs_diloco/storage/artifact_policy.py               |   11 +-
+ fs_diloco/storage/audit_archive.py                 |    3 -
+ fs_diloco/storage/authority.py                     |  168 +-
+ fs_diloco/storage/control.py                       |    9 +-
+ fs_diloco/storage/leader_lease.py                  |    5 +-
+ fs_diloco/storage/object_store.py                  |    2 +-
+ fs_diloco/storage/paths.py                         |  121 +-
+ fs_diloco/storage/run_initializer.py               |   18 +-
+ fs_diloco/storage/{schema_v4.sql => schema.sql}    |    0
+ .../{schema_v4_dynamic.sql => schema_dynamic.sql}  |    0
+ fs_diloco/storage/tensor_codec.py                  |   10 +-
+ fs_diloco/storage/terminal_request.py              |    4 +-
+ fs_diloco/tools/__init__.py                        |    2 +-
+ fs_diloco/tools/analysis.py                        |  878 ++---------
+ fs_diloco/tools/check_workload_equivalence.py      |  136 --
+ fs_diloco/tools/clean_run.py                       |  282 ++--
+ fs_diloco/tools/compare_event_traces.py            |  407 -----
+ fs_diloco/tools/eval_lm_harness.py                 |  464 ------
+ fs_diloco/tools/init_run.py                        |   53 +-
+ fs_diloco/tools/launch_independent_run.py          |   16 +-
+ fs_diloco/tools/paired_performance.py              |   58 -
+ fs_diloco/tools/publish_quality_gate.py            |  261 ----
+ ...eplacement.py => request_static_replacement.py} |    0
+ fs_diloco/tools/request_terminal_close.py          |    4 +-
+ fs_diloco/tools/resolve_scheduler_uncertainty.py   |    3 -
+ fs_diloco/tools/run_metrics_csv.py                 |  751 ---------
+ fs_diloco/tools/validation_eval.py                 |  415 -----
+ main.py                                            |    5 -
+ pyproject.toml                                     |   20 +-
+ reports/DOING/plan03-1/artifact-schema.md          |   59 +
+ reports/DOING/plan03-1/code_review.md              |    3 +
+ reports/DOING/plan03-1/failures.md                 |    3 +
+ reports/DOING/plan03-1/identity-authority.md       |   70 +
+ reports/DOING/plan03-1/inventory.md                |   65 +
+ .../DOING/plan03-1/plan-complete-remediation.md    |    4 +
+ reports/DOING/plan03-1/progress.md                 |   33 +
+ reports/DOING/plan03-1/requirement-matrix.csv      |   13 +
+ reports/DOING/plan03-1/test-ladder.md              |   45 +
+ reports/DOING/plan03-1/workflow_state.yaml         |   29 +
+ scripts/local/clean_run.sh                         |  171 ---
+ scripts/local/prune_runs_without_5000.sh           |  129 --
+ scripts/miyabi/actor_identity.sh                   |   58 +
+ scripts/miyabi/capture_source_identity.py          |   70 +
+ scripts/miyabi/check_full_protocol_run.py          | 1111 +++++++++++++
+ scripts/miyabi/run_full_protocol.pbs               |   59 +
+ scripts/miyabi/run_full_protocol_allocation.sh     |  125 ++
+ scripts/miyabi/run_full_protocol_rank.sh           |  246 +++
+ scripts/miyabi/run_learner.pbs                     |   47 +
+ .../miyabi/{codex => }/run_multi_agent_review.pbs  |   47 +-
+ scripts/miyabi/run_syncer.pbs                      |   23 +
+ tests/architecture/test_authority_surface.py       |   58 +
+ tests/architecture/test_dependency_boundaries.py   |   37 +
+ .../test_plan_complete_dead_surfaces.py            |  123 ++
+ tests/harness/test_full_protocol_harness.py        |  271 ++++
+ tests/protocol/test_accounting_selection_cursor.py |  273 ++++
+ tests/protocol/test_cycle_receipt_v1.py            |  111 ++
+ tests/protocol/test_proposal_v2.py                 |  100 ++
+ tests/runtime/test_dynamic_capacity_service.py     |  653 ++++++++
+ tests/runtime/test_learner_control.py              |   53 +
+ tests/runtime/test_pbs_scheduler.py                |  106 ++
+ tests/runtime/test_syncer_startup_admission.py     |  132 ++
+ tests/runtime/test_terminal_service.py             |  443 ++++++
+ tests/storage/conftest.py                          |   10 +
+ tests/storage/test_artifact_policy.py              |   41 +
+ tests/storage/test_audit_archive.py                |  111 ++
+ tests/storage/test_authority_dynamic.py            |  362 +++++
+ tests/storage/test_authority_operational.py        | 1624 ++++++++++++++++++++
+ tests/storage/test_contributor_progress.py         |   97 ++
+ tests/storage/test_dynamic_admission_request.py    |   41 +
+ tests/storage/test_dynamic_launch_authorization.py |  207 +++
+ tests/storage/test_leader_authority_commands.py    |  451 ++++++
+ tests/storage/test_object_store.py                 |  209 +++
+ tests/storage/test_proposal_adjudication.py        |  329 ++++
+ tests/storage/test_publication.py                  |  318 ++++
+ tests/storage/test_run_initializer.py              |  465 ++++++
+ tests/storage/test_schema.py                       |  192 +++
+ tests/storage/test_state_machine.py                |  264 ++++
+ tests/storage/test_static_contributor_binding.py   |  197 +++
+ tests/storage/test_terminal_request.py             |   57 +
+ tests/storage/test_visibility.py                   |  317 ++++
+ tests/support/__init__.py                          |   16 +
+ tests/support/clock.py                             |   27 +
+ tests/support/fault_tape.py                        |   28 +
+ tests/support/ids.py                               |   16 +
+ tests/support/pbs.py                               |   50 +
+ tests/support/protocol.py                          |  170 ++
+ tests/test_adoption_strategy.py                    |  414 +++++
+ tests/test_atomic_io.py                            |    8 +
+ tests/test_capture_source_identity.py              |  118 ++
+ tests/test_clean_run.py                            |  350 +++++
+ tests/test_config.py                               |  188 +++
+ tests/test_data_shuffle.py                         |   62 +
+ tests/test_hf_revision_pinning.py                  |  160 ++
+ tests/test_inner_scheduler.py                      |  126 ++
+ tests/test_merge.py                                |   21 +
+ tests/test_outer_optim.py                          |   47 +
+ tests/test_param_index_roundtrip.py                |   37 +
+ tests/test_tensor_codec.py                         |   45 +
+ tests/tools/test_launch_independent_run.py         |   72 +
+ tests/tools/test_request_static_replacement.py     |   50 +
+ tests/tools/test_resolve_scheduler_uncertainty.py  |   70 +
+ 175 files changed, 13218 insertions(+), 7952 deletions(-)
+[0m
+[0m$ [0mcat /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/.review-packet/changed-files.txt
+M	README.md
+D	baselines/__init__.py
+D	baselines/artifacts.py
+D	baselines/health.py
+D	baselines/protocol.py
+D	baselines/train.py
+A	configs/full_protocol_dynamic.yaml
+A	configs/full_protocol_functional.yaml
+A	configs/full_protocol_static.yaml
+D	docs/00-glossary.md
+D	docs/01-overview.md
+D	docs/02-architecture.md
+D	docs/03-runtime-flow.md
+D	docs/04-data-flow.md
+D	docs/05-code-structure.md
+D	docs/06-configuration.md
+D	docs/07-operations.md
+M	docs/README.md
+A	docs/configuration.md
+A	docs/design.md
+D	docs/modules/core.md
+D	docs/modules/modeling.md
+D	docs/modules/observability.md
+D	docs/modules/protocol.md
+D	docs/modules/runtime-learner.md
+D	docs/modules/runtime-syncer.md
+D	docs/modules/scripts.md
+D	docs/modules/storage.md
+D	docs/modules/tools.md
+A	docs/operations.md
+A	docs/testing.md
+D	fs_diloco/analysis.py
+M	fs_diloco/cli.py
+M	fs_diloco/core/__init__.py
+M	fs_diloco/core/adoption_rules.py
+M	fs_diloco/core/config.py
+D	fs_diloco/core/config_v4.py
+M	fs_diloco/core/run_descriptor.py
+A	fs_diloco/core/source_identity.py
+M	fs_diloco/core/versions.py
+D	fs_diloco/eval_lm_harness.py
+D	fs_diloco/legacy/__init__.py
+D	fs_diloco/legacy/config_v1_v3.py
+D	fs_diloco/legacy/fragment_v0.py
+D	fs_diloco/legacy/reader.py
+M	fs_diloco/modeling/hf_data.py
+M	fs_diloco/modeling/hf_identity.py
+M	fs_diloco/modeling/hf_model.py
+M	fs_diloco/modeling/outer_optim.py
+M	fs_diloco/modeling/param_index.py
+M	fs_diloco/modeling/training.py
+M	fs_diloco/observability/__init__.py
+M	fs_diloco/observability/logging_utils.py
+D	fs_diloco/observability/resource_monitor.py
+D	fs_diloco/observability/wandb_logging.py
+M	fs_diloco/protocol/__init__.py
+M	fs_diloco/protocol/authority.py
+M	fs_diloco/protocol/contributor.py
+M	fs_diloco/protocol/data_cursor.py
+M	fs_diloco/protocol/merge.py
+M	fs_diloco/protocol/scheduler.py
+M	fs_diloco/protocol/selection.py
+M	fs_diloco/protocol/token_accounting.py
+R098	fs_diloco/runtime/learner_v4.py	fs_diloco/runtime/learner.py
+M	fs_diloco/runtime/learner_control.py
+M	fs_diloco/runtime/learner_entrypoint.py
+M	fs_diloco/runtime/services/__init__.py
+M	fs_diloco/runtime/services/dynamic_capacity.py
+M	fs_diloco/runtime/services/maintenance.py
+M	fs_diloco/runtime/services/merge.py
+M	fs_diloco/runtime/services/terminal.py
+R092	fs_diloco/runtime/syncer_v4.py	fs_diloco/runtime/syncer.py
+M	fs_diloco/runtime/syncer_entrypoint.py
+M	fs_diloco/storage/admission.py
+M	fs_diloco/storage/artifact_policy.py
+M	fs_diloco/storage/audit_archive.py
+M	fs_diloco/storage/authority.py
+M	fs_diloco/storage/control.py
+M	fs_diloco/storage/leader_lease.py
+M	fs_diloco/storage/object_store.py
+M	fs_diloco/storage/paths.py
+M	fs_diloco/storage/run_initializer.py
+R100	fs_diloco/storage/schema_v4.sql	fs_diloco/storage/schema.sql
+R100	fs_diloco/storage/schema_v4_dynamic.sql	fs_diloco/storage/schema_dynamic.sql
+M	fs_diloco/storage/tensor_codec.py
+M	fs_diloco/storage/terminal_request.py
+M	fs_diloco/tools/__init__.py
+M	fs_diloco/tools/analysis.py
+D	fs_diloco/tools/check_workload_equivalence.py
+M	fs_diloco/tools/clean_run.py
+D	fs_diloco/tools/compare_event_traces.py
+D	fs_diloco/tools/eval_lm_harness.py
+M	fs_diloco/tools/init_run.py
+M	fs_diloco/tools/launch_independent_run.py
+D	fs_diloco/tools/paired_performance.py
+D	fs_diloco/tools/publish_quality_gate.py
+R100	fs_diloco/tools/authorize_static_replacement.py	fs_diloco/tools/request_static_replacement.py
+M	fs_diloco/tools/request_terminal_close.py
+M	fs_diloco/tools/resolve_scheduler_uncertainty.py
+D	fs_diloco/tools/run_metrics_csv.py
+D	fs_diloco/tools/validation_eval.py
+D	main.py
+M	pyproject.toml
+A	reports/DOING/plan03-1/artifact-schema.md
+A	reports/DOING/plan03-1/code_review.md
+A	reports/DOING/plan03-1/failures.md
+A	reports/DOING/plan03-1/identity-authority.md
+A	reports/DOING/plan03-1/inventory.md
+A	reports/DOING/plan03-1/plan-complete-remediation.md
+A	reports/DOING/plan03-1/progress.md
+A	reports/DOING/plan03-1/requirement-matrix.csv
+A	reports/DOING/plan03-1/test-ladder.md
+A	reports/DOING/plan03-1/workflow_state.yaml
+D	scripts/local/clean_run.sh
+D	scripts/local/prune_runs_without_5000.sh
+A	scripts/miyabi/actor_identity.sh
+A	scripts/miyabi/capture_source_identity.py
+A	scripts/miyabi/check_full_protocol_run.py
+A	scripts/miyabi/run_full_protocol.pbs
+A	scripts/miyabi/run_full_protocol_allocation.sh
+A	scripts/miyabi/run_full_protocol_rank.sh
+A	scripts/miyabi/run_learner.pbs
+R092	scripts/miyabi/codex/run_multi_agent_review.pbs	scripts/miyabi/run_multi_agent_review.pbs
+A	scripts/miyabi/run_syncer.pbs
+A	tests/architecture/test_authority_surface.py
+A	tests/architecture/test_dependency_boundaries.py
+A	tests/architecture/test_plan_complete_dead_surfaces.py
+A	tests/harness/test_full_protocol_harness.py
+A	tests/protocol/test_accounting_selection_cursor.py
+A	tests/protocol/test_cycle_receipt_v1.py
+A	tests/protocol/test_proposal_v2.py
+A	tests/runtime/test_dynamic_capacity_service.py
+A	tests/runtime/test_learner_control.py
+A	tests/runtime/test_pbs_scheduler.py
+A	tests/runtime/test_syncer_startup_admission.py
+A	tests/runtime/test_terminal_service.py
+A	tests/storage/conftest.py
+A	tests/storage/test_artifact_policy.py
+A	tests/storage/test_audit_archive.py
+A	tests/storage/test_authority_dynamic.py
+A	tests/storage/test_authority_operational.py
+A	tests/storage/test_contributor_progress.py
+A	tests/storage/test_dynamic_admission_request.py
+A	tests/storage/test_dynamic_launch_authorization.py
+A	tests/storage/test_leader_authority_commands.py
+A	tests/storage/test_object_store.py
+A	tests/storage/test_proposal_adjudication.py
+A	tests/storage/test_publication.py
+A	tests/storage/test_run_initializer.py
+A	tests/storage/test_schema.py
+A	tests/storage/test_state_machine.py
+A	tests/storage/test_static_contributor_binding.py
+A	tests/storage/test_terminal_request.py
+A	tests/storage/test_visibility.py
+A	tests/support/__init__.py
+A	tests/support/clock.py
+A	tests/support/fault_tape.py
+A	tests/support/ids.py
+A	tests/support/pbs.py
+A	tests/support/protocol.py
+A	tests/test_adoption_strategy.py
+A	tests/test_atomic_io.py
+A	tests/test_capture_source_identity.py
+A	tests/test_clean_run.py
+A	tests/test_config.py
+A	tests/test_data_shuffle.py
+A	tests/test_hf_revision_pinning.py
+A	tests/test_inner_scheduler.py
+A	tests/test_merge.py
+A	tests/test_outer_optim.py
+A	tests/test_param_index_roundtrip.py
+A	tests/test_tensor_codec.py
+A	tests/tools/test_launch_independent_run.py
+A	tests/tools/test_request_static_replacement.py
+A	tests/tools/test_resolve_scheduler_uncertainty.py
+[0m
+[0m# [0mTodos
+[•] Read design source docs (plan03-1.md, workflow.md, requirement-matrix, identity-authority, artifact-schema, test-ladder)
+[ ] Read config.py, source_identity.py, run_descriptor.py, protocol/
+[ ] Read storage: authority.py, run_initializer.py, control.py, audit_archive.py, artifact_policy.py, paths.py
+[ ] Read runtime services, learner/syncer entrypoints
+[ ] Read tools: analysis.py, clean_run.py, init_run.py, launch_independent_run.py
+[ ] Read tests/harness/test_full_protocol_harness.py and key test files
+[ ] Read configs, PBS scripts, check_full_protocol_run.py
+[ ] Read README, docs/testing.md, docs/operations.md
+[ ] Answer the 8 review questions and formulate findings
+[ ] Write final review with verdict
+[0m
+[0m$ [0mls -la /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/plans/DOING/plans/ /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/plans/ /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/reports/DOING/plan03-1/
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/plans/:
+total 104
+dr-xr-x---  6 x10041 xg24i002   202 Aug 10 16:30 .
+dr-xr-x--- 10 x10041 xg24i002   225 Aug 10 16:35 ..
+-r--r-----  1 x10041 xg24i002 28376 Aug 10 16:30 00-RESEARCH_PLAN.md
+-r--r-----  1 x10041 xg24i002 29409 Aug 10 16:30 01-FULL_REFERENCE_AND_BOUNDED_STATE_PLAN.md
+-r--r-----  1 x10041 xg24i002  2695 Aug 10 16:30 AGENTS.md
+dr-xr-x---  3 x10041 xg24i002    19 Aug 10 16:30 DOING
+dr-xr-x--- 10 x10041 xg24i002   200 Aug 10 16:30 DONE
+dr-xr-x---  2 x10041 xg24i002    43 Aug 10 16:30 followups
+-r--r-----  1 x10041 xg24i002   166 Aug 10 16:30 plans_create_guide.md
+dr-xr-x---  2 x10041 xg24i002    80 Aug 10 16:30 ref
+-r--r-----  1 x10041 xg24i002 35127 Aug 10 16:30 workflow.md
+
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/plans/DOING/plans/:
+total 4
+dr-xr-x--- 2 x10041 xg24i002   25 Aug 10 16:30 .
+dr-xr-x--- 3 x10041 xg24i002   19 Aug 10 16:30 ..
+-r--r----- 1 x10041 xg24i002 1373 Aug 10 16:30 plan03-1.md
+
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/reports/DOING/plan03-1/:
+total 52
+dr-xr-x--- 2 x10041 xg24i002  256 Aug 10 16:30 .
+dr-xr-x--- 3 x10041 xg24i002   22 Aug 10 16:30 ..
+-r--r----- 1 x10041 xg24i002 2141 Aug 10 16:30 artifact-schema.md
+-r--r----- 1 x10041 xg24i002   58 Aug 10 16:30 code_review.md
+-r--r----- 1 x10041 xg24i002   43 Aug 10 16:30 failures.md
+-r--r----- 1 x10041 xg24i002 5272 Aug 10 16:30 identity-authority.md
+-r--r----- 1 x10041 xg24i002 4441 Aug 10 16:30 inventory.md
+-r--r----- 1 x10041 xg24i002  166 Aug 10 16:30 plan-complete-remediation.md
+-r--r----- 1 x10041 xg24i002 1756 Aug 10 16:30 progress.md
+-r--r----- 1 x10041 xg24i002 5154 Aug 10 16:30 requirement-matrix.csv
+-r--r----- 1 x10041 xg24i002 2951 Aug 10 16:30 test-ladder.md
+-r--r----- 1 x10041 xg24i002  944 Aug 10 16:30 workflow_state.yaml
+[0m
+[0m$ [0mwc -l /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/plans/DOING/plans/plan03-1.md /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/plans/workflow.md
+22 /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/plans/DOING/plans/plan03-1.md
+  565 /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/plans/workflow.md
+  587 total
+[0m
+[0m→ [0mRead plans/DOING/plans/plan03-1.md
+[0m→ [0mRead plans/workflow.md
+[0m→ [0mRead reports/DOING/plan03-1/requirement-matrix.csv
+[0m→ [0mRead reports/DOING/plan03-1/identity-authority.md
+[0m→ [0mRead reports/DOING/plan03-1/artifact-schema.md
+[0m→ [0mRead reports/DOING/plan03-1/test-ladder.md
+[0m
+[0m$ [0mfind /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco -type f -name "*.py" | sort && echo "---SCRIPTS---" && find /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/scripts -type f | sort && echo "---TESTS---" && find /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests -type f | sort && echo "---CONFIGS---" && ls /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/configs/
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/cli.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/core/adoption_rules.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/core/config.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/core/constants.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/core/__init__.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/core/run_descriptor.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/core/source_identity.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/core/versions.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/__init__.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/learner.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/modeling/hf_data.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/modeling/hf_identity.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/modeling/hf_model.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/modeling/__init__.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/modeling/outer_optim.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/modeling/param_index.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/modeling/training.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/observability/__init__.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/observability/logging_utils.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/protocol/authority.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/protocol/contributor.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/protocol/cycle_receipt.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/protocol/data_cursor.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/protocol/__init__.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/protocol/merge.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/protocol/proposal.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/protocol/scheduler.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/protocol/selection.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/protocol/token_accounting.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/protocol/_validation.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/runtime/adoption.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/runtime/__init__.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/runtime/learner_control.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/runtime/learner_entrypoint.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/runtime/learner.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/runtime/pbs_scheduler.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/runtime/services/dynamic_capacity.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/runtime/services/__init__.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/runtime/services/maintenance.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/runtime/services/merge.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/runtime/services/terminal.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/runtime/syncer_entrypoint.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/runtime/syncer.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/admission.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/artifact_policy.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/atomic_io.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/audit_archive.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/authority.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/control.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/__init__.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/leader_lease.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/object_store.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/paths.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/run_initializer.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/tensor_codec.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/tensor_identity.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/terminal_request.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/syncer.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/tools/analysis.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/tools/clean_run.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/tools/__init__.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/tools/init_run.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/tools/launch_independent_run.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/tools/request_static_replacement.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/tools/request_terminal_close.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/tools/resolve_scheduler_uncertainty.py
+---SCRIPTS---
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/scripts/miyabi/actor_identity.sh
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/scripts/miyabi/capture_source_identity.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/scripts/miyabi/check_full_protocol_run.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/scripts/miyabi/run_full_protocol_allocation.sh
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/scripts/miyabi/run_full_protocol.pbs
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/scripts/miyabi/run_full_protocol_rank.sh
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/scripts/miyabi/run_learner.pbs
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/scripts/miyabi/run_multi_agent_review.pbs
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/scripts/miyabi/run_syncer.pbs
+---TESTS---
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/architecture/test_authority_surface.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/architecture/test_dependency_boundaries.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/architecture/test_plan_complete_dead_surfaces.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/harness/test_full_protocol_harness.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/protocol/test_accounting_selection_cursor.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/protocol/test_cycle_receipt_v1.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/protocol/test_proposal_v2.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/runtime/test_dynamic_capacity_service.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/runtime/test_learner_control.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/runtime/test_pbs_scheduler.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/runtime/test_syncer_startup_admission.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/runtime/test_terminal_service.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/conftest.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/test_artifact_policy.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/test_audit_archive.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/test_authority_dynamic.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/test_authority_operational.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/test_contributor_progress.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/test_dynamic_admission_request.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/test_dynamic_launch_authorization.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/test_leader_authority_commands.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/test_object_store.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/test_proposal_adjudication.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/test_publication.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/test_run_initializer.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/test_schema.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/test_state_machine.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/test_static_contributor_binding.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/test_terminal_request.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/storage/test_visibility.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/support/clock.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/support/fault_tape.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/support/ids.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/support/__init__.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/support/pbs.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/support/protocol.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/test_adoption_strategy.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/test_atomic_io.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/test_capture_source_identity.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/test_clean_run.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/test_config.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/test_data_shuffle.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/test_hf_revision_pinning.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/test_inner_scheduler.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/test_merge.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/test_outer_optim.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/test_param_index_roundtrip.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/test_tensor_codec.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/tools/test_launch_independent_run.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/tools/test_request_static_replacement.py
+/tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/tests/tools/test_resolve_scheduler_uncertainty.py
+---CONFIGS---
+full_protocol_dynamic.yaml
+full_protocol_functional.yaml
+full_protocol_static.yaml
+[0m
+[0m→ [0mRead fs_diloco/core/config.py
+[0m→ [0mRead fs_diloco/core/source_identity.py
+[0m→ [0mRead fs_diloco/core/run_descriptor.py
+[0m→ [0mRead fs_diloco/core/versions.py
+[0m→ [0mRead fs_diloco/storage/authority.py
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [offset=1279, limit=2000][0m
+[0m
+[0m$ [0mwc -l /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/authority.py /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/run_initializer.py /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/control.py /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/audit_archive.py /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/artifact_policy.py /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/paths.py /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/leader_lease.py /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/terminal_request.py
+6074 /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/authority.py
+   613 /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/run_initializer.py
+   697 /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/control.py
+   379 /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/audit_archive.py
+   186 /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/artifact_policy.py
+   312 /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/paths.py
+    92 /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/leader_lease.py
+    94 /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/terminal_request.py
+  8447 total
+[0m
+[0m$ [0mgrep -n "def \|^class " /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek/fs_diloco/storage/authority.py
+79:def _publication_commit_boundary(_name: str) -> None:
+83:class AuthoritySchemaError(RuntimeError):
+87:class CommandConflictError(RuntimeError):
+91:class MembershipFenceError(RuntimeError):
+95:class ProposalPayloadError(RuntimeError):
+98:    def __init__(self, result: ReadResult[Any]) -> None:
+104:class AuthorityIdentity:
+109:    def __post_init__(self) -> None:
+117:    def as_dict(self) -> dict[str, str]:
+122:class AuthorityMetadata:
+132:class CommittedVersion:
+149:def _schema_dir() -> Path:
+153:def _schema_text(mode: str) -> tuple[str, ...]:
+163:def canonical_features(mode: str) -> tuple[str, ...]:
+171:def _features_json(features: tuple[str, ...]) -> str:
+175:def ddl_bundle_sha256(mode: str) -> str:
+189:def _schema_fingerprint(connection: sqlite3.Connection) -> str:
+203:def _marker_path(database_path: Path, marker_path: str | Path | None) -> Path:
+211:def _path_entry_exists(path: Path) -> bool:
+219:def _same_regular_inode(left: Path, right: Path) -> bool:
+232:def _lexical_protocol_path(root: Path, relative_path: str) -> Path:
+252:def _configure_connection(connection: sqlite3.Connection, *, busy_timeout_ms: int) -> None:
+260:def _configure_read_connection(
+270:def initialize_authority(
+374:def _validate_open(
+456:class AuthorityReadModel:
+459:    def __init__(self, authority: "AuthorityReader | LeaderAuthority") -> None:
+462:    def metadata(self) -> AuthorityMetadata:
+465:    def authority_created_at(self) -> float:
+471:    def latest_committed_version(self) -> CommittedVersion | None:
+477:    def committed_version(self, version: int) -> CommittedVersion | None:
+485:    def static_binding(self, learner_id: str) -> StaticBinding | None:
+491:    def static_binding_history(
+510:    def contributor_progress(self, stable_contributor_key: str) -> ContributorProgress | None:
+517:    def update_status(self, update_id: str) -> str | None:
+524:    def controller_status(self) -> dict[str, Any]:
+530:    def terminal_record(self) -> dict[str, Any] | None:
+534:    def terminal_contributor_fences(self) -> tuple[dict[str, Any], ...]:
+549:    def current_contributor_fences(
+577:    def token_ledger_summary(self) -> TokenLedgerSummary:
+610:    def integrity_check(self) -> tuple[str, ...]:
+613:    def table_names(self) -> tuple[str, ...]:
+619:    def syncer_epochs(self) -> tuple[dict[str, Any], ...]:
+623:    def dynamic_streams(self) -> tuple[dict[str, Any], ...]:
+631:    def dynamic_instances(self) -> tuple[dict[str, Any], ...]:
+641:    def dynamic_launch_requests(self) -> tuple[dict[str, Any], ...]:
+651:    def capacity_observations(self) -> tuple[dict[str, Any], ...]:
+661:    def scheduler_operator_file_disposition(
+675:    def genesis_committed_at(self) -> float | None:
+679:    def audit_history_records(self, *, cutoff_version: int) -> tuple[dict[str, Any], ...]:
+686:    def audit_archive_summary(self) -> dict[str, int]:
+702:    def audit_hot_batches(self) -> tuple[dict[str, Any], ...]:
+709:    def artifact_gc_ready(self, *, claimant_epoch: int) -> bool:
+721:    def audit_gc_ready(self, *, claimant_epoch: int) -> bool:
+732:class AuthorityReader:
+735:    def __init__(
+781:    def close(self) -> None:
+784:    def __enter__(self) -> "AuthorityReader":
+787:    def __exit__(self, *_args: Any) -> None:
+790:    def _fetchone(self, sql: str, parameters: tuple[Any, ...] = ()) -> sqlite3.Row | None:
+793:    def _fetchall(self, sql: str, parameters: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
+797:class LeaderAuthority:
+800:    def __init__(
+865:    def close(self) -> None:
+868:    def assert_outside_transaction(self) -> None:
+874:    def __enter__(self) -> "LeaderAuthority":
+877:    def __exit__(self, *_args: Any) -> None:
+880:    def acquire_leader(
+959:    def committed_leader_lease(self, token: LeaderToken) -> CommittedLeaderLease:
+965:    def renew_leader(self, token: LeaderToken) -> CommittedLeaderLease:
+1000:    def release_leader(self, token: LeaderToken) -> None:
+1024:    def fail_leader(self, token: LeaderToken) -> None:
+1050:    def open_leader(self, token: LeaderToken) -> "LeaderSession":
+1054:    def _verify_token(self, token: LeaderToken, *, require_safe_expiry: bool = True) -> sqlite3.Row:
+1074:    def _fetchone(self, sql: str, parameters: tuple[Any, ...] = ()) -> sqlite3.Row | None:
+1077:    def _fetchall(self, sql: str, parameters: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
+1081:class LeaderSession:
+1084:    def __init__(self, authority: LeaderAuthority, token: LeaderToken) -> None:
+1088:    def replay_committed_static_binding(
+1125:    def bind_or_replace_static_attempt(
+1147:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+1265:    def mark_static_attempt_terminal(
+1276:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+1301:    def ingest_cycle_receipt(
+1306:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+1427:    def ingest_proposal(
+1441:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+1654:    def observe_proposal_visibility(
+1721:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+1982:    def initialize_genesis(
+2019:    def initialize_dynamic_membership(self, *, command_id: str) -> tuple[int, ...]:
+2030:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+2054:    def record_capacity_observation(
+2095:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+2144:    def plan_dynamic_launch_request(
+2193:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+2301:    def transition_dynamic_launch_request(
+2361:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+2439:    def apply_scheduler_operator_request(
+2447:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+2572:    def record_scheduler_operator_file_disposition(
+2601:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+2638:    def admit_dynamic_incarnation(
+2710:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+2996:    def retire_incarnation(
+3022:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+3035:    def try_select_batch(
+3046:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+3153:    def prepare_publication(
+3189:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+3281:    def commit_merge(
+3311:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+3518:    def abandon_publication(
+3523:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+3551:    def reconcile_publications(self, *, command_id: str) -> tuple[str, ...]:
+3556:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+3588:    def claim_orphan_gc(self, *, command_id: str, limit: int = 64) -> tuple[dict[str, Any], ...]:
+3595:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+3636:    def complete_artifact_gc(
+3653:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+3673:    def archive_audit_batch(
+3788:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+3915:    def _immutable_audit_object(
+3932:    def _find_compacted_audit_source(self, batch_id: str) -> dict[str, Any] | None:
+3962:    def compact_audit_batches(
+4052:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+4156:    def claim_audit_gc(self, *, command_id: str, limit: int = 64) -> tuple[dict[str, str], ...]:
+4161:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+4190:    def complete_audit_gc(
+4207:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+4232:    def begin_terminal_preclose(
+4263:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+4294:    def begin_terminal_close(
+4323:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+4425:    def begin_terminal_proposal_visibility(
+4446:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+4476:    def acknowledge_terminal_contributor(
+4512:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+4668:    def finalize_terminal(
+4677:        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+4784:    def _require_proposal_receipt(
+4814:    def _require_visibility_receipt(
+4839:    def _record_observation(
+4865:    def _record_visibility_terminal(
+4938:    def _record_quarantine(
+4971:    def _prune_quarantine(
+4991:    def _advance_proposal_frontier(
+5004:    def _advance_frontier_values(
+5042:    def _terminalize_fenced_updates(
+5108:    def _drop_active_update(
+5132:    def _token_rollup_column(fate: str) -> str:
+5146:    def _ensure_token_rollup(self, connection: sqlite3.Connection, *, now: float) -> None:
+5160:    def _record_token_receipt(
+5191:    def _transition_token_fate(
+5236:    def _reconcile_invalid_batch(
+5306:    def _abandon_publication_artifacts(
+5357:    def _retire_dynamic_in_transaction(
+5436:    def _dynamic_fence_from_instance(row: Mapping[str, Any]) -> DynamicContributorFence:
+5449:    def _dynamic_admission_result(
+5466:    def _require_current_fence(
+5524:    def _require_terminal_input_allowed(
+5562:    def _require_current_fence_json(
+5580:    def _fence_is_current_json(
+5593:    def _verify_prepared_publication_artifacts(self, publication_id: str) -> None:
+5616:    def _command_replay(
+5642:    def _command(
+5697:    def _load_selection_batch(self, batch_id: str) -> SelectionBatch:
+5731:def _audit_history_records(
+5922:def _static_binding_command_request(
+5962:def _canonical_json(value: Any) -> str:
+5966:def _decode_committed_leader_lease(
+5977:def _decode_static_binding(row: Mapping[str, Any]) -> StaticBinding:
+5987:def _decode_progress(row: Mapping[str, Any]) -> ContributorProgress:
+6000:def _decode_publication_intent(row: Mapping[str, Any]) -> PublicationIntent:
+6023:def _decode_committed_version(row: Mapping[str, Any]) -> CommittedVersion:
+6044:def _decode_proposal(row: Mapping[str, Any]) -> FullUpdateProposalV2:
+[0m
+[0m→ [0mRead fs_diloco/storage/run_initializer.py
+[0m→ [0mRead tests/harness/test_full_protocol_harness.py
+[0m→ [0mRead scripts/miyabi/check_full_protocol_run.py
+[0m→ [0mRead scripts/miyabi/run_full_protocol.pbs
+[0m→ [0mRead scripts/miyabi/run_full_protocol_allocation.sh
+[0m→ [0mRead scripts/miyabi/run_full_protocol_rank.sh
+[0m→ [0mRead fs_diloco/runtime/syncer_entrypoint.py
+[0m→ [0mRead fs_diloco/runtime/learner_entrypoint.py
+[0m→ [0mRead fs_diloco/runtime/syncer.py
+[0m→ [0mRead configs/full_protocol_functional.yaml
+[0m→ [0mRead configs/full_protocol_static.yaml
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [offset=5132, limit=300][0m
+[0m→ [0mRead fs_diloco/runtime/learner.py
+[0m→ [0mRead fs_diloco/protocol/token_accounting.py
+[0m→ [0mRead fs_diloco/storage/atomic_io.py
+[0m→ [0mRead fs_diloco/tools/analysis.py
+[0m→ [0mRead fs_diloco/storage/control.py
+[0m→ [0mRead fs_diloco/runtime/services/terminal.py
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [limit=330, offset=4476][0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [limit=100, offset=5042][0m
+[0m→ [0mRead fs_diloco/protocol/cycle_receipt.py
+[0m→ [0mRead .gitignore
+[0m→ [0mRead fs_diloco/tools/init_run.py
+[0m→ [0mRead scripts/miyabi/run_learner.pbs
+[0m→ [0mRead scripts/miyabi/run_syncer.pbs
+[0m→ [0mRead scripts/miyabi/run_multi_agent_review.pbs
+[0m→ [0mRead tests/support/protocol.py
+[0m→ [0mRead tests/support/fault_tape.py
+[0m→ [0mRead tests/support/pbs.py
+[0m→ [0mRead tests/support/clock.py
+[0m→ [0mRead tests/runtime/test_pbs_scheduler.py
+[0m→ [0mRead tests/runtime/test_syncer_startup_admission.py
+[0m→ [0mRead fs_diloco/tools/clean_run.py
+[0m→ [0mRead README.md
+[0m→ [0mRead docs/testing.md
+[0m→ [0mRead docs/operations.md
+[0m→ [0mRead fs_diloco/runtime/services/merge.py
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [limit=300, offset=3035][0m
+[0m→ [0mRead fs_diloco/storage/audit_archive.py
+[0m→ [0mRead fs_diloco/runtime/services/maintenance.py
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [limit=200, offset=5731][0m
+[0m→ [0mRead fs_diloco/storage/authority.py[90m [limit=245, offset=3673][0m
+[0m→ [0mRead tests/architecture/test_plan_complete_dead_surfaces.py
+[0m→ [0mRead fs_diloco/tools/request_static_replacement.py
+[0m→ [0mRead fs_diloco/tools/launch_independent_run.py
+[0m→ [0mRead tests/runtime/test_terminal_service.py
+[0m
+[0m$ [0mcd /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek && rg -l "FAULT_PAUSE|fault_boundary|quiesce_for_fault|assert_outside_transaction" tests/ | sort
+tests/harness/test_full_protocol_harness.py
+[0m
+[0m$ [0mcd /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek && rg -n "_pause_candidate_at_fault_boundary|FS_DILOCO_FAULT" fs_diloco/ scripts/ | head -50
+scripts/miyabi/run_full_protocol_rank.sh:13:scenario="${FS_DILOCO_FAULT_SCENARIO:-none}"
+scripts/miyabi/run_full_protocol_rank.sh:177:    FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION=2 \
+scripts/miyabi/run_full_protocol_rank.sh:178:    FS_DILOCO_FAULT_PAUSE_MARKER_PATH="$fault_marker" \
+scripts/miyabi/run_full_protocol_allocation.sh:103:  "FS_DILOCO_FAULT_SCENARIO=${FS_DILOCO_FAULT_SCENARIO:-none}"
+scripts/miyabi/run_full_protocol.pbs:37:export FS_DILOCO_FAULT_SCENARIO="${FS_DILOCO_FAULT_SCENARIO:-none}"
+fs_diloco/runtime/syncer.py:64:def _pause_candidate_at_fault_boundary(
+fs_diloco/runtime/syncer.py:73:    raw_target = os.environ.get("FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION")
+fs_diloco/runtime/syncer.py:80:            "FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION must be a nonnegative integer"
+fs_diloco/runtime/syncer.py:84:            "FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION must be a nonnegative integer"
+fs_diloco/runtime/syncer.py:86:    marker_value = os.environ.get("FS_DILOCO_FAULT_PAUSE_MARKER_PATH")
+fs_diloco/runtime/syncer.py:89:            "FS_DILOCO_FAULT_PAUSE_MARKER_PATH is required with the fault pause boundary"
+fs_diloco/runtime/syncer.py:182:    _pause_candidate_at_fault_boundary(
+fs_diloco/runtime/syncer.py:273:            _pause_candidate_at_fault_boundary(
+[0m
+[0m→ [0mRead pyproject.toml
+[0m→ [0mRead scripts/miyabi/actor_identity.sh
+[0m
+[0m$ [0mcd /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek && rg -n "def canonical_update_relative_path" -A 12 fs_diloco/protocol/proposal.py
+31:def canonical_update_relative_path(stable_contributor_key: str, update_id: str) -> str:
+32-    contributor = identity(stable_contributor_key, name="stable_contributor_key")
+33-    update = uuid4_string(update_id, name="update_id")
+34-    return f"updates/payloads/{contributor}/{update}.safetensors"
+35-
+36-
+37-def _validate_relative_path(value: Any, *, expected: str) -> str:
+38-    path = nonempty_string(value, name="payload_relative_path")
+39-    parts = path.split("/")
+40-    if path.startswith("/") or any(part in {"", ".", ".."} for part in parts):
+41-        raise ValueError("payload_relative_path must be normalized and run-root-relative")
+42-    if posixpath.normpath(path) != path or path != expected:
+43-        raise ValueError("payload_relative_path does not match proposal identity")
+[0m
+[0m$ [0mcd /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek && rg -n "proposals_root.glob|updates/proposals" fs_diloco/runtime/syncer.py fs_diloco/storage/paths.py fs_diloco/protocol/proposal.py
+fs_diloco/runtime/syncer.py:854:        for path in sorted(proposals_root.glob("*/*.json")):
+[0m
+[0m→ [0mRead fs_diloco/storage/paths.py
+[0m→ [0mRead fs_diloco/runtime/pbs_scheduler.py
+[0m
+[0m$ [0mcd /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek && rg -c "pytest.mark.state_machine|pytest.mark.crash_matrix|pytest.mark.integration|pytest.mark.performance" tests/ | rg -v ":0$"
+tests/storage/test_leader_authority_commands.py:1
+tests/storage/test_state_machine.py:3
+tests/storage/test_publication.py:2
+tests/storage/test_proposal_adjudication.py:1
+[0m
+[0m$ [0mcd /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek && rg -l "FaultTape|_publication_commit_boundary|_immutable_publication_boundary|fault_hook" tests/ | sort
+tests/storage/test_leader_authority_commands.py
+tests/storage/test_publication.py
+tests/storage/test_run_initializer.py
+tests/support/fault_tape.py
+tests/support/__init__.py
+[0m
+[0m$ [0mcd /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek && rg -n "^def test_" tests/storage/test_state_machine.py tests/storage/test_leader_authority_commands.py tests/storage/test_authority_operational.py | head -80
+tests/storage/test_state_machine.py:42:def test_visibility_state_machine_is_bounded_and_terminal_is_sticky(
+tests/storage/test_state_machine.py:124:def test_proposal_state_machine_keeps_one_pending_and_monotonic_frontier(
+tests/storage/test_state_machine.py:163:def test_dynamic_membership_state_machine_has_one_current_incarnation(
+tests/storage/test_leader_authority_commands.py:62:def test_genesis_uses_fenced_publication_chain_and_commit_is_idempotent(
+tests/storage/test_leader_authority_commands.py:88:def test_command_id_replay_with_different_request_fails_closed(tmp_path: Path) -> None:
+tests/storage/test_leader_authority_commands.py:109:def test_stale_token_cannot_execute_a_named_business_command(tmp_path: Path) -> None:
+tests/storage/test_leader_authority_commands.py:128:def test_authority_surface_does_not_offer_direct_sql_or_raw_connection(tmp_path: Path) -> None:
+tests/storage/test_leader_authority_commands.py:139:def test_global_version_target_cannot_skip_or_duplicate(tmp_path: Path) -> None:
+tests/storage/test_leader_authority_commands.py:163:def test_typed_receipt_proposal_selection_and_successor_commit_flow(tmp_path: Path) -> None:
+tests/storage/test_leader_authority_commands.py:228:def test_commit_fault_boundaries_roll_back_and_exact_retry(
+tests/storage/test_leader_authority_commands.py:337:def test_proposal_must_match_every_shared_receipt_field(
+tests/storage/test_leader_authority_commands.py:377:def test_newer_accepted_proposal_supersedes_old_pending_after_insert(tmp_path: Path) -> None:
+tests/storage/test_leader_authority_commands.py:437:def test_overlong_command_id_fails_before_mutation(tmp_path: Path) -> None:
+tests/storage/test_authority_operational.py:192:def test_authority_token_rollup_balances_receipt_only_and_applied_fates(tmp_path: Path) -> None:
+tests/storage/test_authority_operational.py:240:def test_abandoned_selection_does_not_consume_persistent_service_credit(
+tests/storage/test_authority_operational.py:277:def test_sql_fair_selection_uses_committed_count_before_version_ties(tmp_path: Path) -> None:
+tests/storage/test_authority_operational.py:366:def test_process_elapsed_safety_is_monotonic_despite_wall_clock_jumps() -> None:
+tests/storage/test_authority_operational.py:387:def test_dynamic_replacement_returns_full_contiguous_resume_state(tmp_path: Path) -> None:
+tests/storage/test_authority_operational.py:479:def test_terminal_close_freezes_fence_blocks_admission_and_accounts_hard_crash(
+tests/storage/test_authority_operational.py:540:def test_terminal_preclose_admits_only_static_requests_before_durable_cutoff(
+tests/storage/test_authority_operational.py:573:def test_terminal_preclose_admits_only_dynamic_requests_before_durable_cutoff(
+tests/storage/test_authority_operational.py:611:def test_terminal_hard_crash_gap_is_summed_per_lost_incarnation(tmp_path: Path) -> None:
+tests/storage/test_authority_operational.py:658:def test_static_restart_recovers_authoritative_cursor_and_receipt_chain(tmp_path: Path) -> None:
+tests/storage/test_authority_operational.py:685:def test_telemetry_deletion_cannot_change_authoritative_token_summary(tmp_path: Path) -> None:
+tests/storage/test_authority_operational.py:702:def test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens(
+tests/storage/test_authority_operational.py:762:def test_terminal_zero_cycle_ack_requires_no_receipt_and_preserves_zero_gap(
+tests/storage/test_authority_operational.py:792:def test_terminal_close_snapshot_cannot_be_rewritten_by_a_second_command(
+tests/storage/test_authority_operational.py:835:def test_terminal_ack_rejects_a_missing_proposal_promised_by_final_receipt(
+tests/storage/test_authority_operational.py:875:def test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_update(
+tests/storage/test_authority_operational.py:944:def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: Path) -> None:
+tests/storage/test_authority_operational.py:1088:def test_terminal_ack_can_precede_final_proposal_visibility_and_merge(tmp_path: Path) -> None:
+tests/storage/test_authority_operational.py:1139:def test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolution(
+tests/storage/test_authority_operational.py:1209:def test_immutable_audit_batch_precedes_exact_history_prune_and_preserves_rollup(
+tests/storage/test_authority_operational.py:1275:def test_online_archive_retains_each_current_receipt_until_terminal_ack(
+tests/storage/test_authority_operational.py:1368:def test_audit_archive_never_prunes_latest_version_or_blocks_next_commit(tmp_path: Path) -> None:
+tests/storage/test_authority_operational.py:1404:def test_active_leader_compacts_audit_batches_before_exact_source_gc(tmp_path: Path) -> None:
+tests/storage/test_authority_operational.py:1530:def test_fenced_maintenance_archives_history_and_successor_reclaims_artifact_gc(
+tests/storage/test_authority_operational.py:1608:def test_artifact_gc_refuses_symlinked_or_identity_changed_objects(tmp_path: Path) -> None:
+[0m
+[0m$ [0mcd /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek && rg -n "^def test_" tests/storage/test_static_contributor_binding.py tests/storage/test_dynamic_launch_authorization.py tests/tools/test_request_static_replacement.py tests/test_capture_source_identity.py
+tests/storage/test_static_contributor_binding.py:26:def test_static_binding_requires_terminal_old_attempt_and_increments_generation(
+tests/storage/test_static_contributor_binding.py:73:def test_new_static_logical_launch_requires_explicit_replacement(tmp_path: Path) -> None:
+tests/storage/test_static_contributor_binding.py:113:def test_active_static_replacement_atomically_abandons_prepared_work(tmp_path: Path) -> None:
+tests/tools/test_request_static_replacement.py:10:def test_authorization_collision_tells_operator_to_issue_a_fresh_attempt_id(
+tests/storage/test_dynamic_launch_authorization.py:26:def test_bootstrap_slot_is_one_use_and_replacement_requires_exact_qsub_job(
+tests/storage/test_dynamic_launch_authorization.py:165:def test_stream_cannot_hold_two_unreleased_launch_reservations(tmp_path: Path) -> None:
+tests/test_capture_source_identity.py:39:def test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources(tmp_path):
+[0m
+[0m→ [0mRead configs/full_protocol_dynamic.yaml
+[0m
+[0m$ [0mcd /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek && rg -n "full_protocol_dynamic" --glob '!configs/full_protocol_dynamic.yaml' . | rg -v ".review-packet"
+./docs/configuration.md:30:- `configs/full_protocol_dynamic.yaml`：4 个 bootstrap instances 的 dynamic membership 示例，使用 `scripts/miyabi/run_learner.pbs` 扩容或替换。
+[0m
+[0m$ [0mcd /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek && rg -n "expected_hosts|PBS_NODEFILE|gethostname" tests/harness/test_full_protocol_harness.py scripts/miyabi/check_full_protocol_run.py | head
+tests/harness/test_full_protocol_harness.py:68:        "expected_hosts": 5,
+scripts/miyabi/check_full_protocol_run.py:104:    nodefile = os.environ.get("PBS_NODEFILE")
+scripts/miyabi/check_full_protocol_run.py:377:    expected_hosts: int,
+scripts/miyabi/check_full_protocol_run.py:708:    if len(hosts) != expected_hosts:
+scripts/miyabi/check_full_protocol_run.py:709:        errors.append(f"attested topology used {len(hosts)} hosts, expected {expected_hosts}")
+scripts/miyabi/check_full_protocol_run.py:710:    if len(nodes) != expected_hosts or set(nodes) != hosts:
+scripts/miyabi/check_full_protocol_run.py:892:            "expected_hosts": expected_hosts,
+scripts/miyabi/check_full_protocol_run.py:1096:            expected_hosts=args.expected_hosts,
+[0m
+[0m$ [0mcd /tmp/2518445.2272/fsdiloco-review.2518445.7HiYb4/repository-deepseek && rg -n "walltime" scripts/miyabi/run_full_protocol.pbs tests/harness/test_full_protocol_harness.py reports/DOING/plan03-1/test-ladder.md | head -20
+scripts/miyabi/run_full_protocol.pbs:6:#PBS -l walltime=00:15:00
+tests/harness/test_full_protocol_harness.py:247:def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner() -> None:
+tests/harness/test_full_protocol_harness.py:255:    assert "#PBS -l walltime=00:15:00" in wrapper
+[0m
+[0m# [0mTodos
+[✓] Read design source docs
+[✓] Read core modules
+[✓] Read storage modules
+[✓] Read runtime services and entrypoints
+[✓] Read tools
+[✓] Read harness test and Checker
+[✓] Read configs, PBS scripts, docs
+[•] Answer review questions and formulate findings
+[ ] Write final review with verdict
+[0m

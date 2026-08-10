@@ -70,3 +70,21 @@
   one-node topology and the registered base/target/prompt variables.
 - Transition: `TEST_REVIEW_TARGET` → `EXTERNAL_TEST_REVIEW`; only monitoring
   and evidence collection are allowed until the job reaches terminal state.
+
+## 2026-08-10T17:00:15+09:00 — TEST_REMEDIATION
+
+- Reviewer job `2518445.opbs` reached a valid orchestration terminal state on
+  `mg0004` with PBS exit status 0 and immutable snapshot digests unchanged.
+- No external invocation produced a structurally valid, model-verifiable
+  report: Claude failed authentication, GLM and DeepSeek were invalid output,
+  and Kimi timed out. None is counted as APPROVE.
+- The mandatory Codex findings C1-C4 remain accepted. Two independently
+  corroborated harness gaps from the invalid DeepSeek raw transcript are also
+  accepted: allocation failure must still publish a structured artifact, and
+  the real syncer fault seam needs a focused unit test. Its proposed hostname
+  aliasing is rejected because exact scheduler/attestation identity is safer.
+- The current matrix has no dynamic multi-node requirement, so the obsolete
+  `F-DYNAMIC-CAPACITY` runtime-scenario registration will be deleted rather
+  than extended with a second Checker mode.
+- Transition: `EXTERNAL_TEST_REVIEW` → `TEST_REMEDIATION`. Runtime execution
+  remains blocked until the remediation is frozen and critically re-reviewed.

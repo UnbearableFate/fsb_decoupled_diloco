@@ -36,6 +36,10 @@ from fs_diloco.storage.paths import RunPaths
 from fs_diloco.storage.run_initializer import validate_completed_run_for_actor
 
 
+class GatePrerequisiteUnavailable(RuntimeError):
+    """The registered run prerequisite does not exist, so validation cannot start."""
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
@@ -315,6 +319,14 @@ def _token_balance(row: dict[str, Any] | None) -> int:
     )
 
 
+def _registered_epoch_states(expected_syncer_epochs: int) -> tuple[str, ...]:
+    if expected_syncer_epochs == 1:
+        return ("released",)
+    if expected_syncer_epochs == 2:
+        return ("expired", "released")
+    raise ValueError("registered Full Protocol scenarios require one or two syncer epochs")
+
+
 def _evidence_paths(
     *,
     run_root: Path,
@@ -495,6 +507,7 @@ def validate_run(
     expected_contributor_ids = {
         f"learner_{index:03d}" for index in range(expected_contributors)
     }
+    expected_epoch_states = _registered_epoch_states(expected_syncer_epochs)
 
     if descriptor.get("descriptor_sha256") != _json_sha256_without(
         descriptor, "descriptor_sha256"
@@ -606,6 +619,17 @@ def validate_run(
         errors.append("static contributor bindings are not all terminal")
     if len(epochs) != expected_syncer_epochs:
         errors.append("syncer epoch history does not match the registered scenario")
+    elif tuple(str(row["final_state"]) for row in epochs) != expected_epoch_states:
+        errors.append("syncer epoch lifecycle does not match the registered scenario")
+    elif any(row["final_at"] is None for row in epochs):
+        errors.append("syncer epoch lifecycle is not durably terminal")
+    elif expected_syncer_epochs == 1 and epochs[0]["superseded_by_epoch"] is not None:
+        errors.append("normal syncer epoch was unexpectedly superseded")
+    elif expected_syncer_epochs == 2 and (
+        int(epochs[0]["superseded_by_epoch"] or -1) != int(epochs[1]["epoch"])
+        or epochs[1]["superseded_by_epoch"] is not None
+    ):
+        errors.append("syncer takeover epoch linkage is invalid")
     if expected_syncer_epochs > 1 and len(epochs) >= 2:
         successor_epoch = int(epochs[-1]["epoch"])
         successor_versions = [
@@ -947,7 +971,12 @@ def _positive_integer(value: str) -> int:
     return parsed
 
 
-def _blocked_artifact(args: argparse.Namespace, exc: Exception) -> dict[str, Any]:
+def _diagnostic_artifact(
+    args: argparse.Namespace,
+    exc: Exception,
+    *,
+    status: str,
+) -> dict[str, Any]:
     try:
         source: dict[str, Any] | None = _source_identity(args.project_root.resolve())
     except Exception:
@@ -962,7 +991,7 @@ def _blocked_artifact(args: argparse.Namespace, exc: Exception) -> dict[str, Any
         evidence_paths = [str(source_helper)]
     return {
         "artifact_version": 1,
-        "status": "BLOCKED",
+        "status": status,
         "gate": args.gate,
         "experiment_id": args.experiment_id,
         "requirements_covered": [args.requirement_id],
@@ -1076,29 +1105,45 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-hosts", type=_positive_integer, required=True)
     parser.add_argument("--expected-syncer-epochs", type=_positive_integer, default=1)
     parser.add_argument("--expected-replaced-learner", type=_safe_identifier)
+    parser.add_argument("--blocked-reason")
     parser.add_argument("--output", type=Path, required=True)
     return parser
 
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
-    try:
-        payload = validate_run(
-            gate=args.gate,
-            experiment_id=args.experiment_id,
-            requirement_id=args.requirement_id,
-            project_root=args.project_root.resolve(),
-            run_root=args.run_root.resolve(),
-            log_root=args.log_root.resolve(),
-            expected_global_steps=args.expected_global_steps,
-            expected_inner_steps=args.expected_inner_steps,
-            expected_contributors=args.expected_contributors,
-            expected_hosts=args.expected_hosts,
-            expected_syncer_epochs=args.expected_syncer_epochs,
-            expected_replaced_learner=args.expected_replaced_learner,
+    if args.blocked_reason is not None:
+        if not args.blocked_reason.strip():
+            raise SystemExit("--blocked-reason must not be empty")
+        payload = _diagnostic_artifact(
+            args,
+            GatePrerequisiteUnavailable(args.blocked_reason),
+            status="BLOCKED",
         )
-    except Exception as exc:
-        payload = _blocked_artifact(args, exc)
+    else:
+        try:
+            if not args.run_root.resolve().is_dir():
+                raise GatePrerequisiteUnavailable(
+                    f"registered run root is unavailable: {args.run_root.resolve()}"
+                )
+            payload = validate_run(
+                gate=args.gate,
+                experiment_id=args.experiment_id,
+                requirement_id=args.requirement_id,
+                project_root=args.project_root.resolve(),
+                run_root=args.run_root.resolve(),
+                log_root=args.log_root.resolve(),
+                expected_global_steps=args.expected_global_steps,
+                expected_inner_steps=args.expected_inner_steps,
+                expected_contributors=args.expected_contributors,
+                expected_hosts=args.expected_hosts,
+                expected_syncer_epochs=args.expected_syncer_epochs,
+                expected_replaced_learner=args.expected_replaced_learner,
+            )
+        except GatePrerequisiteUnavailable as exc:
+            payload = _diagnostic_artifact(args, exc, status="BLOCKED")
+        except Exception as exc:
+            payload = _diagnostic_artifact(args, exc, status="FAIL")
     output = args.output.resolve()
     validate_gate_artifact(payload, output=output)
     _atomic_write(output, payload)
