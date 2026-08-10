@@ -17,7 +17,7 @@ sync:
   quorum_max: 8
   staleness_lambda: 0.0
   scan_interval_seconds: 0.5
-  stop_after_outer_steps: 10
+  stop_after_outer_steps: 11
 syncer:
   device: cpu
   compute_dtype: float32
@@ -35,7 +35,7 @@ terminal:
   proposal_visibility_grace_seconds: 5.0
   max_terminal_merges: 0
 training:
-  inner_steps: 50
+  inner_steps: 51
   micro_batch_size: 1
   gradient_accumulation_steps: 1
   completion_mode: global_only
