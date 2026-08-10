@@ -3,19 +3,19 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P3-functional-faults
-work_unit_id: P3-W5-unified-functional-fault-rerun
-state: STAGED_TEST_EXECUTION
-base_commit: 4ebee6339fb76f63127874c655d7b109b2ec0b39
-target_commit: 8e7f87432895f3a699c93dc252aa225b7d9944a8
+work_unit_id: P3-W6-phase-closure-review
+state: PHASE_REVIEW_TARGET
+base_commit: 9398e822ebe6cf9755e55567b18916802b93162f
+target_commit: null
 formal_source_commit: null
 formal_source_fingerprint: null
-experiment_id: p3-learner-replacement-01
-experiment_domain: product
+experiment_id: null
+experiment_domain: source-freeze
 failure_counters:
   "harness:p2-one-node-validation-01": 0
   "harness:p2-one-node-full-suite-01": 0
   "product:p3-functional-normal-01": 0
-  "product:p3-learner-replacement-01": 1
+  "product:p3-learner-replacement-01": 0
   "product:p3-syncer-takeover-01": 0
   "harness:p3-functional-checker-01": 0
 required_tests:
@@ -41,6 +41,12 @@ required_evidence:
   - reports/DOING/code_review/plan03-1/critical-P3-terminal-applied-total-remediation/codex-gpt_8e7f87432895f3a699c93dc252aa225b7d9944a8.md
   - reports/DOING/plan03-1/artifacts/20260810-193100_p3-terminal-total-validation.json
   - reports/DOING/plan03-1/artifacts/20260810-193100_p3-terminal-total-validation.log
+  - reports/DOING/plan03-1/artifacts/20260810-193300_p3-functional-normal_result.json
+  - reports/DOING/plan03-1/artifacts/20260810-193300_p3-functional-normal_pbs.log
+  - reports/DOING/plan03-1/artifacts/20260810-193500_p3-learner-replacement_result.json
+  - reports/DOING/plan03-1/artifacts/20260810-193500_p3-learner-replacement_pbs.log
+  - reports/DOING/plan03-1/artifacts/20260810-193700_p3-syncer-takeover_result.json
+  - reports/DOING/plan03-1/artifacts/20260810-193700_p3-syncer-takeover_pbs.log
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -53,4 +59,4 @@ external_review:
   pbs_job_id: null
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: submit_p3_functional_normal_after_terminal_fix
+allowed_next_action: codex_review_p3_code_and_evidence

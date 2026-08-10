@@ -660,3 +660,93 @@
 - The Checker harness counter resets to zero. The allocation closed normally.
   Freeze this evidence, then rerun normal, learner replacement and syncer
   takeover serially from one new source commit/fingerprint.
+
+## 2026-08-10T19:34:53+09:00 — P3 functional-normal rerun PASS
+
+- PBS job `2519926.opbs` ran 15 seconds on exact five-node `debug-g` topology
+  `mg0005`, `mg0006`, `mg0010`, `mg0012`, `mg0013`; scheduler exit status is
+  0. Source commit is `7528370e6b6635ecc7d6c2b40ac8e337c901826b`,
+  fingerprint
+  `sha256:6b4964840a786276242608746f862ca3ce05ae48f256d8755eadb58cfd4454e5`.
+- Structured status is `PASS` with no errors: versions 0-4, four applied
+  proposals per contributor, 16 applied and 12 lawfully dropped proposals,
+  5120 applied of 8960 processed tokens, zero local discard/quarantine/
+  unpublished/outstanding work and zero ledger balance.
+- Independent terminal audit confirms 5120 in merged publication history,
+  token rollup, terminal SQLite authority, fixed stop/summary controls and the
+  immutable stop publication. The pruned hot publication table contains only
+  version 4 and 1280 tokens, directly exercising the repaired authority
+  boundary.
+- Actor/node attestations cover one syncer plus four learners on the exact PBS
+  nodefile; the sole epoch is released; terminal fences, hashes and SQLite
+  integrity pass.
+- Evidence:
+  `artifacts/20260810-193300_p3-functional-normal_result.json` (SHA-256
+  `a814c6b991ff4fe0bfefa93cad6e8bb49c19b88ee0772cecd19a15f65e2b7ba4`)
+  and PBS log (SHA-256
+  `de8b8f09a6efe0f122b2729fab7bdbc9f4d6c7663a93c926d25190823bc3cfa5`).
+- Keep report changes uncommitted so all three scenarios retain the exact same
+  source commit. Submit learner replacement next.
+
+## 2026-08-10T19:36:25+09:00 — P3 learner-replacement rerun PASS
+
+- PBS job `2519935.opbs` ran 17 seconds on exact five-node `debug-g` topology
+  `mg0001`, `mg0005`, `mg0006`, `mg0007`, `mg0010`; scheduler exit status is
+  0. It retained source commit
+  `7528370e6b6635ecc7d6c2b40ac8e337c901826b` and fingerprint
+  `sha256:6b4964840a786276242608746f862ca3ce05ae48f256d8755eadb58cfd4454e5`.
+- Structured status is `PASS` with no errors. The original `learner_000`
+  attempt exited 143, binding generation advanced 1 -> 2, old history is
+  `replaced`, the registered successor became current, contributed accepted
+  work and acknowledged the terminal fence.
+- Versions are exactly 0-4 with four applied proposals per contributor. The
+  ledger records 16 applied and 32 dropped proposals, 5120 applied of 15360
+  processed tokens, zero local discard/quarantine/unpublished/outstanding work
+  and zero balance.
+- Independent audit confirms exactly 5120 tokens in merged publications,
+  rollup, terminal authority, fixed controls and immutable stop. The pruned hot
+  table again holds only the final 1280-token publication. Topology, epoch,
+  hashes, terminal fences and SQLite integrity pass.
+- Evidence:
+  `artifacts/20260810-193500_p3-learner-replacement_result.json` (SHA-256
+  `4e909f836b11f5bb1baa590e65e21419e541235965e2468c03856c3c3e99fade`)
+  and PBS log (SHA-256
+  `0ce8e4829b94f6005aaee6e2c51660deeec90fda5486c678fdc752caffb3c7de`).
+- The product failure counter resets to zero. Keep the report changes
+  uncommitted and submit syncer takeover from the identical source identity.
+
+## 2026-08-10T19:38:29+09:00 — P3 syncer-takeover rerun PASS
+
+- PBS job `2519945.opbs` ran 29 seconds on exact five-node `debug-g` topology
+  `mg0004`, `mg0005`, `mg0006`, `mg0007`, `mg0010`; scheduler exit status is
+  0. It used the same source commit
+  `7528370e6b6635ecc7d6c2b40ac8e337c901826b` and fingerprint
+  `sha256:6b4964840a786276242608746f862ca3ce05ae48f256d8755eadb58cfd4454e5`
+  as the normal and learner-replacement runs.
+- The primary syncer was killed with status 137 immediately after version 2;
+  the retained marker proves the fault occurred outside a SQLite transaction
+  after the lease renewer was quiesced. Epoch 1 durably expired and links to
+  epoch 2; the successor committed versions 3 and 4 and released normally.
+- Structured status is `PASS` with no errors: exactly four applied proposals
+  per contributor, 16 applied and four dropped proposals, 5120 applied of 6400
+  processed tokens, zero local discard/quarantine/unpublished/outstanding work
+  and zero ledger balance. No stale epoch publication follows takeover.
+- Independent terminal audit confirms 5120 in merged publications, rollup,
+  terminal authority, fixed controls and the epoch-2 immutable stop. Actor
+  attestations, terminal fences, publication hashes and SQLite integrity pass.
+- Evidence:
+  `artifacts/20260810-193700_p3-syncer-takeover_result.json` (SHA-256
+  `219fc5ef00ab0e700838360351627d3437ccdbe8fa8bd5fb8847568bcb7b3769`)
+  and PBS log (SHA-256
+  `9fa5d202793e172bdc43ed7996adf67ec7538a8c7f7294b3fdb0068b647cf557`).
+
+## 2026-08-10T19:38:29+09:00 — P3 phase review target
+
+- All three registered P3 scenarios are terminal `PASS`, use the identical
+  clean source commit/fingerprint and satisfy their durable fault oracles.
+  Product and harness counters are zero; obsolete earlier evidence remains
+  explicitly invalidated rather than promoted.
+- Transition: `STAGED_TEST_EXECUTION` -> `PHASE_REVIEW_TARGET`. Freeze the
+  complete evidence set, then perform the mandatory Codex P3 code-and-evidence
+  review from P2 phase-final `9398e822ebe6cf9755e55567b18916802b93162f`.
+  External review remains skipped under user direction.
