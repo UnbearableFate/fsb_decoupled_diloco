@@ -1064,3 +1064,16 @@
 - The mandatory Codex rereview closes FSD-R1 through R9 and returns `APPROVE`.
   Transition: `TEST_REMEDIATION` -> `EXTERNAL_TEST_REVIEW`; submit the restored
   four-lane reviewer job for this exact tested target.
+
+## 2026-08-10T23:03:00+09:00 — external remediation rereview running
+
+- Static preflight passed target ancestry, prompt SHA-256, source-only
+  whitespace, every PBS/shell syntax check and literal group ownership.
+- PBS job `2521428.opbs` is running on one `debug-g` compute node `mg0011` with
+  exact base `74ecd4fb64311c69ae0d758d8c1d99b27a9c5572`, target
+  `3b99d1a995245639f236fe73efd013e4f12c910a`, prompt SHA-256
+  `f01cd657afec036c7bda041b4cd178570addfd8cf2ef4710acca8c94cbe00433`
+  and evidence-based walltime `00:25:00`.
+- The four restored lanes are Claude Opus 5, GLM-5.2, DeepSeek V4 Flash and
+  MiniMax M3. Only terminal monitoring and subsequent identity/finding
+  disposition are allowed while the job is active.

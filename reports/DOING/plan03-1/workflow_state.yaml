@@ -68,7 +68,7 @@ invalidated_evidence:
   - final-f1-normal-target-5b474d5-invalidated-by-current-review-remediation
   - current-u1-target-081e81e-superseded-by-completion-contract-mutation-test
 external_review:
-  pbs_job_id: null
-  status: pending
+  pbs_job_id: 2521428.opbs
+  status: running
 open_blocking_findings: []
-allowed_next_action: submit_external_current_remediation_rereview
+allowed_next_action: monitor_external_current_remediation_rereview
