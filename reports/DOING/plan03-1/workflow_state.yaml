@@ -3,13 +3,13 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P3-functional-faults
-work_unit_id: P3-W1-test-design
-state: IMPLEMENT_AND_DRAFT_TESTS
+work_unit_id: P3-W2-test-design-review
+state: TEST_REVIEW_TARGET
 base_commit: 9398e822ebe6cf9755e55567b18916802b93162f
-target_commit: null
+target_commit: 4688bedebda2cee94137bf943425ca3d9c31ed17
 formal_source_commit: null
 formal_source_fingerprint: null
-experiment_id: null
+experiment_id: p3-functional-fault-test-design-01
 experiment_domain: product
 failure_counters:
   "harness:p2-one-node-validation-01": 0
@@ -34,4 +34,4 @@ external_review:
   pbs_job_id: 2519093.opbs
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: freeze_p3_test_design_target
+allowed_next_action: run_codex_p3_test_design_review
