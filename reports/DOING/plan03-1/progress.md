@@ -478,7 +478,7 @@
   negative aggregate tests, complete Codex review, then rerun one-node
   validation before another five-node normal attempt.
 
-## 2026-08-10T19:17:00+09:00 — P3 Checker remediation target
+## 2026-08-10T19:12:35+09:00 — P3 Checker remediation target
 
 - The normal-run Checker now separates committed work from asynchronous local
   attempts. It still requires exact applied proposals/tokens, and additionally
@@ -497,7 +497,7 @@
   continuous target and complete mandatory Codex critical-incremental review
   before any compute test.
 
-## 2026-08-10T19:19:00+09:00 — P3 Checker remediation APPROVE
+## 2026-08-10T19:13:32+09:00 — P3 Checker remediation APPROVE
 
 - Frozen continuous target:
   `a040cb9c9a073b87a90cdc467dc1c04f72e16ca0`; base is the exact clean source
@@ -510,7 +510,7 @@
   Acquire a main-agent-held one-node allocation and run the fixed validation
   producer before submitting another five-node scenario.
 
-## 2026-08-10T19:22:27+09:00 — P3 Checker remediation validation PASS
+## 2026-08-10T19:15:47+09:00 — P3 Checker remediation validation PASS
 
 - Main-agent-held allocation `2519748.opbs` ran on exact one-node
   `interact-g` host `mg0018` with `1:ncpus=8:mem=16gb`; requested walltime was
