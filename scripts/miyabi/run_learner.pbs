@@ -20,7 +20,7 @@ cd "$PROJECT_ROOT"
 
 authorization=()
 if [[ "$FS_DILOCO_MEMBERSHIP_MODE" == "static" ]]; then
-  LEARNER_INDEX="${PBS_ARRAY_INDEX:-${LEARNER_INDEX:?PBS_ARRAY_INDEX or LEARNER_INDEX is required}}"
+  : "${LEARNER_INDEX:?LEARNER_INDEX is required}"
   printf -v LEARNER_ID 'learner_%03d' "$LEARNER_INDEX"
   STATIC_JOB_ID="${PBS_JOBID%%.*}"
   LOGICAL_LAUNCH_ID="${FS_DILOCO_STATIC_LAUNCH_PREFIX:-static}-${STATIC_JOB_ID}-${LEARNER_ID}"
@@ -36,7 +36,7 @@ else
       authorization+=(--replace-instance-id "$FS_DILOCO_REPLACE_INSTANCE_ID")
     fi
   else
-    BOOTSTRAP_SLOT="${PBS_ARRAY_INDEX:-${BOOTSTRAP_SLOT:?PBS_ARRAY_INDEX or BOOTSTRAP_SLOT is required}}"
+    : "${BOOTSTRAP_SLOT:?BOOTSTRAP_SLOT is required}"
     authorization=(--bootstrap-slot "$BOOTSTRAP_SLOT")
   fi
 fi

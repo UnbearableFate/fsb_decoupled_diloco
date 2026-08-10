@@ -53,6 +53,7 @@ checker=(
   --expected-inner-steps "$EXPECTED_INNER_STEPS"
   --expected-contributors "$NUM_LEARNERS"
   --expected-hosts "$EXPECTED_NODES"
+  --expected-scheduler-jobs 1
   --fault-scenario "$FS_DILOCO_FAULT_SCENARIO"
   --syncer-takeover-boundary-version "$SYNCER_TAKEOVER_BOUNDARY_VERSION"
   --output "$EVIDENCE_OUTPUT"

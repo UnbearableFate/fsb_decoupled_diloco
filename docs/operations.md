@@ -26,10 +26,12 @@ python -m fs_diloco.tools.launch_independent_run \
 确认输出后，加上：
 
 ```text
---submit --syncer-walltime HH:MM:SS --learner-walltime HH:MM:SS
+--submit --syncer-walltime HH:MM:SS --learner-walltime HH:MM:SS --log-root /absolute/log/root
 ```
 
-该工具先创建 immutable run，然后提交 `run_syncer.pbs` 和 `run_learner.pbs`。部分 qsub 成功时不会隐式 qdel；返回的 accepted job IDs 是 operator receipt，必须先核对 scheduler 再决定后续操作。
+该工具先创建 immutable run，然后提交一条 `run_syncer.pbs` 和每个 learner 各一条 scalar `run_learner.pbs`；static 模式不使用 PBS job array。部分 qsub 成功时不会隐式 qdel；返回的 accepted job IDs 是 operator receipt，必须先核对 scheduler 再决定后续操作。
+
+Miyabi login node 不运行 Python。正式提交使用 `run_independent_launcher.pbs` 在短 compute allocation 中完成初始化和 actor qsub；actor 终态后再提交 `check_independent_run.pbs`。后者从九个 immutable actor attestations 验证九个不同的 scheduler job ID 和九个 host，不把 checker 自己的一节点 nodefile 误当成 actor topology。
 
 ## Static learner replacement
 

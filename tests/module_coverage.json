@@ -333,8 +333,8 @@
     },
     {
       "surface": "fs_diloco/tools/launch_independent_run.py",
-      "boundary": "one syncer plus learner launch commands",
-      "tests": ["tests/tools/test_launch_independent_run.py::test_launch_uses_one_syncer_and_one_learner_script"]
+      "boundary": "one syncer plus scalar learner launch commands",
+      "tests": ["tests/tools/test_launch_independent_run.py::test_launch_uses_one_syncer_and_scalar_learner_jobs"]
     },
     {
       "surface": "fs_diloco/tools/request_static_replacement.py",
@@ -367,6 +367,11 @@
       "tests": ["tests/harness/test_full_protocol_harness.py::test_aggregate_checker_mutations_change_acceptance_to_fail"]
     },
     {
+      "surface": "scripts/miyabi/check_independent_run.pbs",
+      "boundary": "independent actor topology and terminal run Checker wrapper",
+      "tests": ["tests/harness/test_full_protocol_harness.py::test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner"]
+    },
+    {
       "surface": "scripts/miyabi/check_plan_completion.py",
       "boundary": "same-target formal ladder and requirement completion aggregation",
       "tests": ["tests/harness/test_plan_completion.py::test_completion_aggregate_accepts_registered_staged_inputs"]
@@ -387,9 +392,14 @@
       "tests": ["tests/harness/test_full_protocol_harness.py::test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner"]
     },
     {
+      "surface": "scripts/miyabi/run_independent_launcher.pbs",
+      "boundary": "compute-side independent actor initialization and submission",
+      "tests": ["tests/harness/test_full_protocol_harness.py::test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner"]
+    },
+    {
       "surface": "scripts/miyabi/run_learner.pbs",
       "boundary": "current independent learner PBS entry",
-      "tests": ["tests/tools/test_launch_independent_run.py::test_launch_uses_one_syncer_and_one_learner_script"]
+      "tests": ["tests/tools/test_launch_independent_run.py::test_launch_uses_one_syncer_and_scalar_learner_jobs"]
     },
     {
       "surface": "scripts/miyabi/run_multi_agent_review.pbs",
@@ -399,7 +409,7 @@
     {
       "surface": "scripts/miyabi/run_syncer.pbs",
       "boundary": "current independent syncer PBS entry",
-      "tests": ["tests/tools/test_launch_independent_run.py::test_launch_uses_one_syncer_and_one_learner_script"]
+      "tests": ["tests/tools/test_launch_independent_run.py::test_launch_uses_one_syncer_and_scalar_learner_jobs"]
     },
     {
       "surface": "scripts/miyabi/run_validation_suite.py",

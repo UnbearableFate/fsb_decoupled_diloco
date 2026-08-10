@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -63,6 +64,28 @@ def _qsub(command: list[str]) -> dict[str, Any]:
     return receipt
 
 
+def _write_submission_receipt(path: Path, payload: dict[str, Any]) -> None:
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, sort_keys=True, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_name, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except BaseException:
+        try:
+            os.unlink(temporary_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
 def launch(
     *,
     config_path: str | Path,
@@ -73,6 +96,7 @@ def launch(
     allow_dirty_snapshot: bool,
     syncer_walltime: str | None = None,
     learner_walltime: str | None = None,
+    log_root: str | Path | None = None,
 ) -> dict[str, Any]:
     project_root = Path(project_root).resolve()
     # Validate scheduler resources before init_run creates the immutable run
@@ -86,6 +110,11 @@ def launch(
         learner_walltime,
         required=submit,
     )
+    if submit and log_root is None:
+        raise ValueError("submitting independent jobs requires an explicit log root")
+    resolved_log_root = None if log_root is None else Path(log_root).resolve()
+    if submit and resolved_log_root is not None:
+        resolved_log_root.mkdir(parents=True, exist_ok=False)
     config = resolve_config(
         config_path,
         run_id=run_id,
@@ -110,6 +139,7 @@ def launch(
     syncer_command = [
         "qsub",
         *syncer_walltime_resource,
+        *([] if resolved_log_root is None else ["-o", str(resolved_log_root / "syncer.log")]),
         "-v",
         variables,
         str(project_root / "scripts/miyabi/run_syncer.pbs"),
@@ -120,6 +150,11 @@ def launch(
             [
                 "qsub",
                 *learner_walltime_resource,
+                *(
+                    []
+                    if resolved_log_root is None
+                    else ["-o", str(resolved_log_root / f"bootstrap_{slot:03d}.log")]
+                ),
                 "-v",
                 f"{variables},BOOTSTRAP_SLOT={slot}",
                 str(project_root / "scripts/miyabi/run_learner.pbs"),
@@ -131,51 +166,64 @@ def launch(
             [
                 "qsub",
                 *learner_walltime_resource,
-                "-r",
-                "y",
+                *(
+                    []
+                    if resolved_log_root is None
+                    else ["-o", str(resolved_log_root / f"learner_{index:03d}.log")]
+                ),
                 "-v",
-                (f"{variables},FS_DILOCO_STATIC_LAUNCH_PREFIX={descriptor['descriptor_sha256']}"),
-                "-J",
-                f"0-{int(shared.sync.num_learners) - 1}",
+                (
+                    f"{variables},"
+                    f"FS_DILOCO_STATIC_LAUNCH_PREFIX={descriptor['descriptor_sha256']},"
+                    f"LEARNER_INDEX={index}"
+                ),
                 str(project_root / "scripts/miyabi/run_learner.pbs"),
             ]
+            for index in range(int(shared.sync.num_learners))
         ]
     result: dict[str, Any] = {
         **initialized,
         "syncer_qsub": syncer_command,
         "membership_mode": shared.membership.mode,
         "learner_qsubs": learner_commands,
+        "log_root": None if resolved_log_root is None else str(resolved_log_root),
         "submitted": bool(submit),
     }
     if submit:
+        assert resolved_log_root is not None
+        receipt_path = resolved_log_root / "submission_receipt.json"
         syncer_receipt = _qsub(syncer_command)
         result["syncer_submission"] = syncer_receipt
         if syncer_receipt["status"] != "submitted":
             result["submission_status"] = "failed"
+            _write_submission_receipt(receipt_path, result)
             return result
         result["syncer_job_id"] = syncer_receipt["job_id"]
+        result["submission_status"] = "submitting"
+        _write_submission_receipt(receipt_path, result)
 
         learner_receipts: list[dict[str, Any]] = []
         result["learner_submissions"] = learner_receipts
         for slot, learner_command in enumerate(learner_commands):
             learner_receipt = _qsub(learner_command)
             learner_receipt["bootstrap_slot"] = slot if dynamic else None
+            learner_receipt["learner_index"] = None if dynamic else slot
             learner_receipts.append(learner_receipt)
+            result["accepted_learner_job_ids"] = [
+                receipt["job_id"]
+                for receipt in learner_receipts
+                if receipt["status"] == "submitted"
+            ]
             if learner_receipt["status"] != "submitted":
                 # Accepted IDs are the durable operator receipt.  Never qdel a
                 # partial topology implicitly.
-                result["accepted_learner_job_ids"] = [
-                    receipt["job_id"]
-                    for receipt in learner_receipts
-                    if receipt["status"] == "submitted"
-                ]
                 result["submission_status"] = "partial"
+                _write_submission_receipt(receipt_path, result)
                 return result
-        if dynamic:
-            result["learner_job_ids"] = [receipt["job_id"] for receipt in learner_receipts]
-        else:
-            result["learner_array_job_id"] = learner_receipts[0]["job_id"]
+            _write_submission_receipt(receipt_path, result)
+        result["learner_job_ids"] = [receipt["job_id"] for receipt in learner_receipts]
         result["submission_status"] = "submitted"
+        _write_submission_receipt(receipt_path, result)
     return result
 
 
@@ -187,6 +235,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--project-root", default=os.getcwd())
     parser.add_argument("--submit", action="store_true")
     parser.add_argument("--allow-dirty-snapshot", action="store_true")
+    parser.add_argument(
+        "--log-root",
+        help="absolute actor log directory; required with --submit",
+    )
     parser.add_argument(
         "--syncer-walltime",
         help="estimated shortest practical PBS walltime (HH:MM:SS); required with --submit",
@@ -205,6 +257,7 @@ def main(argv: list[str] | None = None) -> None:
         allow_dirty_snapshot=args.allow_dirty_snapshot,
         syncer_walltime=args.syncer_walltime,
         learner_walltime=args.learner_walltime,
+        log_root=args.log_root,
     )
     json.dump(result, sys.stdout, sort_keys=True, indent=2)
     sys.stdout.write("\n")

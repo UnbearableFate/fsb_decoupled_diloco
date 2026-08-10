@@ -50,7 +50,10 @@ def _build_valid_checker_fixture(
     *,
     fault_scenario: str = "none",
     syncer_takeover_boundary_version: int = 2,
+    independent_scheduler_jobs: bool = False,
 ) -> tuple[Path, Path, list[str], dict[str, str]]:
+    if independent_scheduler_jobs and fault_scenario != "none":
+        raise ValueError("independent scheduler fixture only covers the fault-free scenario")
     global_steps_by_scenario = {
         "none": 1,
         "learner_replacement": 2,
@@ -86,7 +89,12 @@ def _build_valid_checker_fixture(
         config_sha256=str(descriptor["resolved_config_sha256"]),
     )
     scope = StaticMembershipScope(("learner_000",))
-    scheduler_job_id = "fixture.opbs"
+    scheduler_job_id = (
+        "fixture-syncer.opbs" if independent_scheduler_jobs else "fixture.opbs"
+    )
+    learner_scheduler_job_id = (
+        "fixture-learner.opbs" if independent_scheduler_jobs else scheduler_job_id
+    )
     clock_value = [100.0]
     syncer_attempts = [("checker-syncer", "syncer-attempt", 101)]
     learner_attempts = ["fixture-attempt"]
@@ -289,6 +297,16 @@ def _build_valid_checker_fixture(
     log_root.mkdir()
     atomic_write_json(log_root / "source_identity.json", capture_source_identity(ROOT))
     atomic_write_json(log_root / "init_run.json", {"run_id": descriptor["run_id"]})
+    if independent_scheduler_jobs:
+        atomic_write_json(
+            log_root / "submission_receipt.json",
+            {
+                "submission_status": "submitted",
+                "membership_mode": "static",
+                "syncer_job_id": scheduler_job_id,
+                "learner_job_ids": [learner_scheduler_job_id],
+            },
+        )
     atomic_write_json(log_root / "summary.json", {"final_version": expected_global_steps})
     if replacement_evidence is not None:
         atomic_write_json(log_root / "learner_replacement.json", replacement_evidence)
@@ -317,7 +335,7 @@ def _build_valid_checker_fixture(
             actor_id="learner_000",
             attempt_id=attempt_id,
             runtime_evidence=runtime_evidence,
-            scheduler_job_id=scheduler_job_id,
+            scheduler_job_id=learner_scheduler_job_id,
         )
     for actor_id, attempt_id, _pid in syncer_attempts:
         write_actor_attestation(
@@ -354,6 +372,8 @@ def _build_valid_checker_fixture(
         "1",
         "--expected-hosts",
         "1",
+        "--expected-scheduler-jobs",
+        "2" if independent_scheduler_jobs else "1",
         "--fault-scenario",
         fault_scenario,
         "--syncer-takeover-boundary-version",
@@ -361,7 +381,11 @@ def _build_valid_checker_fixture(
         "--output",
         str(output),
     ]
-    environment = {**os.environ, "PBS_JOBID": scheduler_job_id, "PBS_NODEFILE": str(nodefile)}
+    environment = {
+        **os.environ,
+        "PBS_JOBID": "fixture-checker.opbs" if independent_scheduler_jobs else scheduler_job_id,
+        "PBS_NODEFILE": str(nodefile),
+    }
     return run_root, output, command, environment
 
 
@@ -410,6 +434,49 @@ def test_aggregate_checker_accepts_adjudicated_terminal_overshoot(tmp_path: Path
         "eligible": True,
         "targets": [str(run_root)],
     }
+
+
+def test_aggregate_checker_accepts_independent_actor_jobs(tmp_path: Path) -> None:
+    run_root, output, command, environment = _build_valid_checker_fixture(
+        tmp_path,
+        independent_scheduler_jobs=True,
+    )
+
+    completed, artifact = _run_checker(command, environment, output)
+
+    assert completed.returncode == 0, completed.stderr
+    assert artifact["status"] == "PASS"
+    assert artifact["topology"]["expected_scheduler_jobs"] == 2
+    assert artifact["topology"]["attested_scheduler_job_ids"] == [
+        "fixture-learner.opbs",
+        "fixture-syncer.opbs",
+    ]
+    assert artifact["environment"]["pbs_job_id"] == "fixture-checker.opbs"
+    assert artifact["environment"]["launch_topology"] == {
+        "syncer_job_id": "fixture-syncer.opbs",
+        "learner_job_ids": ["fixture-learner.opbs"],
+    }
+    assert artifact["run_root"] == str(run_root)
+
+
+def test_aggregate_checker_rejects_submission_receipt_mismatch(tmp_path: Path) -> None:
+    _run_root, output, command, environment = _build_valid_checker_fixture(
+        tmp_path,
+        independent_scheduler_jobs=True,
+    )
+    receipt_path = tmp_path / "logs/submission_receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["learner_job_ids"] = ["wrong-learner.opbs"]
+    receipt_path.chmod(0o644)
+    receipt_path.write_text(json.dumps(receipt) + "\n", encoding="utf-8")
+
+    completed, artifact = _run_checker(command, environment, output)
+
+    assert completed.returncode == 1
+    assert artifact["status"] == "FAIL"
+    assert "actor attestations do not match the independent submission receipt" in artifact[
+        "errors"
+    ]
 
 
 @pytest.mark.parametrize(
@@ -701,6 +768,8 @@ def test_checker_parser_freezes_topology_workload_and_fault_oracles(tmp_path: Pa
             "4",
             "--expected-hosts",
             "5",
+            "--expected-scheduler-jobs",
+            "1",
             "--fault-scenario",
             "learner_replacement",
             "--syncer-takeover-boundary-version",
@@ -721,6 +790,7 @@ def test_checker_parser_freezes_topology_workload_and_fault_oracles(tmp_path: Pa
         "expected_inner_steps": 20,
         "expected_contributors": 4,
         "expected_hosts": 5,
+        "expected_scheduler_jobs": 1,
         "fault_scenario": "learner_replacement",
         "syncer_takeover_boundary_version": 2,
         "blocked_reason": None,
@@ -757,6 +827,8 @@ def test_checker_classifies_missing_run_as_structured_blocked_artifact(tmp_path:
             "4",
             "--expected-hosts",
             "5",
+            "--expected-scheduler-jobs",
+            "1",
             "--fault-scenario",
             "none",
             "--syncer-takeover-boundary-version",
@@ -822,6 +894,8 @@ def test_checker_explicit_execution_block_publishes_current_schema(tmp_path: Pat
             "--expected-contributors",
             "1",
             "--expected-hosts",
+            "1",
+            "--expected-scheduler-jobs",
             "1",
             "--fault-scenario",
             "none",
@@ -1082,6 +1156,19 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     assert 'kill -KILL "$primary_pid"' in rank_runner
     assert "trap publish_blocked_on_exit EXIT" in wrapper
     assert "--blocked-reason" in wrapper
+
+    independent_launcher = (
+        ROOT / "scripts/miyabi/run_independent_launcher.pbs"
+    ).read_text(encoding="utf-8")
+    assert "fs_diloco.tools.launch_independent_run" in independent_launcher
+    assert '--log-root "$LOG_ROOT"' in independent_launcher
+    assert 'cp -- "$LAUNCH_RECEIPT" "$LOG_ROOT/init_run.json"' in independent_launcher
+    independent_checker = (
+        ROOT / "scripts/miyabi/check_independent_run.pbs"
+    ).read_text(encoding="utf-8")
+    assert '--expected-scheduler-jobs "$EXPECTED_SCHEDULER_JOBS"' in independent_checker
+    assert "capture_source_identity.py" in independent_checker
+    assert "trap publish_blocked_on_exit EXIT" in independent_checker
 
     review_runner = (ROOT / "scripts/miyabi/run_multi_agent_review.pbs").read_text(encoding="utf-8")
     assert review_runner.count("run_claude &") == 1

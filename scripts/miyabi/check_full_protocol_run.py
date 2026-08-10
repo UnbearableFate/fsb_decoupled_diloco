@@ -354,6 +354,10 @@ def _evidence_paths(
     attestation_root = run_root / "metrics/attestations"
     if attestations and attestation_root.is_dir():
         candidates.extend(sorted(attestation_root.rglob("*.json")))
+    if log_root.is_dir():
+        candidates.extend(
+            path for path in log_root.iterdir() if path.is_file() and not path.is_symlink()
+        )
     candidates.extend(
         sorted((run_root / "control/syncer_epochs").glob("e*_*/terminal/stop_*.json"))
     )
@@ -385,6 +389,7 @@ def validate_run(
     expected_inner_steps: int,
     expected_contributors: int,
     expected_hosts: int,
+    expected_scheduler_jobs: int,
     fault_scenario: str,
     syncer_takeover_boundary_version: int,
 ) -> dict[str, Any]:
@@ -775,8 +780,24 @@ def validate_run(
     attested_syncer_owners = {str(row["actor_id"]) for row in syncer_attestations}
     expected_syncer_owners = {str(row["owner_id"]) for row in epochs}
     hosts = {str(row.get("hostname")) for row in attestations}
+    scheduler_job_ids = {
+        str(row["scheduler_job_id"])
+        for row in attestations
+        if isinstance(row.get("scheduler_job_id"), str) and row["scheduler_job_id"]
+    }
+    scheduler_job_hosts = {
+        job_id: sorted(
+            {
+                str(row["hostname"])
+                for row in attestations
+                if row.get("scheduler_job_id") == job_id
+            }
+        )
+        for job_id in sorted(scheduler_job_ids)
+    }
     pbs_job_id = os.environ.get("PBS_JOBID")
     nodes = _pbs_nodes()
+    launch_topology: dict[str, Any] | None = None
     if any(
         row.get("attestation_sha256") != _json_sha256_without(row, "attestation_sha256")
         or row.get("run_id") != descriptor.get("run_id")
@@ -795,10 +816,62 @@ def validate_run(
         errors.append("syncer attestations do not match exact durable epoch owners")
     if len(hosts) != expected_hosts:
         errors.append(f"attested topology used {len(hosts)} hosts, expected {expected_hosts}")
-    if len(nodes) != expected_hosts or set(nodes) != hosts:
-        errors.append("PBS nodefile and actor attestations describe different topologies")
-    if not pbs_job_id or any(row.get("scheduler_job_id") != pbs_job_id for row in attestations):
-        errors.append("actor attestations are not bound to the current full PBS job ID")
+    if len(scheduler_job_ids) != expected_scheduler_jobs:
+        errors.append(
+            f"actor attestations used {len(scheduler_job_ids)} scheduler jobs, "
+            f"expected {expected_scheduler_jobs}"
+        )
+    if any(len(job_hosts) != 1 for job_hosts in scheduler_job_hosts.values()):
+        errors.append("an actor scheduler job is attested on more than one host")
+    if expected_scheduler_jobs == 1:
+        if len(nodes) != expected_hosts or set(nodes) != hosts:
+            errors.append("PBS nodefile and actor attestations describe different topologies")
+        if not pbs_job_id or scheduler_job_ids != {pbs_job_id}:
+            errors.append("actor attestations are not bound to the current full PBS job ID")
+    elif len(attestations) != expected_scheduler_jobs:
+        errors.append("independent scheduler jobs are not one-to-one with actor attempts")
+    if expected_scheduler_jobs > 1:
+        receipt_path = log_root / "submission_receipt.json"
+        if not receipt_path.is_file():
+            errors.append("independent submission receipt is missing")
+        else:
+            receipt = _read_json(receipt_path)
+            learner_job_ids = receipt.get("learner_job_ids")
+            syncer_job_id = receipt.get("syncer_job_id")
+            if (
+                receipt.get("submission_status") != "submitted"
+                or receipt.get("membership_mode") != "static"
+                or not isinstance(syncer_job_id, str)
+                or not isinstance(learner_job_ids, list)
+                or len(learner_job_ids) != expected_contributors
+                or any(not isinstance(item, str) or not item for item in learner_job_ids)
+            ):
+                errors.append("independent submission receipt is not complete and exact")
+            else:
+                expected_job_ids = {syncer_job_id, *learner_job_ids}
+                learner_attestation_jobs = {
+                    str(row["actor_id"]): str(row["scheduler_job_id"])
+                    for row in learner_attestations
+                }
+                expected_learner_jobs = {
+                    f"learner_{index:03d}": str(job_id)
+                    for index, job_id in enumerate(learner_job_ids)
+                }
+                syncer_attestation_jobs = {
+                    str(row["scheduler_job_id"]) for row in syncer_attestations
+                }
+                if (
+                    scheduler_job_ids != expected_job_ids
+                    or learner_attestation_jobs != expected_learner_jobs
+                    or syncer_attestation_jobs != {syncer_job_id}
+                ):
+                    errors.append(
+                        "actor attestations do not match the independent submission receipt"
+                    )
+                launch_topology = {
+                    "syncer_job_id": syncer_job_id,
+                    "learner_job_ids": learner_job_ids,
+                }
 
     replacement_evidence: dict[str, Any] | None = None
     if replacement_learner is not None:
@@ -930,6 +1003,9 @@ def validate_run(
             "packages": _package_provenance(),
             "pbs_job_id": pbs_job_id,
             "nodes": nodes,
+            "actor_scheduler_job_ids": sorted(scheduler_job_ids),
+            "actor_scheduler_job_hosts": scheduler_job_hosts,
+            "launch_topology": launch_topology,
             "topology": topology,
         },
         "workload_identity": {
@@ -978,7 +1054,9 @@ def validate_run(
         },
         "topology": {
             "expected_hosts": expected_hosts,
+            "expected_scheduler_jobs": expected_scheduler_jobs,
             "attested_hosts": sorted(hosts),
+            "attested_scheduler_job_ids": sorted(scheduler_job_ids),
             "learner_attestation_count": len(learner_attestations),
             "syncer_attestation_count": len(syncer_attestations),
         },
@@ -1179,6 +1257,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-inner-steps", type=_positive_integer, required=True)
     parser.add_argument("--expected-contributors", type=_positive_integer, required=True)
     parser.add_argument("--expected-hosts", type=_positive_integer, required=True)
+    parser.add_argument("--expected-scheduler-jobs", type=_positive_integer, required=True)
     parser.add_argument(
         "--fault-scenario",
         choices=("none", "learner_replacement", "syncer_takeover"),
@@ -1226,6 +1305,7 @@ def main(argv: list[str] | None = None) -> None:
                 expected_inner_steps=args.expected_inner_steps,
                 expected_contributors=args.expected_contributors,
                 expected_hosts=args.expected_hosts,
+                expected_scheduler_jobs=args.expected_scheduler_jobs,
                 fault_scenario=args.fault_scenario,
                 syncer_takeover_boundary_version=args.syncer_takeover_boundary_version,
             )

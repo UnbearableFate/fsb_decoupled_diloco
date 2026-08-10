@@ -33,7 +33,7 @@ def test_submission_walltime_is_explicit_and_at_least_ten_minutes(value: str | N
 
 
 @pytest.mark.parametrize("mode", ["static", "dynamic"])
-def test_launch_uses_one_syncer_and_one_learner_script(
+def test_launch_uses_one_syncer_and_scalar_learner_jobs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
 ) -> None:
     config = _config(mode)
@@ -68,3 +68,65 @@ def test_launch_uses_one_syncer_and_one_learner_script(
 
     assert Path(result["syncer_qsub"][-1]).name == "run_syncer.pbs"
     assert {Path(command[-1]).name for command in result["learner_qsubs"]} == {"run_learner.pbs"}
+    if mode == "static":
+        assert len(result["learner_qsubs"]) == config.sync.num_learners
+        variables = [command[command.index("-v") + 1] for command in result["learner_qsubs"]]
+        assert {
+            item.rsplit("LEARNER_INDEX=", 1)[1] for item in variables
+        } == {str(index) for index in range(config.sync.num_learners)}
+        assert all(
+            "-J" not in command and "-r" not in command
+            for command in result["learner_qsubs"]
+        )
+    else:
+        assert len(result["learner_qsubs"]) == config.membership.bootstrap_instances
+        variables = [command[command.index("-v") + 1] for command in result["learner_qsubs"]]
+        assert {
+            item.rsplit("BOOTSTRAP_SLOT=", 1)[1] for item in variables
+        } == {str(index) for index in range(config.membership.bootstrap_instances)}
+
+
+def test_submit_returns_every_scalar_actor_job_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config("static")
+    descriptor = {
+        "shared_root": config.run.shared_root,
+        "descriptor_sha256": "d" * 64,
+    }
+    monkeypatch.setattr(launch_independent_run, "resolve_config", lambda *args, **kwargs: config)
+    monkeypatch.setattr(
+        launch_independent_run,
+        "bind_source_identity",
+        lambda *_args, **_kwargs: {},
+    )
+    monkeypatch.setattr(
+        launch_independent_run,
+        "initialize_run",
+        lambda *args, **kwargs: {"descriptor": descriptor, "bootstrap": {}},
+    )
+    submitted: list[list[str]] = []
+
+    def fake_qsub(command: list[str]) -> dict[str, object]:
+        submitted.append(command)
+        return {"status": "submitted", "job_id": f"job-{len(submitted)}"}
+
+    monkeypatch.setattr(launch_independent_run, "_qsub", fake_qsub)
+
+    result = launch_independent_run.launch(
+        config_path=tmp_path / "config.yaml",
+        run_id="run",
+        shared_root=config.run.shared_root,
+        project_root=tmp_path,
+        submit=True,
+        allow_dirty_snapshot=False,
+        syncer_walltime="00:10:00",
+        learner_walltime="00:10:00",
+        log_root=tmp_path / "logs",
+    )
+
+    assert len(submitted) == 1 + config.sync.num_learners
+    assert result["syncer_job_id"] == "job-1"
+    assert result["learner_job_ids"] == [
+        f"job-{index}" for index in range(2, config.sync.num_learners + 2)
+    ]

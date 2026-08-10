@@ -1,0 +1,74 @@
+#!/bin/bash
+#PBS -N fsdiloco_independent_check
+#PBS -q regular-g
+#PBS -W group_list=xg24i002
+#PBS -l select=1:mpiprocs=1
+#PBS -l walltime=00:10:00
+#PBS -j oe
+
+set -eEuo pipefail
+trap 'echo "[ERROR] independent checker failed at line $LINENO" >&2' ERR
+
+: "${EVIDENCE_OUTPUT:?EVIDENCE_OUTPUT is required}"
+: "${GATE:?GATE is required}"
+: "${EXPERIMENT_ID:?EXPERIMENT_ID is required}"
+: "${REQUIREMENT_ID:?REQUIREMENT_ID is required}"
+: "${SHARED_ROOT:?SHARED_ROOT is required}"
+: "${LOG_ROOT:?LOG_ROOT is required}"
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+EXPECTED_GLOBAL_STEPS="${EXPECTED_GLOBAL_STEPS:-10}"
+EXPECTED_INNER_STEPS="${EXPECTED_INNER_STEPS:-50}"
+EXPECTED_CONTRIBUTORS="${EXPECTED_CONTRIBUTORS:-8}"
+EXPECTED_HOSTS="${EXPECTED_HOSTS:-9}"
+EXPECTED_SCHEDULER_JOBS="${EXPECTED_SCHEDULER_JOBS:-9}"
+SYNCER_TAKEOVER_BOUNDARY_VERSION="${SYNCER_TAKEOVER_BOUNDARY_VERSION:-2}"
+
+cd "$PROJECT_ROOT"
+test -x "$PYTHON_BIN"
+mkdir -p "$LOG_ROOT"
+[[ ! -e "$EVIDENCE_OUTPUT" ]] || {
+  echo "EVIDENCE_OUTPUT already exists: $EVIDENCE_OUTPUT" >&2
+  exit 2
+}
+
+"$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/capture_source_identity.py" \
+  --project-root "$PROJECT_ROOT" \
+  --output-json "$LOG_ROOT/source_identity.json" \
+  --output-env "$LOG_ROOT/source_identity.env" \
+  > "$LOG_ROOT/source_identity.log"
+"$PYTHON_BIN" -m fs_diloco.tools.analysis "$SHARED_ROOT" > "$LOG_ROOT/summary.json"
+
+checker=(
+  "$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/check_full_protocol_run.py"
+  --gate "$GATE"
+  --experiment-id "$EXPERIMENT_ID"
+  --requirement-id "$REQUIREMENT_ID"
+  --project-root "$PROJECT_ROOT"
+  --run-root "$SHARED_ROOT"
+  --log-root "$LOG_ROOT"
+  --expected-global-steps "$EXPECTED_GLOBAL_STEPS"
+  --expected-inner-steps "$EXPECTED_INNER_STEPS"
+  --expected-contributors "$EXPECTED_CONTRIBUTORS"
+  --expected-hosts "$EXPECTED_HOSTS"
+  --expected-scheduler-jobs "$EXPECTED_SCHEDULER_JOBS"
+  --fault-scenario none
+  --syncer-takeover-boundary-version "$SYNCER_TAKEOVER_BOUNDARY_VERSION"
+  --output "$EVIDENCE_OUTPUT"
+)
+
+publish_blocked_on_exit() {
+  local exit_status=$?
+  trap - EXIT
+  if [[ "$exit_status" -ne 0 && ! -e "$EVIDENCE_OUTPUT" ]]; then
+    "${checker[@]}" \
+      --blocked-reason \
+      "Independent Checker exited before evidence publication (exit=$exit_status)" \
+      || true
+  fi
+  exit "$exit_status"
+}
+trap publish_blocked_on_exit EXIT
+
+"${checker[@]}"
+trap - EXIT

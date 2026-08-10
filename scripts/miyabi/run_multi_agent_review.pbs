@@ -1,9 +1,9 @@
 #!/bin/bash
 #PBS -N fsdiloco_multi_review
-#PBS -q debug-g
+#PBS -q regular-g
 #PBS -W group_list=xg24i002
 #PBS -l select=1:mpiprocs=1
-#PBS -l walltime=00:30:00
+#PBS -l walltime=02:30:00
 #PBS -j oe
 
 set -eEuo pipefail
@@ -65,14 +65,14 @@ CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-5}"
 OPENCODE_GLM_MODEL="${OPENCODE_GLM_MODEL:-opencode-go/glm-5.2}"
 OPENCODE_DEEPSEEK_MODEL="${OPENCODE_DEEPSEEK_MODEL:-opencode-go/deepseek-v4-flash}"
 OPENCODE_MINIMAX_MODEL="${OPENCODE_MINIMAX_MODEL:-opencode-go/minimax-m3}"
-REVIEW_TIMEOUT_SECONDS="${REVIEW_TIMEOUT_SECONDS:-1500}"
+REVIEW_TIMEOUT_SECONDS="${REVIEW_TIMEOUT_SECONDS:-7200}"
 
 HOST_NAME="$(hostname)"
 [[ -n "${PBS_JOBID:-}" ]] || die "PBS_JOBID is missing; do not run reviewers outside PBS"
 [[ "$HOST_NAME" =~ ^mg[0-9]+$ ]] || die "reviewers must run on an mg<number> compute node, got $HOST_NAME"
 [[ "$REVIEW_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || die "REVIEW_TIMEOUT_SECONDS must be an integer"
-((REVIEW_TIMEOUT_SECONDS >= 60 && REVIEW_TIMEOUT_SECONDS <= 1500)) || \
-  die "REVIEW_TIMEOUT_SECONDS must be between 60 and 1500"
+((REVIEW_TIMEOUT_SECONDS >= 60 && REVIEW_TIMEOUT_SECONDS <= 7200)) || \
+  die "REVIEW_TIMEOUT_SECONDS must be between 60 and 7200"
 
 require_safe_component "PLAN_ID" "$PLAN_ID"
 require_safe_component "REVIEW_ID" "$REVIEW_ID"
