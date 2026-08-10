@@ -31,3 +31,28 @@
 - Result: `plan-init static self-check: PASS`.
 - Transition: `PLAN_INIT` → `IMPLEMENT_AND_DRAFT_TESTS`, phase
   `P1-current-protocol`, work unit `P1-W1-unversioned-surface`.
+
+## 2026-08-10T16:34:16+09:00 — TEST_REVIEW_TARGET
+
+- Frozen implementation target:
+  `f14847498d0055e9efbd9639a4e73ec3cfebfb6b`; base remains the branch point
+  `7d4a607b753744d9b57b54fe0400d1267b13cc40`, verified as an ancestor.
+- Implemented one unversioned Full Protocol surface, strict current config,
+  fresh unversioned schema paths, query-only operator authority, canonical
+  source identity, current-only cleanup, static/functional/formal configs,
+  current PBS launchers, fault injection and structured Checker.
+- Login-safe static commands passed on the target: `git diff --check`,
+  `bash -n scripts/miyabi/*.pbs`, `bash -n scripts/miyabi/*.sh`, literal group
+  checks, path/reference scans and obsolete-product-name scans. No project
+  Python import or runtime test was executed on the login node.
+- Mandatory Codex/GPT test-design review was saved before requesting or reading
+  any external conclusion at
+  `reports/DOING/code_review/plan03-1/test-P2-full-protocol-harness/`.
+- Review verdict: `CHANGES_REQUIRED`. Open findings cover the missing aggregate
+  Checker acceptance/mutation fixture, incorrect FAIL/BLOCKED classification,
+  incomplete takeover epoch-state oracle and missing retained-module coverage
+  inventory.
+- External review prompt SHA-256:
+  `0c5ed443950e3650ff884781a43aca1661bc75a95412a0ce21765cfe78ddcec1`.
+- Transition: `IMPLEMENT_AND_DRAFT_TESTS` → `TEST_REVIEW_TARGET`. The only next
+  action is the external test-design reviewer job; runtime tests remain blocked.
