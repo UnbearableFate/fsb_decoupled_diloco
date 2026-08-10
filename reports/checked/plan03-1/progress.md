@@ -1344,5 +1344,28 @@
   `reports/checked/code_review/plan03-1/`.
 - `archive-path-map.json` records the three prefix mappings without rewriting
   hash-bound evidence. The archived evidence set also retains invalidated and
-  failure artifacts. Cleanup of the exact final run and log roots is the only
-  remaining action.
+  failure artifacts. Cleanup of the exact final run roots is the only remaining
+  action.
+
+## 2026-08-11T01:38:06+09:00 — archive cleanup complete
+
+- Archive commit `eb7dbfbd6ef016eb3943795038914445294a8ecb` preserves
+  Git rename history, the path map and the complete success/failure evidence
+  set.
+- Evidence-bound dry-runs resolved only terminal proposal pointers and terminal
+  update payloads in the four exact final F1/G1 run roots. Execution then
+  deleted 40 redundant objects totaling 669,235 bytes. The four immutable
+  cleanup manifests report `complete`; their SHA-256 values are
+  `02f2f43b5e52cba95e2dd5273cc5dd7b8f2f2578c954aec136a2455426fb9752`,
+  `da46b30617ef906bb9e9d568648ebc6493fe19ceb8d7d75da5a2434e39170521`,
+  `01c083c2cda63fffcc0446125d1cbcb04b2824fc8bb6cfe3c763fa7d7a4d58a0`
+  and `017639cf4c92e8a4c3a7169359e43f54e0ffb88da1a9dacf61591757c6403889`.
+- The deleted redundant objects are not directly recoverable; their information
+  remains summarized in the cleanup manifests and they can be regenerated only
+  by rerunning the experiments. Authority databases, fsync histories,
+  checkpoints, publications, configuration and 169 authority-owned GC objects
+  were retained by policy. The small log roots remain because the formal
+  manifest binds their source identity and they contain resolved config,
+  summary and fault-boundary evidence.
+- The clean detached formal-source worktree was removed. No further workflow
+  action remains.

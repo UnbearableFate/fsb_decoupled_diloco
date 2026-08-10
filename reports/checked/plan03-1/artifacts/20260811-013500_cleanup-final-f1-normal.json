@@ -1,0 +1,101 @@
+{
+  "artifact_policy_sha256": "d8c2fcc864e94097c5c5b32a2cbfb2d6c053386dd6b25012dce0889f61762ce8",
+  "candidate_bytes": 133820,
+  "candidate_count": 8,
+  "candidates": [
+    {
+      "device": 743766374,
+      "inode": 252205250440595148,
+      "mtime_ns": 1786373838000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_000.json",
+      "size_bytes": 607
+    },
+    {
+      "device": 743766374,
+      "inode": 252205248460965113,
+      "mtime_ns": 1786373838000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_001.json",
+      "size_bytes": 607
+    },
+    {
+      "device": 743766374,
+      "inode": 252205248444143329,
+      "mtime_ns": 1786373838000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_002.json",
+      "size_bytes": 607
+    },
+    {
+      "device": 743766374,
+      "inode": 252205238126170604,
+      "mtime_ns": 1786373838000000000,
+      "reason": "terminal proposal pointer",
+      "relative_path": "updates/latest/learner_003.json",
+      "size_bytes": 607
+    },
+    {
+      "device": 743766374,
+      "inode": 252205250440595140,
+      "mtime_ns": 1786373838000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_000/81adee41-b909-4e6d-843a-46a7ecb06953.safetensors",
+      "size_bytes": 32848
+    },
+    {
+      "device": 743766374,
+      "inode": 252205248460965105,
+      "mtime_ns": 1786373838000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_001/6fd97601-164a-47a7-a13f-e5f96ddece3c.safetensors",
+      "size_bytes": 32848
+    },
+    {
+      "device": 743766374,
+      "inode": 252205248444143321,
+      "mtime_ns": 1786373838000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_002/91d7b151-3a7a-4755-8a9d-2eb7210f862c.safetensors",
+      "size_bytes": 32848
+    },
+    {
+      "device": 743766374,
+      "inode": 252205238126170601,
+      "mtime_ns": 1786373838000000000,
+      "reason": "terminal update payload",
+      "relative_path": "updates/payloads/learner_003/ab5aac9b-757e-4a18-bb87-cf82784aaa08.safetensors",
+      "size_bytes": 32848
+    }
+  ],
+  "completion_evidence": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/checked/plan03-1/artifacts/20260810-235500_final-f1-functional-normal_result.json",
+  "completion_evidence_sha256": "5db6765f74621aa57ba45a7c7f0bf2e49eff71cae61441698b2d5bf439b58bb4",
+  "deleted_bytes": 133820,
+  "deleted_count": 8,
+  "format_version": 1,
+  "retained_authority_owned_gc_count": 17,
+  "retained_authority_owned_gc_paths": [
+    "updates/payloads/learner_000/19c82980-a86d-4b7a-bc5c-4d02301aa847.safetensors",
+    "updates/payloads/learner_000/c20a110a-fc39-4162-a5d3-d30e15be773b.safetensors",
+    "updates/payloads/learner_000/e0ef4587-7d1f-48a0-b415-d64eb2a4874b.safetensors",
+    "updates/payloads/learner_000/eef2ef96-368d-4f4d-b973-28a597e80e39.safetensors",
+    "updates/payloads/learner_001/1df1e118-3dd0-4b7b-b118-eabc807742d9.safetensors",
+    "updates/payloads/learner_001/8b5d3b2f-bf95-46c0-a616-7b71e4eea116.safetensors",
+    "updates/payloads/learner_001/a183bae0-8315-46ae-8abe-860ebc3da030.safetensors",
+    "updates/payloads/learner_001/c5a77c75-7c7b-4c01-9a1e-3901c4fdfb94.safetensors",
+    "updates/payloads/learner_002/0c21ccd2-c6d5-44db-937c-a59c7dfa5adf.safetensors",
+    "updates/payloads/learner_002/1d0edb97-c017-4c37-b3a6-6333cd622b64.safetensors",
+    "updates/payloads/learner_002/42e5cc05-c888-4a73-a274-b68dfe135288.safetensors",
+    "updates/payloads/learner_002/4a1b3695-6fac-4da5-8efd-8cdd10151d64.safetensors",
+    "updates/payloads/learner_003/0699ea0a-604b-4878-a693-41413d6b163a.safetensors",
+    "updates/payloads/learner_003/44aa2bef-d0f4-4bc2-bb3f-988ba8ec376d.safetensors",
+    "updates/payloads/learner_003/5dc46bba-951a-46f9-a184-3690ed64e3a6.safetensors",
+    "updates/payloads/learner_003/8b4fec06-66c6-4285-9cd9-d04650cadf09.safetensors",
+    "updates/payloads/learner_003/a1e1e2c4-ea10-41a3-ab22-bc6c41c0337b.safetensors"
+  ],
+  "retained_representative_learner_log": null,
+  "run_id": "plan03_1_final_f1_normal_20260810_235500",
+  "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan03_1_final_f1_normal_20260810_235500",
+  "status": "complete",
+  "tool": "fs_diloco.tools.clean_run"
+}
