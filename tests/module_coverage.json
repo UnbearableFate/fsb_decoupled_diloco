@@ -412,6 +412,11 @@
       "tests": ["tests/tools/test_launch_independent_run.py::test_launch_uses_one_syncer_and_scalar_learner_jobs"]
     },
     {
+      "surface": "scripts/miyabi/run_validation_suite.pbs",
+      "boundary": "one-node validation suite PBS wrapper",
+      "tests": ["tests/harness/test_full_protocol_harness.py::test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner"]
+    },
+    {
       "surface": "scripts/miyabi/run_validation_suite.py",
       "boundary": "atomic one-node validation artifact producer",
       "tests": ["tests/harness/test_validation_suite.py::test_validation_runner_publishes_create_only_schema_complete_pass"]

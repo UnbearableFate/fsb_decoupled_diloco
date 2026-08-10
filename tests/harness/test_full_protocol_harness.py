@@ -1170,6 +1170,13 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     assert "capture_source_identity.py" in independent_checker
     assert "trap publish_blocked_on_exit EXIT" in independent_checker
 
+    validation_wrapper = (
+        ROOT / "scripts/miyabi/run_validation_suite.pbs"
+    ).read_text(encoding="utf-8")
+    assert "run_validation_suite.py" in validation_wrapper
+    assert '${VALIDATION_RAW_LOG:?VALIDATION_RAW_LOG is required}' in validation_wrapper
+    assert '${VALIDATION_OUTPUT:?VALIDATION_OUTPUT is required}' in validation_wrapper
+
     review_runner = (ROOT / "scripts/miyabi/run_multi_agent_review.pbs").read_text(encoding="utf-8")
     assert review_runner.count("run_claude &") == 1
     assert review_runner.count("run_opencode \\") == 3
