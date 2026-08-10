@@ -11,8 +11,8 @@ from typing import Any, Callable
 import torch
 import torch.distributed as dist
 
-from ..modeling.hf_data import Batch
-from ..modeling.training import maybe_autocast
+from ..fs_diloco.modeling.hf_data import Batch
+from ..fs_diloco.modeling.training import maybe_autocast
 
 
 @dataclass(frozen=True)

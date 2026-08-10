@@ -4,7 +4,6 @@
 
 ## 强制加载
 
-- 新建或实质修订 plan、design、requirement matrix 前，必须完整读取并遵循 `plans/plans_create_guide.md`。
 - 实施、测试、审查、迁移或关闭 `plans/DOING/**` 下任何 plan 前，必须完整读取并遵循 `plans/workflow.md`。
 - 同时涉及 plan 构建和实施时，两份文件都必须读取；不得只依据 plan 正文、旧报告或记忆推断规则。
 

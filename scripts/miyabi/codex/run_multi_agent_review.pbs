@@ -67,7 +67,7 @@ OPENCODE_BIN="${OPENCODE_BIN:-opencode}"
 CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-5}"
 OPENCODE_GLM_MODEL="${OPENCODE_GLM_MODEL:-opencode-go/glm-5.2}"
 OPENCODE_DEEPSEEK_MODEL="${OPENCODE_DEEPSEEK_MODEL:-opencode-go/deepseek-v4-flash}"
-OPENCODE_KIMI_MODEL="${OPENCODE_KIMI_MODEL:-opencode-go/kimi-3}"
+OPENCODE_KIMI_MODEL="${OPENCODE_KIMI_MODEL:-opencode-go/kimi-k3}"
 REVIEW_TIMEOUT_SECONDS="${REVIEW_TIMEOUT_SECONDS:-1500}"
 
 HOST_NAME="$(hostname)"
@@ -339,8 +339,7 @@ run_claude() {
     return 0
   fi
 
-  set +e
-  (
+  if (
     cd "$SNAPSHOT_CLAUDE"
     unset PROJECT_ROOT REVIEW_PROMPT_FILE REVIEW_PROMPT_SHA256 REVIEW_PROMPT_B64 PBS_O_WORKDIR
     timeout --signal=TERM --kill-after=30s "${REVIEW_TIMEOUT_SECONDS}s" \
@@ -350,13 +349,14 @@ run_claude() {
       --permission-mode plan \
       --output-format json \
       "$prompt"
-  ) >"$raw_file" 2>"$stderr_file"
-  exit_code=$?
-  set -e
+  ) >"$raw_file" 2>"$stderr_file"; then
+    exit_code=0
+  else
+    exit_code=$?
+  fi
 
   if [[ "$exit_code" -eq 0 ]]; then
-    set +e
-    python3 - "$raw_file" "$parsed_report" <<'PY'
+    if python3 - "$raw_file" "$parsed_report" <<'PY'
 import json
 import pathlib
 import sys
@@ -369,8 +369,11 @@ if not isinstance(result, str) or not result.strip():
     raise SystemExit("Claude JSON does not contain a non-empty result")
 report_path.write_text(result.rstrip() + "\n", encoding="utf-8")
 PY
-    parse_exit=$?
-    set -e
+    then
+      parse_exit=0
+    else
+      parse_exit=$?
+    fi
     if [[ "$parse_exit" -eq 0 ]] && validate_report "$parsed_report"; then
       mv -- "$parsed_report" "$report_file"
       status="completed"
@@ -434,15 +437,16 @@ run_opencode() {
     return 0
   fi
 
-  set +e
-  (
+  if (
     cd "$snapshot_dir"
     unset PROJECT_ROOT REVIEW_PROMPT_FILE REVIEW_PROMPT_SHA256 REVIEW_PROMPT_B64 PBS_O_WORKDIR
     timeout --signal=TERM --kill-after=30s "${REVIEW_TIMEOUT_SECONDS}s" \
       "$OPENCODE_BIN" run --agent plan --model "$model" "$prompt"
-  ) >"$raw_file" 2>"$stderr_file"
-  exit_code=$?
-  set -e
+  ) >"$raw_file" 2>"$stderr_file"; then
+    exit_code=0
+  else
+    exit_code=$?
+  fi
 
   if [[ "$exit_code" -eq 0 && -s "$raw_file" ]]; then
     cp "$raw_file" "$parsed_report"
@@ -503,7 +507,7 @@ run_opencode \
   "$SNAPSHOT_DEEPSEEK_SHA256" &
 pid_deepseek=$!
 run_opencode \
-  "kimi-3" \
+  "kimi-k3" \
   "$OPENCODE_KIMI_MODEL" \
   "cross-module integration, experiment validity, artifact/Checker evidence, and documentation drift" \
   "$SNAPSHOT_KIMI" \
@@ -533,7 +537,7 @@ python3 - \
   "$RUN_TMP/claude-opus-5.tsv" \
   "$RUN_TMP/glm-5.2.tsv" \
   "$RUN_TMP/deepseek-v4-flash.tsv" \
-  "$RUN_TMP/kimi-3.tsv" <<'PY'
+  "$RUN_TMP/kimi-k3.tsv" <<'PY'
 import json
 import pathlib
 import sys

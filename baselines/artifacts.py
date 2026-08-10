@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..core.config import Config, config_to_dict
-from ..storage.atomic_io import (
+from ..fs_diloco.core.config import Config, config_to_dict
+from ..fs_diloco.storage.atomic_io import (
     atomic_write_json,
     atomic_write_text,
     ensure_dir,

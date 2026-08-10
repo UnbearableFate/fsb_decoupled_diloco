@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from ..storage.atomic_io import safe_read_json
+from ..fs_diloco.storage.atomic_io import safe_read_json
 from .artifacts import BaselineRunPaths
 
 

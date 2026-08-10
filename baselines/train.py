@@ -17,15 +17,15 @@ import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 
-from ..core.config import Config, config_to_dict, resolve_config
-from ..modeling.hf_data import build_batch_iterator
-from ..modeling.hf_model import load_causal_lm_and_tokenizer
-from ..modeling.training import (
+from ..fs_diloco.core.config import Config, config_to_dict, resolve_config
+from ..fs_diloco.modeling.hf_data import build_batch_iterator
+from ..fs_diloco.modeling.hf_model import load_causal_lm_and_tokenizer
+from ..fs_diloco.modeling.training import (
     build_inner_optimizer_and_scheduler,
     current_inner_learning_rate,
 )
-from ..observability.logging_utils import JsonlLogger
-from ..storage.atomic_io import atomic_write_json
+from ..fs_diloco.observability.logging_utils import JsonlLogger
+from ..fs_diloco.storage.atomic_io import atomic_write_json
 from .artifacts import (
     RANK_METRIC_FIELDS,
     SYNC_METRIC_FIELDS,
