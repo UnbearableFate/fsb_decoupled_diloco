@@ -13,7 +13,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 CHECKER = ROOT / "scripts/miyabi/check_plan_completion.py"
-MANIFEST = ROOT / "reports/DOING/plan03-1/formal-ladder-manifest.json"
+MANIFEST = ROOT / "reports/checked/plan03-1/formal-ladder-manifest.json"
 
 
 def _module():
