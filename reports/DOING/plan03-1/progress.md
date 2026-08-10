@@ -1143,3 +1143,14 @@
 - Transition: `PLAN_REVIEW_TARGET` -> `EXTERNAL_TEST_REVIEW`. Submit the
   restored four-lane R3 job for this exact target; final U1/F1/G1 remains
   blocked until terminal disposition.
+
+## 2026-08-10T23:39:00+09:00 — external R3 final-target review running
+
+- PBS job `2521665.opbs` is running on one `debug-g` node `mg0018` with exact
+  base `47662f8d872f4a5e451908796a6b677105a28c52`, target
+  `1558e1112108ec38388cc2361b69e2cf78d49217`, prompt SHA-256
+  `146f2b675f168b29f4c36227dcb7992039e202060a8afe166a169b807b9db542`,
+  four current reviewer lanes and walltime `00:15:00`.
+- Preflight passed ancestry, source-only whitespace, prompt identity, all
+  PBS/shell syntax and literal group checks. Only monitoring is allowed until
+  terminal orchestration state.

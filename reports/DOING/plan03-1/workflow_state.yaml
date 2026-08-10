@@ -79,7 +79,7 @@ invalidated_evidence:
   - current-u1-target-081e81e-superseded-by-completion-contract-mutation-test
   - current-u1-target-3b99d1a-superseded-by-effective-entrypoint-oracle
 external_review:
-  pbs_job_id: null
-  status: pending
+  pbs_job_id: 2521665.opbs
+  status: running
 open_blocking_findings: []
-allowed_next_action: submit_external_final_common_target_r3
+allowed_next_action: monitor_external_final_common_target_r3
