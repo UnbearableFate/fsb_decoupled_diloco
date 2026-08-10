@@ -56,3 +56,23 @@
   format/lint and the focused tests in the same allocation. The frozen target
   `219abe663025adc7ff8f731f65d90fb27c42c0fe` is superseded for subsequent test
   evidence.
+
+## 2026-08-10T17:54:29+09:00 — P2 one-node focused attempt 2
+
+- Experiment: `p2-one-node-validation-01`; domain: `harness`.
+- Category: `valid-test-failure`; consecutive count: 2.
+- Allocation: retained `2519128.opbs`, node `mg0012`.
+- Static result: all 121 Python files formatted and Ruff lint passed.
+- Focused pytest result: collection stopped with two import errors because
+  `tests/support/__init__.py` imports deleted module `tests.support.performance`.
+  The harness and terminal-service modules both import the support package and
+  therefore expose the dead re-export before any test executes.
+- Evidence: `artifacts/20260810-175429_p2-one-node-focused_fail.log`.
+- Root cause: `performance.py` was deleted with the obsolete performance path,
+  but its `PairedPerformanceResult` and `paired_noninferiority` re-exports were
+  left in the package initializer. Repository-wide search finds no current
+  caller; restoring the deleted helper would reintroduce obsolete test surface.
+- Remediation: delete the two dead imports/exports, verify no repository
+  reference remains, save a mandatory Codex-only incremental review, then rerun
+  the same static and focused command. A third valid failure would trigger the
+  workflow's comprehensive failure review.

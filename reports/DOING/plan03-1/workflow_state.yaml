@@ -4,7 +4,7 @@ branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P2-tests-and-harness
 work_unit_id: P2-W2-one-node-validation
-state: STAGED_TEST_EXECUTION
+state: TARGETED_REMEDIATION
 base_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 target_commit: bb0023184abd78b6e220c487967d9c245adf36d5
 formal_source_commit: null
@@ -12,7 +12,7 @@ formal_source_fingerprint: null
 experiment_id: p2-one-node-validation-01
 experiment_domain: harness
 failure_counters:
-  "harness:p2-one-node-validation-01": 1
+  "harness:p2-one-node-validation-01": 2
 required_tests:
   - s0-static-preflight
   - harness-focused-unit-tests
@@ -25,8 +25,9 @@ required_evidence:
   - reports/DOING/plan03-1/artifact-schema.md
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
+  - p2-focused-attempt-2-collection-failed
 external_review:
   pbs_job_id: 2519093.opbs
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: rerun_p2_static_and_focused_tests
+allowed_next_action: delete_obsolete_performance_support_exports

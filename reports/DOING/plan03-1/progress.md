@@ -204,3 +204,15 @@
 - Transition: `TARGETED_REMEDIATION` -> `STAGED_TEST_EXECUTION`. Retry format,
   lint and focused harness/runtime/architecture tests in allocation
   `2519128.opbs` before considering the full suite.
+
+## 2026-08-10T17:54:29+09:00 — TARGETED_REMEDIATION after focused attempt 2
+
+- The formatter remediation is verified: format check covered 121 files and
+  Ruff lint passed.
+- Focused collection exposed one repository-cleanup defect: the support package
+  still exports two names from deleted `tests/support/performance.py`. There is
+  no current consumer of either name.
+- Transition: `STAGED_TEST_EXECUTION` -> `TARGETED_REMEDIATION`; valid failure
+  count is now 2. Delete the obsolete re-export rather than restoring legacy
+  performance support, review the continuous diff with Codex, and retry in the
+  retained allocation.
