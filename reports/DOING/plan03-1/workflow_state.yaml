@@ -3,7 +3,7 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P4-formal-and-docs
-work_unit_id: P4-W15-final-f1-normal
+work_unit_id: P4-W18-final-g1-formal
 state: FINAL_TEST_LADDER
 base_commit: 5b474d5c1735beb8cca922fd6cc7b6304926df2c
 target_commit: 1558e1112108ec38388cc2361b69e2cf78d49217
@@ -70,6 +70,15 @@ required_evidence:
   - reports/DOING/plan03-1/artifacts/20260810-235300_final-u1-one-node-validation.log
   - reports/DOING/plan03-1/artifacts/20260810-235300_final-u1-one-node-validation.log.focused-pytest.junit.xml
   - reports/DOING/plan03-1/artifacts/20260810-235300_final-u1-one-node-validation.log.full-pytest.junit.xml
+  - reports/DOING/plan03-1/artifacts/20260810-235500_final-f1-functional-normal_result.json
+  - reports/DOING/plan03-1/artifacts/20260810-235500_final-f1-functional-normal_pbs.log
+  - logs/qsub_plan03_1_final_f1_normal_20260810_235500/source_identity.json
+  - reports/DOING/plan03-1/artifacts/20260810-235800_final-f1-learner-replacement_result.json
+  - reports/DOING/plan03-1/artifacts/20260810-235800_final-f1-learner-replacement_pbs.log
+  - logs/qsub_plan03_1_final_f1_learner_replacement_20260810_235800/source_identity.json
+  - reports/DOING/plan03-1/artifacts/20260810-235900_final-f1-syncer-takeover_result.json
+  - reports/DOING/plan03-1/artifacts/20260810-235900_final-f1-syncer-takeover_pbs.log
+  - logs/qsub_plan03_1_final_f1_syncer_takeover_20260810_235900/source_identity.json
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -88,4 +97,4 @@ external_review:
   pbs_job_id: 2521665.opbs
   status: terminal-no-valid-report
 open_blocking_findings: []
-allowed_next_action: submit_final_f1_functional_normal
+allowed_next_action: monitor_final_g1_formal

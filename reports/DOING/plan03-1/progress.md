@@ -1193,3 +1193,39 @@
   `29efd5f5639981d4d5cce01ec25392238e5ca35f89a8a36efd1abe1836978131`.
 - Transition: `FINAL_COMMON_TARGET_FREEZE` -> `FINAL_TEST_LADDER`. Submit the
   normal five-node F1 scenario next from the same detached source identity.
+
+## 2026-08-11T00:00:00+09:00 — all final F1 scenarios PASS
+
+- Normal job `2521765.opbs`, learner-replacement job `2521772.opbs` and
+  syncer-takeover job `2521777.opbs` each ran on exact five-node `debug-g`
+  allocations with `5:ncpus=8:mpiprocs=1:mem=16gb` and `00:10:00` requests.
+- All three artifacts bind commit
+  `1558e1112108ec38388cc2361b69e2cf78d49217`, fingerprint
+  `sha256:9fdff5a7c613e044a7f97523ede2c566f60d4fc9fbf5a5cb4edd5c416ee06337`,
+  exact 20-local-step by 4-global-step workloads, 16 applied proposals, 5,120
+  direct applied tokens, four credits per learner, zero balance and SQLite
+  integrity `ok`.
+- The replacement artifact binds the sole `learner_000` generation-1 attempt
+  and its generation-2 successor, with five learner attestations. The takeover
+  artifact binds primary exit 137 at committed version 2 outside a transaction
+  with the renewer quiesced, then the successor epoch; two syncer attestations
+  are present.
+- Result/PBS-log/source-identity SHA-256 values are respectively:
+  normal `5db6765f74621aa57ba45a7c7f0bf2e49eff71cae61441698b2d5bf439b58bb4`,
+  `137603a104b49fb6718a5b9edcc2bc8b70bcbfe29fa07cb679e9c1c3d5320d04`,
+  `cdee79cc632644d770fba0660ebb9440408c754408404991cc9842da31aa1cfd`;
+  replacement `d660dda11bf1fdaceec5a30c6f3cdd2373c09f7651cb5e7975514e8465454736`,
+  `146f11f5c0ef404f24a471bbafbe1644c2fad18b5b018c44f4cd9616214e98fb`,
+  `4c4c0105fd21ab29cf7d467b4d2c1e66895b7da64c0dddd81d2788ce72fe4bdd`;
+  takeover `ed7c1127f693603f27659e4f424a18136265de07f9bf37dcc2749bca1eb473c2`,
+  `037530b968a93b915638a60287fd768cdf1caaa1229e8502d0439bf77d149d84`,
+  `cd179e4343a7bfd90a9d6b1f987c9e7193e97c6bb792f6d0e68e44cc924d0ec8`.
+
+## 2026-08-11T00:01:00+09:00 — final G1 submitted
+
+- PBS job `2521829.opbs` is queued in the scheduler's `small-g` execution
+  class from the requested `regular-g` queue, with exact
+  `9:ncpus=8:mpiprocs=1:mem=16gb` topology and `00:10:00` walltime.
+- It uses the same detached formal source, canonical static 50 x 10 config,
+  eight learners and one syncer. Only monitoring is allowed until the job
+  reaches terminal state.
