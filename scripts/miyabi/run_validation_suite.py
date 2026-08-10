@@ -104,7 +104,9 @@ def _environment_error(environment: dict[str, Any]) -> str | None:
         return "validation requires PBS_JOBID"
     if environment["nodes"] != [hostname]:
         return "validation requires an exact one-node PBS_NODEFILE matching the compute host"
-    missing = [name for name, version in environment["packages"].items() if version == "not-installed"]
+    missing = [
+        name for name, version in environment["packages"].items() if version == "not-installed"
+    ]
     if missing:
         return f"validation packages are missing: {', '.join(missing)}"
     return None
@@ -253,7 +255,9 @@ def run_validation(
                     )
                 )
                 if completed.returncode != 0:
-                    errors.append(f"validation step failed: {step.name} (exit={completed.returncode})")
+                    errors.append(
+                        f"validation step failed: {step.name} (exit={completed.returncode})"
+                    )
                     status = "FAIL"
                     break
             source_after = capture_source_identity(project_root)

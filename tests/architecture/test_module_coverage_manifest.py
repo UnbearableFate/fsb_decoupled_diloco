@@ -39,9 +39,7 @@ def _assert_test_selector(selector: str) -> None:
     assert path.is_file(), selector
     tree = ast.parse(path.read_text(encoding="utf-8"))
     functions = {
-        node.name
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
     assert function_name in functions, selector
 

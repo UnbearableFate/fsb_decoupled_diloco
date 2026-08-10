@@ -74,15 +74,17 @@ def test_runtime_composition_has_one_current_actor_boundary() -> None:
     syncer = _top_level_definitions("fs_diloco/runtime/syncer.py")
     learner_entrypoint = _top_level_definitions("fs_diloco/runtime/learner_entrypoint.py")
     syncer_entrypoint = _top_level_definitions("fs_diloco/runtime/syncer_entrypoint.py")
-    public_learner = _top_level_definitions("fs_diloco/learner.py")
-    public_syncer = _top_level_definitions("fs_diloco/syncer.py")
+    public_learner_source = (ROOT / "fs_diloco/learner.py").read_text(encoding="utf-8")
+    public_syncer_source = (ROOT / "fs_diloco/syncer.py").read_text(encoding="utf-8")
 
     assert "run_admitted_learner" in learner
     assert "run_fenced_syncer" in syncer
     assert {"build_parser", "main"} <= learner_entrypoint
     assert {"build_parser", "main"} <= syncer_entrypoint
-    assert public_learner == set()
-    assert public_syncer == set()
+    assert "from .runtime.learner_entrypoint import main" in public_learner_source
+    assert '"main"' in public_learner_source
+    assert "from .runtime.syncer_entrypoint import main" in public_syncer_source
+    assert '"main"' in public_syncer_source
 
 
 def test_only_unversioned_product_surfaces_exist() -> None:

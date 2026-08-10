@@ -81,6 +81,7 @@ def test_summarize_run_projects_current_read_only_authority(
     assert summary["contributor_progress"] == {
         "learner_000": {"stable_contributor_key": "learner_000", "data_cursor": 7}
     }
+    json.dumps(summary)
     analysis.assert_summary(
         summary,
         expected_learners=1,
