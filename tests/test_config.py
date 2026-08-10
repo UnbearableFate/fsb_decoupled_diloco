@@ -67,6 +67,7 @@ def test_static_config_rejects_repeated_or_inert_capacity_fields(
 @pytest.mark.parametrize("revision", [None, "main", "v1.0", "A" * 40, "a" * 39])
 def test_hub_inputs_require_immutable_commit_revisions(revision: str | None) -> None:
     config = Config()
+    config.model.name_or_path = "organization/model"
     config.model.revision = revision
     config.data.revision = HUB_COMMIT
 
