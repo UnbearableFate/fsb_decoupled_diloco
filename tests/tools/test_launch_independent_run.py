@@ -44,6 +44,15 @@ def test_launch_uses_one_syncer_and_one_learner_script(
     monkeypatch.setattr(launch_independent_run, "resolve_config", lambda *args, **kwargs: config)
     monkeypatch.setattr(
         launch_independent_run,
+        "bind_source_identity",
+        lambda *_args, **_kwargs: {
+            "git_commit": "a" * 40,
+            "git_dirty": False,
+            "source_fingerprint": "sha256:" + "b" * 64,
+        },
+    )
+    monkeypatch.setattr(
+        launch_independent_run,
         "initialize_run",
         lambda *args, **kwargs: {"descriptor": descriptor, "bootstrap": {}},
     )

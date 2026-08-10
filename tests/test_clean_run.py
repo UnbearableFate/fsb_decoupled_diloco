@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from pathlib import Path
@@ -16,51 +17,72 @@ from fs_diloco.tools.clean_run import (
 
 
 def _completed_run(project: Path, name: str = "completed-run") -> tuple[Path, Path]:
-    run = project / "runs" / "fs_diloco" / name
-    reports = project / "reports" / "DOING" / "plan" / "artifacts"
+    run = project / "runs" / "full_protocol" / name
+    reports = project / "reports" / "DOING" / "test"
     (run / "control").mkdir(parents=True)
     reports.mkdir(parents=True, exist_ok=True)
-    (run / "control" / "summary.json").write_text(
-        json.dumps(
-            {
-                "run_id": name,
-                "final_version": 12,
-                "all_learners_stopped": True,
-            }
-        ),
-        encoding="utf-8",
-    )
-    (run / "control" / "stop.json").write_text(
-        json.dumps({"run_id": name, "final_version": 12}),
-        encoding="utf-8",
-    )
+    summary = {"run_id": name, "final_version": 4, "all_learners_stopped": True}
+    stop = {"run_id": name, "final_version": 4}
+    (run / "control" / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+    (run / "control" / "stop.json").write_text(json.dumps(stop), encoding="utf-8")
+    descriptor = {
+        "run_id": name,
+        "descriptor_sha256": f"descriptor-{name}",
+        "source_fingerprint": "sha256:test-source",
+    }
     (run / "control" / "run_descriptor.json").write_text(
-        json.dumps(
-            {
-                "run_id": name,
-                "descriptor_sha256": f"descriptor-{name}",
-                "source_fingerprint": "sha256:test-source",
-            }
-        ),
-        encoding="utf-8",
+        json.dumps(descriptor), encoding="utf-8"
     )
     policy = run / "control" / "artifact_policy.json"
     policy.write_text(json.dumps(build_artifact_policy()), encoding="utf-8")
     policy.chmod(0o444)
-    sqlite3.connect(run / "control" / "syncer_metadata.sqlite3").close()
-    evidence = reports / f"{name}-completed.json"
+    database = run / "control" / "syncer_metadata.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE updates(payload_relative_path TEXT, status TEXT);
+            CREATE TABLE artifact_publications(relative_path TEXT, state TEXT);
+            CREATE TABLE gc_candidates(relative_path TEXT, state TEXT);
+            CREATE TABLE terminal_state(
+                singleton INTEGER, state TEXT, final_version INTEGER,
+                finalized_by_owner_id TEXT, finalized_by_epoch INTEGER, generation INTEGER
+            );
+            CREATE TABLE controller_state(singleton INTEGER, state TEXT);
+            CREATE TABLE run_identity(singleton INTEGER, run_id TEXT);
+            CREATE TABLE global_versions(version INTEGER);
+            INSERT INTO terminal_state VALUES (1, 'finalized', 4, 'syncer-owner', 1, 1);
+            INSERT INTO controller_state VALUES (1, 'finalized');
+            INSERT INTO run_identity VALUES (1, 'completed-run-placeholder');
+            INSERT INTO global_versions VALUES (4);
+            """
+        )
+        connection.execute("UPDATE run_identity SET run_id=?", (name,))
+    owner_short = hashlib.sha256(b"syncer-owner").hexdigest()[:12]
+    immutable_stop = (
+        run
+        / "control/syncer_epochs"
+        / f"e000001_{owner_short}"
+        / "terminal/stop_g000001.json"
+    )
+    immutable_stop.parent.mkdir(parents=True)
+    immutable_stop.write_text(json.dumps(stop), encoding="utf-8")
+    immutable_stop.chmod(0o444)
+    evidence = reports / f"{name}.json"
     evidence.write_text(
         json.dumps(
             {
+                "artifact_version": 1,
                 "status": "PASS",
                 "errors": [],
                 "run_root": str(run),
-                "identity": {
-                    "run_id": name,
-                    "descriptor_sha256": f"descriptor-{name}",
-                    "source_fingerprint": "sha256:test-source",
+                "identity": descriptor,
+                "authority": {"final_version": 4},
+                "terminal_summary": summary,
+                "cleanup": {
+                    "owner": "full_protocol_harness",
+                    "eligible": True,
+                    "targets": [str(run)],
                 },
-                "authority": {"terminal": {"final_version": 12}},
             }
         ),
         encoding="utf-8",
@@ -73,356 +95,256 @@ def _write(path: Path, text: str = "generated") -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def test_clean_run_preserves_authority_and_one_learner_log(tmp_path: Path) -> None:
+def test_dry_run_preserves_authority_and_selects_only_policy_owned_redundancy(
+    tmp_path: Path,
+) -> None:
     run, evidence = _completed_run(tmp_path)
     preserved = [
-        run / "control" / "syncer_metadata.sqlite3",
-        run / "weights" / "global_v000012.safetensors",
-        run / "optim" / "outer_v000012.safetensors",
-        run / "logs" / "syncer.jsonl",
-        run / "logs" / "learner_000.jsonl",
-        run / "metrics" / "update_history.jsonl",
+        run / "control/syncer_metadata.sqlite3",
+        run / "weights/global.safetensors",
+        run / "optim/outer.safetensors",
+        run / "logs/learner_000.jsonl",
     ]
-    deleted = [
-        run / "logs" / "learner_001.jsonl",
-        run / "logs" / "auxiliary" / "offline-run" / "debug.log",
-        run / "metrics" / "update_manifest.csv",
-        run / "metrics" / "learner_metrics.csv",
-        run / "heartbeats" / "learner_000.json",
-        run / "updates" / "latest" / "learner_000.json",
-        run / "updates" / "payloads" / "learner_000" / "update.safetensors",
-        run / "weights" / ".tmp-checkpoint",
+    selected = [
+        run / "logs/learner_001.jsonl",
+        run / "heartbeats/learner_000.json",
+        run / "updates/latest/learner_000.json",
+        run / "updates/payloads/learner_000/update.safetensors",
+        run / "weights/.tmp-checkpoint",
     ]
-    for path in (*preserved[1:], *deleted):
+    for path in (*preserved[1:], *selected):
         _write(path)
 
     plan = build_cleanup_plan(tmp_path, run, evidence)
 
     assert plan.retained_representative_learner_log == "logs/learner_000.jsonl"
-    assert {candidate.path for candidate in plan.candidates} == set(deleted)
-    assert all(path.exists() for path in preserved)
-    assert all(path.exists() for path in deleted)
+    assert {candidate.path for candidate in plan.candidates} == set(selected)
+    assert all(path.exists() for path in (*preserved, *selected))
 
-    manifest = tmp_path / "reports" / "DOING" / "plan" / "cleanup.json"
+
+def test_execute_rechecks_plan_and_publishes_exact_manifest(tmp_path: Path) -> None:
+    run, evidence = _completed_run(tmp_path, "execute")
+    _write(run / "logs/learner_000.jsonl")
+    candidate = run / "heartbeats/learner_000.json"
+    _write(candidate)
+    plan = build_cleanup_plan(tmp_path, run, evidence)
+    manifest = tmp_path / "reports/DOING/test/cleanup.json"
+
     result = execute_cleanup(plan, manifest)
 
     assert result["status"] == "complete"
-    assert result["deleted_count"] == len(deleted)
-    assert all(path.exists() for path in preserved)
-    assert all(not path.exists() for path in deleted)
+    assert result["deleted_count"] == 1
+    assert not candidate.exists()
     assert json.loads(manifest.read_text(encoding="utf-8"))["status"] == "complete"
 
 
-def test_clean_run_skips_auxiliary_symlinks_without_following_them(tmp_path: Path) -> None:
-    run, evidence = _completed_run(tmp_path, "auxiliary-symlink-run")
-    offline = run / "logs" / "auxiliary" / "offline-run-1"
-    debug = offline / "files" / "debug.log"
-    _write(debug)
-    latest = run / "logs" / "auxiliary" / "latest-run"
-    latest.symlink_to(offline.name, target_is_directory=True)
-    debug_link = run / "logs" / "auxiliary" / "debug.log"
-    debug_link.symlink_to(debug.relative_to(debug_link.parent))
+def test_live_authority_reference_blocks_cleanup(tmp_path: Path) -> None:
+    run, evidence = _completed_run(tmp_path, "live-reference")
+    candidate = run / "updates/payloads/learner_000/update.safetensors"
+    _write(candidate)
+    with sqlite3.connect(run / "control/syncer_metadata.sqlite3") as connection:
+        connection.execute(
+            "INSERT INTO updates(payload_relative_path, status) VALUES (?, 'pending')",
+            (candidate.relative_to(run).as_posix(),),
+        )
 
-    plan = build_cleanup_plan(tmp_path, run, evidence)
-
-    assert latest.is_symlink()
-    assert debug_link.is_symlink()
-    assert all(candidate.path not in {latest, debug_link} for candidate in plan.candidates)
-    manifest = tmp_path / "reports" / "DOING" / "plan" / "auxiliary-symlink-cleanup.json"
-    execute_cleanup(plan, manifest)
-    assert latest.is_symlink()
-    assert debug_link.is_symlink()
-    assert offline.is_dir()
-
-
-@pytest.mark.parametrize("evidence_status", ["BLOCKED", "PASS_WITH_FOLLOWUPS"])
-def test_clean_run_requires_exact_pass_evidence(
-    tmp_path: Path,
-    evidence_status: str,
-) -> None:
-    run, evidence = _completed_run(tmp_path)
-    payload = json.loads(evidence.read_text(encoding="utf-8"))
-    payload["status"] = evidence_status
-    evidence.write_text(json.dumps(payload), encoding="utf-8")
-
-    with pytest.raises(CleanupRefusedError, match="error-free PASS"):
+    with pytest.raises(CleanupRefusedError, match="authority still references"):
         build_cleanup_plan(tmp_path, run, evidence)
 
 
-def test_clean_run_refuses_mismatched_evidence_and_broad_target(tmp_path: Path) -> None:
-    run, evidence = _completed_run(tmp_path)
-    other, _other_evidence = _completed_run(tmp_path, "other-run")
-    with pytest.raises(
-        CleanupRefusedError,
-        match="different run|run identity does not match",
-    ):
+@pytest.mark.parametrize("state", ["pending", "claimed"])
+def test_authority_gc_ownership_retains_candidate(tmp_path: Path, state: str) -> None:
+    run, evidence = _completed_run(tmp_path, f"gc-{state}")
+    candidate = run / "updates/payloads/learner_000/update.safetensors"
+    _write(candidate)
+    relative = candidate.relative_to(run).as_posix()
+    with sqlite3.connect(run / "control/syncer_metadata.sqlite3") as connection:
+        connection.execute(
+            "INSERT INTO gc_candidates(relative_path, state) VALUES (?, ?)",
+            (relative, state),
+        )
+
+    plan = build_cleanup_plan(tmp_path, run, evidence)
+
+    assert plan.retained_authority_owned_gc_paths == (relative,)
+    assert plan.candidates == ()
+    assert candidate.exists()
+
+
+def test_missing_policy_or_nonpass_evidence_fails_closed(tmp_path: Path) -> None:
+    run, evidence = _completed_run(tmp_path, "fail-closed")
+    payload = json.loads(evidence.read_text(encoding="utf-8"))
+    payload["status"] = "BLOCKED"
+    evidence.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(CleanupRefusedError, match="error-free PASS"):
+        build_cleanup_plan(tmp_path, run, evidence)
+    payload["status"] = "PASS"
+    evidence.write_text(json.dumps(payload), encoding="utf-8")
+    policy = run / "control/artifact_policy.json"
+    policy.chmod(0o644)
+    policy.unlink()
+    with pytest.raises(CleanupRefusedError, match="policy is required"):
+        build_cleanup_plan(tmp_path, run, evidence)
+
+
+def test_mismatched_evidence_and_broad_run_target_are_rejected(tmp_path: Path) -> None:
+    run, evidence = _completed_run(tmp_path, "first")
+    other, _ = _completed_run(tmp_path, "second")
+    with pytest.raises(CleanupRefusedError, match="different run|identity"):
         build_cleanup_plan(tmp_path, other, evidence)
     with pytest.raises(CleanupRefusedError, match="one exact run"):
         build_cleanup_plan(tmp_path, tmp_path / "runs", evidence)
     assert run.exists()
 
 
-def test_clean_run_accepts_each_run_from_matched_performance_evidence(tmp_path: Path) -> None:
-    static_run, static_evidence = _completed_run(tmp_path, "matched-static")
-    dynamic_run, _dynamic_evidence = _completed_run(tmp_path, "matched-dynamic")
-    matched_evidence = static_evidence.with_name("matched-performance.json")
-    matched_evidence.write_text(
-        json.dumps(
-            {
-                "status": "PASS",
-                "errors": [],
-                "identity": {
-                    "static_descriptor_sha256": "descriptor-matched-static",
-                    "dynamic_descriptor_sha256": "descriptor-matched-dynamic",
-                    "source_fingerprint": "sha256:test-source",
-                },
-                "static": {
-                    "run_root": str(static_run),
-                    "summary": {"run_id": static_run.name, "final_version": 12},
-                },
-                "dynamic": {
-                    "run_root": str(dynamic_run),
-                    "summary": {"run_id": dynamic_run.name, "final_version": 12},
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    assert build_cleanup_plan(tmp_path, static_run, matched_evidence).run_id == static_run.name
-    assert build_cleanup_plan(tmp_path, dynamic_run, matched_evidence).run_id == dynamic_run.name
-
-
-def test_clean_run_rejects_mismatched_descriptor_identity(tmp_path: Path) -> None:
-    run, evidence = _completed_run(tmp_path)
-    payload = json.loads(evidence.read_text(encoding="utf-8"))
-    payload["identity"]["descriptor_sha256"] = "wrong-descriptor"
-    evidence.write_text(json.dumps(payload), encoding="utf-8")
-
-    with pytest.raises(CleanupRefusedError, match="descriptor identity does not match"):
-        build_cleanup_plan(tmp_path, run, evidence)
-
-
-@pytest.mark.parametrize("terminal_binding", [None, 11])
-def test_clean_run_requires_evidence_for_current_terminal_version(
-    tmp_path: Path,
-    terminal_binding: int | None,
-) -> None:
-    run, evidence = _completed_run(tmp_path)
-    payload = json.loads(evidence.read_text(encoding="utf-8"))
-    if terminal_binding is None:
-        payload.pop("authority")
-    else:
-        payload["authority"]["terminal"]["final_version"] = terminal_binding
-    evidence.write_text(json.dumps(payload), encoding="utf-8")
-
-    with pytest.raises(CleanupRefusedError, match="terminal final version"):
-        build_cleanup_plan(tmp_path, run, evidence)
-
-
-def test_clean_run_refuses_authority_sidecar_and_changed_candidate(tmp_path: Path) -> None:
-    run, evidence = _completed_run(tmp_path)
-    sidecar = run / "control" / "syncer_metadata.sqlite3-wal"
-    _write(sidecar)
-    with pytest.raises(CleanupRefusedError, match="may still be active"):
-        build_cleanup_plan(tmp_path, run, evidence)
-    sidecar.unlink()
-    sidecar.symlink_to(tmp_path / "missing-sidecar")
-    with pytest.raises(CleanupRefusedError, match="may still be active"):
-        build_cleanup_plan(tmp_path, run, evidence)
-    sidecar.unlink()
-    candidate = run / "logs" / "learner_001.jsonl"
-    representative = run / "logs" / "learner_000.jsonl"
-    _write(representative)
-    _write(candidate)
-    plan = build_cleanup_plan(tmp_path, run, evidence)
-    _write(candidate, "changed after inventory")
-    manifest = tmp_path / "reports" / "DOING" / "plan" / "changed-cleanup.json"
-
-    with pytest.raises(CleanupRefusedError, match="changed after inventory"):
-        execute_cleanup(plan, manifest)
-
-    assert candidate.exists()
-    assert json.loads(manifest.read_text(encoding="utf-8"))["status"] == "failed"
-
-
-def test_clean_run_revalidates_completion_evidence_before_delete(tmp_path: Path) -> None:
-    run, evidence = _completed_run(tmp_path)
-    candidate = run / "metrics" / "update_manifest.csv"
-    _write(candidate)
-    plan = build_cleanup_plan(tmp_path, run, evidence)
-    evidence_payload = json.loads(evidence.read_text(encoding="utf-8"))
-    evidence_payload["status"] = "BLOCKED"
-    evidence.write_text(json.dumps(evidence_payload), encoding="utf-8")
-    manifest = tmp_path / "reports" / "DOING" / "plan" / "revalidated-cleanup.json"
-
-    with pytest.raises(CleanupRefusedError, match="error-free PASS"):
-        execute_cleanup(plan, manifest)
-
-    assert candidate.exists()
-    assert json.loads(manifest.read_text(encoding="utf-8"))["status"] == "failed"
-
-
-def test_clean_run_cli_is_dry_run_by_default(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    run, evidence = _completed_run(tmp_path)
-    candidate = run / "metrics" / "update_manifest.csv"
-    _write(candidate)
-
-    assert main([str(run), "--evidence", str(evidence), "--project-root", str(tmp_path)]) == 0
-
-    output = json.loads(capsys.readouterr().out)
-    assert output["status"] == "dry_run"
-    assert output["candidate_count"] == 1
-    assert candidate.exists()
-
-
-def test_clean_run_delete_requires_report_manifest(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    run, evidence = _completed_run(tmp_path)
-    assert (
-        main(
-            [
-                str(run),
-                "--evidence",
-                str(evidence),
-                "--project-root",
-                str(tmp_path),
-                "--delete",
-            ]
-        )
-        == 2
-    )
-    assert "--manifest-output is required" in capsys.readouterr().err
-
-
-def test_clean_run_applies_artifact_policy_and_authority_live_references(
-    tmp_path: Path,
-) -> None:
-    run, evidence = _completed_run(tmp_path, "policy-run")
-    policy_path = run / "control" / "artifact_policy.json"
-    policy_path.chmod(0o644)
-    policy_path.write_text(json.dumps(build_artifact_policy()), encoding="utf-8")
-    policy_path.chmod(0o444)
-    database = run / "control" / "syncer_metadata.sqlite3"
-    connection = sqlite3.connect(database)
-    connection.execute("CREATE TABLE updates(status TEXT, payload_relative_path TEXT)")
-    candidate = run / "updates/payloads/learner-0/update.safetensors"
-    _write(candidate)
-    connection.execute(
-        "INSERT INTO updates(status, payload_relative_path) VALUES ('pending', ?)",
-        (candidate.relative_to(run).as_posix(),),
-    )
-    connection.commit()
-    connection.close()
-
-    with pytest.raises(CleanupRefusedError, match="authority still references"):
-        build_cleanup_plan(tmp_path, run, evidence)
-
-    connection = sqlite3.connect(database)
-    connection.execute("UPDATE updates SET status='applied'")
-    connection.commit()
-    connection.close()
-    plan = build_cleanup_plan(tmp_path, run, evidence)
-    assert plan.artifact_policy_sha256 == build_artifact_policy()["policy_sha256"]
-    assert {item.relative_path for item in plan.candidates} == {
-        "updates/payloads/learner-0/update.safetensors"
-    }
-
-
-@pytest.mark.parametrize("gc_state", ["pending", "claimed"])
-def test_clean_run_retains_authority_owned_gc_and_cleans_unrelated_terminal_files(
-    tmp_path: Path, gc_state: str
-) -> None:
-    run, evidence = _completed_run(tmp_path, "authority-gc-run")
-    retained = run / "updates/payloads/learner-0/update.safetensors"
-    removable = run / "heartbeats/learner-0.json"
-    _write(retained)
-    _write(removable)
-    relative = retained.relative_to(run).as_posix()
-    database = run / "control" / "syncer_metadata.sqlite3"
-    with sqlite3.connect(database) as connection:
-        connection.execute("CREATE TABLE gc_candidates(relative_path TEXT, state TEXT)")
-        connection.execute(
-            "INSERT INTO gc_candidates(relative_path, state) VALUES (?, ?)",
-            (relative, gc_state),
-        )
-
-    plan = build_cleanup_plan(tmp_path, run, evidence)
-
-    assert plan.retained_authority_owned_gc_paths == (relative,)
-    assert {item.path for item in plan.candidates} == {removable}
-    manifest = tmp_path / "reports/DOING/plan/authority-gc-cleanup.json"
-    result = execute_cleanup(plan, manifest)
-    assert result["retained_authority_owned_gc_paths"] == [relative]
-    assert retained.is_file()
-    assert not removable.exists()
-
-
-def test_clean_run_refuses_symlinked_policy_or_authority_database(tmp_path: Path) -> None:
-    run, evidence = _completed_run(tmp_path, "policy-symlink-run")
-    policy = run / "control" / "artifact_policy.json"
-    policy.unlink()
-    policy.symlink_to(tmp_path / "missing-policy")
-    with pytest.raises(CleanupRefusedError, match="immutable regular"):
-        build_cleanup_plan(tmp_path, run, evidence)
-    policy.unlink()
-    policy.write_text(json.dumps(build_artifact_policy()), encoding="utf-8")
-    policy.chmod(0o444)
-    database = run / "control" / "syncer_metadata.sqlite3"
-    database.touch()
-    database.unlink()
-    database.symlink_to(tmp_path / "outside-authority.sqlite3")
-
-    with pytest.raises(CleanupRefusedError, match="symlink|non-regular"):
-        build_cleanup_plan(tmp_path, run, evidence)
-
-
-def test_clean_run_fails_closed_without_artifact_policy(tmp_path: Path) -> None:
-    run, evidence = _completed_run(tmp_path, "missing-policy-run")
-    policy = run / "control" / "artifact_policy.json"
-    policy.chmod(0o644)
-    policy.unlink()
-
-    with pytest.raises(CleanupRefusedError, match="policy is required"):
-        build_cleanup_plan(tmp_path, run, evidence)
-
-
-def test_clean_run_refuses_symlinked_candidate_parent_without_touching_outside(
-    tmp_path: Path,
-) -> None:
-    run, evidence = _completed_run(tmp_path, "candidate-parent-symlink")
+def test_symlinked_candidate_parent_is_never_followed(tmp_path: Path) -> None:
+    run, evidence = _completed_run(tmp_path, "symlink-parent")
     outside = tmp_path / "outside"
     outside.mkdir()
-    outside_file = outside / "update.safetensors"
-    _write(outside_file, "must survive")
-    payloads = run / "updates" / "payloads"
+    _write(outside / "update.safetensors", "must survive")
+    payloads = run / "updates/payloads"
     payloads.parent.mkdir(parents=True)
     payloads.symlink_to(outside, target_is_directory=True)
 
     with pytest.raises(CleanupRefusedError, match="symlink|owned directory"):
         build_cleanup_plan(tmp_path, run, evidence)
-    assert outside_file.read_text(encoding="utf-8") == "must survive"
+    assert (outside / "update.safetensors").read_text(encoding="utf-8") == "must survive"
 
 
-def test_clean_run_rechecks_parent_chain_before_unlink(tmp_path: Path) -> None:
-    run, evidence = _completed_run(tmp_path, "candidate-parent-swap")
-    candidate = run / "updates" / "payloads" / "learner-0" / "update.safetensors"
+def test_evidence_descriptor_and_terminal_identities_must_match(tmp_path: Path) -> None:
+    run, evidence = _completed_run(tmp_path, "identity-mismatch")
+    payload = json.loads(evidence.read_text(encoding="utf-8"))
+    payload["identity"]["descriptor_sha256"] = "wrong"
+    evidence.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(CleanupRefusedError, match="descriptor identity"):
+        build_cleanup_plan(tmp_path, run, evidence)
+
+    payload["identity"]["descriptor_sha256"] = "descriptor-identity-mismatch"
+    payload["authority"]["final_version"] = 3
+    evidence.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(CleanupRefusedError, match="final version"):
+        build_cleanup_plan(tmp_path, run, evidence)
+
+
+def test_terminal_projection_and_cleanup_target_must_match_immutable_evidence(
+    tmp_path: Path,
+) -> None:
+    run, evidence = _completed_run(tmp_path, "terminal-binding")
+    stop_path = run / "control/stop.json"
+    stop_path.write_text(
+        json.dumps({"run_id": run.name, "final_version": 4, "changed": True}),
+        encoding="utf-8",
+    )
+    with pytest.raises(CleanupRefusedError, match="immutable authority output"):
+        build_cleanup_plan(tmp_path, run, evidence)
+
+    stop_path.write_text(
+        json.dumps({"run_id": run.name, "final_version": 4}),
+        encoding="utf-8",
+    )
+    payload = json.loads(evidence.read_text(encoding="utf-8"))
+    payload["cleanup"]["targets"] = [str(tmp_path / "runs")]
+    evidence.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(CleanupRefusedError, match="authorize this cleanup target"):
+        build_cleanup_plan(tmp_path, run, evidence)
+
+
+def test_authority_sidecar_or_symlinked_database_blocks_cleanup(tmp_path: Path) -> None:
+    run, evidence = _completed_run(tmp_path, "authority-files")
+    database = run / "control/syncer_metadata.sqlite3"
+    sidecar = database.with_name(database.name + "-wal")
+    _write(sidecar)
+    with pytest.raises(CleanupRefusedError, match="may still be active"):
+        build_cleanup_plan(tmp_path, run, evidence)
+
+    sidecar.unlink()
+    outside = tmp_path / "outside.sqlite3"
+    database.rename(outside)
+    database.symlink_to(outside)
+    with pytest.raises(CleanupRefusedError, match="regular non-symlink"):
+        build_cleanup_plan(tmp_path, run, evidence)
+
+
+def test_execute_revalidates_evidence_and_candidate_identity(tmp_path: Path) -> None:
+    run, evidence = _completed_run(tmp_path, "revalidate")
+    candidate = run / "heartbeats/learner_000.json"
+    _write(candidate)
+    plan = build_cleanup_plan(tmp_path, run, evidence)
+    _write(candidate, "changed")
+    manifest = tmp_path / "reports/DOING/test/changed-candidate.json"
+    with pytest.raises(CleanupRefusedError, match="changed after inventory"):
+        execute_cleanup(plan, manifest)
+    assert candidate.exists()
+    assert json.loads(manifest.read_text(encoding="utf-8"))["status"] == "failed"
+
+    plan = build_cleanup_plan(tmp_path, run, evidence)
+    payload = json.loads(evidence.read_text(encoding="utf-8"))
+    payload["status"] = "BLOCKED"
+    evidence.write_text(json.dumps(payload), encoding="utf-8")
+    manifest = tmp_path / "reports/DOING/test/changed-evidence.json"
+    with pytest.raises(CleanupRefusedError, match="error-free PASS"):
+        execute_cleanup(plan, manifest)
+    assert candidate.exists()
+
+
+def test_execute_never_follows_a_parent_swapped_to_a_symlink(tmp_path: Path) -> None:
+    run, evidence = _completed_run(tmp_path, "parent-swap")
+    candidate = run / "updates/payloads/learner_000/update.safetensors"
     _write(candidate)
     plan = build_cleanup_plan(tmp_path, run, evidence)
     outside = tmp_path / "outside-swap"
-    outside.mkdir()
-    outside_file = outside / "learner-0" / "update.safetensors"
-    _write(outside_file, "must survive")
-    payloads = run / "updates" / "payloads"
-    original = run / "updates" / "payloads-original"
+    outside_candidate = outside / "learner_000/update.safetensors"
+    _write(outside_candidate, "must survive")
+    payloads = run / "updates/payloads"
+    original = run / "updates/payloads-original"
     payloads.rename(original)
     payloads.symlink_to(outside, target_is_directory=True)
-    manifest = tmp_path / "reports" / "DOING" / "plan" / "parent-swap.json"
+    manifest = tmp_path / "reports/DOING/test/parent-swap.json"
 
-    with pytest.raises(CleanupRefusedError, match="symlink|owned directory|changed"):
+    with pytest.raises(CleanupRefusedError, match="changed|parent|directory"):
         execute_cleanup(plan, manifest)
-    assert outside_file.read_text(encoding="utf-8") == "must survive"
-    assert (original / "learner-0" / "update.safetensors").exists()
+    assert outside_candidate.read_text(encoding="utf-8") == "must survive"
+    assert (original / "learner_000/update.safetensors").exists()
+
+
+def test_cli_has_one_explicit_dry_run_and_execute_interface(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    run, evidence = _completed_run(tmp_path, "cli")
+    _write(run / "heartbeats/learner_000.json")
+
+    assert (
+        main(
+            [
+                "--run-root",
+                str(run),
+                "--evidence",
+                str(evidence),
+                "--project-root",
+                str(tmp_path),
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "dry_run"
+    assert payload["candidate_count"] == 1
+
+    manifest = tmp_path / "reports/DOING/test/cli-cleanup.json"
+    assert (
+        main(
+            [
+                "--run-root",
+                str(run),
+                "--evidence",
+                str(evidence),
+                "--project-root",
+                str(tmp_path),
+                "--execute",
+                "--manifest",
+                str(manifest),
+            ]
+        )
+        == 0
+    )
+    assert json.loads(manifest.read_text(encoding="utf-8"))["status"] == "complete"

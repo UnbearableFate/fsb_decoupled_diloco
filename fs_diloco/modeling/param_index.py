@@ -161,7 +161,7 @@ def named_tensors_to_flat(
     return torch.cat(chunks).contiguous()
 
 
-def validate_compatible_index(param_index: dict[str, Any], other: dict[str, Any]) -> None:
+def validate_matching_index(param_index: dict[str, Any], other: dict[str, Any]) -> None:
     keys = ["format_version", "model_name_or_path", "trainable_only", "total_numel"]
     for key in keys:
         if param_index.get(key) != other.get(key):

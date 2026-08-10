@@ -61,58 +61,37 @@ class AdmissionInvariantError(RuntimeError):
     """An internal admission invariant failed and must terminate this candidate."""
 
 
-def _raise_injected_candidate_failure(version: int) -> None:
-    raw = os.environ.get("FS_DILOCO_TEST_FAIL_AFTER_COMMITTED_VERSION")
-    if raw is None:
-        return
-    try:
-        target = int(raw)
-    except ValueError as exc:
-        raise ValueError(
-            "FS_DILOCO_TEST_FAIL_AFTER_COMMITTED_VERSION must be a nonnegative integer"
-        ) from exc
-    if target < 0:
-        raise ValueError(
-            "FS_DILOCO_TEST_FAIL_AFTER_COMMITTED_VERSION must be a nonnegative integer"
-        )
-    if int(version) >= target:
-        raise RuntimeError(f"injected candidate failure after committed version {version}")
-
-
-def _pause_candidate_outside_transaction(
+def _pause_candidate_at_fault_boundary(
     authority: LeaderAuthority,
     leader: LeaderSession,
     renewer: Any,
     *,
     version: int,
 ) -> None:
-    """SIGSTOP one test candidate only after both SQLite writers are quiescent."""
+    """Expose a deterministic process-fault boundary outside SQLite transactions."""
 
-    raw_target = os.environ.get("FS_DILOCO_TEST_PAUSE_AFTER_COMMITTED_VERSION")
+    raw_target = os.environ.get("FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION")
     if raw_target is None:
         return
     try:
         target = int(raw_target)
     except ValueError as exc:
         raise ValueError(
-            "FS_DILOCO_TEST_PAUSE_AFTER_COMMITTED_VERSION must be a nonnegative integer"
+            "FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION must be a nonnegative integer"
         ) from exc
     if target < 0:
         raise ValueError(
-            "FS_DILOCO_TEST_PAUSE_AFTER_COMMITTED_VERSION must be a nonnegative integer"
+            "FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION must be a nonnegative integer"
         )
-    marker_value = os.environ.get("FS_DILOCO_TEST_PAUSE_MARKER_PATH")
+    marker_value = os.environ.get("FS_DILOCO_FAULT_PAUSE_MARKER_PATH")
     if not marker_value:
         raise ValueError(
-            "FS_DILOCO_TEST_PAUSE_MARKER_PATH is required with the candidate pause hook"
+            "FS_DILOCO_FAULT_PAUSE_MARKER_PATH is required with the fault pause boundary"
         )
     marker = Path(marker_value)
-    trigger_value = os.environ.get("FS_DILOCO_TEST_PAUSE_TRIGGER_PATH")
-    if trigger_value and not Path(trigger_value).is_file():
-        return
     if version < target or marker.exists():
         return
-    with renewer.quiesce_for_test_pause():
+    with renewer.quiesce_for_fault_injection():
         authority.assert_outside_transaction()
         atomic_write_json(
             marker,
@@ -185,8 +164,12 @@ def run_fenced_syncer(
     leader.reconcile_publications(command_id=f"reconcile-publications-e{token.epoch}")
     latest = authority.read.latest_committed_version()
     if latest is None:
-        latest, theta, outer_state, param_index = _initialize_v0(loaded, leader, device=device)
-        telemetry.event("v0_initialized", publication_id=latest.publication_id)
+        latest, theta, outer_state, param_index = _initialize_genesis(
+            loaded,
+            leader,
+            device=device,
+        )
+        telemetry.event("genesis_initialized", publication_id=latest.publication_id)
     else:
         param_index = json.loads(paths.param_index_json.read_text(encoding="utf-8"))
         theta, outer_state = load_outer_state(
@@ -196,13 +179,12 @@ def run_fenced_syncer(
         )
         telemetry.event("authority_resumed", version=latest.version)
     control.publish_latest(latest)
-    _pause_candidate_outside_transaction(
+    _pause_candidate_at_fault_boundary(
         authority,
         leader,
         renewer,
         version=latest.version,
     )
-    _raise_injected_candidate_failure(latest.version)
     terminal = authority.read.terminal_record()
     if terminal is not None:
         control.publish_terminal(terminal)
@@ -288,16 +270,15 @@ def run_fenced_syncer(
                 time.sleep(poll_seconds)
         else:
             maintenance_service.tick()
-            _pause_candidate_outside_transaction(
+            _pause_candidate_at_fault_boundary(
                 authority,
                 leader,
                 renewer,
                 version=outcome.version,
             )
-            _raise_injected_candidate_failure(outcome.version)
 
 
-def _initialize_v0(
+def _initialize_genesis(
     loaded: LoadedRunDescriptor,
     leader: LeaderSession,
     *,
@@ -346,7 +327,7 @@ def _initialize_v0(
         dtype=dtype_from_name(config.syncer.publish_dtype),
     )
     leader.prepare_publication(
-        command_id=f"initialize-v0-{publication_id}-prepare",
+        command_id=f"initialize-genesis-{publication_id}-prepare",
         publication_id=publication_id,
         target_version=0,
         selection_batch_id=None,
@@ -362,11 +343,11 @@ def _initialize_v0(
     publish_immutable_bytes(weight_path, weight_payload)
     publish_immutable_bytes(optim_path, optim_payload)
     committed = leader.commit_merge(
-        command_id=f"initialize-v0-{publication_id}-commit",
+        command_id=f"initialize-genesis-{publication_id}-commit",
         publication_id=publication_id,
     )
     if isinstance(committed, MergeFenceConflict):
-        raise RuntimeError("v0 unexpectedly encountered a membership fence conflict")
+        raise RuntimeError("genesis unexpectedly encountered a membership fence conflict")
     committed_theta, committed_outer_state = load_outer_state(
         loaded.paths.shared_root / committed.optim_relative_path,
         device=device,

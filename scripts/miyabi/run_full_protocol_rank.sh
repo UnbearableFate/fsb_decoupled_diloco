@@ -16,13 +16,13 @@ case "$scenario" in
   *) echo "unsupported fault scenario: $scenario" >&2; exit 2 ;;
 esac
 
-learner_command() {
+build_learner_command() {
   local learner_index="$1"
   local logical_id="$2"
   local attempt_id="${3:-}"
   local learner_id
   printf -v learner_id 'learner_%03d' "$learner_index"
-  local -a command=(
+  LEARNER_COMMAND=(
     "$PYTHON_BIN" -m fs_diloco.learner
     --config "$RESOLVED_CONFIG"
     --shared-root "$SHARED_ROOT"
@@ -30,11 +30,15 @@ learner_command() {
     --logical-launch-id "$logical_id"
   )
   if [[ -n "$attempt_id" ]]; then
-    command+=(--attempt-id "$attempt_id")
+    LEARNER_COMMAND+=(--attempt-id "$attempt_id")
   fi
+}
+
+run_learner() {
+  build_learner_command "$@"
   CUDA_VISIBLE_DEVICES="$LEARNER_CUDA_VISIBLE_DEVICES" \
   OMP_NUM_THREADS="$LEARNER_OMP_NUM_THREADS" \
-    "${command[@]}"
+    "${LEARNER_COMMAND[@]}"
 }
 
 launch_learner() {
@@ -42,7 +46,7 @@ launch_learner() {
   local learner_id logical_id
   printf -v learner_id 'learner_%03d' "$learner_index"
   logical_id="allocation-${PBS_JOBID%%.*}-${learner_id}"
-  learner_command "$learner_index" "$logical_id" >"$LOG_ROOT/${learner_id}.log" 2>&1
+  run_learner "$learner_index" "$logical_id" >"$LOG_ROOT/${learner_id}.log" 2>&1
 }
 
 launch_replaced_learner() {
@@ -53,9 +57,13 @@ launch_replaced_learner() {
   new_logical="replacement-${PBS_JOBID%%.*}-${learner_id}"
   new_attempt="attempt-${PBS_JOBID%%.*}-${learner_id}-replacement"
 
-  learner_command "$learner_index" "$old_logical" >"$LOG_ROOT/${learner_id}.log" 2>&1 &
+  build_learner_command "$learner_index" "$old_logical"
+  CUDA_VISIBLE_DEVICES="$LEARNER_CUDA_VISIBLE_DEVICES" \
+  OMP_NUM_THREADS="$LEARNER_OMP_NUM_THREADS" \
+    "${LEARNER_COMMAND[@]}" >"$LOG_ROOT/${learner_id}.log" 2>&1 &
   local learner_pid=$!
-  readarray -t old_fence < <(
+  local fence_output
+  if ! fence_output="$(
     "$PYTHON_BIN" - "$SHARED_ROOT/control/syncer_metadata.sqlite3" "$learner_id" <<'PY'
 import sqlite3
 import sys
@@ -86,7 +94,12 @@ while time.monotonic() < deadline:
     time.sleep(0.05)
 raise SystemExit("learner did not reach the registered replacement boundary")
 PY
-  )
+  )"; then
+    kill -TERM "$learner_pid" 2>/dev/null || true
+    wait "$learner_pid" 2>/dev/null || true
+    return 1
+  fi
+  readarray -t old_fence <<<"$fence_output"
   old_logical="${old_fence[0]}"
   old_attempt="${old_fence[1]}"
   old_generation="${old_fence[2]}"
@@ -113,7 +126,7 @@ PY
     --reason "registered learner process replacement" \
     >"$LOG_ROOT/${learner_id}_replacement_authorization.json"
 
-  learner_command "$learner_index" "$new_logical" "$new_attempt" \
+  run_learner "$learner_index" "$new_logical" "$new_attempt" \
     >>"$LOG_ROOT/${learner_id}.log" 2>&1
   "$PYTHON_BIN" - "$LOG_ROOT/learner_replacement.json" "$learner_id" \
     "$old_attempt" "$old_generation" "$new_attempt" "$killed_status" <<'PY'
@@ -132,44 +145,92 @@ payload = {
     "injected_exit_status": int(sys.argv[6]),
 }
 temporary = target.with_name(f".{target.name}.{os.getpid()}.tmp")
-temporary.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+with temporary.open("x", encoding="utf-8") as handle:
+    handle.write(json.dumps(payload, sort_keys=True, indent=2) + "\n")
+    handle.flush()
+    os.fsync(handle.fileno())
 os.replace(temporary, target)
+directory = os.open(target.parent, os.O_RDONLY)
+try:
+    os.fsync(directory)
+finally:
+    os.close(directory)
 PY
 }
+
+SYNCER_COMMAND=(
+  "$PYTHON_BIN" -m fs_diloco.syncer
+  --config "$RESOLVED_CONFIG"
+  --shared-root "$SHARED_ROOT"
+)
 
 run_syncer() {
   local log_path="$1"
   CUDA_VISIBLE_DEVICES="$SYNCER_CUDA_VISIBLE_DEVICES" \
   OMP_NUM_THREADS="$SYNCER_OMP_NUM_THREADS" \
-    "$PYTHON_BIN" -m fs_diloco.syncer \
-      --config "$RESOLVED_CONFIG" \
-      --shared-root "$SHARED_ROOT" \
-      >"$log_path" 2>&1
+    "${SYNCER_COMMAND[@]}" >"$log_path" 2>&1
 }
 
 if [[ "$rank" -eq 0 ]]; then
   if [[ "$scenario" == "syncer_takeover" ]]; then
+    fault_marker="$LOG_ROOT/syncer_primary_fault_boundary.json"
+    FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION=2 \
+    FS_DILOCO_FAULT_PAUSE_MARKER_PATH="$fault_marker" \
+    CUDA_VISIBLE_DEVICES="$SYNCER_CUDA_VISIBLE_DEVICES" \
+    OMP_NUM_THREADS="$SYNCER_OMP_NUM_THREADS" \
+      "${SYNCER_COMMAND[@]}" >"$LOG_ROOT/syncer_primary.log" 2>&1 &
+    primary_pid=$!
+    deadline=$((SECONDS + 120))
+    while [[ ! -f "$fault_marker" ]]; do
+      if ! kill -0 "$primary_pid" 2>/dev/null; then
+        wait "$primary_pid" 2>/dev/null || true
+        echo "primary syncer exited before the registered fault boundary" >&2
+        exit 1
+      fi
+      if ((SECONDS >= deadline)); then
+        kill -KILL "$primary_pid" 2>/dev/null || true
+        wait "$primary_pid" 2>/dev/null || true
+        echo "primary syncer did not reach the registered fault boundary" >&2
+        exit 1
+      fi
+      sleep 0.1
+    done
+    kill -KILL "$primary_pid"
     set +e
-    FS_DILOCO_TEST_FAIL_AFTER_COMMITTED_VERSION=2 \
-      run_syncer "$LOG_ROOT/syncer_primary.log"
+    wait "$primary_pid"
     primary_status=$?
     set -e
     if [[ "$primary_status" -eq 0 ]]; then
-      echo "primary syncer did not fail at the registered boundary" >&2
+      echo "primary syncer survived the registered fault injection" >&2
       exit 1
     fi
     run_syncer "$LOG_ROOT/syncer_successor.log"
-    "$PYTHON_BIN" - "$LOG_ROOT/syncer_takeover.json" "$primary_status" <<'PY'
+    "$PYTHON_BIN" - "$fault_marker" "$LOG_ROOT/syncer_takeover.json" \
+      "$primary_status" "$primary_pid" <<'PY'
 import json
 import os
 import pathlib
 import sys
 
-target = pathlib.Path(sys.argv[1])
-payload = {"artifact_version": 1, "primary_exit_status": int(sys.argv[2])}
+fault_marker = pathlib.Path(sys.argv[1])
+target = pathlib.Path(sys.argv[2])
+payload = {
+    "artifact_version": 1,
+    "primary_exit_status": int(sys.argv[3]),
+    "primary_pid": int(sys.argv[4]),
+    "fault_boundary": json.loads(fault_marker.read_text(encoding="utf-8")),
+}
 temporary = target.with_name(f".{target.name}.{os.getpid()}.tmp")
-temporary.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+with temporary.open("x", encoding="utf-8") as handle:
+    handle.write(json.dumps(payload, sort_keys=True, indent=2) + "\n")
+    handle.flush()
+    os.fsync(handle.fileno())
 os.replace(temporary, target)
+directory = os.open(target.parent, os.O_RDONLY)
+try:
+    os.fsync(directory)
+finally:
+    os.close(directory)
 PY
   else
     run_syncer "$LOG_ROOT/syncer.log"

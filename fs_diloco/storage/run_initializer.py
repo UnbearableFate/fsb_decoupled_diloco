@@ -334,7 +334,7 @@ def repair_identity_reservation(final_root: Path) -> Path:
 
 
 def remove_completed_staging(*, final_root: Path, staging_root: Path) -> None:
-    """Remove only the verified staging alias after final publication is visible."""
+    """Remove only the verified staging directory after final publication is visible."""
 
     final_root = final_root.resolve()
     staging_root = staging_root.absolute()

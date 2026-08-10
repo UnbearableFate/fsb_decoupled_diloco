@@ -166,6 +166,65 @@ def _terminal_identity(run_root: Path) -> tuple[str, dict[str, Any], dict[str, A
         raise CleanupRefusedError("terminal summary does not confirm that all learners stopped")
     if int(summary.get("final_version", -1)) != int(stop.get("final_version", -2)):
         raise CleanupRefusedError("terminal summary and stop final versions do not match")
+    database = run_root / "control" / "syncer_metadata.sqlite3"
+    try:
+        metadata = database.lstat()
+    except FileNotFoundError as exc:
+        raise CleanupRefusedError("authority database is missing") from exc
+    if not stat.S_ISREG(metadata.st_mode):
+        raise CleanupRefusedError("authority database must be a regular non-symlink file")
+    connection = sqlite3.connect(f"{database.resolve().as_uri()}?mode=ro", uri=True)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA query_only=ON")
+    try:
+        integrity = [str(row[0]) for row in connection.execute("PRAGMA integrity_check")]
+        terminal = connection.execute(
+            "SELECT * FROM terminal_state WHERE singleton=1"
+        ).fetchone()
+        controller = connection.execute(
+            "SELECT state FROM controller_state WHERE singleton=1"
+        ).fetchone()
+        identity = connection.execute(
+            "SELECT run_id FROM run_identity WHERE singleton=1"
+        ).fetchone()
+        latest = connection.execute("SELECT MAX(version) FROM global_versions").fetchone()[0]
+    except sqlite3.Error as exc:
+        raise CleanupRefusedError("cannot validate terminal authority") from exc
+    finally:
+        connection.close()
+    if integrity != ["ok"]:
+        raise CleanupRefusedError("authority integrity check failed")
+    if (
+        terminal is None
+        or terminal["state"] != "finalized"
+        or controller is None
+        or controller["state"] != "finalized"
+        or identity is None
+        or identity["run_id"] != run_id
+        or latest is None
+        or int(latest) != int(summary["final_version"])
+        or int(terminal["final_version"]) != int(summary["final_version"])
+    ):
+        raise CleanupRefusedError("terminal filesystem controls do not match durable authority")
+    owner_short = hashlib.sha256(
+        str(terminal["finalized_by_owner_id"]).encode("utf-8")
+    ).hexdigest()[:12]
+    immutable_stop = (
+        run_root
+        / "control"
+        / "syncer_epochs"
+        / f"e{int(terminal['finalized_by_epoch']):06d}_{owner_short}"
+        / "terminal"
+        / f"stop_g{int(terminal['generation']):06d}.json"
+    )
+    try:
+        immutable_metadata = immutable_stop.lstat()
+    except FileNotFoundError as exc:
+        raise CleanupRefusedError("immutable terminal control is missing") from exc
+    if not stat.S_ISREG(immutable_metadata.st_mode) or immutable_metadata.st_mode & 0o222:
+        raise CleanupRefusedError("immutable terminal control is not immutable")
+    if _load_json(immutable_stop, label="immutable terminal control") != stop:
+        raise CleanupRefusedError("fixed terminal stop differs from immutable authority output")
     return run_id, summary, stop
 
 
@@ -176,78 +235,48 @@ def _matching_pass_evidence(
     summary: dict[str, Any],
 ) -> dict[str, Any]:
     evidence = _load_json(evidence_path, label="completion evidence")
-    if evidence.get("status") != "PASS" or evidence.get("errors") not in (None, []):
+    if (
+        evidence.get("artifact_version") != 1
+        or evidence.get("status") != "PASS"
+        or evidence.get("errors") != []
+    ):
         raise CleanupRefusedError("completion evidence is not an error-free PASS")
 
     identity = evidence.get("identity")
     if not isinstance(identity, dict):
         raise CleanupRefusedError("completion evidence has no source identity")
     evidence_run_root = evidence.get("run_root")
-    direct_evidence = isinstance(evidence_run_root, str)
-    descriptor_identity_key = "descriptor_sha256"
-    if not direct_evidence:
-        matched_branches: list[str] = []
-        for branch_name in ("static", "dynamic"):
-            branch = evidence.get(branch_name)
-            if not isinstance(branch, dict) or not isinstance(branch.get("run_root"), str):
-                continue
-            try:
-                branch_root = Path(str(branch["run_root"])).resolve(strict=True)
-            except OSError:
-                continue
-            if branch_root != run_root:
-                continue
-            branch_summary = branch.get("summary")
-            if (
-                not isinstance(branch_summary, dict)
-                or str(branch_summary.get("run_id") or "") != run_id
-                or int(branch_summary.get("final_version", -1))
-                != int(summary.get("final_version", -2))
-            ):
-                raise CleanupRefusedError("matched evidence run summary does not match")
-            matched_branches.append(branch_name)
-        if len(matched_branches) != 1:
-            raise CleanupRefusedError("completion evidence does not identify exactly one run_root")
-        branch_name = matched_branches[0]
-        evidence_run_root = str(evidence[branch_name]["run_root"])
-        descriptor_identity_key = f"{branch_name}_descriptor_sha256"
-
+    if not isinstance(evidence_run_root, str):
+        raise CleanupRefusedError("completion evidence has no run_root")
     try:
         resolved_evidence_run = Path(evidence_run_root).resolve(strict=True)
     except OSError as exc:
         raise CleanupRefusedError("completion evidence run_root no longer exists") from exc
     if resolved_evidence_run != run_root:
         raise CleanupRefusedError("completion evidence belongs to a different run")
-    if direct_evidence and str(identity.get("run_id") or "") != run_id:
+    if str(identity.get("run_id") or "") != run_id:
         raise CleanupRefusedError("completion evidence run identity does not match")
-    if direct_evidence:
-        authority = evidence.get("authority")
-        terminal_candidates: list[dict[str, Any]] = []
-        if isinstance(evidence.get("terminal"), dict):
-            terminal_candidates.append(evidence["terminal"])
-        if isinstance(authority, dict):
-            if isinstance(authority.get("terminal"), dict):
-                terminal_candidates.append(authority["terminal"])
-            terminal_candidates.append(authority)
-        terminal_versions: set[int] = set()
-        for candidate in terminal_candidates:
-            if candidate.get("final_version") is None:
-                continue
-            try:
-                terminal_versions.add(int(candidate["final_version"]))
-            except (TypeError, ValueError) as exc:
-                raise CleanupRefusedError(
-                    "completion evidence terminal final version is invalid"
-                ) from exc
-        if terminal_versions != {int(summary.get("final_version", -1))}:
-            raise CleanupRefusedError(
-                "completion evidence terminal final version does not match the run"
-            )
+    authority = evidence.get("authority")
+    if not isinstance(authority, dict):
+        raise CleanupRefusedError("completion evidence has no authority result")
+    try:
+        evidence_final_version = int(authority["final_version"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise CleanupRefusedError("completion evidence final version is invalid") from exc
+    if evidence_final_version != int(summary.get("final_version", -1)):
+        raise CleanupRefusedError("completion evidence final version does not match the run")
+    if evidence.get("terminal_summary") != summary:
+        raise CleanupRefusedError("completion evidence terminal summary no longer matches")
+    cleanup = evidence.get("cleanup")
+    if not isinstance(cleanup, dict) or cleanup.get("eligible") is not True or cleanup.get(
+        "targets"
+    ) != [str(run_root)]:
+        raise CleanupRefusedError("completion evidence does not authorize this cleanup target")
 
     descriptor = _load_json(run_root / "control" / "run_descriptor.json", label="run descriptor")
     if str(descriptor.get("run_id") or "") != run_id:
         raise CleanupRefusedError("run descriptor identity does not match")
-    if str(identity.get(descriptor_identity_key) or "") != str(
+    if str(identity.get("descriptor_sha256") or "") != str(
         descriptor.get("descriptor_sha256") or ""
     ):
         raise CleanupRefusedError("completion evidence descriptor identity does not match")
@@ -314,46 +343,21 @@ def _authority_live_paths(run_root: Path) -> tuple[set[str], set[str]]:
     blocking: set[str] = set()
     authority_owned_gc: set[str] = set()
     try:
-        tables = {
-            str(row[0])
-            for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        }
-        if "updates" in tables:
-            columns = {
-                str(row[1]) for row in connection.execute("PRAGMA table_info(updates)").fetchall()
-            }
-            path_column = (
-                "payload_relative_path"
-                if "payload_relative_path" in columns
-                else "file_path"
-                if "file_path" in columns
-                else None
-            )
-            if path_column is not None and "status" in columns:
-                rows = connection.execute(
-                    f"SELECT {path_column} FROM updates WHERE status IN ('pending','selected')"
-                ).fetchall()
-                for row in rows:
-                    raw = Path(str(row[0]))
-                    if raw.is_absolute():
-                        try:
-                            raw = raw.resolve().relative_to(run_root)
-                        except ValueError:
-                            continue
-                    blocking.add(raw.as_posix())
-        if "artifact_publications" in tables:
-            rows = connection.execute(
-                """
-                SELECT relative_path FROM artifact_publications
-                WHERE state IN ('prepared','committed','orphan')
-                """
-            ).fetchall()
-            blocking.update(str(row[0]) for row in rows)
-        if "gc_candidates" in tables:
-            rows = connection.execute(
-                "SELECT relative_path FROM gc_candidates WHERE state IN ('pending','claimed')"
-            ).fetchall()
-            authority_owned_gc.update(str(row[0]) for row in rows)
+        rows = connection.execute(
+            "SELECT payload_relative_path FROM updates WHERE status IN ('pending','selected')"
+        ).fetchall()
+        blocking.update(str(row[0]) for row in rows)
+        rows = connection.execute(
+            """
+            SELECT relative_path FROM artifact_publications
+            WHERE state IN ('prepared','committed','orphan')
+            """
+        ).fetchall()
+        blocking.update(str(row[0]) for row in rows)
+        rows = connection.execute(
+            "SELECT relative_path FROM gc_candidates WHERE state IN ('pending','claimed')"
+        ).fetchall()
+        authority_owned_gc.update(str(row[0]) for row in rows)
     except sqlite3.Error as exc:
         raise CleanupRefusedError("cannot inspect authority live references") from exc
     finally:
@@ -612,7 +616,7 @@ def _unlink_owned_candidate(run_root: Path, candidate: CleanupCandidate) -> None
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("run_root", type=Path, help="one exact completed run directory")
+    parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--evidence", type=Path, required=True, help="matching PASS evidence JSON")
     parser.add_argument(
         "--project-root",
@@ -620,11 +624,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path(__file__).resolve().parents[2],
         help=argparse.SUPPRESS,
     )
-    parser.add_argument("--delete", action="store_true", help="perform the inventoried deletion")
+    parser.add_argument("--execute", action="store_true", help="perform the inventoried deletion")
     parser.add_argument(
-        "--manifest-output",
+        "--manifest",
         type=Path,
-        help="new report-side cleanup manifest (required with --delete)",
+        help="new report-side cleanup manifest (required with --execute)",
     )
     return parser
 
@@ -637,13 +641,13 @@ def main(argv: list[str] | None = None) -> int:
             args.run_root,
             args.evidence,
         )
-        if args.delete:
-            if args.manifest_output is None:
-                raise CleanupRefusedError("--manifest-output is required with --delete")
-            result = execute_cleanup(plan, args.manifest_output)
+        if args.execute:
+            if args.manifest is None:
+                raise CleanupRefusedError("--manifest is required with --execute")
+            result = execute_cleanup(plan, args.manifest)
         else:
-            if args.manifest_output is not None:
-                raise CleanupRefusedError("--manifest-output is only accepted with --delete")
+            if args.manifest is not None:
+                raise CleanupRefusedError("--manifest is only accepted with --execute")
             result = _manifest(plan, status="dry_run")
     except CleanupRefusedError as exc:
         print(f"REFUSED: {exc}", file=os.sys.stderr)

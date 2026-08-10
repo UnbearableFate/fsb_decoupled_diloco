@@ -67,34 +67,32 @@ def test_hf_model_and_tokenizer_load_the_declared_revisions(
     assert calls[1][2]["revision"] == MODEL_REVISION
 
 
-@pytest.mark.parametrize("primary_fails", [False, True])
-def test_hf_dataset_primary_and_wikitext_fallback_use_the_declared_revision(
+def test_hf_dataset_loads_the_declared_repository_and_revision(
     monkeypatch: pytest.MonkeyPatch,
-    primary_fails: bool,
 ) -> None:
     calls: list[tuple[str, str | None, dict[str, object]]] = []
     expected = object()
 
     def load_dataset(name: str, config_name: str | None, **kwargs: object) -> object:
         calls.append((name, config_name, kwargs))
-        if primary_fails and len(calls) == 1:
-            raise RuntimeError("primary unavailable")
         return expected
 
-    monkeypatch.delenv("FS_DILOCO_HF_WIKITEXT_REPO", raising=False)
     monkeypatch.setitem(sys.modules, "datasets", SimpleNamespace(load_dataset=load_dataset))
     config = SimpleNamespace(
-        dataset_name="wikitext",
+        dataset_name="Salesforce/wikitext",
         dataset_config_name="wikitext-2-raw-v1",
         revision=DATA_REVISION,
         cache_dir=None,
     )
 
     assert load_text_split(config, "train") is expected
-    assert all(call[2]["revision"] == DATA_REVISION for call in calls)
-    assert calls[0][0] == "wikitext"
-    if primary_fails:
-        assert calls[1][0] == "Salesforce/wikitext"
+    assert calls == [
+        (
+            "Salesforce/wikitext",
+            "wikitext-2-raw-v1",
+            {"revision": DATA_REVISION, "split": "train", "cache_dir": None},
+        )
+    ]
 
 
 @pytest.mark.parametrize("use_symlink", [False, True])
@@ -138,29 +136,21 @@ def test_hf_model_loader_rejects_an_ambiguous_existing_local_reference(
         load_causal_lm_and_tokenizer(config)
 
 
-@pytest.mark.parametrize("use_environment_override", [False, True])
-def test_hf_dataset_loader_rejects_an_existing_local_reference_or_override(
+def test_hf_dataset_loader_rejects_an_existing_local_reference(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    use_environment_override: bool,
 ) -> None:
     local_dataset = tmp_path / "Salesforce" / "wikitext"
     local_dataset.mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
     reference = "Salesforce/wikitext"
-    configured_name = reference
-    if use_environment_override:
-        configured_name = "wikitext"
-        monkeypatch.setenv("FS_DILOCO_HF_WIKITEXT_REPO", str(local_dataset))
-    else:
-        monkeypatch.delenv("FS_DILOCO_HF_WIKITEXT_REPO", raising=False)
 
     def unexpected_load(*_args: object, **_kwargs: object) -> object:
         raise AssertionError("local dataset reference reached the Hugging Face producer")
 
     monkeypatch.setitem(sys.modules, "datasets", SimpleNamespace(load_dataset=unexpected_load))
     config = SimpleNamespace(
-        dataset_name=configured_name,
+        dataset_name=reference,
         dataset_config_name="wikitext-2-raw-v1",
         revision=DATA_REVISION,
         cache_dir=None,

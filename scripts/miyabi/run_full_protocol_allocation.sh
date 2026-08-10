@@ -85,6 +85,7 @@ MPI_ENV_ARGS=(
   "PROJECT_ROOT=$PROJECT_ROOT"
   "PRIMARY_WORKTREE_ROOT=$PRIMARY_WORKTREE_ROOT"
   "PYTHON_BIN=$PYTHON_BIN"
+  "RUN_ID=$RUN_ID"
   "SHARED_ROOT=$SHARED_ROOT"
   "RESOLVED_CONFIG=$RESOLVED_CONFIG"
   "LOG_ROOT=$LOG_ROOT"
@@ -105,7 +106,6 @@ MPI_ENV_ARGS=(
   "HF_HUB_CACHE=${HF_HUB_CACHE:-}"
   "HF_DATASETS_OFFLINE=${HF_DATASETS_OFFLINE:-0}"
   "HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}"
-  "FS_DILOCO_HF_WIKITEXT_REPO=${FS_DILOCO_HF_WIKITEXT_REPO:-Salesforce/wikitext}"
   "TOKENIZERS_PARALLELISM=${TOKENIZERS_PARALLELISM:-false}"
 )
 
@@ -116,9 +116,10 @@ printf 'HOST %s\n' "${HOSTS[@]}"
 mpirun \
   --mca mpi_abort_print_stack 1 \
   --report-bindings \
+  --map-by ppr:1:node \
   --bind-to none \
   -np "$EXPECTED_NODES" \
   /usr/bin/env "${MPI_ENV_ARGS[@]}" \
   bash "$PROJECT_ROOT/scripts/miyabi/run_full_protocol_rank.sh"
 
-"$PYTHON_BIN" -m fs_diloco.tools.analysis "$SHARED_ROOT" --json | tee "$LOG_ROOT/summary.json"
+"$PYTHON_BIN" -m fs_diloco.tools.analysis "$SHARED_ROOT" | tee "$LOG_ROOT/summary.json"

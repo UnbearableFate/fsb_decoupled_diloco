@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core.config import resolve_config
+from ..core.source_identity import bind_source_identity
 from .init_run import initialize_run
 
 
@@ -91,6 +92,7 @@ def launch(
         shared_root=shared_root,
         project_root=project_root,
     )
+    bind_source_identity(config, project_root)
     initialized = initialize_run(
         config,
         project_root=project_root,

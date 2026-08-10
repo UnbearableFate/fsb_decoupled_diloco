@@ -142,8 +142,8 @@ def ingest_update(
     return proposal
 
 
-def initialize_v0(leader, run_root: Path) -> None:
-    leader.initialize_v0(
+def initialize_genesis(leader, run_root: Path) -> None:
+    leader.initialize_genesis(
         command_id="initialize-v0",
         publication_id="publication-v0",
         **publish_checkpoint_pair(run_root, version=0),
@@ -160,7 +160,7 @@ def test_revoke_before_selection_leaves_current_quorum_progressing(tmp_path: Pat
         current_fence = admit(leader, index=1)
         stale = ingest_update(leader, tmp_path, stale_fence, ordinal=0)
         current = ingest_update(leader, tmp_path, current_fence, ordinal=1)
-        initialize_v0(leader, tmp_path)
+        initialize_genesis(leader, tmp_path)
 
         retired = leader.retire_incarnation(
             command_id="retire-stale",
@@ -196,7 +196,7 @@ def test_selection_classifies_stale_rows_without_partial_abort(tmp_path: Path) -
         current_fence = admit(leader, index=1)
         stale = ingest_update(leader, tmp_path, stale_fence, ordinal=0)
         current = ingest_update(leader, tmp_path, current_fence, ordinal=1)
-        initialize_v0(leader, tmp_path)
+        initialize_genesis(leader, tmp_path)
         fault = sqlite3.connect(tmp_path / "authority.sqlite3")
         try:
             fault.execute(
@@ -229,7 +229,7 @@ def test_revoke_after_selection_returns_per_row_conflict_then_retry_commits(
         current_fence = admit(leader, index=1)
         stale = ingest_update(leader, tmp_path, stale_fence, ordinal=0)
         current = ingest_update(leader, tmp_path, current_fence, ordinal=1)
-        initialize_v0(leader, tmp_path)
+        initialize_genesis(leader, tmp_path)
         first_attempt = leader.try_select_batch(
             command_id="select-first", quorum_min=2, quorum_max=2
         )

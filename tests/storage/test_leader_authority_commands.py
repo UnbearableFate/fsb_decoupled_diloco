@@ -51,15 +51,17 @@ def open_authority(tmp_path: Path, clock: Clock) -> LeaderAuthority:
     )
 
 
-def commit_v0(leader, run_root: Path) -> None:
-    leader.initialize_v0(
+def commit_genesis(leader, run_root: Path) -> None:
+    leader.initialize_genesis(
         command_id="initialize-v0",
         publication_id="publication-v0",
         **publish_checkpoint_pair(run_root, version=0),
     )
 
 
-def test_v0_uses_fenced_publication_chain_and_commit_is_idempotent(tmp_path: Path) -> None:
+def test_genesis_uses_fenced_publication_chain_and_commit_is_idempotent(
+    tmp_path: Path,
+) -> None:
     clock = Clock()
     with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
@@ -139,7 +141,7 @@ def test_global_version_target_cannot_skip_or_duplicate(tmp_path: Path) -> None:
     with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
         leader = authority.open_leader(token)
-        commit_v0(leader, tmp_path)
+        commit_genesis(leader, tmp_path)
 
         with pytest.raises(ValueError, match="next version 1"):
             leader.prepare_publication(
@@ -158,7 +160,7 @@ def test_global_version_target_cannot_skip_or_duplicate(tmp_path: Path) -> None:
             )
 
 
-def test_typed_receipt_proposal_selection_and_v1_commit_flow(tmp_path: Path) -> None:
+def test_typed_receipt_proposal_selection_and_successor_commit_flow(tmp_path: Path) -> None:
     clock = Clock()
     with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
@@ -189,7 +191,7 @@ def test_typed_receipt_proposal_selection_and_v1_commit_flow(tmp_path: Path) -> 
             leader.ingest_proposal(command_id="proposal-replay", proposal=proposal).value
             == "exact_replay"
         )
-        commit_v0(leader, tmp_path)
+        commit_genesis(leader, tmp_path)
         attempt = leader.try_select_batch(command_id="select-v1", quorum_min=1, quorum_max=1)
         batch = attempt.batch
         assert batch is not None
@@ -266,7 +268,7 @@ def test_commit_fault_boundaries_roll_back_and_exact_retry(
             )
             publish_proposal_payload(root, proposal)
             leader.ingest_proposal(command_id="proposal-1", proposal=proposal)
-            commit_v0(leader, root)
+            commit_genesis(leader, root)
             selection = leader.try_select_batch(command_id="select-v1", quorum_min=1, quorum_max=1)
             assert selection.batch is not None
             intent = leader.prepare_publication(

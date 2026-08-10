@@ -58,7 +58,7 @@ python -m fs_diloco.tools.request_static_replacement \
 ## 检查、手工关闭和 scheduler uncertainty
 
 ```bash
-python -m fs_diloco.tools.analysis RUN_ROOT --json
+python -m fs_diloco.tools.analysis RUN_ROOT
 python -m fs_diloco.cli close --shared-root RUN_ROOT --reason REASON
 python -m fs_diloco.tools.resolve_scheduler_uncertainty --help
 ```
@@ -73,8 +73,7 @@ analysis 汇总 immutable identity、integrity、controller、latest version、c
 python -m fs_diloco.tools.clean_run \
   --project-root "$PWD" \
   --run-root RUN_ROOT \
-  --evidence EVIDENCE_JSON \
-  --manifest REPORT_JSON
+  --evidence EVIDENCE_JSON
 ```
 
-只有确认 manifest 的精确路径后才加 `--execute`。工具拒绝 symlink run root、缺失 artifact policy、非 PASS evidence、authority live reference 和执行前发生变化的 inode/size/mtime。
+确认 stdout 中的精确路径后，另加 `--execute --manifest REPORT_JSON`。工具拒绝 symlink run root、缺失 artifact policy、非 PASS evidence、authority live reference 和执行前发生变化的 inode/size/mtime。

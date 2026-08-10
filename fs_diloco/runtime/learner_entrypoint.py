@@ -158,45 +158,6 @@ def main(argv: list[str] | None = None) -> None:
         raise RuntimeError("learner admission changed immediately before torch import")
     if "torch" in sys.modules:
         raise RuntimeError("learner admission revalidation imported torch")
-    admission_signal = os.environ.get("FS_DILOCO_TEST_ADMISSION_SIGNAL_PATH")
-    if admission_signal:
-        from ..storage.atomic_io import atomic_write_json
-
-        atomic_write_json(
-            admission_signal,
-            {
-                "run_id": descriptor["run_id"],
-                "descriptor_sha256": descriptor["descriptor_sha256"],
-                "actor_id": actor_id,
-                "attempt_id": admission.attempt_id,
-                "fence": admission.fence.as_dict(),
-            },
-        )
-    release_marker = os.environ.get("FS_DILOCO_TEST_PRETORCH_RELEASE_MARKER_PATH")
-    if release_marker:
-        release_deadline = time.monotonic() + float(
-            os.environ.get("FS_DILOCO_TEST_PRETORCH_RELEASE_TIMEOUT_SECONDS", "900")
-        )
-        marker = Path(release_marker)
-        while not marker.is_file():
-            if time.monotonic() >= release_deadline:
-                raise TimeoutError("test pre-Torch release marker did not appear")
-            time.sleep(0.1)
-        released_admission = read_admission_response(
-            loaded.paths,
-            run_id=str(descriptor["run_id"]),
-            descriptor_sha256=str(descriptor["descriptor_sha256"]),
-            actor_id=actor_id,
-            attempt_id=response_attempt_id,
-            stable_contributor_key=response_stable_key,
-            request_sha256=request_sha256,
-            max_clock_skew_seconds=config.leader.max_clock_skew_seconds,
-            expected_fence=admission.fence,
-        )
-        if released_admission != admission:
-            raise RuntimeError("learner admission changed while waiting at the test release gate")
-    if "torch" in sys.modules:
-        raise RuntimeError("learner pre-Torch release gate imported torch")
     from .learner import run_admitted_learner
 
     run_admitted_learner(loaded, admission)

@@ -36,7 +36,6 @@ def test_repository_configs_use_the_one_strict_schema(path: Path) -> None:
     assert config.config_schema_version == 1
     assert payload["config_schema_version"] == 1
     assert set(payload) <= {field.name for field in dataclasses.fields(Config)}
-    assert not ({"profile", "shared", "coordination"} & set(payload))
 
 
 @pytest.mark.parametrize("revision", [None, "main", "v1.0", "A" * 40, "a" * 39])
@@ -88,12 +87,35 @@ def test_local_inputs_are_rejected_without_content_identity(
         config.validate()
 
 
-@pytest.mark.parametrize("removed", ["profile", "shared", "coordination", "fragments"])
-def test_unknown_or_removed_sections_are_rejected(tmp_path: Path, removed: str) -> None:
+def test_unknown_top_level_keys_are_rejected(tmp_path: Path) -> None:
     path = tmp_path / "config.yaml"
-    path.write_text(f"{removed}: {{}}\n", encoding="utf-8")
+    path.write_text("unknown_section: {}\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match=removed):
+    with pytest.raises(ValueError, match="unknown_section"):
+        load_config(path)
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        ("config_schema_version: true\n", "config_schema_version must be an integer"),
+        ("sync:\n  scan_interval_seconds: '0.5'\n", "scan_interval_seconds must be a number"),
+        ("run:\n  name: invalid/name\n", "run.name must be a safe"),
+        (
+            "run:\n  source_fingerprint: sha256:short\n",
+            "run.source_fingerprint must be a sha256 digest",
+        ),
+    ],
+)
+def test_config_rejects_invalid_current_types_and_identities(
+    tmp_path: Path,
+    content: str,
+    message: str,
+) -> None:
+    path = tmp_path / "config.yaml"
+    path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
         load_config(path)
 
 
@@ -125,7 +147,7 @@ def test_resolution_owns_run_identity_and_path_substitution(
 ) -> None:
     monkeypatch.setenv("FS_DILOCO_GIT_COMMIT", "a" * 40)
     monkeypatch.setenv("FS_DILOCO_GIT_DIRTY", "0")
-    monkeypatch.setenv("FS_DILOCO_SOURCE_FINGERPRINT", "sha256:source")
+    monkeypatch.setenv("FS_DILOCO_SOURCE_FINGERPRINT", "sha256:" + "b" * 64)
     config = resolve_config(
         "configs/full_protocol_static.yaml",
         run_id="identity-test",
@@ -137,7 +159,7 @@ def test_resolution_owns_run_identity_and_path_substitution(
     assert config.run.shared_root == str(tmp_path / "identity-test")
     assert config.run.git_commit == "a" * 40
     assert config.run.git_dirty is False
-    assert config.run.source_fingerprint == "sha256:source"
+    assert config.run.source_fingerprint == "sha256:" + "b" * 64
 
 
 @pytest.mark.parametrize(

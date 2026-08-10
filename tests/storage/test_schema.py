@@ -10,6 +10,7 @@ from fs_diloco.protocol.contributor import DynamicMembershipScope, StaticMembers
 from fs_diloco.storage import authority as authority_module
 from fs_diloco.storage.authority import (
     AuthorityIdentity,
+    AuthorityReader,
     AuthoritySchemaError,
     LeaderAuthority,
     ddl_bundle_sha256,
@@ -19,7 +20,11 @@ from fs_diloco.core.versions import AUTHORITY_SCHEMA_VERSION
 
 
 def identity() -> AuthorityIdentity:
-    return AuthorityIdentity("run-current", "source-fingerprint", hashlib.sha256(b"config").hexdigest())
+    return AuthorityIdentity(
+        "run-current",
+        "source-fingerprint",
+        hashlib.sha256(b"config").hexdigest(),
+    )
 
 
 @pytest.mark.parametrize(
@@ -43,7 +48,6 @@ def test_fresh_schema_initializes_reopens_and_is_integral(
         assert ("learner_instances" in tables) is dynamic_expected
         assert "static_contributor_bindings" in tables
         assert "publication_intents" in tables
-        assert "candidate_launch_outbox" not in tables
         assert ("launch_requests" in tables) is dynamic_expected
         assert ("scheduler_operator_requests" in tables) is dynamic_expected
         assert ("scheduler_operator_file_dispositions" in tables) is dynamic_expected
@@ -53,14 +57,14 @@ def test_fresh_schema_initializes_reopens_and_is_integral(
                     str(row[1])
                     for row in connection.execute("PRAGMA table_info(launch_requests)").fetchall()
                 }
-                stream_columns = {
-                    str(row[1])
-                    for row in connection.execute("PRAGMA table_info(streams)").fetchall()
-                }
             assert {"reservation_released_at", "stream_id", "replace_instance_id"} <= columns
-            assert "last_receipt_id" not in stream_columns
     marker = database.with_name("bootstrap_complete.json")
     assert marker.stat().st_mode & 0o222 == 0
+
+    with AuthorityReader(database, identity(), scope) as reader:
+        assert reader.read.integrity_check() == ("ok",)
+        with pytest.raises(sqlite3.OperationalError, match="readonly|query only"):
+            reader._connection.execute("DELETE FROM run_identity")
 
 
 @pytest.mark.parametrize("collision_kind", ["database", "marker"])
@@ -104,7 +108,27 @@ def test_open_rejects_mode_identity_and_schema_feature_mismatch(tmp_path: Path) 
         LeaderAuthority(database, identity(), static)
 
 
-def test_pre_p3_authority_schema_revision_fails_with_explicit_version_diagnostic(
+def test_query_reader_rejects_symlinked_authority_identity_files(tmp_path: Path) -> None:
+    database = tmp_path / "authority.sqlite3"
+    marker = tmp_path / "bootstrap_complete.json"
+    scope = StaticMembershipScope(("learner-0",))
+    initialize_authority(database, identity(), scope)
+    real_database = tmp_path / "authority-real.sqlite3"
+    database.rename(real_database)
+    database.symlink_to(real_database)
+    with pytest.raises(AuthoritySchemaError, match="regular file"):
+        AuthorityReader(database, identity(), scope)
+
+    database.unlink()
+    real_database.rename(database)
+    real_marker = tmp_path / "bootstrap-real.json"
+    marker.rename(real_marker)
+    marker.symlink_to(real_marker)
+    with pytest.raises(AuthoritySchemaError, match="immutable regular file"):
+        AuthorityReader(database, identity(), scope)
+
+
+def test_noncurrent_authority_schema_revision_fails_with_explicit_diagnostic(
     tmp_path: Path,
 ) -> None:
     database = tmp_path / "authority.sqlite3"

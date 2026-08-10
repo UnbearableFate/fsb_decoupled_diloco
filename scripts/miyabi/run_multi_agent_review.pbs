@@ -53,11 +53,8 @@ PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-}}"
 : "${REVIEW_KIND:?REVIEW_KIND is required}"
 : "${BASE_COMMIT:?BASE_COMMIT is required}"
 : "${TARGET_COMMIT:?TARGET_COMMIT is required}"
-if [[ -n "${REVIEW_PROMPT_FILE:-}" && -n "${REVIEW_PROMPT_B64:-}" ]]; then
-  die "provide exactly one of REVIEW_PROMPT_FILE or REVIEW_PROMPT_B64"
-fi
-[[ -n "${REVIEW_PROMPT_FILE:-}" || -n "${REVIEW_PROMPT_B64:-}" ]] || \
-  die "REVIEW_PROMPT_FILE or REVIEW_PROMPT_B64 is required"
+: "${REVIEW_PROMPT_FILE:?REVIEW_PROMPT_FILE is required}"
+: "${REVIEW_PROMPT_SHA256:?REVIEW_PROMPT_SHA256 is required}"
 
 PROJECT_ROOT="$(cd "$PROJECT_ROOT" && pwd -P)"
 [[ "$PROJECT_ROOT" != *","* ]] || die "PROJECT_ROOT must not contain a comma"
@@ -114,32 +111,22 @@ cleanup() {
 trap cleanup EXIT
 
 PROMPT_FILE="$RUN_TMP/common-review-prompt.md"
-if [[ -n "${REVIEW_PROMPT_FILE:-}" ]]; then
-  [[ "$REVIEW_PROMPT_FILE" != *","* ]] || die "REVIEW_PROMPT_FILE must not contain a comma"
-  [[ -f "$REVIEW_PROMPT_FILE" && ! -L "$REVIEW_PROMPT_FILE" ]] || \
-    die "REVIEW_PROMPT_FILE must be a regular non-symlink file"
-  PROMPT_SOURCE_REAL="$(cd "$(dirname "$REVIEW_PROMPT_FILE")" && pwd -P)/$(basename "$REVIEW_PROMPT_FILE")"
-  case "$PROMPT_SOURCE_REAL" in
-    "$REPORT_ROOT"/*) ;;
-    *) die "REVIEW_PROMPT_FILE must be under $REPORT_ROOT" ;;
-  esac
-  [[ "${REVIEW_PROMPT_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] || \
-    die "REVIEW_PROMPT_SHA256 must be a lowercase SHA-256 when using REVIEW_PROMPT_FILE"
-  cp -- "$PROMPT_SOURCE_REAL" "$PROMPT_FILE"
-elif command -v base64 >/dev/null 2>&1; then
-  ((${#REVIEW_PROMPT_B64} <= 32768)) || \
-    die "REVIEW_PROMPT_B64 fallback exceeds 32768 characters; use REVIEW_PROMPT_FILE"
-  if ! printf '%s' "$REVIEW_PROMPT_B64" | base64 --decode >"$PROMPT_FILE"; then
-    die "REVIEW_PROMPT_B64 is not valid base64"
-  fi
-else
-  die "base64 is required for REVIEW_PROMPT_B64 fallback"
-fi
-[[ -s "$PROMPT_FILE" ]] || die "decoded review prompt is empty"
+[[ "$REVIEW_PROMPT_FILE" != *","* ]] || die "REVIEW_PROMPT_FILE must not contain a comma"
+[[ -f "$REVIEW_PROMPT_FILE" && ! -L "$REVIEW_PROMPT_FILE" ]] || \
+  die "REVIEW_PROMPT_FILE must be a regular non-symlink file"
+PROMPT_SOURCE_REAL="$(cd "$(dirname "$REVIEW_PROMPT_FILE")" && pwd -P)/$(basename "$REVIEW_PROMPT_FILE")"
+case "$PROMPT_SOURCE_REAL" in
+  "$REPORT_ROOT"/*) ;;
+  *) die "REVIEW_PROMPT_FILE must be under $REPORT_ROOT" ;;
+esac
+[[ "$REVIEW_PROMPT_SHA256" =~ ^[0-9a-f]{64}$ ]] || \
+  die "REVIEW_PROMPT_SHA256 must be a lowercase SHA-256"
+cp -- "$PROMPT_SOURCE_REAL" "$PROMPT_FILE"
+[[ -s "$PROMPT_FILE" ]] || die "review prompt is empty"
 PROMPT_BYTES="$(wc -c <"$PROMPT_FILE")"
 ((PROMPT_BYTES <= 65536)) || die "review prompt exceeds 65536 bytes"
 PROMPT_SHA256="$(sha256sum "$PROMPT_FILE" | awk '{print $1}')"
-if [[ -n "${REVIEW_PROMPT_FILE:-}" && "$PROMPT_SHA256" != "$REVIEW_PROMPT_SHA256" ]]; then
+if [[ "$PROMPT_SHA256" != "$REVIEW_PROMPT_SHA256" ]]; then
   die "REVIEW_PROMPT_FILE SHA-256 does not match REVIEW_PROMPT_SHA256"
 fi
 
@@ -341,7 +328,7 @@ run_claude() {
 
   if (
     cd "$SNAPSHOT_CLAUDE"
-    unset PROJECT_ROOT REVIEW_PROMPT_FILE REVIEW_PROMPT_SHA256 REVIEW_PROMPT_B64 PBS_O_WORKDIR
+    unset PROJECT_ROOT REVIEW_PROMPT_FILE REVIEW_PROMPT_SHA256 PBS_O_WORKDIR
     timeout --signal=TERM --kill-after=30s "${REVIEW_TIMEOUT_SECONDS}s" \
       "$CLAUDE_BIN" -p \
       --model "$CLAUDE_MODEL" \
@@ -439,7 +426,7 @@ run_opencode() {
 
   if (
     cd "$snapshot_dir"
-    unset PROJECT_ROOT REVIEW_PROMPT_FILE REVIEW_PROMPT_SHA256 REVIEW_PROMPT_B64 PBS_O_WORKDIR
+    unset PROJECT_ROOT REVIEW_PROMPT_FILE REVIEW_PROMPT_SHA256 PBS_O_WORKDIR
     timeout --signal=TERM --kill-after=30s "${REVIEW_TIMEOUT_SECONDS}s" \
       "$OPENCODE_BIN" run --agent plan --model "$model" "$prompt"
   ) >"$raw_file" 2>"$stderr_file"; then

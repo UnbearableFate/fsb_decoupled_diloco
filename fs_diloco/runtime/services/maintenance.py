@@ -213,7 +213,9 @@ class MaintenanceService:
                 except FileNotFoundError:
                     pass
             completed = self.leader.complete_audit_gc(
-                command_id=f"maintenance-audit-complete-e{self.leader.token.epoch}-n{self.sequence}",
+                command_id=(
+                    f"maintenance-audit-complete-e{self.leader.token.epoch}-n{self.sequence}"
+                ),
                 relative_paths=tuple(str(item["relative_path"]) for item in audit_claims),
             )
             result["audit_gc"] = list(completed)

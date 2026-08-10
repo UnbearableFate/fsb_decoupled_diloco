@@ -11,6 +11,9 @@ set -eEuo pipefail
 trap 'echo "[ERROR] Full Protocol job failed at line $LINENO" >&2' ERR
 
 : "${EVIDENCE_OUTPUT:?EVIDENCE_OUTPUT is required}"
+: "${GATE:?GATE is required}"
+: "${EXPERIMENT_ID:?EXPERIMENT_ID is required}"
+: "${REQUIREMENT_ID:?REQUIREMENT_ID is required}"
 PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
 PRIMARY_WORKTREE_ROOT="${PRIMARY_WORKTREE_ROOT:-$PROJECT_ROOT}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
@@ -22,7 +25,7 @@ EXPECTED_NODES="${EXPECTED_NODES:-9}"
 NUM_LEARNERS="${NUM_LEARNERS:-8}"
 EXPECTED_INNER_STEPS="${EXPECTED_INNER_STEPS:-50}"
 EXPECTED_GLOBAL_STEPS="${EXPECTED_GLOBAL_STEPS:-10}"
-EXPECTED_MIN_SYNCER_EPOCHS="${EXPECTED_MIN_SYNCER_EPOCHS:-1}"
+EXPECTED_SYNCER_EPOCHS="${EXPECTED_SYNCER_EPOCHS:-1}"
 SYNCER_CUDA_VISIBLE_DEVICES="${SYNCER_CUDA_VISIBLE_DEVICES:-0}"
 LEARNER_CUDA_VISIBLE_DEVICES="${LEARNER_CUDA_VISIBLE_DEVICES:-0}"
 
@@ -37,13 +40,17 @@ bash "$PROJECT_ROOT/scripts/miyabi/run_full_protocol_allocation.sh"
 
 checker=(
   "$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/check_full_protocol_run.py"
+  --gate "$GATE"
+  --experiment-id "$EXPERIMENT_ID"
+  --requirement-id "$REQUIREMENT_ID"
   --project-root "$PROJECT_ROOT"
   --run-root "$SHARED_ROOT"
+  --log-root "$LOG_ROOT"
   --expected-global-steps "$EXPECTED_GLOBAL_STEPS"
   --expected-inner-steps "$EXPECTED_INNER_STEPS"
   --expected-contributors "$NUM_LEARNERS"
   --expected-hosts "$EXPECTED_NODES"
-  --expected-min-syncer-epochs "$EXPECTED_MIN_SYNCER_EPOCHS"
+  --expected-syncer-epochs "$EXPECTED_SYNCER_EPOCHS"
   --output "$EVIDENCE_OUTPUT"
 )
 if [[ -n "${EXPECTED_REPLACED_LEARNER:-}" ]]; then

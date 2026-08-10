@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from fs_diloco.core.config import resolve_config
+from fs_diloco.core.config import Config
 from fs_diloco.runtime.adoption import (
     AdoptionContext,
     PredictGlobalAdoptionStrategy,
@@ -22,6 +22,15 @@ class RecordingLogger:
 
     def event(self, event_type, **payload):
         self.events.append((event_type, payload))
+
+
+def _config(strategy: str = "replace") -> Config:
+    config = Config()
+    config.model.name_or_path = "synthetic-tiny"
+    config.data.dataset_name = "synthetic"
+    config.learner.global_adoption_strategy = strategy
+    config.validate()
+    return config
 
 
 def _context(
@@ -68,21 +77,21 @@ def _context(
 
 
 @pytest.mark.parametrize(
-    ("config_path", "expected_type"),
+    ("strategy_name", "expected_type"),
     [
-        ("configs/fs_diloco_tiny_local.yaml", ReplaceGlobalAdoptionStrategy),
-        ("configs/fs_diloco_tiny_rebase_local.yaml", RebaseGlobalAdoptionStrategy),
-        ("configs/fs_diloco_tiny_predict_local.yaml", PredictGlobalAdoptionStrategy),
+        ("replace", ReplaceGlobalAdoptionStrategy),
+        ("rebase_local", RebaseGlobalAdoptionStrategy),
+        ("predict_global", PredictGlobalAdoptionStrategy),
     ],
 )
-def test_strategy_factory_dispatches(config_path, expected_type):
-    strategy = make_global_adoption_strategy(resolve_config(config_path))
+def test_strategy_factory_dispatches(strategy_name, expected_type):
+    strategy = make_global_adoption_strategy(_config(strategy_name))
 
     assert isinstance(strategy, expected_type)
 
 
 def test_strategy_factory_rejects_unknown_name():
-    config = resolve_config("configs/fs_diloco_tiny_local.yaml")
+    config = _config()
     config.learner.global_adoption_strategy = "unknown"
 
     with pytest.raises(ValueError, match="unsupported learner.global_adoption_strategy"):
@@ -90,7 +99,7 @@ def test_strategy_factory_rejects_unknown_name():
 
 
 def test_replace_returns_reset_adoption_outcome():
-    config = resolve_config("configs/fs_diloco_tiny_local.yaml")
+    config = _config()
     config.learner.poll_latest_during_inner_steps = True
     strategy = ReplaceGlobalAdoptionStrategy()
 
@@ -104,7 +113,7 @@ def test_replace_returns_reset_adoption_outcome():
 
 
 def test_replace_adoption_uses_actual_latest_returned_by_retry_helper():
-    config = resolve_config("configs/fs_diloco_tiny_local.yaml")
+    config = _config()
     logger = RecordingLogger()
 
     def recovered_load(**kwargs):
@@ -143,7 +152,7 @@ def test_replace_adoption_uses_actual_latest_returned_by_retry_helper():
 
 
 def test_rebase_context_returns_actual_latest_from_retry_helper():
-    config = resolve_config("configs/fs_diloco_tiny_rebase_local.yaml")
+    config = _config("rebase_local")
 
     def recovered_load(**kwargs):
         recovered = {"version": 4, "weight_path": "global-4"}
@@ -172,7 +181,7 @@ def test_rebase_context_returns_actual_latest_from_retry_helper():
 
 
 def test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption():
-    config = resolve_config("configs/fs_diloco_tiny_rebase_local.yaml")
+    config = _config("rebase_local")
     logger = RecordingLogger()
     ctx = _context(config, logger=logger)
     strategy = RebaseGlobalAdoptionStrategy()
@@ -199,7 +208,7 @@ def test_rebase_strategy_owns_anchor_tokens_and_clears_after_adoption():
 
 
 def test_prediction_strategy_starts_reconciles_and_abandons_on_stop():
-    config = resolve_config("configs/fs_diloco_tiny_predict_local.yaml")
+    config = _config("predict_global")
     logger = RecordingLogger()
     ctx = _context(config, logger=logger)
     strategy = PredictGlobalAdoptionStrategy()
@@ -232,7 +241,7 @@ def test_prediction_strategy_starts_reconciles_and_abandons_on_stop():
 
 
 def test_prediction_strategy_timeout_keeps_state_for_diagnostics():
-    config = resolve_config("configs/fs_diloco_tiny_predict_local.yaml")
+    config = _config("predict_global")
     logger = RecordingLogger()
     ctx = _context(config, logger=logger)
     strategy = PredictGlobalAdoptionStrategy()
@@ -246,7 +255,7 @@ def test_prediction_strategy_timeout_keeps_state_for_diagnostics():
 
 
 def test_prediction_reconcile_stop_during_wait_abandons_without_timeout(tmp_path):
-    config = resolve_config("configs/fs_diloco_tiny_predict_local.yaml")
+    config = _config("predict_global")
     paths = RunPaths(tmp_path)
     logger = RecordingLogger()
 
@@ -277,7 +286,7 @@ def test_prediction_reconcile_stop_during_wait_abandons_without_timeout(tmp_path
 
 
 def test_predict_after_publish_stop_skips_prediction_preparation(tmp_path):
-    config = resolve_config("configs/fs_diloco_tiny_predict_local.yaml")
+    config = _config("predict_global")
     paths = RunPaths(tmp_path)
     atomic_write_json(paths.stop_json, {"reason": "stop_after_outer_steps"})
     calls = []
@@ -306,7 +315,7 @@ def test_predict_after_publish_stop_skips_prediction_preparation(tmp_path):
 
 
 def test_rebase_after_publish_stop_skips_anchor_snapshot(tmp_path):
-    config = resolve_config("configs/fs_diloco_tiny_rebase_local.yaml")
+    config = _config("rebase_local")
     paths = RunPaths(tmp_path)
     atomic_write_json(paths.stop_json, {"reason": "stop_after_outer_steps"})
     calls = []
@@ -334,16 +343,16 @@ def test_rebase_after_publish_stop_skips_anchor_snapshot(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "strategy_type,config_path",
+    "strategy_type,strategy_name",
     [
-        (PredictGlobalAdoptionStrategy, "configs/fs_diloco_tiny_predict_local.yaml"),
-        (RebaseGlobalAdoptionStrategy, "configs/fs_diloco_tiny_rebase_local.yaml"),
+        (PredictGlobalAdoptionStrategy, "predict_global"),
+        (RebaseGlobalAdoptionStrategy, "rebase_local"),
     ],
 )
 def test_ha_adoption_ignores_polluted_fixed_stop_without_authoritative_terminal(
-    tmp_path, strategy_type, config_path
+    tmp_path, strategy_type, strategy_name
 ):
-    config = resolve_config(config_path)
+    config = _config(strategy_name)
     paths = RunPaths(tmp_path)
     atomic_write_json(paths.stop_json, {"reason": "polluted-lower-epoch-cache"})
     calls = []
@@ -377,16 +386,16 @@ def test_ha_adoption_ignores_polluted_fixed_stop_without_authoritative_terminal(
 
 
 @pytest.mark.parametrize(
-    "strategy_type,config_path",
+    "strategy_type,strategy_name",
     [
-        (PredictGlobalAdoptionStrategy, "configs/fs_diloco_tiny_predict_local.yaml"),
-        (RebaseGlobalAdoptionStrategy, "configs/fs_diloco_tiny_rebase_local.yaml"),
+        (PredictGlobalAdoptionStrategy, "predict_global"),
+        (RebaseGlobalAdoptionStrategy, "rebase_local"),
     ],
 )
 def test_stop_does_not_skip_already_visible_direct_adoption(
-    tmp_path, strategy_type, config_path
+    tmp_path, strategy_type, strategy_name
 ):
-    config = resolve_config(config_path)
+    config = _config(strategy_name)
     paths = RunPaths(tmp_path)
     atomic_write_json(paths.stop_json, {"reason": "stop_after_outer_steps"})
     strategy = strategy_type()

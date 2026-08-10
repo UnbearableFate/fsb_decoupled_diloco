@@ -16,7 +16,7 @@
 
 1. normal：完整 initialization → admission → training → proposal → selection → merge → adoption → terminal。
 2. learner replacement：`learner_000` 至少贡献一个 committed update 后终止进程；使用精确 old fence 发布 replacement authorization，并证明 binding generation 增长且 successor 继续贡献。
-3. syncer takeover：primary 在 committed version 2 后失败；successor 获得更高 epoch 并提交后续版本，旧 epoch 不得在 takeover 后提交。
+3. syncer takeover：primary 在 committed version 2 后、SQLite transaction 外且 lease renewer quiesced 的注册边界暂停，harness 强制终止该进程；successor 获得更高 epoch 并提交后续版本，旧 epoch 不得在 takeover 后提交。
 
 `check_full_protocol_run.py` 不以 exit code 或 log 文本作为 PASS oracle。它读取 immutable descriptor/config、query-only SQLite、audit history、attestations 和 publication objects，验证 exact workload、5-host topology、contiguous versions、selection credit、token balance、terminal ack、object hash、replacement fence 或 successor epoch。
 

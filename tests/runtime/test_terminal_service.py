@@ -57,7 +57,7 @@ def _runtime(tmp_path: Path, clock: VirtualClock, *, max_terminal_merges: int):
     leader = authority.open_leader(
         authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
     )
-    leader.initialize_v0(
+    leader.initialize_genesis(
         command_id="v0",
         publication_id="publication-v0",
         **publish_checkpoint_pair(tmp_path, version=0),

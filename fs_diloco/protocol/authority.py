@@ -170,7 +170,7 @@ class PublicationIntent:
         strict_int(self.target_version, name="target_version", minimum=0)
         if self.target_version == 0:
             if self.predecessor_version is not None:
-                raise ValueError("v0 publication cannot have a predecessor")
+                raise ValueError("genesis publication cannot have a predecessor")
         elif self.predecessor_version != self.target_version - 1:
             raise ValueError("publication predecessor must be target_version - 1")
         if self.selection_batch_id is not None:

@@ -27,27 +27,45 @@ def _class_definitions(relative: str, class_name: str) -> set[str]:
     }
 
 
-def test_old_selection_and_compatibility_api_are_deleted() -> None:
+def _class_annotated_fields(relative: str, class_name: str) -> tuple[str, ...]:
+    tree = ast.parse((ROOT / relative).read_text(encoding="utf-8"))
+    cls = next(
+        node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == class_name
+    )
+    return tuple(
+        node.target.id
+        for node in cls.body
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
+    )
+
+
+def test_merge_and_admission_modules_expose_the_current_protocol_surface() -> None:
     merge = _top_level_definitions("fs_diloco/protocol/merge.py")
-    leader = _class_definitions("fs_diloco/storage/authority.py", "LeaderSession")
-    admission = _class_definitions("fs_diloco/protocol/authority.py", "DynamicAdmission")
+    admission_fields = _class_annotated_fields(
+        "fs_diloco/protocol/authority.py", "DynamicAdmission"
+    )
 
-    assert {"select_one_per_learner", "stale_update_ids"}.isdisjoint(merge)
-    assert "record_proposal" not in leader
-    assert {
-        "resume_cursor",
-        "last_receipt_id",
-        "last_receipt_sha256",
-        "next_cycle_seq",
-    }.isdisjoint(admission)
+    assert merge == {
+        "staleness",
+        "raw_update_weight",
+        "normalized_update_weights",
+        "weighted_average_tensors",
+    }
+    assert admission_fields == ("fence", "resume")
 
 
-def test_early_development_layout_fallbacks_are_deleted() -> None:
+def test_receipt_identity_and_paths_have_one_protocol_owner() -> None:
+    receipt = _top_level_definitions("fs_diloco/protocol/cycle_receipt.py")
     syncer = (ROOT / "fs_diloco/runtime/syncer.py").read_text(encoding="utf-8")
     admission = (ROOT / "fs_diloco/storage/admission.py").read_text(encoding="utf-8")
 
+    assert {
+        "canonical_receipt_id",
+        "contributor_fence_namespace",
+        "canonical_receipt_relative_path",
+    }.issubset(receipt)
     assert "canonical_receipt_id" not in syncer
-    assert "admissions/{learner_id}" not in admission
+    assert "canonical_receipt_id" not in admission
 
 
 def test_only_unversioned_product_surfaces_exist() -> None:
@@ -61,23 +79,45 @@ def test_only_unversioned_product_surfaces_exist() -> None:
     assert not any(generation_suffix.search(path) for path in tracked)
 
 
-def test_versions_and_paths_have_one_canonical_owner() -> None:
-    constants = (ROOT / "fs_diloco/core/constants.py").read_text(encoding="utf-8")
-    param_index = (ROOT / "fs_diloco/modeling/param_index.py").read_text(encoding="utf-8")
+def test_artifact_versions_and_run_paths_have_explicit_owners() -> None:
+    constants = ast.parse(
+        (ROOT / "fs_diloco/core/constants.py").read_text(encoding="utf-8")
+    )
+    versions = ast.parse((ROOT / "fs_diloco/core/versions.py").read_text(encoding="utf-8"))
     paths = _class_definitions("fs_diloco/storage/paths.py", "RunPaths")
     path_functions = _top_level_definitions("fs_diloco/storage/paths.py")
     atomic_functions = _top_level_definitions("fs_diloco/storage/atomic_io.py")
+    constant_names = {
+        target.id
+        for node in constants.body
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    }
+    version_names = {
+        target.id
+        for node in versions.body
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    }
 
-    assert "PROTOCOL_VERSION" not in constants
-    assert "FORMAT_VERSION" not in constants
-    assert "PARAM_INDEX_FORMAT_VERSION" in param_index
-    assert "core.constants import FORMAT_VERSION" not in param_index
-    assert {"global_weight_path", "outer_optim_path"}.isdisjoint(paths)
+    assert constant_names == {"DEFAULT_RUNS_DIR"}
+    assert {"PROTOCOL_VERSION", "CONFIG_SCHEMA_VERSION", "PARAM_INDEX_FORMAT_VERSION"} <= (
+        version_names
+    )
     assert {
-        "iter_instance_heartbeats",
-        "iter_instance_pointers",
-        "iter_instance_payloads",
-        "iter_registration_requests",
-    }.isdisjoint(paths)
-    assert "prepare_run_dirs" not in path_functions
-    assert "wait_for_file" not in atomic_functions
+        "bootstrap_complete_json",
+        "run_descriptor_json",
+        "resolved_config_yaml",
+        "sqlite_db",
+        "terminal_close_request_json",
+    } <= paths
+    assert path_functions == {"RunPaths", "prepare_authority_dirs", "prepare_learner_instance_dir"}
+    assert {
+        "atomic_write_bytes",
+        "publish_immutable_bytes",
+        "read_json",
+        "safe_read_json",
+        "sha256_file",
+    } <= atomic_functions

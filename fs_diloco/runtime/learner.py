@@ -21,7 +21,7 @@ from ..modeling.param_index import (
     flatten_trainable_params,
     load_flat_into_model,
     load_param_index,
-    validate_compatible_index,
+    validate_matching_index,
 )
 from ..modeling.training import build_inner_optimizer_and_scheduler
 from ..observability.logging_utils import ActorTelemetryWriter
@@ -193,7 +193,7 @@ def run_admitted_learner(
     )
     param_index = load_param_index(paths.param_index_json)
     local_index = build_param_index(model, model_name_or_path=config.model.name_or_path)
-    validate_compatible_index(param_index, local_index)
+    validate_matching_index(param_index, local_index)
     weight_path = paths.shared_root / str(latest["weight_path"])
     load_global_weights_into_model(weight_path, model, param_index)
     base_version = int(latest["version"])
@@ -247,7 +247,7 @@ def run_admitted_learner(
             device=device,
             dtype=dtype_from_name(config.syncer.compute_dtype),
         )
-        return snapshot, {"compute_device": str(device), "compute_fallback": False}
+        return snapshot, {"compute_device": str(device)}
 
     def rebase_local_delta(
         *,

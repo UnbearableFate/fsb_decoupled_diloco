@@ -10,7 +10,7 @@ from typing import Any
 
 from ..core.run_descriptor import LoadedRunDescriptor, load_run_descriptor
 from ..protocol.contributor import DynamicMembershipScope, StaticMembershipScope
-from ..storage.authority import AuthorityIdentity, LeaderAuthority
+from ..storage.authority import AuthorityIdentity, AuthorityReader
 
 
 def _scope(loaded: LoadedRunDescriptor) -> StaticMembershipScope | DynamicMembershipScope:
@@ -31,19 +31,12 @@ def _json_value(value: Any) -> Any:
 
 def summarize_run(shared_root: str | Path) -> dict[str, Any]:
     loaded = load_run_descriptor(shared_root)
-    authority = LeaderAuthority(
+    authority = AuthorityReader(
         loaded.paths.sqlite_db,
         AuthorityIdentity(**loaded.identity.as_dict()),
         _scope(loaded),
         marker_path=loaded.paths.bootstrap_complete_json,
-        lease_duration_seconds=loaded.config.leader.lease_duration_seconds,
-        max_clock_skew_seconds=loaded.config.leader.max_clock_skew_seconds,
         busy_timeout_ms=loaded.config.leader.business_busy_timeout_ms,
-        run_root=loaded.paths.shared_root,
-        orphan_grace_seconds=loaded.config.maintenance.publication_orphan_grace_seconds,
-        max_quarantine_records_per_contributor=(
-            loaded.config.maintenance.quarantine_records_per_contributor
-        ),
     )
     try:
         fences = authority.read.current_contributor_fences()

@@ -47,7 +47,7 @@ def terminal_close_reason(
         if request is not None:
             return f"manual:{request['request_id']}:{request['reason']}"
     if policy == "deadline":
-        started = authority.read.v0_committed_at()
+        started = authority.read.genesis_committed_at()
         if started is not None and float(now if now is not None else time.time()) >= (
             started + float(config.terminal.deadline_seconds)
         ):

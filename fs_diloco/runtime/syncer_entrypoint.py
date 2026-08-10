@@ -47,11 +47,11 @@ class _LeaseRenewer:
             raise RuntimeError("leader lease renewal failed") from self._failed
 
     @contextmanager
-    def quiesce_for_test_pause(self) -> Any:
-        """Exclude an in-flight renewal transaction around a test-only SIGSTOP.
+    def quiesce_for_fault_injection(self) -> Any:
+        """Exclude an in-flight renewal transaction around a fault-harness SIGSTOP.
 
-        The production loop never calls this unless the explicit fault-test
-        injection environment is present.  Holding the lock across SIGSTOP
+        The runtime loop calls this only when the explicit fault injection
+        environment is present. Holding the lock across SIGSTOP
         proves that neither the main authority connection nor the renewer can
         retain a SQLite write transaction while the candidate is paused.
         """

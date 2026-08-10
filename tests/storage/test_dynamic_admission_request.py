@@ -25,7 +25,14 @@ def test_dynamic_request_carries_exact_bootstrap_authorization(tmp_path: Path) -
 
     assert request["bootstrap_slot"] == 0
     assert request["launch_request_id"] is None
-    assert admission_request_error(request, run_id="run-current", descriptor_sha256="d" * 64) is None
+    assert (
+        admission_request_error(
+            request,
+            run_id="run-current",
+            descriptor_sha256="d" * 64,
+        )
+        is None
+    )
 
     request["bootstrap_slot"] = None
     assert admission_request_error(request, run_id="run-current", descriptor_sha256="d" * 64) == (

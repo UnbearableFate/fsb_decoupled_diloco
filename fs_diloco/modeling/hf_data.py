@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import itertools
-import os
 import random
 from dataclasses import dataclass
 from typing import Any, Iterator
@@ -62,36 +61,18 @@ def _chunks(tokens: list[int], block_size: int) -> list[list[int]]:
 
 
 def load_text_split(data_config: Any, split: str) -> Any:
-    """Load one configured text split with the same WikiText fallback as training."""
-    dataset_name = data_config.dataset_name
-    if dataset_name == "wikitext" and os.environ.get("FS_DILOCO_HF_WIKITEXT_REPO"):
-        dataset_name = os.environ["FS_DILOCO_HF_WIKITEXT_REPO"]
-    reject_local_reference(str(dataset_name), kind="dataset")
+    """Load one configured text split at its immutable revision."""
+    reject_local_reference(str(data_config.dataset_name), kind="dataset")
 
     from datasets import load_dataset
 
-    try:
-        return load_dataset(
-            dataset_name,
-            data_config.dataset_config_name,
-            revision=data_config.revision,
-            split=split,
-            cache_dir=data_config.cache_dir,
-        )
-    except Exception as exc:
-        if data_config.dataset_name != "wikitext" or "/" in str(dataset_name):
-            raise
-        reject_local_reference("Salesforce/wikitext", kind="dataset")
-        try:
-            return load_dataset(
-                "Salesforce/wikitext",
-                data_config.dataset_config_name,
-                revision=data_config.revision,
-                split=split,
-                cache_dir=data_config.cache_dir,
-            )
-        except Exception:
-            raise exc
+    return load_dataset(
+        data_config.dataset_name,
+        data_config.dataset_config_name,
+        revision=data_config.revision,
+        split=split,
+        cache_dir=data_config.cache_dir,
+    )
 
 
 def text_rows_to_blocks(dataset: Any, tokenizer: Any, block_size: int) -> list[list[int]]:
@@ -150,7 +131,7 @@ def _batched_blocks(
         )
 
 
-def wikitext_batches(
+def text_batches(
     data_config: Any,
     tokenizer: Any,
     *,
@@ -188,7 +169,7 @@ def build_batch_iterator(
             seed=config.training.seed,
             learner_index=learner_index,
         )
-    return wikitext_batches(
+    return text_batches(
         config.data,
         tokenizer,
         learner_index=learner_index,

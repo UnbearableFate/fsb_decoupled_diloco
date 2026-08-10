@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from fs_diloco.tools import authorize_static_replacement
+from fs_diloco.tools import request_static_replacement
 
 
 def test_authorization_collision_tells_operator_to_issue_a_fresh_attempt_id(
@@ -14,12 +14,12 @@ def test_authorization_collision_tells_operator_to_issue_a_fresh_attempt_id(
         raise FileExistsError("immutable target collision")
 
     monkeypatch.setattr(
-        authorize_static_replacement,
+        request_static_replacement,
         "publish_static_replacement_authorization",
         collide,
     )
     with pytest.raises(SystemExit) as raised:
-        authorize_static_replacement.main(
+        request_static_replacement.main(
             [
                 "--shared-root",
                 str(tmp_path),

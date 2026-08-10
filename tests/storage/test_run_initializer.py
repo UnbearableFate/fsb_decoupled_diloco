@@ -44,7 +44,7 @@ def _config(tmp_path: Path, name: str = "run"):
     )
     shared.run.git_commit = "a" * 40
     shared.run.git_dirty = False
-    shared.run.source_fingerprint = "sha256:source"
+    shared.run.source_fingerprint = "sha256:" + "b" * 64
     shared.model.revision = MODEL_COMMIT
     shared.model.tokenizer_revision = TOKENIZER_COMMIT
     shared.data.revision = DATASET_COMMIT
@@ -88,7 +88,9 @@ def test_each_precomplete_crash_prefix_is_invisible_and_same_staging_retry_recov
     )
 
 
-def test_crash_after_complete_is_visible_and_retry_removes_staging_alias(tmp_path: Path) -> None:
+def test_crash_after_complete_is_visible_and_retry_removes_staging_directory(
+    tmp_path: Path,
+) -> None:
     config = _config(tmp_path, "post-complete")
 
     def fault(point: str) -> None:

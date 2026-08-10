@@ -63,7 +63,11 @@ class Clock:
 
 
 def _identity() -> AuthorityIdentity:
-    return AuthorityIdentity("run-current", "source-fingerprint", hashlib.sha256(b"config").hexdigest())
+    return AuthorityIdentity(
+        "run-current",
+        "source-fingerprint",
+        hashlib.sha256(b"config").hexdigest(),
+    )
 
 
 def _open_static(tmp_path: Path, clock: Clock) -> LeaderAuthority:
@@ -193,7 +197,7 @@ def test_authority_token_rollup_balances_receipt_only_and_applied_fates(tmp_path
         )
         fence = _static_fence(leader)
         receipt, _ = _ingest_static_cycle(leader, tmp_path, fence, sequence=1, previous=None)
-        leader.initialize_v0(
+        leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **publish_checkpoint_pair(tmp_path, version=0),
@@ -243,7 +247,7 @@ def test_abandoned_selection_does_not_consume_persistent_service_credit(
         )
         fence = _static_fence(leader)
         _ingest_static_cycle(leader, tmp_path, fence, sequence=1, previous=None)
-        leader.initialize_v0(
+        leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **publish_checkpoint_pair(tmp_path, version=0),
@@ -308,7 +312,7 @@ def test_sql_fair_selection_uses_committed_count_before_version_ties(tmp_path: P
                 update_ordinal=index * 100 + 1,
             )
             receipts[key] = receipt
-        leader.initialize_v0(
+        leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **publish_checkpoint_pair(tmp_path, version=0),
@@ -493,7 +497,7 @@ def test_terminal_close_freezes_fence_blocks_admission_and_accounts_hard_crash(
             hostname="host",
             pid=1,
         )
-        leader.initialize_v0(
+        leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **publish_checkpoint_pair(tmp_path, version=0),
@@ -626,7 +630,7 @@ def test_terminal_hard_crash_gap_is_summed_per_lost_incarnation(tmp_path: Path) 
             )
             for index in range(2)
         )
-        leader.initialize_v0(
+        leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **publish_checkpoint_pair(tmp_path, version=0),
@@ -733,7 +737,7 @@ def test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens(
             command_id="receipt-1",
             receipt=CycleReceiptV1.from_dict(payload),
         )
-        leader.initialize_v0(
+        leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **publish_checkpoint_pair(tmp_path, version=0),
@@ -764,7 +768,7 @@ def test_terminal_zero_cycle_ack_requires_no_receipt_and_preserves_zero_gap(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
         fence = StaticContributorFence.from_dict(_static_fence(leader))
-        leader.initialize_v0(
+        leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **publish_checkpoint_pair(tmp_path, version=0),
@@ -794,7 +798,7 @@ def test_terminal_close_snapshot_cannot_be_rewritten_by_a_second_command(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
         fence = StaticContributorFence.from_dict(_static_fence(leader))
-        leader.initialize_v0(
+        leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **publish_checkpoint_pair(tmp_path, version=0),
@@ -840,7 +844,7 @@ def test_terminal_ack_rejects_a_missing_proposal_promised_by_final_receipt(
         fence = StaticContributorFence.from_dict(fence_payload)
         receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence_payload))
         leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
-        leader.initialize_v0(
+        leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **publish_checkpoint_pair(tmp_path, version=0),
@@ -889,7 +893,7 @@ def test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_u
             hostname="host",
             pid=1,
         )
-        leader.initialize_v0(
+        leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **publish_checkpoint_pair(tmp_path, version=0),
@@ -1089,7 +1093,7 @@ def test_terminal_ack_can_precede_final_proposal_visibility_and_merge(tmp_path: 
         )
         fence_payload = _static_fence(leader)
         fence = StaticContributorFence.from_dict(fence_payload)
-        leader.initialize_v0(
+        leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **publish_checkpoint_pair(tmp_path, version=0),
@@ -1212,7 +1216,7 @@ def test_immutable_audit_batch_precedes_exact_history_prune_and_preserves_rollup
         )
         fence = _static_fence(leader)
         version_zero = publish_checkpoint_pair(tmp_path, version=0)
-        leader.initialize_v0(
+        leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **version_zero,
@@ -1254,14 +1258,14 @@ def test_immutable_audit_batch_precedes_exact_history_prune_and_preserves_rollup
         finally:
             connection.close()
         assert command_receipt_path(RunPaths(tmp_path), "v0-prepare").is_file()
-        replayed_v0 = leader.initialize_v0(
+        replayed_genesis = leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **version_zero,
         )
-        assert replayed_v0.version == 0
+        assert replayed_genesis.version == 0
         with pytest.raises(CommandConflictError, match="different kind or request"):
-            leader.initialize_v0(
+            leader.initialize_genesis(
                 command_id="v0",
                 publication_id="different-publication-v0",
                 **version_zero,
@@ -1294,7 +1298,7 @@ def test_online_archive_retains_each_current_receipt_until_terminal_ack(
                 attempt_id=binding.attempt_id,
                 binding_generation=binding.binding_generation,
             )
-        leader.initialize_v0(
+        leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **publish_checkpoint_pair(tmp_path, version=0),
@@ -1368,7 +1372,7 @@ def test_audit_archive_never_prunes_latest_version_or_blocks_next_commit(tmp_pat
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
         fence = _static_fence(leader)
-        leader.initialize_v0(
+        leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **publish_checkpoint_pair(tmp_path, version=0),
@@ -1404,7 +1408,7 @@ def test_active_leader_compacts_audit_batches_before_exact_source_gc(tmp_path: P
         token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         leader = authority.open_leader(token)
         fence = _static_fence(leader)
-        leader.initialize_v0(
+        leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **publish_checkpoint_pair(tmp_path, version=0),
@@ -1535,7 +1539,7 @@ def test_fenced_maintenance_archives_history_and_successor_reclaims_artifact_gc(
         leader = authority.open_leader(token)
         fence = _static_fence(leader)
         version_zero = publish_checkpoint_pair(tmp_path, version=0)
-        leader.initialize_v0(
+        leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **version_zero,

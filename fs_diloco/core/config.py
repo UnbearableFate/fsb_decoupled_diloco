@@ -20,6 +20,7 @@ from .versions import CONFIG_SCHEMA_VERSION
 
 T = TypeVar("T")
 
+
 class ConfigSection:
     """Pure structural validation shared by every dataclass config section."""
 
@@ -116,7 +117,7 @@ class ModelSection(ConfigSection):
 
 @dataclass
 class DataSection(ConfigSection):
-    dataset_name: str = "wikitext"
+    dataset_name: str = "Salesforce/wikitext"
     dataset_config_name: str | None = "wikitext-2-raw-v1"
     revision: str | None = None
     train_split: str = "train"
@@ -285,10 +286,13 @@ class Config(ConfigSection):
         _normalize_and_validate(self)
 
     def _validate_structure(self) -> None:
+        type_hints = get_type_hints(type(self))
         for field_info in dataclasses.fields(self):
-            section = getattr(self, field_info.name)
-            if isinstance(section, ConfigSection):
-                section.validate(path=field_info.name)
+            value = getattr(self, field_info.name)
+            annotation = type_hints.get(field_info.name, field_info.type)
+            _validate_config_value(value, annotation, field_info.name)
+            if isinstance(value, ConfigSection):
+                value.validate(path=field_info.name)
         if self.config_schema_version != CONFIG_SCHEMA_VERSION:
             raise ValueError(f"config_schema_version must be exactly {CONFIG_SCHEMA_VERSION}")
 
@@ -354,12 +358,6 @@ def load_config(path: str | Path) -> Config:
     return _normalize_and_validate(_parse_config(path))
 
 
-def load_resolved_config_snapshot(path: str | Path) -> Config:
-    """Load an immutable resolved config snapshot."""
-
-    return load_config(path)
-
-
 def _default_run_id(name: str) -> str:
     return time.strftime("%Y%m%d_%H%M%S") + f"_{name}"
 
@@ -415,8 +413,34 @@ def resolve_config(
 
 def _normalize_and_validate(config: Config) -> Config:
     config._validate_structure()
-    if not config.run.name:
-        raise ValueError("run.name must not be empty")
+    safe_component = re.compile(r"[A-Za-z0-9._-]+\Z")
+    if not config.run.name or safe_component.fullmatch(config.run.name) is None:
+        raise ValueError("run.name must be a safe non-empty identity component")
+    if config.run.run_id is not None and safe_component.fullmatch(config.run.run_id) is None:
+        raise ValueError("run.run_id must be a safe non-empty identity component")
+    if config.run.shared_root is not None and not config.run.shared_root:
+        raise ValueError("run.shared_root must not be empty when set")
+    if config.run.git_commit is not None and _IMMUTABLE_HUB_REVISION.fullmatch(
+        config.run.git_commit
+    ) is None:
+        raise ValueError("run.git_commit must be a 40-character lowercase commit SHA")
+    if config.run.source_fingerprint is not None and re.fullmatch(
+        r"sha256:[0-9a-f]{64}", config.run.source_fingerprint
+    ) is None:
+        raise ValueError("run.source_fingerprint must be a sha256 digest")
+    for name, value in (
+        ("model.name_or_path", config.model.name_or_path),
+        ("data.dataset_name", config.data.dataset_name),
+        ("data.train_split", config.data.train_split),
+    ):
+        if not value:
+            raise ValueError(f"{name} must not be empty")
+    for name, value in (
+        ("data.dataset_config_name", config.data.dataset_config_name),
+        ("data.cache_dir", config.data.cache_dir),
+    ):
+        if value is not None and not value:
+            raise ValueError(f"{name} must not be empty when set")
     for name, value in (
         ("model.synthetic_vocab_size", config.model.synthetic_vocab_size),
         ("model.synthetic_hidden_size", config.model.synthetic_hidden_size),
@@ -548,9 +572,11 @@ def _normalize_and_validate(config: Config) -> Config:
         raise ValueError("scaling productive upload grace minimum must be > 0")
     if scaling.productive_upload_grace_max_seconds < scaling.productive_upload_grace_min_seconds:
         raise ValueError("scaling productive upload grace maximum must cover minimum")
-    if scaling.enabled:
-        learner_walltime = scaling.learner_walltime
-        parts = [] if learner_walltime is None else learner_walltime.split(":")
+    learner_walltime = scaling.learner_walltime
+    if scaling.enabled and learner_walltime is None:
+        raise ValueError("scaling.learner_walltime is required when scaling is enabled")
+    if learner_walltime is not None:
+        parts = learner_walltime.split(":")
         if (
             len(parts) != 3
             or not all(part.isdigit() for part in parts)
@@ -562,26 +588,26 @@ def _normalize_and_validate(config: Config) -> Config:
             or all(int(part) == 0 for part in parts)
         ):
             raise ValueError(
-                "scaling.learner_walltime must be an explicit estimated HH:MM:SS "
-                "value when scaling is enabled"
+                "scaling.learner_walltime must be an estimated HH:MM:SS value"
             )
         walltime_seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
         if walltime_seconds < 600:
             raise ValueError("scaling.learner_walltime must be at least 00:10:00")
-        if scaling.learner_queue is not None and (
-            not scaling.learner_queue
-            or any(
-                not (character.isalnum() or character in "_.-")
-                for character in scaling.learner_queue
-            )
-        ):
-            raise ValueError("scaling.learner_queue contains unsafe PBS characters")
+    if scaling.learner_queue is not None and (
+        not scaling.learner_queue
+        or any(
+            not (character.isalnum() or character in "_.-")
+            for character in scaling.learner_queue
+        )
+    ):
+        raise ValueError("scaling.learner_queue contains unsafe PBS characters")
     for field_name in (
         "startup_grace_seconds",
         "productive_upload_grace_factor",
         "cooldown_seconds",
         "launch_request_ttl_seconds",
         "scheduler_reconcile_interval_seconds",
+        "scheduler_uncertainty_timeout_seconds",
         "starvation_observation_seconds",
     ):
         if float(getattr(scaling, field_name)) <= 0.0:
@@ -598,7 +624,7 @@ def _normalize_and_validate(config: Config) -> Config:
     if terminal.admission_close_policy == "deadline" and terminal.deadline_seconds is None:
         raise ValueError("terminal.deadline_seconds is required for deadline close policy")
     has_global_target = config.sync.stop_after_outer_steps is not None
-    if dynamic and terminal.admission_close_policy == "global_target" and not has_global_target:
+    if terminal.admission_close_policy == "global_target" and not has_global_target:
         raise ValueError("global_target close policy requires a configured global target")
     if (
         dynamic

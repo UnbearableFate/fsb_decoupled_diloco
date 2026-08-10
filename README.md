@@ -7,7 +7,7 @@
 - `static`：固定 learner 身份；替换活跃进程必须先发布精确匹配旧 fence 和新 attempt 的 operator authorization。
 - `dynamic`：固定虚拟 stream pool；leader 持久化 admission、capacity observation、launch reservation 和 scheduler reconciliation。
 
-配置只有一个严格入口 `fs_diloco.core.config.Config`，并由 `load_config`、`resolve_config`、`write_resolved_config` 处理。未知字段直接拒绝，不提供配置 profile、迁移器、别名或历史格式回退。
+配置只有一个严格入口 `fs_diloco.core.config.Config`，并由 `load_config`、`resolve_config`、`write_resolved_config` 处理。配置结构、类型和语义均在启动前严格验证。
 
 快速检查配置和初始化命令：
 

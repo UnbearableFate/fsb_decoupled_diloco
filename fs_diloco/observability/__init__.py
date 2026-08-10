@@ -1,1 +1,1 @@
-"""Structured logs, JSONL metrics, and resource telemetry."""
+"""Structured process logs and immutable actor telemetry."""

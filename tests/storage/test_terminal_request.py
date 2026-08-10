@@ -32,7 +32,14 @@ def test_manual_terminal_request_is_immutable_identity_bound_and_replayable(
     )
 
     assert replay == first
-    assert read_manual_terminal_request(paths, run_id="run-current", descriptor_sha256="d" * 64) == first
+    assert (
+        read_manual_terminal_request(
+            paths,
+            run_id="run-current",
+            descriptor_sha256="d" * 64,
+        )
+        == first
+    )
     assert (
         read_manual_terminal_request(paths, run_id="another-run", descriptor_sha256="d" * 64)
         is None

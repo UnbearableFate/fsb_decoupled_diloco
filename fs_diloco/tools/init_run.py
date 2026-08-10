@@ -18,6 +18,7 @@ from ..core.config import (
     resolved_config_bytes,
     write_resolved_config,
 )
+from ..core.source_identity import bind_source_identity
 from ..core.versions import (
     AUTHORITY_SCHEMA_VERSION,
     PROTOCOL_VERSION,
@@ -272,6 +273,7 @@ def main(argv: list[str] | None = None) -> None:
         shared_root=args.shared_root,
         project_root=args.project_root,
     )
+    bind_source_identity(config, args.project_root)
     result = initialize_run(
         config,
         project_root=args.project_root,

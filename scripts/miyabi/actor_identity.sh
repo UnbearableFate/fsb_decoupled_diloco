@@ -33,10 +33,10 @@ PY
 import pathlib
 import sys
 
-sys.path.insert(0, str(pathlib.Path(sys.argv[1]) / "scripts" / "miyabi"))
-from capture_source_identity import capture
+sys.path.insert(0, str(pathlib.Path(sys.argv[1])))
+from fs_diloco.core.source_identity import capture_source_identity
 
-identity = capture(pathlib.Path(sys.argv[1]))
+identity = capture_source_identity(pathlib.Path(sys.argv[1]))
 print(identity["git_commit"])
 print(identity["source_fingerprint"])
 print(int(identity["git_dirty"]))

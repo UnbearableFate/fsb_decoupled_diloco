@@ -1,1 +1,1 @@
-"""Configuration and shared identifiers."""
+"""Configuration, source identity, descriptor, and artifact versions."""

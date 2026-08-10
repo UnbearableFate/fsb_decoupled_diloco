@@ -257,6 +257,16 @@ def _configure_connection(connection: sqlite3.Connection, *, busy_timeout_ms: in
     connection.execute(f"PRAGMA busy_timeout={int(busy_timeout_ms)}")
 
 
+def _configure_read_connection(
+    connection: sqlite3.Connection, *, busy_timeout_ms: int
+) -> None:
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys=ON")
+    connection.execute("PRAGMA synchronous=FULL")
+    connection.execute(f"PRAGMA busy_timeout={int(busy_timeout_ms)}")
+    connection.execute("PRAGMA query_only=ON")
+
+
 def initialize_authority(
     database_path: str | Path,
     identity: AuthorityIdentity,
@@ -370,6 +380,12 @@ def _validate_open(
     mode: str,
     busy_timeout_ms: int,
 ) -> AuthorityMetadata:
+    try:
+        marker_metadata = marker.lstat()
+    except FileNotFoundError as exc:
+        raise AuthoritySchemaError(f"bootstrap marker is missing: {marker}") from exc
+    if not stat.S_ISREG(marker_metadata.st_mode) or marker_metadata.st_mode & 0o222:
+        raise AuthoritySchemaError(f"bootstrap marker must be an immutable regular file: {marker}")
     marker_payload = read_json(marker)
     if not isinstance(marker_payload, Mapping):
         raise AuthoritySchemaError(f"missing or malformed bootstrap marker: {marker}")
@@ -440,7 +456,7 @@ def _validate_open(
 class AuthorityReadModel:
     """Typed, query-only view over the authority."""
 
-    def __init__(self, authority: "LeaderAuthority") -> None:
+    def __init__(self, authority: "AuthorityReader | LeaderAuthority") -> None:
         self._authority = authority
 
     def metadata(self) -> AuthorityMetadata:
@@ -656,7 +672,7 @@ class AuthorityReadModel:
         )
         return None if row is None else dict(row)
 
-    def v0_committed_at(self) -> float | None:
+    def genesis_committed_at(self) -> float | None:
         row = self._authority._fetchone("SELECT committed_at FROM global_versions WHERE version=0")
         return None if row is None else float(row["committed_at"])
 
@@ -711,6 +727,71 @@ class AuthorityReadModel:
             )
             is not None
         )
+
+
+class AuthorityReader:
+    """Validated query-only authority connection for operator inspection."""
+
+    def __init__(
+        self,
+        database_path: str | Path,
+        identity: AuthorityIdentity,
+        membership_scope: StaticMembershipScope | DynamicMembershipScope,
+        *,
+        marker_path: str | Path | None = None,
+        busy_timeout_ms: int = 60_000,
+        wall_clock: Callable[[], float] = time.time,
+    ) -> None:
+        database = Path(database_path)
+        try:
+            database_metadata = database.lstat()
+        except FileNotFoundError as exc:
+            raise AuthoritySchemaError("authority database is missing") from exc
+        if not stat.S_ISREG(database_metadata.st_mode):
+            raise AuthoritySchemaError("authority database must be a regular file")
+        path = database.resolve()
+        mode = "static" if isinstance(membership_scope, StaticMembershipScope) else "dynamic"
+        connection = sqlite3.connect(
+            f"{path.as_uri()}?mode=ro",
+            uri=True,
+            timeout=busy_timeout_ms / 1000.0,
+        )
+        _configure_read_connection(connection, busy_timeout_ms=busy_timeout_ms)
+        try:
+            metadata = _validate_open(
+                connection,
+                path=path,
+                marker=_marker_path(path, marker_path),
+                identity=identity,
+                mode=mode,
+                busy_timeout_ms=busy_timeout_ms,
+            )
+        except Exception:
+            connection.close()
+            raise
+        if int(connection.execute("PRAGMA query_only").fetchone()[0]) != 1:
+            connection.close()
+            raise AuthoritySchemaError("query-only authority connection is not enforced")
+        self._connection = connection
+        self._scope = membership_scope
+        self._wall_clock = wall_clock
+        self.metadata = metadata
+        self.read = AuthorityReadModel(self)
+
+    def close(self) -> None:
+        self._connection.close()
+
+    def __enter__(self) -> "AuthorityReader":
+        return self
+
+    def __exit__(self, *_args: Any) -> None:
+        self.close()
+
+    def _fetchone(self, sql: str, parameters: tuple[Any, ...] = ()) -> sqlite3.Row | None:
+        return self._connection.execute(sql, parameters).fetchone()
+
+    def _fetchall(self, sql: str, parameters: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
+        return list(self._connection.execute(sql, parameters).fetchall())
 
 
 class LeaderAuthority:
@@ -785,7 +866,7 @@ class LeaderAuthority:
         self._connection.close()
 
     def assert_outside_transaction(self) -> None:
-        """Fail closed if test instrumentation reached a SQLite transaction boundary."""
+        """Fail closed if fault instrumentation reached a SQLite transaction boundary."""
 
         if self._connection.in_transaction:
             raise RuntimeError("authority connection has an active SQLite transaction")
@@ -819,7 +900,8 @@ class LeaderAuthority:
                 expired = now > (float(current["lease_expires_at"]) + self._max_clock_skew_seconds)
                 if active and not expired:
                     raise LeaseUnavailableError(
-                        f"leader lease is held by epoch={current['epoch']} owner={current['owner_id']}"
+                        "leader lease is held by "
+                        f"epoch={current['epoch']} owner={current['owner_id']}"
                     )
                 epoch = int(current["epoch"]) + 1
                 final_state = "expired" if active else "released"
@@ -1897,7 +1979,7 @@ class LeaderSession:
             ),
         )
 
-    def initialize_v0(
+    def initialize_genesis(
         self,
         *,
         command_id: str,
@@ -1911,7 +1993,7 @@ class LeaderSession:
         weight_theta_sha256: str,
         optim_theta_sha256: str,
     ) -> CommittedVersion:
-        """Run v0 through the same prepared-intent and fenced commit chain."""
+        """Commit the genesis version through the normal fenced publication chain."""
 
         self.prepare_publication(
             command_id=f"{command_id}-prepare",
@@ -1931,7 +2013,7 @@ class LeaderSession:
             command_id=f"{command_id}-commit", publication_id=publication_id
         )
         if isinstance(committed, MergeFenceConflict):
-            raise RuntimeError("v0 unexpectedly encountered a membership fence conflict")
+            raise RuntimeError("genesis unexpectedly encountered a membership fence conflict")
         return committed
 
     def initialize_dynamic_membership(self, *, command_id: str) -> tuple[int, ...]:
@@ -2964,7 +3046,9 @@ class LeaderSession:
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
             latest = connection.execute("SELECT MAX(version) FROM global_versions").fetchone()[0]
             if latest is None:
-                raise RuntimeError("v0 must be committed before selecting learner proposals")
+                raise RuntimeError(
+                    "the genesis version must be committed before selecting learner proposals"
+                )
             rows = connection.execute(
                 """
                 WITH per_contributor AS (
@@ -3109,7 +3193,7 @@ class LeaderSession:
                 raise ValueError(f"publication target must be the next version {expected_target}")
             if target_version == 0:
                 if selection_batch_id is not None:
-                    raise ValueError("v0 publication cannot bind a selection batch")
+                    raise ValueError("genesis publication cannot bind a selection batch")
             else:
                 batch = connection.execute(
                     "SELECT * FROM selection_batches WHERE batch_id=?",
@@ -3291,7 +3375,7 @@ class LeaderSession:
                     (batch_id,),
                 ).fetchall()
                 if not selected_rows:
-                    raise ValueError("non-v0 publication has an empty selection")
+                    raise ValueError("successor publication has an empty selection")
                 invalid_ids = [
                     str(row["update_id"])
                     for row in selected_rows
@@ -4660,7 +4744,7 @@ class LeaderSession:
                 raise RuntimeError("terminal finalization requires drained contributor/token state")
             latest = connection.execute("SELECT MAX(version) FROM global_versions").fetchone()[0]
             if latest is None:
-                raise RuntimeError("cannot finalize before v0 is committed")
+                raise RuntimeError("cannot finalize before the genesis version is committed")
             direct = connection.execute(
                 "SELECT COALESCE(SUM(direct_weight_tokens_applied), 0) FROM global_versions"
             ).fetchone()[0]
@@ -5740,7 +5824,8 @@ def _audit_history_records(
     if receipt_ids:
         placeholders = ",".join("?" for _ in receipt_ids)
         receipt_rows = connection.execute(
-            f"SELECT * FROM cycle_receipts WHERE receipt_id IN ({placeholders}) ORDER BY receipt_id",
+            "SELECT * FROM cycle_receipts "
+            f"WHERE receipt_id IN ({placeholders}) ORDER BY receipt_id",
             tuple(sorted(receipt_ids)),
         ).fetchall()
         fate_rows = connection.execute(

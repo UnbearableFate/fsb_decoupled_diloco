@@ -140,7 +140,7 @@ def test_active_static_replacement_atomically_abandons_prepared_work(tmp_path: P
         )
         publish_proposal_payload(tmp_path, proposal)
         leader.ingest_proposal(command_id="proposal-1", proposal=proposal)
-        leader.initialize_v0(
+        leader.initialize_genesis(
             command_id="initialize-v0",
             publication_id="publication-v0",
             **publish_checkpoint_pair(tmp_path, version=0),
