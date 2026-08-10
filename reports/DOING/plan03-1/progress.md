@@ -136,3 +136,18 @@
 - Transition: `EXTERNAL_TEST_REVIEW` -> `TEST_REMEDIATION`. Runtime execution
   remains blocked until C5-C6 are implemented and the new continuous target
   completes another critical-incremental review.
+
+## 2026-08-10T17:43:57+09:00 — TEST_REVIEW_TARGET terminal-control closure
+
+- Frozen target: `219abe663025adc7ff8f731f65d90fb27c42c0fe`; continuous
+  base: `af54925a4d0487a37c20f298f2027003cb079d20`, with ancestry verified.
+- C5 now uses the product terminal publisher for the aggregate fixture and
+  requires exact stop/summary authority projections plus a non-writable epoch
+  publication. Three focused mutations cover both schemas and immutability.
+- C6 now executes the tracked PBS wrapper against a failing allocation stub and
+  requires exit-status preservation plus blocked-evidence publication.
+- Login-safe `bash -n`, literal-group and current-worktree diff checks passed.
+  No project Python or runtime test ran on the login node.
+- The mandatory Codex critical-incremental report was saved before any external
+  request and returned `APPROVE` for test-design promotion. Runtime remains
+  blocked pending external reviewer terminal state and finding disposition.

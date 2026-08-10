@@ -32,3 +32,14 @@ Runtime tests remain blocked. C5 changes the Checker acceptance boundary and C6
 closes its PBS failure producer, so their continuous diff requires a new frozen
 target, mandatory critical-incremental Codex report and best-effort external
 review before the one-node `interact-g` test stage.
+
+## 2026-08-10T17:43:57+09:00 — implementation freeze
+
+- C5: `fixed pending review and runtime verification` at target
+  `219abe663025adc7ff8f731f65d90fb27c42c0fe`. The fixture now uses the product
+  publisher; exact stop/summary and immutable-mode mutations are registered.
+- C6: `fixed pending review and runtime verification` at the same target. The
+  real wrapper is executed with bounded allocation/Checker/module stubs and
+  must preserve exit 23 while publishing the exact blocked reason.
+- Mandatory critical-incremental Codex verdict: `APPROVE`. External review and
+  all runtime tests remain pending.
