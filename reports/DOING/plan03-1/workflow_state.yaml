@@ -3,13 +3,13 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P3-functional-faults
-work_unit_id: P3-W3-functional-normal
-state: STAGED_TEST_EXECUTION
-base_commit: 9398e822ebe6cf9755e55567b18916802b93162f
-target_commit: 4688bedebda2cee94137bf943425ca3d9c31ed17
+work_unit_id: P3-W3-functional-normal-queue-routing
+state: TEST_REVIEW_TARGET
+base_commit: 4688bedebda2cee94137bf943425ca3d9c31ed17
+target_commit: null
 formal_source_commit: null
 formal_source_fingerprint: null
-experiment_id: p3-functional-fault-test-design-01
+experiment_id: p3-functional-fault-queue-routing-01
 experiment_domain: product
 failure_counters:
   "harness:p2-one-node-validation-01": 0
@@ -35,4 +35,4 @@ external_review:
   pbs_job_id: null
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: submit_p3_functional_normal
+allowed_next_action: codex_review_p3_queue_routing

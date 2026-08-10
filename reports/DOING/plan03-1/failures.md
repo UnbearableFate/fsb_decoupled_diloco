@@ -127,3 +127,27 @@
   the two version-suffixed test modules and their manifest references, flatten
   the startup fixture, and rewrite all adoption inputs to current names. Review
   the continuous test-only change with Codex before attempt 2.
+
+## 2026-08-10T19:04:00+09:00 — P3 normal pre-execution queue routing
+
+- Experiment: `p3-functional-normal-01`; domain: `product`.
+- Category: `infra-invalid-run`; valid product attempt: no; consecutive product
+  failure count: unchanged at 0.
+- Three `regular-g` submissions were terminated before execution:
+  `2519520.opbs` inherited the site default 100 GiB per node,
+  `2519545.opbs` fixed memory but inherited the site default CPU count, and
+  `2519576.opbs` used the exact bounded request
+  `5:ncpus=8:mpiprocs=1:mem=16gb` but remained queued because it would conflict
+  with a reservation or top job.
+- None acquired an `exec_host`, created a run/log root, produced PBS stdout or
+  published structured evidence. Historical state for `2519576.opbs` is
+  `F/substate=91` after cancellation and has no execution exit status. These are
+  scheduler/pre-execution events, not failed protocol runs.
+- Live `qstat --rsc -x` shows `debug-g` is enabled and started, permits 1-16
+  nodes and 30 minutes, while the registered scenario needs five nodes for ten
+  minutes. Current resource use was 13/48 debug nodes versus regular backfill
+  conflicts.
+- Remediation: pre-register `debug-g` and the exact bounded select string in the
+  P3 manifest, freeze and Codex-review that report-only design change, then
+  submit a new create-only normal scenario identity. Runtime source scopes stay
+  unchanged; no evidence from the cancelled submissions is promoted.

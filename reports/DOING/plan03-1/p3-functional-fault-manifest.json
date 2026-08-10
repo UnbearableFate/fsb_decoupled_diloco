@@ -25,14 +25,14 @@
     "rule": "Every scenario uses the same clean post-review commit and source fingerprint; any scoped edit invalidates all earlier scenario evidence."
   },
   "resources": {
-    "queue": "regular-g",
+    "queue": "debug-g",
     "group": "xg24i002",
-    "select": "5:mpiprocs=1",
+    "select": "5:ncpus=8:mpiprocs=1:mem=16gb",
     "nodes": 5,
     "learner_nodes": 4,
     "syncer_nodes": 1,
     "walltime": "00:10:00",
-    "walltime_basis": "The retained 9-node 60-local-step by 20-global-step job completed inside 20 minutes. These 5-node scenarios use 20 local steps and 4 global steps; even takeover adds only a 15-second lease expiry and bounded 120-second fault wait. Ten minutes is the workflow minimum and retains more than twice the expected runtime plus teardown margin."
+    "walltime_basis": "The retained 9-node 60-local-step by 20-global-step job completed inside 20 minutes. These 5-node scenarios use 20 local steps and 4 global steps; even takeover adds only a 15-second lease expiry and bounded 120-second fault wait. Ten minutes is the workflow minimum and retains more than twice the expected runtime plus teardown margin. Live qstat --rsc -x on 2026-08-10 showed debug-g enabled for 1-16 nodes with a 30-minute maximum; it is the appropriate brief multi-node validation queue after three regular-g submissions never started because of defaults or backfill reservations."
   },
   "configuration": {
     "path": "configs/full_protocol_functional.yaml",
@@ -74,8 +74,8 @@
     "pbs_script": "scripts/miyabi/run_full_protocol.pbs",
     "python": ".venv/bin/python",
     "qsub_overrides": [
-      "-q regular-g",
-      "-l select=5:mpiprocs=1",
+      "-q debug-g",
+      "-l select=5:ncpus=8:mpiprocs=1:mem=16gb",
       "-l walltime=00:10:00"
     ],
     "environment": {

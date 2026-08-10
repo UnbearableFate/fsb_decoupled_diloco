@@ -433,3 +433,19 @@
 - Promotion is serial: submit only `functional-normal` after PBS script syntax,
   literal group, clean-source and create-only path checks. Fault scenarios stay
   blocked until the normal artifact is terminal PASS.
+
+## 2026-08-10T19:04:00+09:00 — P3 candidate queue-routing target
+
+- The first three normal-scenario submissions never entered execution and
+  produced no run or evidence. The first two exposed site resource defaults;
+  the third carried the exact bounded five-node request but could not backfill
+  ahead of a reservation/top job.
+- Live queue discovery reports `debug-g` as enabled/started for 1-16 nodes with
+  a 30-minute maximum and available capacity. The P3 scenario is a brief
+  five-node functional validation with an already reviewed ten-minute budget,
+  so the manifest now explicitly selects `debug-g` and
+  `5:ncpus=8:mpiprocs=1:mem=16gb`.
+- This is a pre-execution test-design correction. Runtime source, topology,
+  workload, fault boundaries, durable oracles, walltime and cleanup policy are
+  unchanged. Freeze this target and complete a Codex critical-incremental
+  review before submitting a new normal scenario identity.
