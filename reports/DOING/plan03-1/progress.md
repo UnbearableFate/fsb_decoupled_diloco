@@ -56,3 +56,17 @@
   `0c5ed443950e3650ff884781a43aca1661bc75a95412a0ce21765cfe78ddcec1`.
 - Transition: `IMPLEMENT_AND_DRAFT_TESTS` → `TEST_REVIEW_TARGET`. The only next
   action is the external test-design reviewer job; runtime tests remain blocked.
+
+## 2026-08-10T16:35:16+09:00 — EXTERNAL_TEST_REVIEW
+
+- Pre-submit checks passed: shell syntax for every Miyabi PBS/shell script,
+  literal `group_list=xg24i002`, no group placeholder, prompt hash match and
+  branch-point ancestry for target
+  `f14847498d0055e9efbd9639a4e73ec3cfebfb6b`.
+- Submitted reviewer job `2518445.opbs` to `debug-g`: one `mg0004` compute
+  node, four reviewer processes, requested walltime `00:30:00`, prompt SHA-256
+  `0c5ed443950e3650ff884781a43aca1661bc75a95412a0ce21765cfe78ddcec1`.
+- Initial `qstat -f` confirmed running state, full PBS job ID, literal group,
+  one-node topology and the registered base/target/prompt variables.
+- Transition: `TEST_REVIEW_TARGET` → `EXTERNAL_TEST_REVIEW`; only monitoring
+  and evidence collection are allowed until the job reaches terminal state.
