@@ -1,0 +1,183 @@
+{
+  "manifest_version": 1,
+  "plan_id": "plan03-1",
+  "state": "candidate",
+  "source_scopes": [
+    "fs_diloco",
+    "configs",
+    "scripts/miyabi",
+    "tests",
+    "pyproject.toml",
+    "README.md",
+    "docs"
+  ],
+  "source_identity": null,
+  "gates": [
+    {
+      "id": "U1-final-one-node-validation",
+      "producer": "scripts/miyabi/run_validation_suite.py",
+      "requirements": [
+        "UNIT-01",
+        "HARNESS-01"
+      ],
+      "artifact_path": null,
+      "artifact_sha256": null,
+      "supporting_evidence": [],
+      "topology": {
+        "queue": "interact-g",
+        "nodes": 1,
+        "select": "1:ncpus=8:mem=16gb",
+        "walltime": "01:00:00"
+      },
+      "workload": {
+        "commands": [
+          "ruff-format",
+          "ruff-lint",
+          "focused-pytest",
+          "full-pytest"
+        ],
+        "pytest_policy": "tests > 0 and failures = errors = skipped = 0 for each suite"
+      },
+      "pass_formula": "All four registered commands return zero, both pytest JUnit projections are non-empty exact all-pass suites, and the clean source identity is unchanged across execution.",
+      "cleanup": "Retain the structured artifact, raw command log, and both JUnit XML files through completion."
+    },
+    {
+      "id": "F1-final-functional-normal",
+      "producer": "scripts/miyabi/check_full_protocol_run.py",
+      "requirements": [
+        "FUNC-4L1S-01"
+      ],
+      "artifact_path": null,
+      "artifact_sha256": null,
+      "supporting_evidence": [],
+      "topology": {
+        "queue": "debug-g",
+        "nodes": 5,
+        "select": "5:ncpus=8:mpiprocs=1:mem=16gb",
+        "walltime": "00:10:00"
+      },
+      "workload": {
+        "config": "configs/full_protocol_functional.yaml",
+        "fault_scenario": "none",
+        "learners": 4,
+        "local_optimizer_steps_per_cycle": 20,
+        "committed_global_steps": 4,
+        "direct_weight_tokens_applied": 5120
+      },
+      "pass_formula": "The runtime Checker reports PASS with exact five-node topology, versions 0..4, four applied proposals per learner, 5120 direct applied tokens, balanced terminal authority, immutable publications, and no unregistered replacement or takeover.",
+      "cleanup": "Preserve the complete run until final evidence review; cleanup only with its exact PASS artifact."
+    },
+    {
+      "id": "F1-final-learner-replacement",
+      "producer": "scripts/miyabi/check_full_protocol_run.py",
+      "requirements": [
+        "FAULT-4L1S-01"
+      ],
+      "artifact_path": null,
+      "artifact_sha256": null,
+      "supporting_evidence": [],
+      "topology": {
+        "queue": "debug-g",
+        "nodes": 5,
+        "select": "5:ncpus=8:mpiprocs=1:mem=16gb",
+        "walltime": "00:10:00"
+      },
+      "workload": {
+        "config": "configs/full_protocol_functional.yaml",
+        "fault_scenario": "learner_replacement",
+        "learners": 4,
+        "local_optimizer_steps_per_cycle": 20,
+        "committed_global_steps": 4,
+        "direct_weight_tokens_applied": 5120
+      },
+      "pass_formula": "The runtime Checker reports PASS and binds the sole learner_000 generation-1 replaced history, generation-2 successor, both exact attempt attestations, successor progress, exact workload, terminal authority, and balanced ledger.",
+      "cleanup": "Preserve the complete run until final evidence review; cleanup only with its exact PASS artifact."
+    },
+    {
+      "id": "F1-final-syncer-takeover",
+      "producer": "scripts/miyabi/check_full_protocol_run.py",
+      "requirements": [
+        "FAULT-4L1S-01"
+      ],
+      "artifact_path": null,
+      "artifact_sha256": null,
+      "supporting_evidence": [],
+      "topology": {
+        "queue": "debug-g",
+        "nodes": 5,
+        "select": "5:ncpus=8:mpiprocs=1:mem=16gb",
+        "walltime": "00:10:00"
+      },
+      "workload": {
+        "config": "configs/full_protocol_functional.yaml",
+        "fault_scenario": "syncer_takeover",
+        "learners": 4,
+        "local_optimizer_steps_per_cycle": 20,
+        "committed_global_steps": 4,
+        "direct_weight_tokens_applied": 5120
+      },
+      "pass_formula": "The runtime Checker reports PASS and binds the registered version-2 fault boundary, exact expired-to-released epoch chain and owner attestations, successor publications, no stale writer, exact workload, terminal authority, and balanced ledger.",
+      "cleanup": "Preserve the complete run until final evidence review; cleanup only with its exact PASS artifact."
+    },
+    {
+      "id": "G1-final-formal-8l1s",
+      "producer": "scripts/miyabi/check_full_protocol_run.py",
+      "requirements": [
+        "FORMAL-8L1S-01"
+      ],
+      "artifact_path": null,
+      "artifact_sha256": null,
+      "supporting_evidence": [],
+      "topology": {
+        "queue": "regular-g",
+        "nodes": 9,
+        "select": "9:ncpus=8:mpiprocs=1:mem=16gb",
+        "walltime": "00:10:00"
+      },
+      "workload": {
+        "config": "configs/full_protocol_static.yaml",
+        "fault_scenario": "none",
+        "learners": 8,
+        "local_optimizer_steps_per_cycle": 50,
+        "committed_global_steps": 10,
+        "direct_weight_tokens_applied": 64000
+      },
+      "pass_formula": "The runtime Checker reports PASS on exactly nine PBS nodes with versions 0..10, ten applied proposals and selection credits per learner, 64000 direct applied tokens across all terminal authorities, zero ledger balance, immutable object hashes, finalized control, and SQLite integrity ok.",
+      "cleanup": "Preserve the complete formal run until final evidence review and staged completion PASS; then use only evidence-bound cleanup."
+    }
+  ],
+  "reviews": [
+    {
+      "id": "R2-preformal-current-state",
+      "review_kind": "preformal-current-state",
+      "requirements": [
+        "SURFACE-01",
+        "CONFIG-01",
+        "SCHEMA-01",
+        "CLEAN-01",
+        "ARCH-01"
+      ],
+      "artifact_path": null,
+      "artifact_sha256": null
+    },
+    {
+      "id": "R3-final-evidence",
+      "review_kind": "final-evidence",
+      "requirements": [
+        "DOCS-01"
+      ],
+      "artifact_path": null,
+      "artifact_sha256": null
+    }
+  ],
+  "aggregate": {
+    "producer": "scripts/miyabi/check_plan_completion.py",
+    "matrix_path": "reports/DOING/plan03-1/requirement-matrix.csv",
+    "staged_final_requirement": "FINAL-01"
+  },
+  "retention": {
+    "success": "Track each structured artifact and minimal independent raw evidence before aggregation.",
+    "failure": "Retain the failed artifact, raw log, and exact run root until disposition closes.",
+    "cleanup_owner": "fs_diloco.tools.clean_run using the matching PASS artifact and exact run root"
+  }
+}

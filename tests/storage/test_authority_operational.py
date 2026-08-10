@@ -411,6 +411,16 @@ def test_dynamic_replacement_returns_full_contiguous_resume_state(tmp_path: Path
             )
         )
         leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
+        proposal = FullUpdateProposalV2.from_dict(
+            proposal_payload(
+                fence=first.fence.as_dict(),
+                stable_contributor_key="0",
+                update_id=receipt.planned_update_id,
+                receipt_sha256=receipt.immutable_sha256(),
+            )
+        )
+        publish_proposal_payload(tmp_path, proposal)
+        leader.ingest_proposal(command_id="proposal-1", proposal=proposal)
         leader.record_capacity_observation(
             command_id="observe-replacement",
             observation_key="capacity-replacement-2",
@@ -470,9 +480,43 @@ def test_dynamic_replacement_returns_full_contiguous_resume_state(tmp_path: Path
         assert second.resume.cursor == 8
         assert second.resume.last_receipt_id == receipt.receipt_id
         assert second.resume.last_receipt_sha256 == receipt.immutable_sha256()
+        assert second.resume.last_update_id == receipt.planned_update_id
         assert second.resume.next_cycle_seq == 2
         assert second.resume.stream_epoch == second.fence.stream_epoch == 2
+        assert authority.read.update_status(proposal.update_id) == "dropped"
         assert authority.read.token_ledger_summary().direct_dropped == 6
+        leader.initialize_genesis(
+            command_id="v0",
+            publication_id="publication-v0",
+            **publish_checkpoint_pair(tmp_path, version=0),
+        )
+        leader.begin_terminal_close(command_id="close", reason="target reached")
+        with sqlite3.connect(tmp_path / "authority.sqlite3") as connection:
+            connection.execute(
+                "UPDATE updates SET status='pending' WHERE update_id=?",
+                (proposal.update_id,),
+            )
+        with pytest.raises(MembershipFenceError, match="contributor lineage"):
+            leader.acknowledge_terminal_contributor(
+                command_id="stale-live-update-ack",
+                fence=second.fence,
+                final_cycle_seq=1,
+                final_update_id=second.resume.last_update_id,
+            )
+        with sqlite3.connect(tmp_path / "authority.sqlite3") as connection:
+            connection.execute(
+                "UPDATE updates SET status='dropped' WHERE update_id=?",
+                (proposal.update_id,),
+            )
+        assert (
+            leader.acknowledge_terminal_contributor(
+                command_id="replacement-ack",
+                fence=second.fence,
+                final_cycle_seq=1,
+                final_update_id=second.resume.last_update_id,
+            )
+            == "acked"
+        )
 
 
 def test_terminal_close_freezes_fence_blocks_admission_and_accounts_hard_crash(
@@ -661,8 +705,15 @@ def test_static_restart_recovers_authoritative_cursor_and_receipt_chain(tmp_path
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
         fence_payload = _static_fence(leader)
-        receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence_payload))
-        progress = leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
+        receipt, proposal = _ingest_static_cycle(
+            leader,
+            tmp_path,
+            fence_payload,
+            sequence=1,
+            previous=None,
+        )
+        progress = authority.read.contributor_progress("learner-0")
+        assert progress is not None
         fence = StaticContributorFence.from_dict(fence_payload)
         leader.mark_static_attempt_terminal(command_id="terminal-1", fence=fence)
         replacement = leader.bind_or_replace_static_attempt(
@@ -679,6 +730,31 @@ def test_static_restart_recovers_authoritative_cursor_and_receipt_chain(tmp_path
         assert recovered.data_cursor == 8
         assert recovered.last_receipt_id == receipt.receipt_id
         assert recovered.last_receipt_sha256 == receipt.immutable_sha256()
+        assert recovered.last_update_id == receipt.planned_update_id
+        assert authority.read.update_status(proposal.update_id) == "dropped"
+
+        replacement_fence = StaticContributorFence(
+            kind="static",
+            learner_id=replacement.learner_id,
+            logical_launch_id=replacement.logical_launch_id,
+            attempt_id=replacement.attempt_id,
+            binding_generation=replacement.binding_generation,
+        )
+        leader.initialize_genesis(
+            command_id="v0",
+            publication_id="publication-v0",
+            **publish_checkpoint_pair(tmp_path, version=0),
+        )
+        leader.begin_terminal_close(command_id="close", reason="target reached")
+        assert (
+            leader.acknowledge_terminal_contributor(
+                command_id="replacement-ack",
+                fence=replacement_fence,
+                final_cycle_seq=1,
+                final_update_id=recovered.last_update_id,
+            )
+            == "acked"
+        )
 
 
 def test_telemetry_deletion_cannot_change_authoritative_token_summary(tmp_path: Path) -> None:

@@ -476,7 +476,7 @@ def run_admitted_learner(
     cycle_seq = admission.resume.next_cycle_seq
     previous_receipt_id = admission.resume.last_receipt_id
     previous_receipt_sha256 = admission.resume.last_receipt_sha256
-    last_cycle_update_id: str | None = None
+    last_cycle_update_id = admission.resume.last_update_id
     local_step = 0
     awaiting_configured_close = False
     while True:

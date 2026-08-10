@@ -3,7 +3,7 @@
 #PBS -q regular-g
 #PBS -W group_list=xg24i002
 #PBS -l select=9:mpiprocs=1
-#PBS -l walltime=00:15:00
+#PBS -l walltime=00:10:00
 #PBS -j oe
 #PBS -m ae
 
@@ -25,7 +25,6 @@ EXPECTED_NODES="${EXPECTED_NODES:-9}"
 NUM_LEARNERS="${NUM_LEARNERS:-8}"
 EXPECTED_INNER_STEPS="${EXPECTED_INNER_STEPS:-50}"
 EXPECTED_GLOBAL_STEPS="${EXPECTED_GLOBAL_STEPS:-10}"
-EXPECTED_SYNCER_EPOCHS="${EXPECTED_SYNCER_EPOCHS:-1}"
 SYNCER_CUDA_VISIBLE_DEVICES="${SYNCER_CUDA_VISIBLE_DEVICES:-0}"
 LEARNER_CUDA_VISIBLE_DEVICES="${LEARNER_CUDA_VISIBLE_DEVICES:-0}"
 [[ ! -e "$EVIDENCE_OUTPUT" ]] || {
@@ -52,12 +51,9 @@ checker=(
   --expected-inner-steps "$EXPECTED_INNER_STEPS"
   --expected-contributors "$NUM_LEARNERS"
   --expected-hosts "$EXPECTED_NODES"
-  --expected-syncer-epochs "$EXPECTED_SYNCER_EPOCHS"
+  --fault-scenario "$FS_DILOCO_FAULT_SCENARIO"
   --output "$EVIDENCE_OUTPUT"
 )
-if [[ -n "${EXPECTED_REPLACED_LEARNER:-}" ]]; then
-  checker+=(--expected-replaced-learner "$EXPECTED_REPLACED_LEARNER")
-fi
 
 publish_blocked_on_exit() {
   local exit_status=$?

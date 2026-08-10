@@ -213,6 +213,7 @@ class ContributorProgress:
     last_cycle_seq: int
     last_receipt_id: str | None
     last_receipt_sha256: str | None
+    last_update_id: str | None
     data_cursor: int
     updated_at: float
 
@@ -222,11 +223,17 @@ class ContributorProgress:
         strict_int(self.data_cursor, name="data_cursor", minimum=0)
         strict_float(self.updated_at, name="updated_at")
         if self.last_cycle_seq == 0:
-            if self.last_receipt_id is not None or self.last_receipt_sha256 is not None:
-                raise ValueError("empty progress cannot name a last receipt")
+            if (
+                self.last_receipt_id is not None
+                or self.last_receipt_sha256 is not None
+                or self.last_update_id is not None
+            ):
+                raise ValueError("empty progress cannot name a last receipt or update")
         else:
             identity(self.last_receipt_id, name="last_receipt_id")
             sha256(self.last_receipt_sha256, name="last_receipt_sha256")
+            if self.last_update_id is not None:
+                identity(self.last_update_id, name="last_update_id")
 
 
 @dataclass(frozen=True)

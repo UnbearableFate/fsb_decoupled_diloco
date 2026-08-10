@@ -507,7 +507,14 @@ class AuthorityReadModel:
 
     def contributor_progress(self, stable_contributor_key: str) -> ContributorProgress | None:
         row = self._authority._fetchone(
-            "SELECT * FROM contributor_progress WHERE stable_contributor_key = ?",
+            """
+            SELECT p.*, r.planned_update_id AS last_update_id
+            FROM contributor_progress AS p
+            LEFT JOIN cycle_receipts AS r
+              ON r.stable_contributor_key=p.stable_contributor_key
+             AND r.receipt_id=p.last_receipt_id
+            WHERE p.stable_contributor_key=?
+            """,
             (stable_contributor_key,),
         )
         return None if row is None else _decode_progress(row)
@@ -1417,7 +1424,9 @@ class LeaderSession:
                 (receipt.stable_contributor_key,),
             ).fetchone()
             assert row is not None
-            return dict(row)
+            result = dict(row)
+            result["last_update_id"] = receipt.planned_update_id
+            return result
 
         result = self._command(command_id, "ingest_cycle_receipt", request, operation)
         return _decode_progress(result)
@@ -2986,6 +2995,7 @@ class LeaderSession:
                 cursor=int(result["resume_cursor"]),
                 last_receipt_id=result["last_receipt_id"],
                 last_receipt_sha256=result["last_receipt_sha256"],
+                last_update_id=result["last_update_id"],
                 next_cycle_seq=int(result["next_cycle_seq"]),
                 stream_epoch=int(result["fence"]["stream_epoch"]),
             ),
@@ -4580,7 +4590,8 @@ class LeaderSession:
                 else:
                     receipt = connection.execute(
                         """
-                        SELECT proposal_expected, planned_update_id FROM cycle_receipts
+                        SELECT receipt_id, proposal_expected, planned_update_id
+                        FROM cycle_receipts
                         WHERE stable_contributor_key=? AND cycle_seq=?
                         """,
                         (fence.stable_contributor_key, final_cycle_seq),
@@ -4606,9 +4617,16 @@ class LeaderSession:
                     ).fetchone()
                     if update is not None and (
                         int(update["cycle_seq"]) != final_cycle_seq
-                        or update["fence_json"] != _canonical_json(fence.as_dict())
+                        or update["stable_contributor_key"] != fence.stable_contributor_key
+                        or update["cycle_receipt_id"] != receipt["receipt_id"]
+                        or (
+                            update["fence_json"] != _canonical_json(fence.as_dict())
+                            and update["status"] not in {"applied", "dropped"}
+                        )
                     ):
-                        raise MembershipFenceError("final update does not match the frozen cycle")
+                        raise MembershipFenceError(
+                            "final update does not match the frozen contributor lineage"
+                        )
                 if isinstance(fence, DynamicContributorFence):
                     if final_update_id is not None:
                         self._retire_dynamic_in_transaction(
@@ -5451,7 +5469,14 @@ class LeaderSession:
         fence: DynamicContributorFence,
     ) -> dict[str, Any]:
         progress = connection.execute(
-            "SELECT * FROM contributor_progress WHERE stable_contributor_key=?",
+            """
+            SELECT p.*, r.planned_update_id AS last_update_id
+            FROM contributor_progress AS p
+            LEFT JOIN cycle_receipts AS r
+              ON r.stable_contributor_key=p.stable_contributor_key
+             AND r.receipt_id=p.last_receipt_id
+            WHERE p.stable_contributor_key=?
+            """,
             (fence.stable_contributor_key,),
         ).fetchone()
         return {
@@ -5459,6 +5484,7 @@ class LeaderSession:
             "resume_cursor": 0 if progress is None else int(progress["data_cursor"]),
             "last_receipt_id": None if progress is None else progress["last_receipt_id"],
             "last_receipt_sha256": (None if progress is None else progress["last_receipt_sha256"]),
+            "last_update_id": None if progress is None else progress["last_update_id"],
             "next_cycle_seq": 1 if progress is None else int(progress["last_cycle_seq"]) + 1,
         }
 
@@ -5991,6 +6017,7 @@ def _decode_progress(row: Mapping[str, Any]) -> ContributorProgress:
         last_receipt_sha256=(
             None if row["last_receipt_sha256"] is None else str(row["last_receipt_sha256"])
         ),
+        last_update_id=(None if row["last_update_id"] is None else str(row["last_update_id"])),
         data_cursor=int(row["data_cursor"]),
         updated_at=float(row["updated_at"]),
     )

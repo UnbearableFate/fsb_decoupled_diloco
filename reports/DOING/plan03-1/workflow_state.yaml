@@ -2,15 +2,15 @@ workflow_version: 3
 plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
-phase_id: P3-functional-faults
-work_unit_id: P3-W7-phase-final
-state: PHASE_FINAL
-base_commit: 9398e822ebe6cf9755e55567b18916802b93162f
-target_commit: a133a98a431566dbd1aef1af6a7f496f2c301d38
+phase_id: P4-formal-and-docs
+work_unit_id: P4-W1-candidate-hardening
+state: TEST_REMEDIATION
+base_commit: e1f76a85f77c33765ebaaddb4828e40cc45d4d24
+target_commit: null
 formal_source_commit: null
 formal_source_fingerprint: null
-experiment_id: null
-experiment_domain: source-freeze
+experiment_id: p4-candidate-hardening-01
+experiment_domain: harness
 failure_counters:
   "harness:p2-one-node-validation-01": 0
   "harness:p2-one-node-full-suite-01": 0
@@ -19,36 +19,13 @@ failure_counters:
   "product:p3-syncer-takeover-01": 0
   "harness:p3-functional-checker-01": 0
 required_tests:
-  - p3-functional-normal
-  - p3-learner-replacement
-  - p3-syncer-takeover
+  - p4-focused-candidate
+  - p4-one-node-validation
 required_evidence:
-  - reports/DOING/plan03-1/p3-functional-fault-manifest.json
-  - reports/DOING/plan03-1/identity-authority.md
   - reports/DOING/plan03-1/artifact-schema.md
-  - reports/DOING/code_review/plan03-1/test-P3-functional-fault-design/codex-gpt_4688bedebda2cee94137bf943425ca3d9c31ed17.md
-  - reports/DOING/code_review/plan03-1/critical-P3-queue-routing/codex-gpt_debbcdf10267c5fb786dded33c17d2caba08f198.md
-  - reports/DOING/plan03-1/artifacts/20260810-190552_p3-functional-normal_pass.json
-  - reports/DOING/plan03-1/artifacts/20260810-190552_p3-functional-normal_pbs.log
-  - reports/DOING/code_review/plan03-1/critical-P3-normal-checker-remediation/codex-gpt_a040cb9c9a073b87a90cdc467dc1c04f72e16ca0.md
-  - reports/DOING/plan03-1/artifacts/20260810-192000_p3-checker-remediation-validation.json
-  - reports/DOING/plan03-1/artifacts/20260810-192000_p3-checker-remediation-validation.log
-  - reports/DOING/plan03-1/artifacts/20260810-191842_p3-functional-normal_result.json
-  - reports/DOING/plan03-1/artifacts/20260810-191842_p3-functional-normal_pbs.log
-  - reports/DOING/plan03-1/artifacts/20260810-192006_p3-learner-replacement_result.json
-  - reports/DOING/plan03-1/artifacts/20260810-192006_p3-learner-replacement_pbs.log
-  - reports/DOING/code_review/plan03-1/critical-P3-terminal-applied-total-remediation/codex-gpt_36987b41daa67558ff83024abb282122f40065bf.md
-  - reports/DOING/code_review/plan03-1/critical-P3-terminal-applied-total-remediation/codex-gpt_8e7f87432895f3a699c93dc252aa225b7d9944a8.md
-  - reports/DOING/plan03-1/artifacts/20260810-193100_p3-terminal-total-validation.json
-  - reports/DOING/plan03-1/artifacts/20260810-193100_p3-terminal-total-validation.log
-  - reports/DOING/plan03-1/artifacts/20260810-193300_p3-functional-normal_result.json
-  - reports/DOING/plan03-1/artifacts/20260810-193300_p3-functional-normal_pbs.log
-  - reports/DOING/plan03-1/artifacts/20260810-193500_p3-learner-replacement_result.json
-  - reports/DOING/plan03-1/artifacts/20260810-193500_p3-learner-replacement_pbs.log
-  - reports/DOING/plan03-1/artifacts/20260810-193700_p3-syncer-takeover_result.json
-  - reports/DOING/plan03-1/artifacts/20260810-193700_p3-syncer-takeover_pbs.log
+  - reports/DOING/plan03-1/formal-ladder-manifest.json
   - reports/DOING/plan03-1/requirement-matrix.csv
-  - reports/DOING/code_review/plan03-1/P3-phase-closure-review/codex-gpt_a133a98a431566dbd1aef1af6a7f496f2c301d38.md
+  - reports/DOING/plan03-1/test-ladder.md
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -61,4 +38,4 @@ external_review:
   pbs_job_id: null
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: start_p4_preformal_candidate_and_review_design
+allowed_next_action: complete_p4_candidate_and_one_node_validation

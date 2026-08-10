@@ -372,6 +372,11 @@
       "tests": ["tests/harness/test_full_protocol_harness.py::test_aggregate_checker_mutations_change_acceptance_to_fail"]
     },
     {
+      "surface": "scripts/miyabi/check_plan_completion.py",
+      "boundary": "same-target formal ladder and requirement completion aggregation",
+      "tests": ["tests/harness/test_plan_completion.py::test_completion_aggregate_accepts_registered_staged_inputs"]
+    },
+    {
       "surface": "scripts/miyabi/run_full_protocol.pbs",
       "boundary": "single multi-node wrapper and structured early-exit evidence",
       "tests": ["tests/harness/test_full_protocol_harness.py::test_pbs_wrapper_publishes_blocked_artifact_when_allocation_exits"]

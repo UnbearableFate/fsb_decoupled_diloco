@@ -34,6 +34,7 @@ workload_identity:
   processed_tokens: integer
   direct_weight_tokens_applied: integer
   cursor_terminal: per-contributor terminal cursor
+fault_scenario: none | learner_replacement | syncer_takeover for runtime gates
 metrics: object
 errors: list
 evidence_paths: non-empty list of pre-existing raw evidence paths
@@ -47,6 +48,13 @@ Full Protocol runtime gate metrics additionally project `receipt_count`,
 `proposal_count`, `applied_proposal_count`, `dropped_proposal_count` and
 `direct_dropped_tokens`. Applied work is the registered workload; processed
 work may also contain fully adjudicated supersession or terminal drops.
+
+The one-node validation gate records the exact ordered `ruff-format`,
+`ruff-lint`, `focused-pytest`, and `full-pytest` steps. Each pytest step has a
+create-only JUnit XML path and parsed `tests`, `failures`, `errors`, and
+`skipped` counts. A pytest step passes only when it executed at least one test
+and every failure, error, and skipped count is zero; both the raw command log
+and JUnit XML files are independent evidence.
 
 Rules:
 
@@ -63,5 +71,9 @@ Rules:
 - Runtime PASS requires the exact registered directly applied token total to
   agree across publication history, the durable token rollup, terminal
   authority, fixed terminal controls, and the immutable terminal publication.
+- Runtime behavior is selected only by the registered `fault_scenario`.
+  Scenario-derived binding generations, learner attempt attestations, syncer
+  epochs and durable fault evidence must be exact; normal runs reject any
+  unregistered replacement or takeover history.
 - Failure artifacts preserve actual identity, partial metrics, error class, raw
   paths, and cleanup eligibility; they are never overwritten by a retry.

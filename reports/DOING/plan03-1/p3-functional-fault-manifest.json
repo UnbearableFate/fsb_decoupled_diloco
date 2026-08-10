@@ -99,8 +99,6 @@
       "gate": "F1-functional-normal",
       "requirement": "FUNC-4L1S-01",
       "fault_scenario": "none",
-      "expected_syncer_epochs": 1,
-      "expected_replaced_learner": null,
       "injection": null,
       "durable_oracles": [
         "Exactly four learner identities and one syncer identity attest on the exact five PBS nodes.",
@@ -116,8 +114,6 @@
       "gate": "F1-learner-replacement",
       "requirement": "FAULT-4L1S-01",
       "fault_scenario": "learner_replacement",
-      "expected_syncer_epochs": 1,
-      "expected_replaced_learner": "learner_000",
       "injection": {
         "layer": "learner process after learner_000 has at least one committed selection credit",
         "action": "SIGTERM the first attempt, publish one exact static replacement authorization, then start the named successor attempt",
@@ -134,8 +130,6 @@
       "gate": "F1-syncer-takeover",
       "requirement": "FAULT-4L1S-01",
       "fault_scenario": "syncer_takeover",
-      "expected_syncer_epochs": 2,
-      "expected_replaced_learner": null,
       "injection": {
         "layer": "syncer process immediately after committed version 2, outside a SQLite transaction and with the lease renewer quiesced",
         "action": "publish the exact fault marker, SIGKILL the primary, wait for lease expiry, then run one successor candidate",

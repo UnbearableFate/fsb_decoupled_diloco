@@ -10,6 +10,11 @@
 - learner/syncer admission、dynamic capacity、PBS scheduler 和 operator tools；
 - harness argument/PBS identity、structured failure、publication hashes 和 token-balance oracle。
 
+单节点 evidence producer 按固定顺序运行 Ruff、focused pytest 和 full
+pytest。两个 pytest gate 各自发布 create-only JUnit XML，并要求
+`tests > 0`、`failures = errors = skipped = 0`；结构化 artifact 同时绑定
+原始命令日志和两份 JUnit 文件，不能仅以 pytest 退出码作为 PASS。
+
 ## 4 learners + 1 syncer
 
 `configs/full_protocol_functional.yaml` 固定 4 个 learner、full quorum、每轮 20 local optimizer steps 和 4 committed global steps。reviewed harness 使用 5 个独立节点验证三个场景：
@@ -19,6 +24,11 @@
 3. syncer takeover：primary 在 committed version 2 后、SQLite transaction 外且 lease renewer quiesced 的注册边界暂停，harness 强制终止该进程；successor 获得更高 epoch 并提交后续版本，旧 epoch 不得在 takeover 后提交。
 
 `check_full_protocol_run.py` 不以 exit code 或 log 文本作为 PASS oracle。它读取 immutable descriptor/config、query-only SQLite、audit history、attestations 和 publication objects，验证 exact workload、5-host topology、contiguous versions、selection credit、token balance、terminal ack、object hash、replacement fence 或 successor epoch。
+
+checker 只接受一个必填 `--fault-scenario`，取值为 `none`、
+`learner_replacement` 或 `syncer_takeover`。binding generation、历史 attempt、
+syncer epoch 和 fault evidence 全部由该场景唯一推导；normal 场景中出现任何
+未注册 replacement/takeover 都会使 gate 失败。
 
 ## 8 learners + 1 syncer
 

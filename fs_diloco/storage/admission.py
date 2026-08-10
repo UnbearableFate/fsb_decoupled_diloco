@@ -30,7 +30,7 @@ from .paths import RunPaths
 
 
 ADMISSION_REQUEST_FORMAT_VERSION = 1
-ADMISSION_RESPONSE_FORMAT_VERSION = 1
+ADMISSION_RESPONSE_FORMAT_VERSION = 2
 ADMISSION_REJECTION_FORMAT_VERSION = 1
 ADMISSION_CURRENT_FORMAT_VERSION = 1
 ADMISSION_DISPOSITION_FORMAT_VERSION = 1
@@ -347,6 +347,7 @@ def publish_admission_response(
             "cursor": resume.cursor,
             "last_receipt_id": resume.last_receipt_id,
             "last_receipt_sha256": resume.last_receipt_sha256,
+            "last_update_id": resume.last_update_id,
             "next_cycle_seq": resume.next_cycle_seq,
             "stream_epoch": resume.stream_epoch,
         },
@@ -553,6 +554,7 @@ def _decode_admission_response_control(
         "cursor",
         "last_receipt_id",
         "last_receipt_sha256",
+        "last_update_id",
         "next_cycle_seq",
         "stream_epoch",
     }:
@@ -563,6 +565,7 @@ def _decode_admission_response_control(
             cursor=resume_payload["cursor"],
             last_receipt_id=resume_payload["last_receipt_id"],
             last_receipt_sha256=resume_payload["last_receipt_sha256"],
+            last_update_id=resume_payload["last_update_id"],
             next_cycle_seq=resume_payload["next_cycle_seq"],
             stream_epoch=resume_payload["stream_epoch"],
         )

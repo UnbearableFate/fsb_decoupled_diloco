@@ -573,6 +573,7 @@ def _admit_observations_unprotected(
                     last_receipt_sha256=(
                         None if progress is None else progress.last_receipt_sha256
                     ),
+                    last_update_id=None if progress is None else progress.last_update_id,
                     next_cycle_seq=1 if progress is None else progress.last_cycle_seq + 1,
                 )
             elif request.get("mode") == "dynamic":
@@ -786,6 +787,7 @@ def _existing_admission_resume(
         "cursor",
         "last_receipt_id",
         "last_receipt_sha256",
+        "last_update_id",
         "next_cycle_seq",
         "stream_epoch",
     }:
@@ -795,6 +797,7 @@ def _existing_admission_resume(
             cursor=resume_payload["cursor"],
             last_receipt_id=resume_payload["last_receipt_id"],
             last_receipt_sha256=resume_payload["last_receipt_sha256"],
+            last_update_id=resume_payload["last_update_id"],
             next_cycle_seq=resume_payload["next_cycle_seq"],
             stream_epoch=resume_payload["stream_epoch"],
         )
@@ -807,6 +810,7 @@ def _resume_from_progress(fence: ContributorFence, progress: Any) -> Contributor
         cursor=0 if progress is None else progress.data_cursor,
         last_receipt_id=None if progress is None else progress.last_receipt_id,
         last_receipt_sha256=None if progress is None else progress.last_receipt_sha256,
+        last_update_id=None if progress is None else progress.last_update_id,
         next_cycle_seq=1 if progress is None else progress.last_cycle_seq + 1,
         stream_epoch=fence.stream_epoch if fence.kind == "dynamic" else None,
     )

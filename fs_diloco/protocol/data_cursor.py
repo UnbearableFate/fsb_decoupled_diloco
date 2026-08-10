@@ -72,6 +72,7 @@ class ContributorResumeState:
     cursor: int
     last_receipt_id: str | None
     last_receipt_sha256: str | None
+    last_update_id: str | None
     next_cycle_seq: int
     stream_epoch: int | None = None
 
@@ -79,11 +80,17 @@ class ContributorResumeState:
         cursor = strict_int(self.cursor, name="cursor", minimum=0)
         sequence = strict_int(self.next_cycle_seq, name="next_cycle_seq", minimum=1)
         if sequence == 1:
-            if self.last_receipt_id is not None or self.last_receipt_sha256 is not None:
-                raise ValueError("empty progress cannot name a previous receipt")
+            if (
+                self.last_receipt_id is not None
+                or self.last_receipt_sha256 is not None
+                or self.last_update_id is not None
+            ):
+                raise ValueError("empty progress cannot name a previous receipt or update")
         else:
             identity(self.last_receipt_id, name="last_receipt_id")
             sha256(self.last_receipt_sha256, name="last_receipt_sha256")
+            if self.last_update_id is not None:
+                identity(self.last_update_id, name="last_update_id")
         if self.stream_epoch is not None:
             strict_int(self.stream_epoch, name="stream_epoch", minimum=1)
         object.__setattr__(self, "cursor", cursor)

@@ -57,6 +57,7 @@ def test_contributor_progress_advances_only_contiguous_receipt_chain(tmp_path: P
         assert first_progress.last_cycle_seq == 1
         assert second_progress.last_cycle_seq == 2
         assert second_progress.last_receipt_sha256 == second.immutable_sha256()
+        assert second_progress.last_update_id == second.planned_update_id
         assert second_progress.data_cursor == 16
         assert authority.read.contributor_progress("learner-0") == second_progress
     finally:

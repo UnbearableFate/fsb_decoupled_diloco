@@ -47,7 +47,15 @@ def _checker_module():
 
 def _build_valid_checker_fixture(
     tmp_path: Path,
+    *,
+    fault_scenario: str = "none",
 ) -> tuple[Path, Path, list[str], dict[str, str]]:
+    global_steps_by_scenario = {
+        "none": 1,
+        "learner_replacement": 2,
+        "syncer_takeover": 3,
+    }
+    expected_global_steps = global_steps_by_scenario[fault_scenario]
     run_root = tmp_path / "run"
     log_root = tmp_path / "logs"
     config = resolve_config(
@@ -59,7 +67,7 @@ def _build_valid_checker_fixture(
     config.sync.num_learners = 1
     config.sync.quorum_min = 1
     config.sync.quorum_max = 1
-    config.sync.stop_after_outer_steps = 1
+    config.sync.stop_after_outer_steps = expected_global_steps
     config.membership.stream_pool_size = 1
     config.membership.bootstrap_instances = 1
     config.scaling.desired_contributors = 1
@@ -77,36 +85,26 @@ def _build_valid_checker_fixture(
         config_sha256=str(descriptor["resolved_config_sha256"]),
     )
     scope = StaticMembershipScope(("learner_000",))
-    update_id = "00000000-0000-4000-8000-000000000001"
-    receipt_payload = {
-        "cycle_receipt_format_version": 1,
-        "run_id": descriptor["run_id"],
-        "stable_contributor_key": "learner_000",
-        "cycle_seq": 1,
-        "cycle_id": "10000000-0000-4000-8000-000000000001",
-        "receipt_id": "receipt-learner_000-1",
-        "previous_receipt_id": None,
-        "previous_receipt_sha256": None,
-        "processed_tokens_this_cycle": 16,
-        "effective_tokens_this_cycle": 16,
-        "local_discarded_tokens_this_cycle": 0,
-        "retained_tokens_since_base": 16,
-        "data_cursor_start": 0,
-        "data_cursor_end": 1,
-        "proposal_expected": True,
-        "planned_update_id": update_id,
-        "planned_payload_sha256": PAYLOAD_DIGEST,
-        "contributor_fence": {},
-        "created_at": 101.0,
-    }
+    scheduler_job_id = "fixture.opbs"
+    clock_value = [100.0]
+    syncer_attempts = [("checker-syncer", "syncer-attempt", 101)]
+    learner_attempts = ["fixture-attempt"]
+    replacement_evidence = None
+    takeover_evidence = None
     with LeaderAuthority(
         loaded.paths.sqlite_db,
         identity,
         scope,
         run_root=run_root,
+        lease_duration_seconds=5.0,
+        max_clock_skew_seconds=1.0,
+        wall_clock=lambda: clock_value[0],
     ) as authority:
         token = authority.acquire_leader(
-            owner_id="checker-syncer", hostname=socket.gethostname(), pid=os.getpid()
+            owner_id="checker-syncer",
+            hostname=socket.gethostname(),
+            pid=101,
+            pbs_job_id=scheduler_job_id,
         )
         leader = authority.open_leader(token)
         binding = leader.bind_or_replace_static_attempt(
@@ -122,101 +120,164 @@ def _build_valid_checker_fixture(
             attempt_id=binding.attempt_id,
             binding_generation=binding.binding_generation,
         )
-        receipt_payload["contributor_fence"] = fence.as_dict()
-        receipt = CycleReceiptV1.from_dict(receipt_payload)
         leader.initialize_genesis(
             command_id="genesis",
             publication_id="publication-0",
-            **publish_checkpoint_pair(run_root, version=0),
+            **publish_checkpoint_pair(run_root, version=0, epoch=token.epoch),
         )
-        leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
-        proposal = FullUpdateProposalV2.from_dict(
-            {
-                "proposal_format_version": 2,
-                "run_id": descriptor["run_id"],
-                "stable_contributor_key": "learner_000",
-                "cycle_seq": 1,
-                "cycle_id": receipt.cycle_id,
-                "update_id": update_id,
-                "cycle_receipt_id": receipt.receipt_id,
-                "cycle_receipt_sha256": receipt.immutable_sha256(),
-                "base_global_version": 0,
-                "local_step_start": 0,
-                "local_step_end": 1,
-                "inner_steps": 1,
-                "processed_tokens_this_cycle": 16,
-                "effective_tokens_this_update": 16,
-                "local_discarded_tokens_this_cycle": 0,
-                "retained_tokens_since_base": 16,
-                "data_cursor_start": 0,
-                "data_cursor_end": 1,
-                "contributor_fence": fence.as_dict(),
-                "payload_relative_path": canonical_update_relative_path("learner_000", update_id),
-                "payload_size": len(DEFAULT_PAYLOAD),
-                "payload_sha256": PAYLOAD_DIGEST,
-                "tensor_schema_sha256": SCHEMA_DIGEST,
-                "tensor_dtype": "float32",
-                "tensor_numel": 1,
-                "created_at": 101.0,
-            }
+
+        def publish_cycle(
+            sequence: int,
+            current_fence: StaticContributorFence,
+            previous: CycleReceiptV1 | None,
+            *,
+            commit: bool,
+        ) -> tuple[CycleReceiptV1, FullUpdateProposalV2]:
+            update_id = f"00000000-0000-4000-8000-{sequence:012d}"
+            receipt = CycleReceiptV1.from_dict(
+                {
+                    "cycle_receipt_format_version": 1,
+                    "run_id": descriptor["run_id"],
+                    "stable_contributor_key": "learner_000",
+                    "cycle_seq": sequence,
+                    "cycle_id": f"10000000-0000-4000-8000-{sequence:012d}",
+                    "receipt_id": f"receipt-learner_000-{sequence}",
+                    "previous_receipt_id": None if previous is None else previous.receipt_id,
+                    "previous_receipt_sha256": (
+                        None if previous is None else previous.immutable_sha256()
+                    ),
+                    "processed_tokens_this_cycle": 16,
+                    "effective_tokens_this_cycle": 16,
+                    "local_discarded_tokens_this_cycle": 0,
+                    "retained_tokens_since_base": 16,
+                    "data_cursor_start": sequence - 1,
+                    "data_cursor_end": sequence,
+                    "proposal_expected": True,
+                    "planned_update_id": update_id,
+                    "planned_payload_sha256": PAYLOAD_DIGEST,
+                    "contributor_fence": current_fence.as_dict(),
+                    "created_at": 100.0 + sequence,
+                }
+            )
+            leader.ingest_cycle_receipt(command_id=f"receipt-{sequence}", receipt=receipt)
+            proposal = FullUpdateProposalV2.from_dict(
+                {
+                    "proposal_format_version": 2,
+                    "run_id": descriptor["run_id"],
+                    "stable_contributor_key": "learner_000",
+                    "cycle_seq": sequence,
+                    "cycle_id": receipt.cycle_id,
+                    "update_id": update_id,
+                    "cycle_receipt_id": receipt.receipt_id,
+                    "cycle_receipt_sha256": receipt.immutable_sha256(),
+                    "base_global_version": min(sequence - 1, expected_global_steps),
+                    "local_step_start": sequence - 1,
+                    "local_step_end": sequence,
+                    "inner_steps": 1,
+                    "processed_tokens_this_cycle": 16,
+                    "effective_tokens_this_update": 16,
+                    "local_discarded_tokens_this_cycle": 0,
+                    "retained_tokens_since_base": 16,
+                    "data_cursor_start": sequence - 1,
+                    "data_cursor_end": sequence,
+                    "contributor_fence": current_fence.as_dict(),
+                    "payload_relative_path": canonical_update_relative_path(
+                        "learner_000", update_id
+                    ),
+                    "payload_size": len(DEFAULT_PAYLOAD),
+                    "payload_sha256": PAYLOAD_DIGEST,
+                    "tensor_schema_sha256": SCHEMA_DIGEST,
+                    "tensor_dtype": "float32",
+                    "tensor_numel": 1,
+                    "created_at": 100.0 + sequence,
+                }
+            )
+            publish_proposal_payload(run_root, proposal)
+            leader.ingest_proposal(command_id=f"proposal-{sequence}", proposal=proposal)
+            if commit:
+                selected = leader.try_select_batch(
+                    command_id=f"select-{sequence}", quorum_min=1, quorum_max=1
+                )
+                assert selected.batch is not None
+                leader.prepare_publication(
+                    command_id=f"prepare-{sequence}",
+                    publication_id=f"publication-{sequence}",
+                    target_version=sequence,
+                    selection_batch_id=selected.batch.batch_id,
+                    **publish_checkpoint_pair(run_root, version=sequence, epoch=leader.token.epoch),
+                )
+                leader.commit_merge(
+                    command_id=f"commit-{sequence}",
+                    publication_id=f"publication-{sequence}",
+                )
+            return receipt, proposal
+
+        previous_receipt = None
+        for sequence in range(1, expected_global_steps + 1):
+            previous_receipt, _proposal = publish_cycle(
+                sequence, fence, previous_receipt, commit=True
+            )
+            if fault_scenario == "learner_replacement" and sequence == 1:
+                old_fence = fence
+                replacement = leader.bind_or_replace_static_attempt(
+                    command_id="replace-learner",
+                    learner_id="learner_000",
+                    logical_launch_id="fixture-launch",
+                    attempt_id="fixture-attempt-replacement",
+                    expected_generation=1,
+                    replacement_reason="fixture injected process replacement",
+                )
+                fence = StaticContributorFence(
+                    kind="static",
+                    learner_id=replacement.learner_id,
+                    logical_launch_id=replacement.logical_launch_id,
+                    attempt_id=replacement.attempt_id,
+                    binding_generation=replacement.binding_generation,
+                )
+                learner_attempts.append(replacement.attempt_id)
+                replacement_evidence = {
+                    "learner_id": "learner_000",
+                    "injected_exit_status": 143,
+                    "old_attempt_id": old_fence.attempt_id,
+                    "new_attempt_id": replacement.attempt_id,
+                    "old_binding_generation": old_fence.binding_generation,
+                }
+            if fault_scenario == "syncer_takeover" and sequence == 2:
+                takeover_evidence = {
+                    "primary_exit_status": 137,
+                    "primary_pid": 101,
+                    "fault_boundary": {
+                        "sqlite_transaction_active": False,
+                        "lease_renewer_quiesced": True,
+                        "committed_version": 2,
+                        "pid": 101,
+                        "epoch": token.epoch,
+                    },
+                }
+                clock_value[0] = 107.0
+                token = authority.acquire_leader(
+                    owner_id="checker-syncer-successor",
+                    hostname=socket.gethostname(),
+                    pid=102,
+                    pbs_job_id=scheduler_job_id,
+                )
+                leader = authority.open_leader(token)
+                syncer_attempts.append(
+                    ("checker-syncer-successor", "syncer-successor-attempt", 102)
+                )
+
+        extra_receipt, extra_proposal = publish_cycle(
+            expected_global_steps + 1,
+            fence,
+            previous_receipt,
+            commit=False,
         )
-        publish_proposal_payload(run_root, proposal)
-        leader.ingest_proposal(command_id="proposal-1", proposal=proposal)
-        selected = leader.try_select_batch(command_id="select-1", quorum_min=1, quorum_max=1)
-        assert selected.batch is not None
-        leader.prepare_publication(
-            command_id="prepare-1",
-            publication_id="publication-1",
-            target_version=1,
-            selection_batch_id=selected.batch.batch_id,
-            **publish_checkpoint_pair(run_root, version=1),
-        )
-        leader.commit_merge(command_id="commit-1", publication_id="publication-1")
-        extra_update_id = "00000000-0000-4000-8000-000000000002"
-        extra_receipt = CycleReceiptV1.from_dict(
-            {
-                **receipt.as_dict(),
-                "cycle_seq": 2,
-                "cycle_id": "10000000-0000-4000-8000-000000000002",
-                "receipt_id": "receipt-learner_000-2",
-                "previous_receipt_id": receipt.receipt_id,
-                "previous_receipt_sha256": receipt.immutable_sha256(),
-                "retained_tokens_since_base": 16,
-                "data_cursor_start": 1,
-                "data_cursor_end": 2,
-                "planned_update_id": extra_update_id,
-                "created_at": 102.0,
-            }
-        )
-        leader.ingest_cycle_receipt(command_id="receipt-2", receipt=extra_receipt)
-        extra_proposal = FullUpdateProposalV2.from_dict(
-            {
-                **proposal.as_dict(),
-                "cycle_seq": 2,
-                "cycle_id": extra_receipt.cycle_id,
-                "update_id": extra_update_id,
-                "cycle_receipt_id": extra_receipt.receipt_id,
-                "cycle_receipt_sha256": extra_receipt.immutable_sha256(),
-                "base_global_version": 1,
-                "local_step_start": 1,
-                "local_step_end": 2,
-                "retained_tokens_since_base": 16,
-                "data_cursor_start": 1,
-                "data_cursor_end": 2,
-                "payload_relative_path": canonical_update_relative_path(
-                    "learner_000", extra_update_id
-                ),
-                "created_at": 102.0,
-            }
-        )
-        publish_proposal_payload(run_root, extra_proposal)
-        leader.ingest_proposal(command_id="proposal-2", proposal=extra_proposal)
         leader.begin_terminal_close(command_id="close", reason="fixture complete")
         leader.acknowledge_terminal_contributor(
             command_id="ack-learner",
             fence=fence,
-            final_cycle_seq=2,
-            final_update_id=extra_update_id,
+            final_cycle_seq=extra_receipt.cycle_seq,
+            final_update_id=extra_proposal.update_id,
         )
         leader.finalize_terminal(command_id="finalize", reason="fixture complete")
         terminal = authority.read.terminal_record()
@@ -227,13 +288,17 @@ def _build_valid_checker_fixture(
     log_root.mkdir()
     atomic_write_json(log_root / "source_identity.json", capture_source_identity(ROOT))
     atomic_write_json(log_root / "init_run.json", {"run_id": descriptor["run_id"]})
-    atomic_write_json(log_root / "summary.json", {"final_version": 1})
+    atomic_write_json(log_root / "summary.json", {"final_version": expected_global_steps})
+    if replacement_evidence is not None:
+        atomic_write_json(log_root / "learner_replacement.json", replacement_evidence)
+    if takeover_evidence is not None:
+        atomic_write_json(log_root / "syncer_takeover.json", takeover_evidence)
     publish_audit_batch(
         loaded.paths,
         build_audit_batch(
             batch_id="checker-fixture",
             record_kind="authority_history",
-            cutoff_version=1,
+            cutoff_version=expected_global_steps,
             records=[],
         ),
     )
@@ -244,23 +309,24 @@ def _build_valid_checker_fixture(
         "module_environment": [],
         "resource_allocation": {"nodes": 1},
     }
-    scheduler_job_id = "fixture.opbs"
-    write_actor_attestation(
-        loaded,
-        actor_kind="learner",
-        actor_id="learner_000",
-        attempt_id="fixture-attempt",
-        runtime_evidence=runtime_evidence,
-        scheduler_job_id=scheduler_job_id,
-    )
-    write_actor_attestation(
-        loaded,
-        actor_kind="syncer",
-        actor_id="checker-syncer",
-        attempt_id="syncer-attempt",
-        runtime_evidence=runtime_evidence,
-        scheduler_job_id=scheduler_job_id,
-    )
+    for attempt_id in learner_attempts:
+        write_actor_attestation(
+            loaded,
+            actor_kind="learner",
+            actor_id="learner_000",
+            attempt_id=attempt_id,
+            runtime_evidence=runtime_evidence,
+            scheduler_job_id=scheduler_job_id,
+        )
+    for actor_id, attempt_id, _pid in syncer_attempts:
+        write_actor_attestation(
+            loaded,
+            actor_kind="syncer",
+            actor_id=actor_id,
+            attempt_id=attempt_id,
+            runtime_evidence=runtime_evidence,
+            scheduler_job_id=scheduler_job_id,
+        )
     nodefile = tmp_path / "pbs-nodes"
     nodefile.write_text(socket.gethostname() + "\n", encoding="utf-8")
     output = tmp_path / "gate.json"
@@ -280,13 +346,15 @@ def _build_valid_checker_fixture(
         "--log-root",
         str(log_root),
         "--expected-global-steps",
-        "1",
+        str(expected_global_steps),
         "--expected-inner-steps",
         "1",
         "--expected-contributors",
         "1",
         "--expected-hosts",
         "1",
+        "--fault-scenario",
+        fault_scenario,
         "--output",
         str(output),
     ]
@@ -342,6 +410,100 @@ def test_aggregate_checker_accepts_adjudicated_terminal_overshoot(tmp_path: Path
 
 
 @pytest.mark.parametrize(
+    ("scenario", "global_steps", "epoch_states", "learner_attempts", "syncer_attempts"),
+    [
+        ("learner_replacement", 2, ["released"], 2, 1),
+        ("syncer_takeover", 3, ["expired", "released"], 1, 2),
+    ],
+)
+def test_aggregate_checker_accepts_registered_fault_behavior(
+    tmp_path: Path,
+    scenario: str,
+    global_steps: int,
+    epoch_states: list[str],
+    learner_attempts: int,
+    syncer_attempts: int,
+) -> None:
+    _run_root, output, command, environment = _build_valid_checker_fixture(
+        tmp_path,
+        fault_scenario=scenario,
+    )
+
+    completed, artifact = _run_checker(command, environment, output)
+
+    assert completed.returncode == 0, completed.stderr
+    assert artifact["status"] == "PASS"
+    assert artifact["fault_scenario"] == scenario
+    assert artifact["authority"]["final_version"] == global_steps
+    assert [row["final_state"] for row in artifact["authority"]["epochs"]] == epoch_states
+    assert artifact["metrics"]["learner_attestation_count"] == learner_attempts
+    assert artifact["metrics"]["syncer_attestation_count"] == syncer_attempts
+    if scenario == "learner_replacement":
+        assert artifact["authority"]["static_binding_history"][0]["final_status"] == "replaced"
+        assert artifact["fault_evidence"]["learner_replacement"] is not None
+    else:
+        assert artifact["fault_evidence"]["syncer_takeover"] is not None
+
+
+@pytest.mark.parametrize(
+    ("scenario", "mutation", "expected_error"),
+    [
+        (
+            "learner_replacement",
+            "replacement_history",
+            "registered learner replacement history is not exact",
+        ),
+        (
+            "learner_replacement",
+            "replacement_evidence",
+            "registered learner replacement evidence is missing",
+        ),
+        (
+            "syncer_takeover",
+            "takeover_boundary",
+            "syncer takeover evidence does not prove the registered fault layer",
+        ),
+        (
+            "syncer_takeover",
+            "takeover_linkage",
+            "syncer takeover epoch linkage is invalid",
+        ),
+    ],
+)
+def test_aggregate_checker_fault_mutations_change_acceptance_to_fail(
+    tmp_path: Path,
+    scenario: str,
+    mutation: str,
+    expected_error: str,
+) -> None:
+    run_root, output, command, environment = _build_valid_checker_fixture(
+        tmp_path,
+        fault_scenario=scenario,
+    )
+    if mutation == "replacement_history":
+        with sqlite3.connect(RunPaths(run_root).sqlite_db) as connection:
+            connection.execute("UPDATE static_binding_history SET final_status='terminal'")
+    elif mutation == "replacement_evidence":
+        (tmp_path / "logs/learner_replacement.json").unlink()
+    elif mutation == "takeover_boundary":
+        path = tmp_path / "logs/syncer_takeover.json"
+        evidence = json.loads(path.read_text(encoding="utf-8"))
+        evidence["fault_boundary"]["lease_renewer_quiesced"] = False
+        atomic_write_json(path, evidence)
+    elif mutation == "takeover_linkage":
+        with sqlite3.connect(RunPaths(run_root).sqlite_db) as connection:
+            connection.execute("UPDATE syncer_epochs SET superseded_by_epoch=NULL WHERE epoch=1")
+    else:  # pragma: no cover - parametrization is closed above
+        raise AssertionError(mutation)
+
+    completed, artifact = _run_checker(command, environment, output)
+
+    assert completed.returncode == 1
+    assert artifact["status"] == "FAIL"
+    assert expected_error in artifact["errors"]
+
+
+@pytest.mark.parametrize(
     "mutation",
     [
         "source_identity",
@@ -356,6 +518,7 @@ def test_aggregate_checker_accepts_adjudicated_terminal_overshoot(tmp_path: Path
         "archive_integrity",
         "exact_workload",
         "normal_non_drop_fate",
+        "unregistered_replacement",
         "publication_identity",
     ],
 )
@@ -438,6 +601,24 @@ def test_aggregate_checker_mutations_change_acceptance_to_fail(
                 "UPDATE token_rollups SET direct_dropped=0, "
                 "direct_quarantined_or_conflicted=16 WHERE singleton=1"
             )
+    elif mutation == "unregistered_replacement":
+        with sqlite3.connect(paths.sqlite_db) as connection:
+            binding = connection.execute(
+                "SELECT learner_id, logical_launch_id, attempt_id, bound_by_epoch, bound_at "
+                "FROM static_contributor_bindings WHERE learner_id='learner_000'"
+            ).fetchone()
+            assert binding is not None
+            connection.execute(
+                "INSERT INTO static_binding_history "
+                "(learner_id, binding_generation, logical_launch_id, attempt_id, "
+                "final_status, bound_by_epoch, bound_at, finalized_by_epoch, finalized_at) "
+                "VALUES (?, 1, ?, ?, 'replaced', ?, ?, ?, ?)",
+                (*binding, 1, 200.0),
+            )
+            connection.execute(
+                "UPDATE static_contributor_bindings SET binding_generation=2 "
+                "WHERE learner_id='learner_000'"
+            )
     elif mutation == "publication_identity":
         weight = run_root / "weights/epochs/e1/v1.safetensors"
         weight.chmod(0o644)
@@ -487,10 +668,8 @@ def test_checker_parser_freezes_topology_workload_and_fault_oracles(tmp_path: Pa
             "4",
             "--expected-hosts",
             "5",
-            "--expected-syncer-epochs",
-            "2",
-            "--expected-replaced-learner",
-            "learner_000",
+            "--fault-scenario",
+            "learner_replacement",
             "--output",
             str(tmp_path / "evidence.json"),
         ]
@@ -507,8 +686,7 @@ def test_checker_parser_freezes_topology_workload_and_fault_oracles(tmp_path: Pa
         "expected_inner_steps": 20,
         "expected_contributors": 4,
         "expected_hosts": 5,
-        "expected_syncer_epochs": 2,
-        "expected_replaced_learner": "learner_000",
+        "fault_scenario": "learner_replacement",
         "blocked_reason": None,
         "output": tmp_path / "evidence.json",
     }
@@ -543,6 +721,8 @@ def test_checker_classifies_missing_run_as_structured_blocked_artifact(tmp_path:
             "4",
             "--expected-hosts",
             "5",
+            "--fault-scenario",
+            "none",
             "--output",
             str(output),
         ],
@@ -605,6 +785,8 @@ def test_checker_explicit_execution_block_publishes_current_schema(tmp_path: Pat
             "1",
             "--expected-hosts",
             "1",
+            "--fault-scenario",
+            "none",
             "--blocked-reason",
             "allocation actor exited before validation",
             "--output",
@@ -717,6 +899,7 @@ def test_gate_artifact_validator_rejects_self_proof(tmp_path: Path) -> None:
         "gate": "F1-functional",
         "experiment_id": "self-proof",
         "requirements_covered": ["FUNC-4L1S-01"],
+        "fault_scenario": "none",
         "source_identity": None,
         "config_schema_identity": None,
         "protocol_schema_identity": None,
@@ -750,20 +933,28 @@ def test_token_balance_oracle_classifies_every_direct_fate() -> None:
 
 
 @pytest.mark.parametrize(
-    ("count", "states"),
-    [(1, ("released",)), (2, ("expired", "released"))],
+    ("scenario", "states", "replaced_learner"),
+    [
+        ("none", ("released",), None),
+        ("learner_replacement", ("released",), "learner_000"),
+        ("syncer_takeover", ("expired", "released"), None),
+    ],
 )
-def test_checker_registers_exact_epoch_lifecycle(count: int, states: tuple[str, ...]) -> None:
+def test_checker_registers_exact_fault_scenario(
+    scenario: str,
+    states: tuple[str, ...],
+    replaced_learner: str | None,
+) -> None:
     module = _checker_module()
 
-    assert module._registered_epoch_states(count) == states
+    assert module._scenario_expectations(scenario) == (states, replaced_learner)
 
 
-def test_checker_rejects_unregistered_epoch_count() -> None:
+def test_checker_rejects_unregistered_fault_scenario() -> None:
     module = _checker_module()
 
-    with pytest.raises(ValueError, match="one or two"):
-        module._registered_epoch_states(3)
+    with pytest.raises(ValueError, match="unregistered"):
+        module._scenario_expectations("unknown")
 
 
 def test_actor_identity_shell_exports_exact_descriptor_bound_source(tmp_path: Path) -> None:
@@ -823,12 +1014,16 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
         assert "#PBS -W group_list=xg24i002" in source
         assert "group_list=<" not in source
     wrapper = (ROOT / "scripts/miyabi/run_full_protocol.pbs").read_text(encoding="utf-8")
-    assert "#PBS -l walltime=00:15:00" in wrapper
+    assert "#PBS -l walltime=00:10:00" in wrapper
     assert all(
         f"${{{name}:?{name} is required}}" in wrapper
         for name in ("GATE", "EXPERIMENT_ID", "REQUIREMENT_ID")
     )
     assert wrapper.count("run_full_protocol_allocation.sh") == 1
+    assert 'export FS_DILOCO_FAULT_SCENARIO="${FS_DILOCO_FAULT_SCENARIO:-none}"' in wrapper
+    assert '--fault-scenario "$FS_DILOCO_FAULT_SCENARIO"' in wrapper
+    assert "EXPECTED_SYNCER_EPOCHS" not in wrapper
+    assert "EXPECTED_REPLACED_LEARNER" not in wrapper
     allocation = (ROOT / "scripts/miyabi/run_full_protocol_allocation.sh").read_text(
         encoding="utf-8"
     )
@@ -900,7 +1095,7 @@ printf '{"status":"BLOCKED","errors":["%s"]}\n' "$blocked_reason" >"$output"
         "NUM_LEARNERS": "1",
         "EXPECTED_INNER_STEPS": "1",
         "EXPECTED_GLOBAL_STEPS": "1",
-        "EXPECTED_SYNCER_EPOCHS": "1",
+        "FS_DILOCO_FAULT_SCENARIO": "none",
         "PBS_JOBID": "fixture.opbs",
     }
 

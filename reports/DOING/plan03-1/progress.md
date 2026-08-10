@@ -765,3 +765,17 @@
   invoked, following the user's Codex-only directive.
 - P3 is complete. Begin P4 by freezing the preformal candidate/current-state
   review design before the formal 8+1 experiment and documentation closure.
+
+## 2026-08-10T20:00:00+09:00 — P4 candidate hardening started
+
+- P3 remains phase-final. The P4 candidate adds a single registered fault
+  scenario interface, restores the durable `last_update_id` needed by resumed
+  learners, makes pytest validation evidence JUnit-backed, and introduces a
+  strict same-target formal-ladder completion checker.
+- The final ladder is fixed at one U1 validation, three five-node P3 scenarios,
+  one nine-node 50-by-10 G1 run, and two Codex internal reviews. External
+  reviewers remain skipped under the user's directive and their untracked
+  output is not accepted as evidence or as a workflow gate.
+- Candidate source and tests are not yet frozen or runtime-validated. Next:
+  complete static hardening, commit the candidate, then run focused and full
+  validation on one confirmed Miyabi compute node.

@@ -321,12 +321,14 @@ def _token_balance(row: dict[str, Any] | None) -> int:
     )
 
 
-def _registered_epoch_states(expected_syncer_epochs: int) -> tuple[str, ...]:
-    if expected_syncer_epochs == 1:
-        return ("released",)
-    if expected_syncer_epochs == 2:
-        return ("expired", "released")
-    raise ValueError("registered Full Protocol scenarios require one or two syncer epochs")
+def _scenario_expectations(fault_scenario: str) -> tuple[tuple[str, ...], str | None]:
+    if fault_scenario == "none":
+        return ("released",), None
+    if fault_scenario == "learner_replacement":
+        return ("released",), "learner_000"
+    if fault_scenario == "syncer_takeover":
+        return ("expired", "released"), None
+    raise ValueError(f"unregistered Full Protocol fault scenario: {fault_scenario}")
 
 
 def _evidence_paths(
@@ -383,8 +385,7 @@ def validate_run(
     expected_inner_steps: int,
     expected_contributors: int,
     expected_hosts: int,
-    expected_syncer_epochs: int,
-    expected_replaced_learner: str | None,
+    fault_scenario: str,
 ) -> dict[str, Any]:
     validate_completed_run_for_actor(run_root)
     descriptor_path = run_root / "control/run_descriptor.json"
@@ -501,7 +502,8 @@ def validate_run(
     final_version = int(terminal[0]["final_version"]) if len(terminal) == 1 else -1
     expected_versions = list(range(expected_global_steps + 1))
     expected_contributor_ids = {f"learner_{index:03d}" for index in range(expected_contributors)}
-    expected_epoch_states = _registered_epoch_states(expected_syncer_epochs)
+    expected_epoch_states, replacement_learner = _scenario_expectations(fault_scenario)
+    syncer_epoch_count = len(expected_epoch_states)
 
     if descriptor.get("descriptor_sha256") != _json_sha256_without(descriptor, "descriptor_sha256"):
         errors.append("run descriptor self-checksum is invalid")
@@ -627,20 +629,39 @@ def validate_run(
         row["status"] for row in bindings
     } != {"terminal"}:
         errors.append("static contributor bindings are not all terminal")
-    if len(epochs) != expected_syncer_epochs:
+    expected_binding_generations = {
+        learner_id: 2 if learner_id == replacement_learner else 1
+        for learner_id in expected_contributor_ids
+    }
+    actual_binding_generations = {
+        str(row["learner_id"]): int(row["binding_generation"]) for row in bindings
+    }
+    if actual_binding_generations != expected_binding_generations:
+        errors.append("static binding generations do not match the registered fault scenario")
+    if replacement_learner is None:
+        if binding_history:
+            errors.append("registered scenario contains unexpected static replacement history")
+    elif (
+        len(binding_history) != 1
+        or str(binding_history[0]["learner_id"]) != replacement_learner
+        or int(binding_history[0]["binding_generation"]) != 1
+        or str(binding_history[0]["final_status"]) != "replaced"
+    ):
+        errors.append("registered learner replacement history is not exact")
+    if len(epochs) != syncer_epoch_count:
         errors.append("syncer epoch history does not match the registered scenario")
     elif tuple(str(row["final_state"]) for row in epochs) != expected_epoch_states:
         errors.append("syncer epoch lifecycle does not match the registered scenario")
     elif any(row["final_at"] is None for row in epochs):
         errors.append("syncer epoch lifecycle is not durably terminal")
-    elif expected_syncer_epochs == 1 and epochs[0]["superseded_by_epoch"] is not None:
+    elif syncer_epoch_count == 1 and epochs[0]["superseded_by_epoch"] is not None:
         errors.append("normal syncer epoch was unexpectedly superseded")
-    elif expected_syncer_epochs == 2 and (
+    elif syncer_epoch_count == 2 and (
         int(epochs[0]["superseded_by_epoch"] or -1) != int(epochs[1]["epoch"])
         or epochs[1]["superseded_by_epoch"] is not None
     ):
         errors.append("syncer takeover epoch linkage is invalid")
-    if expected_syncer_epochs > 1 and len(epochs) >= 2:
+    if syncer_epoch_count > 1 and len(epochs) >= 2:
         successor_epoch = int(epochs[-1]["epoch"])
         successor_versions = [
             int(row["version"])
@@ -655,13 +676,6 @@ def validate_run(
             for row in versions
         ):
             errors.append("a stale syncer committed after successor takeover")
-    if expected_replaced_learner is not None:
-        replacement = next(
-            (row for row in bindings if row["learner_id"] == expected_replaced_learner), None
-        )
-        if replacement is None or int(replacement["binding_generation"]) < 2:
-            errors.append("registered learner replacement did not advance its durable fence")
-
     per_update_tokens = (
         expected_inner_steps
         * int(config["training"]["gradient_accumulation_steps"])
@@ -700,7 +714,7 @@ def validate_run(
     rollup = rollups[0] if len(rollups) == 1 else None
     balance = _token_balance(rollup)
     receipt_processed = sum(int(row["processed_tokens_this_cycle"]) for row in receipts)
-    registered_fault = expected_replaced_learner is not None or expected_syncer_epochs > 1
+    registered_fault = fault_scenario != "none"
     dropped_updates = [row for row in updates if row["status"] == "dropped"]
     if not registered_fault:
         receipt_proposals = {
@@ -755,6 +769,14 @@ def validate_run(
     learner_attestations = [row for row in attestations if row.get("actor_kind") == "learner"]
     syncer_attestations = [row for row in attestations if row.get("actor_kind") == "syncer"]
     contributor_ids = {row.get("actor_id") for row in learner_attestations}
+    attested_learner_attempts = {
+        (str(row["actor_id"]), str(row["attempt_id"])) for row in learner_attestations
+    }
+    expected_learner_attempts = {
+        (str(row["learner_id"]), str(row["attempt_id"])) for row in bindings
+    } | {(str(row["learner_id"]), str(row["attempt_id"])) for row in binding_history}
+    attested_syncer_owners = {str(row["actor_id"]) for row in syncer_attestations}
+    expected_syncer_owners = {str(row["owner_id"]) for row in epochs}
     hosts = {str(row.get("hostname")) for row in attestations}
     pbs_job_id = os.environ.get("PBS_JOBID")
     nodes = _pbs_nodes()
@@ -768,8 +790,12 @@ def validate_run(
         errors.append("an actor attestation has an invalid checksum or run identity")
     if expected_contributor_ids != contributor_ids:
         errors.append("learner attestations do not cover every contributor")
-    if len(syncer_attestations) != expected_syncer_epochs:
+    if attested_learner_attempts != expected_learner_attempts:
+        errors.append("learner attestations do not match exact durable binding attempts")
+    if len(syncer_attestations) != syncer_epoch_count:
         errors.append("syncer attestations do not cover every expected candidate")
+    if attested_syncer_owners != expected_syncer_owners:
+        errors.append("syncer attestations do not match exact durable epoch owners")
     if len(hosts) != expected_hosts:
         errors.append(f"attested topology used {len(hosts)} hosts, expected {expected_hosts}")
     if len(nodes) != expected_hosts or set(nodes) != hosts:
@@ -778,28 +804,28 @@ def validate_run(
         errors.append("actor attestations are not bound to the current full PBS job ID")
 
     replacement_evidence: dict[str, Any] | None = None
-    if expected_replaced_learner is not None:
+    if replacement_learner is not None:
         replacement_path = log_root / "learner_replacement.json"
         if not replacement_path.is_file():
             errors.append("registered learner replacement evidence is missing")
         else:
             replacement_evidence = _read_json(replacement_path)
             current = next(
-                (row for row in bindings if row["learner_id"] == expected_replaced_learner),
+                (row for row in bindings if row["learner_id"] == replacement_learner),
                 None,
             )
             old_history = next(
                 (
                     row
                     for row in binding_history
-                    if row["learner_id"] == expected_replaced_learner
+                    if row["learner_id"] == replacement_learner
                     and int(row["binding_generation"])
                     == int(replacement_evidence.get("old_binding_generation", -1))
                 ),
                 None,
             )
             if (
-                replacement_evidence.get("learner_id") != expected_replaced_learner
+                replacement_evidence.get("learner_id") != replacement_learner
                 or int(replacement_evidence.get("injected_exit_status", 0)) == 0
                 or current is None
                 or old_history is None
@@ -812,7 +838,7 @@ def validate_run(
                 errors.append("learner replacement evidence does not match durable binding history")
 
     takeover_evidence: dict[str, Any] | None = None
-    if expected_syncer_epochs > 1:
+    if syncer_epoch_count > 1:
         takeover_path = log_root / "syncer_takeover.json"
         if not takeover_path.is_file():
             errors.append("registered syncer takeover evidence is missing")
@@ -885,6 +911,7 @@ def validate_run(
         "gate": gate,
         "experiment_id": experiment_id,
         "requirements_covered": [requirement_id],
+        "fault_scenario": fault_scenario,
         "run_root": str(run_root),
         "source_identity": source,
         "config_schema_identity": {
@@ -1010,12 +1037,6 @@ def _positive_integer(value: str) -> int:
     return parsed
 
 
-def _syncer_epoch_count(value: str) -> int:
-    parsed = _positive_integer(value)
-    _registered_epoch_states(parsed)
-    return parsed
-
-
 def _diagnostic_artifact(
     args: argparse.Namespace,
     exc: Exception,
@@ -1040,6 +1061,7 @@ def _diagnostic_artifact(
         "gate": args.gate,
         "experiment_id": args.experiment_id,
         "requirements_covered": [args.requirement_id],
+        "fault_scenario": args.fault_scenario,
         "run_root": str(args.run_root.resolve()),
         "source_identity": source,
         "config_schema_identity": None,
@@ -1071,6 +1093,7 @@ _REQUIRED_ARTIFACT_FIELDS = {
     "gate",
     "experiment_id",
     "requirements_covered",
+    "fault_scenario",
     "source_identity",
     "config_schema_identity",
     "protocol_schema_identity",
@@ -1150,8 +1173,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-inner-steps", type=_positive_integer, required=True)
     parser.add_argument("--expected-contributors", type=_positive_integer, required=True)
     parser.add_argument("--expected-hosts", type=_positive_integer, required=True)
-    parser.add_argument("--expected-syncer-epochs", type=_syncer_epoch_count, default=1)
-    parser.add_argument("--expected-replaced-learner", type=_safe_identifier)
+    parser.add_argument(
+        "--fault-scenario",
+        choices=("none", "learner_replacement", "syncer_takeover"),
+        required=True,
+    )
     parser.add_argument("--blocked-reason")
     parser.add_argument("--output", type=Path, required=True)
     return parser
@@ -1189,8 +1215,7 @@ def main(argv: list[str] | None = None) -> None:
                 expected_inner_steps=args.expected_inner_steps,
                 expected_contributors=args.expected_contributors,
                 expected_hosts=args.expected_hosts,
-                expected_syncer_epochs=args.expected_syncer_epochs,
-                expected_replaced_learner=args.expected_replaced_learner,
+                fault_scenario=args.fault_scenario,
             )
         except GatePrerequisiteUnavailable as exc:
             payload = _diagnostic_artifact(args, exc, status="BLOCKED")
