@@ -786,6 +786,9 @@ def test_terminal_zero_cycle_ack_requires_no_receipt_and_preserves_zero_gap(
         assert summary.hard_crash_gap_tokens_upper_bound == 0
         assert summary.balance == 0
         assert leader.finalize_terminal(command_id="finalize", reason="done").value == "finalized"
+        terminal = authority.read.terminal_record()
+        assert terminal is not None
+        assert terminal["direct_weight_tokens_applied"] == 0
 
 
 def test_terminal_close_snapshot_cannot_be_rewritten_by_a_second_command(

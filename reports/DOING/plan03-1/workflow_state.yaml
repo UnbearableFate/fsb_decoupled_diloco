@@ -4,9 +4,9 @@ branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P3-functional-faults
 work_unit_id: P3-W4-learner-replacement-terminal-total-remediation
-state: TEST_REMEDIATION
+state: TEST_REVIEW_TARGET
 base_commit: 4ebee6339fb76f63127874c655d7b109b2ec0b39
-target_commit: 36987b41daa67558ff83024abb282122f40065bf
+target_commit: null
 formal_source_commit: null
 formal_source_fingerprint: null
 experiment_id: p3-learner-replacement-01
@@ -51,4 +51,4 @@ external_review:
   status: skipped-by-user
 open_blocking_findings:
   - P3-TAT-001
-allowed_next_action: fix_zero_work_terminal_rollup_semantics
+allowed_next_action: codex_rereview_p3_terminal_applied_total_remediation

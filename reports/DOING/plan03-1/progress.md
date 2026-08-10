@@ -609,3 +609,18 @@
   remain valid.
 - Verdict: `CHANGES_REQUIRED`; external review remains skipped. Transition:
   `TEST_REVIEW_TARGET` -> `TEST_REMEDIATION`.
+
+## 2026-08-10T19:29:09+09:00 — P3 zero-work terminal finding remediated
+
+- `finalize_terminal` now applies the existing ledger read contract inside its
+  fenced transaction: an absent lazily materialized rollup is exactly zero
+  applied and zero outstanding work; a present rollup supplies the durable
+  all-history values. Nonzero outstanding work still blocks finalization.
+- The current zero-cycle test now requires persisted terminal applied work to
+  equal zero. Together with the archive-before-terminal assertion, the tests
+  cover both sparse-zero and pruned-positive ledger states.
+- Login-safe formatting, lint, syntax, JSON and whitespace checks pass. Freeze
+  the continuous remediation target and rerun the mandatory Codex incremental
+  review before any compute test; `P3-TAT-001` remains open until that verdict.
+- Transition: `TEST_REMEDIATION` -> `TEST_REVIEW_TARGET`; external review is
+  skipped under user direction.
