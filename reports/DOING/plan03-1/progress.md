@@ -496,3 +496,16 @@
 - Transition: `TARGETED_REMEDIATION` -> `TEST_REVIEW_TARGET`. Freeze this
   continuous target and complete mandatory Codex critical-incremental review
   before any compute test.
+
+## 2026-08-10T19:19:00+09:00 — P3 Checker remediation APPROVE
+
+- Frozen continuous target:
+  `a040cb9c9a073b87a90cdc467dc1c04f72e16ca0`; base is the exact clean source
+  used by failed job `2519662.opbs`.
+- Mandatory Codex review traced learner attempts through receipt/proposal
+  ingestion, supersession, terminal adjudication, token rollup and Checker
+  projection. It confirmed the failure was a total-attempt/committed-work
+  ontology error and that the replacement oracle remains false-PASS resistant.
+- Verdict: `APPROVE`; external review remains skipped under user direction.
+  Acquire a main-agent-held one-node allocation and run the fixed validation
+  producer before submitting another five-node scenario.
