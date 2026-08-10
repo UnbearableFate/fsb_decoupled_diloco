@@ -1,138 +1,33 @@
-# 实施记录与失败升级规则
+# Plan 构建与实施入口规则
 
-本目录中的实施计划在执行时，需要同步维护可供人工审阅的实施记录。所有记录都应位于仓库根目录的 `reports/DOING/` 下；其中本文件规定的 phase/plan 双模型审查报告使用 `reports/DOING/code_review/`。不要写回计划正文，也不要依赖终端滚屏作为唯一证据。
+本文件递归适用于 `plans/` 下的计划、设计、矩阵和实施记录。它只保留必须自动加载的入口约束；plan 构建方法位于 [`plans_create_guide.md`](plans_create_guide.md)，完整实施流程位于 [`workflow.md`](workflow.md)。
 
-## 报告路径与文件名
+## 强制加载
 
-每份计划使用计划文件名作为稳定标识：
+- 新建或实质修订 plan、design、requirement matrix 前，必须完整读取并遵循 `plans/plans_create_guide.md`。
+- 实施、测试、审查、迁移或关闭 `plans/DOING/**` 下任何 plan 前，必须完整读取并遵循 `plans/workflow.md`。
+- 同时涉及 plan 构建和实施时，两份文件都必须读取；不得只依据 plan 正文、旧报告或记忆推断规则。
 
-```text
-plans/DOING/<plan-id>.md
-    → reports/DOING/<plan-id>/
-```
+约束优先级如下：
 
-例如，`plans/DOING/01.md` 对应：
+1. 仓库根目录 `AGENTS.md`；
+2. 本文件；
+3. `plans/plans_create_guide.md`（构建/修订时）与 `plans/workflow.md`（实施时）；
+4. 具体 plan、design、requirement matrix 和 phase 说明。
 
-```text
-reports/DOING/01/
-├── progress.md
-├── failures.md
-├── code_review.md
-└── artifacts/
-```
+Plan 可以增加更严格的测试或验收条件，但不能静默削弱上述规则。若 plan 与 workflow 冲突，停止冲突动作，在对应报告中记录差异，并以更严格且不违反上级规则的一方为准；需要扩大权限或降低门禁时必须由用户明确决定。
 
-- `progress.md`：记录已经通过的关联测试组、实验结果以及本轮新增或修改内容的简报。
-- `failures.md`：按时间顺序记录每次失败、初步或确认的原因，以及下一次修改计划。
-- `code_review.md`：记录连续三次失败后启动的全面代码审查、重新推导的实现逻辑和修订方案。
-- `artifacts/`：保存需要长期保留的原始日志、结构化结果和检查输出。文件名采用 `YYYYMMDD-HHMMSS_<experiment-id>_<result>.<ext>`，其中 `result` 使用 `pass`、`fail` 或 `review`。
+## 职责边界
 
-同一文件应持续追加，不得覆盖此前记录。体积较大的训练产物、模型和重复日志保留在原 run 目录中，报告只记录其绝对路径、run ID、PBS job ID 和必要摘要。不得在报告中写入 token、凭据或其他秘密信息。
+- Plan 定义需要完成的功能、代码、测试、实验和验收条件。
+- `plans/plans_create_guide.md` 定义如何从当前代码和证据构建可实施、可验证、可审计且成本合理的 plan。
+- `plans/workflow.md` 定义如何实施 plan，包括记录、失败升级、多智能体审查、Miyabi/PBS 路由、phase/plan 完成门禁和 artifact 清理。
+- Codex/GPT 主实例是唯一实现协调者和主工作树 writer。外部 reviewer 只能读取冻结目标并返回报告，不得修改实现、测试、配置、计划、Git 状态、scheduler 状态或 run 数据。
+- 所有外部 reviewer agent 进程必须通过 `scripts/miyabi/run_multi_agent_review.pbs` 在 Miyabi compute node 上运行。Miyabi login 节点只允许准备 prompt、运行静态 shell 检查、`qsub`、`qstat` 和读取结果；不得直接启动 Claude/OpenCode review 实例。
 
-## 关联测试通过后的记录
+## 记录与完成声明
 
-一组围绕同一改动或同一不变量的关联测试全部通过后，在继续下一工作单元前向 `progress.md` 追加一条记录。记录至少包括：
-
-- 时间、工作单元或 experiment ID；
-- 本轮验证的目标和范围；
-- 新增或修改内容的简要说明；
-- 实际执行的测试命令、关键配置和运行环境；
-- 通过结果、关键指标和对应 artifact 路径；
-- 尚未覆盖的风险、后续工作或明确的非目标。
-
-不得以单个偶然通过的测试替代关联测试组结论。只有能够共同证明目标行为的相关测试均通过后，才将该工作单元记为通过。
-
-## 测试失败后的记录
-
-任何测试或实验失败后，在进行下一轮针对性修改前向 `failures.md` 追加一条记录。记录至少包括：
-
-- 时间、experiment ID 和该实验的连续失败次数；
-- 完整命令、配置、run ID、PBS job ID 和环境信息；
-- 预期行为、实际行为和最小可复现症状；
-- 原始日志或结构化结果的路径；
-- 已确认的失败原因；若尚未确认，应明确区分事实与假设；
-- 下一轮准备修改的逻辑、预期影响和用于证伪该修改的新测试。
-
-失败记录不得只写“测试失败”或只保留异常末行。应保留足够信息，使没有参与当次运行的人能够复现问题并理解下一步计划。
-
-## 连续三次失败后的升级
-
-同一实验连续失败三次后，停止继续进行局部试错式修改，并在 `code_review.md` 中启动一次只包含codex+gpt的全面代码审查。完成审查和实施逻辑重写前，不得提交同一实验的第四次运行。
-
-全面代码审查至少覆盖：
-
-- 三次失败的共同模式、差异和现有证据；
-- 从输入、状态转换、持久化、恢复到输出的完整数据流和控制流；
-- 相关不变量、SQLite transaction、文件发布顺序、GC 引用关系和进程生命周期；
-- 与问题相关的实现、测试、配置和 launcher，而不是只检查最后修改的函数；
-- 当前测试是否验证了正确的不变量，是否存在错误假设或遗漏的反例；
-- 至少一个与原实现思路不同的候选解释或实现方案；
-- 重新整理后的根因判断、修订实施逻辑、影响范围和新的 RED 测试；
-- 下一次实验的明确通过条件，以及为什么新方案能够避免前三次失败。
-
-“同一实验”指验证目标、核心配置和目标不变量相同的测试或运行；仅修改随机种子、超时、日志级别或无关参数，不视为新实验。连续失败计数在该实验通过后归零。若确实改变了核心假设或验证目标，应先在 `code_review.md` 或 `failures.md` 中记录边界变化和理由，再使用新的 experiment ID。
-
-## 记录质量
-
-所有报告使用清晰、可审阅的 Markdown。事实、推断和后续计划应分开表述；测试结果应能追溯到命令和 artifact；代码已修改但尚未验证时，不得在 `progress.md` 中记为完成。实施代码、测试、计划与报告之间出现不一致时，应先修正记录或说明差异，再继续扩大实验规模。
-
-## Git 分支与完成门禁
-
-本节是执行 `plans/DOING/` 下计划时的完成门禁。Phase 或 plan 在以下流程结束前只能视为完成候选；门禁通过前，不得宣布完成或开始下一 phase。
-
-连续三次失败后产生的 `reports/DOING/<plan-id>/code_review.md` 是失败诊断记录，不能替代完成门禁要求的 `reports/DOING/code_review/<plan-id>/<phase_id>/` 双模型独立报告；完成门禁报告也不能替代失败诊断记录。
-
-### 冻结审查目标
-
-1. 每个新 plan 必须在独立 Git branch 上执行。
-2. 实现和初始关联测试组通过后，创建 review-target commit。审查覆盖的源代码和测试树必须与该 commit 一致；记录并排除审查范围外的既有改动。
-3. 每份审查报告必须记录完整的`base commit ID`和`target commit ID`。同一phase审查流的首次审查，base使用上一phase-final commit；第一phase使用plan branch point。后续新审查必须以上一次审查的target作为本次base，以当前最新冻结commit作为target，只审查这段连续增量；同一target的重试仍使用原base/target。plan-completion使用下文单独规定的全量current-state审查。
-4. 启动审查前确认base是target的ancestor；除同一target的显式重试外，禁止跳过、重叠或倒退审查范围。工作树中的未提交修改不属于target。
-5. `<plan-id>` 使用不含 `.md` 的计划文件名；`<phase_id>` 使用计划中稳定的 phase 标识；整个 plan 的审查使用 `plan-complete`。
-
-### 使用 `claude -p` 运行双模型独立审查
-
-从仓库根目录把占位符替换为实际值后执行：
-
-```bash
-claude -p \
-  --model claude-opus-5 \
-  --session-id <new-uuid> \
-  --permission-mode bypassPermissions \
-  --dangerously-skip-permissions \
-  --output-format json \
-  '以commit <base-commit>为基线，审核commit <target-commit>相对该基线的完整代码修改（等价于git diff <base-commit> <target-commit>），覆盖相关源代码、测试、配置、PBS脚本、launcher、Checker和文档。将审核结果写入 <absolute-repo>/reports/DOING/code_review/<plan-id>/<phase-id>/claude-opus-5_<target-commit>.md，并在报告开头记录完整的base和target commit ID。按 Critical/High/Medium/Low 列出finding、证据、文件行号、修复建议和缺失测试，检查correctness、回归风险、错误处理、并发/持久化不变量、测试覆盖及plan验收条件，最后给出 APPROVE 或 CHANGES_REQUIRED；没有finding时列明检查范围。你是只读reviewer，除上述报告外不得修改任何文件或Git状态，不得qsub/qdel、删除run数据、commit、push或创建PR，也不得在报告中写入secret、token、凭据或完整环境变量。'
-```
-
-若因账户会话限额而无法进行claude code 审查则跳过,并不影响任务进行.
-
-Codex同时独立审查同一`<base-commit>..<target-commit>`，并在读取Claude报告前保存自己的报告到同一目录。完成报告不可覆盖；重跑使用`-retryN`新文件。核验JSON中的实际模型和session ID；明确的Claude会话额度耗尽记为`skipped-session-limit`，不重试、不伪造报告且不阻断后续任务，Codex审查仍为必做门禁。其他模型/session/fallback/认证/权限错误均为`blocked`。
-
-### 完整 plan 结束后的全量代码审查
-
-一个plan的全部phase、Checker和文档同步完成后仍只是完成候选；进入下一个plan前，必须对最新冻结target执行一次多模型全量审查。报告仍记录base和target：base取上一次已完成审查的target（没有则取plan branch point），target取当前最新冻结commit；这里base只用于记录审查连续性，审查范围不是diff，而是target中`fs_diloco/`全部tracked代码的当前状态。
-
-Claude沿用上面的`claude -p`参数，`<phase-id>`使用`plan-complete`，prompt替换为：
-
-```text
-对commit <target-commit>中的fs_diloco/全部tracked代码做current-state完整审查。报告中记录base commit <base-commit>和target commit <target-commit>，但不要把审查限制在两者的diff；逐模块检查target当前实现，并列出覆盖的文件/模块清单。除了逻辑错误和回归风险，还要审查整体架构、分层与依赖方向、抽象和API边界、重复实现、可维护性、错误处理、并发与持久化不变量、恢复与兼容性、性能、可测试性、死代码以及文档漂移。按Critical/High/Medium/Low列出问题、证据、文件行号、影响、修改建议和缺失测试，最后给出APPROVE或CHANGES_REQUIRED。将报告写入<absolute-repo>/reports/DOING/code_review/<plan-id>/plan-complete/claude-opus-5_<target-commit>.md。你是只读reviewer，除该报告外不得修改文件或Git状态，不得qsub/qdel、删除run数据、commit、push或创建PR，也不得写入secret、token、凭据或完整环境变量。
-```
-
-Codex必须在读取Claude报告前，对同一target和同一全量范围完成独立审查。之后由Codex汇总所有可用报告，去重并处理冲突，在`reports/DOING/<plan-id>/plan-complete-remediation.md`形成按优先级和依赖排序的修改计划；每条finding必须标记为`fixed`、`rejected-with-evidence`或`deferred-with-justification`，并给出修改范围、RED测试和验证方法。Codex随后按计划修缮代码、补充测试、运行受影响的完整验证并同步文档；若产生代码修改，再以全量审查target为base、修缮后的最新冻结commit为target执行一次增量多模型审查。全量审查、意见汇总、必要修复、增量复审和验证完成前，不得把plan标为完成或开始下一个plan。
-
-### 处置问题并验证
-
-1. 通常只有两份报告都完成后，Codex 才能一起读取它们并修改代码；若 Codex 之外的 reviewer 已按上文记为 `skipped-session-limit`，Codex 报告完成后即可继续。Codex 必须在对应的 `reports/DOING/<plan-id>/progress.md` 或 `failures.md` 中，将所有实际产生的 finding 处置为 `fixed`、`rejected-with-evidence` 或 `deferred-with-justification`，并记录被跳过 reviewer 的调用身份、可核验限额原因和不阻断结论。
-2. `Critical` 和 `High` findings 阻止完成，必须修复。`Medium` findings 必须修复，或在证据、影响和后续负责人明确的情况下延期。`Low` findings 可以记录为 follow-up。
-3. 对每个接受的行为缺陷，Codex 必须新增或更新一个在修复前会失败的测试，然后重新运行覆盖所有修复改动的测试。若修复触及 phase 的关键不变量，重新运行该 phase 的完整关联测试组。在 `reports/DOING/<plan-id>/` 下记录准确命令、解析后的配置、结果和保留的 artifact 路径。
-4. 修复和测试通过后，创建 phase-final 或 plan-final commit。审查修复 commit 不会递归触发另一轮完整双模型审查；但若修复改变公共接口、持久化格式、并发协议、安全边界或其他关键不变量，应创建新的 review-target commit，并针对它重复本门禁。
-5. 失败或不完整的测试会使 phase 或 plan 保持未完成，并遵循本文件中的失败记录和清理规则。
-
-## Test Artifact Retention and Cleanup
-
-After each test or experiment reaches a terminal state, reduce the run output before starting the next work unit:
-
-1. Persist the core evidence first in the applicable `reports/DOING/<plan-id>/` record. Keep the exact command and resolved configuration, source identity, run ID, PBS job ID, structured Checker result, final or summary metrics, and paths needed to audit the result.
-2. For a successful test, retain only the smallest representative logs and artifacts needed to prove the tested invariant. For a failed test, retain the complete error log, the minimal reproduction evidence, and any artifact still needed for root-cause analysis.
-3. Delete redundant files produced solely by that completed test, including duplicate or intermediate checkpoints, temporary/staging files, caches, superseded raw telemetry, repeated successful per-rank logs, orphan payloads, and other run-generated files whose information is already captured by the retained summary or manifest.
-4. Resolve and inventory the exact cleanup targets before deletion. Limit cleanup to the completed test's known run directory; never delete files from a live, queued, or resumable run, the current database/checkpoint needed for recovery, source/configuration files, reports, unresolved failure evidence, pre-existing user data, or any path whose ownership is uncertain.
-5. Write, use, and extend fs_diloco/tools/clean_run.py to better clean up generated runs.
+- 实施记录写入 `reports/DOING/<plan-id>/`，多智能体审查写入 `reports/DOING/code_review/<plan-id>/`；不得写回 plan 正文。
+- 未通过 `plans/workflow.md` 对应状态门禁前，不得宣布 work unit、phase 或 plan 完成，也不得开始下一 phase。
+- Plan 完成后才可把 plan/report 移入 `plans/DONE/` 和 `reports/checked/`；移动提交不得改写已冻结 artifact 内容或丢失 evidence 路径映射。
+- 正在执行的旧 plan 采用新 workflow 时必须先记录 migration checkpoint；不得把新增加的前置步骤倒推为已完成，也不得无证据重做或改写历史结果。

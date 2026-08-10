@@ -24,3 +24,57 @@ When a code change has been verified by a 9-node experiment whose workload excee
 ## Subagent Usage
 
 Use subagents only when the task materially benefits from parallel execution. Avoid delegation for routine sequential work, and do not run more than two subagents concurrently within the same task.
+
+## 最简设计&实现原则
+请始终以“当前最新设计的最简洁、最直接、最一致的实现”为唯一目标。
+
+本任务不要求、也不允许保留任何向后兼容性。旧代码、旧设计、旧接口、旧配置、旧数据格式以及历史行为，只要不再属于当前设计，都应彻底删除，而不是兼容、包装、保留或标记 deprecated。
+
+Do not optimize for minimizing the diff. Optimize for minimizing the complexity of the final repository.
+
+具体要求：
+
+1. 只实现当前最新设计
+    * 以当前明确的设计和需求为唯一 source of truth。
+    * 不要因为仓库中已有旧实现、旧测试或旧配置而限制新设计。
+    * 如果旧设计与当前设计冲突，直接以当前设计替换旧设计。
+2. 不保留 backward compatibility
+    * 不要保留旧 API、旧函数签名、旧 CLI 参数、旧配置项、旧环境变量、旧文件格式或旧行为。
+    * 不要添加 compatibility layer、adapter、shim、migration wrapper、fallback path 或 legacy mode。
+    * 不要为了让旧调用方式继续工作而增加额外分支。
+3. 主动删除 obsolete 内容
+    * 删除已经没有必要的旧功能代码。
+    * 删除只服务于旧设计的 helper、wrapper、abstraction 和 compatibility code。
+    * 删除针对旧行为、旧接口、旧配置的测试。
+    * 删除 obsolete fixtures、mock、test utilities。
+    * 删除旧配置项、配置模板、示例配置、CLI 参数和环境变量。
+    * 删除已经不适用于当前实现的文档、注释和示例。
+    * 删除 dead code、unused imports、unused dependencies 和不再需要的 feature flags。
+4. 测试只验证当前设计
+    * 不要修改新实现去满足旧测试。
+    * 如果测试验证的是已经废弃的行为，应删除或重写该测试。
+    * 测试应描述当前系统应该如何工作，而不是过去如何工作。
+5. 配置和接口保持唯一
+    * 对同一个概念只保留一种当前推荐的表达方式。
+    * 不要同时支持 old_name/new_name、old_format/new_format、old_path/new_path。
+    * 不要通过 alias 或 fallback 同时维持两套接口。
+6. 优先降低复杂度
+    * 如果删除兼容性代码可以显著简化架构，应直接删除。
+    * 优先选择更少的状态、更少的分支、更少的抽象层和更明确的数据流。
+    * 不要为了“以后可能有用”而保留当前不需要的 abstraction 或 extension point。
+    * 不要为了最小化 diff 而保留不合理的旧结构；允许进行必要的重构。
+7. 不进行历史迁移支持
+    * 除非当前任务明确要求，否则不需要支持旧 checkpoint、旧数据库 schema、旧 metadata、旧配置文件或旧运行目录。
+    * 可以假设用户会从当前版本的干净环境开始运行。
+8. 完成后进行 repository-wide cleanup
+    * 搜索整个仓库，确认没有遗留对旧接口、旧配置、旧名称和旧设计的引用。
+    * 确认代码、测试、配置、脚本、文档和示例彼此一致。
+    * 如果发现某段内容存在的唯一理由是兼容历史版本，应删除它。
+
+判断原则：
+
+当你在“保留旧实现以兼容历史行为”和“删除旧实现以得到更简单、更一致的当前实现”之间做选择时，始终选择后者。
+
+不要把 backward compatibility 当成优点。在这个项目当前阶段，历史兼容性属于不必要的技术债务。
+
+最终代码应看起来像“这个项目从一开始就是按照当前设计实现的”，而不是“在旧设计上不断打补丁演化到当前状态”。
