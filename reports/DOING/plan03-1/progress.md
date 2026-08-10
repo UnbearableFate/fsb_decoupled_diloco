@@ -118,3 +118,21 @@
 - Initial scheduler metadata confirms the exact base/target/prompt identities,
   literal group `xg24i002` and running state. Only monitoring is allowed until
   the job reaches terminal orchestration state.
+
+## 2026-08-10T17:37:12+09:00 — TEST_REMEDIATION terminal-control closure
+
+- Reviewer job `2518777.opbs` reached terminal orchestration state on `mg0006`;
+  all four read-only snapshot digests remained unchanged. No invocation
+  produced a valid report: Claude authentication was expired, while GLM,
+  DeepSeek and Kimi reached the registered 1500-second timeout without output.
+- The mandatory remediation review remains the controlling conclusion for
+  C1-C4/A1/A2/A4. No unavailable external invocation is counted as approval or
+  as a finding.
+- A subsequent coordinator inspection found two acceptance-boundary gaps in
+  the frozen target: the aggregate fixture hand-builds terminal controls that
+  the current publisher would never emit and the Checker does not validate
+  their exact schemas; the PBS early-exit test checks source text but does not
+  execute the EXIT trap.
+- Transition: `EXTERNAL_TEST_REVIEW` -> `TEST_REMEDIATION`. Runtime execution
+  remains blocked until C5-C6 are implemented and the new continuous target
+  completes another critical-incremental review.
