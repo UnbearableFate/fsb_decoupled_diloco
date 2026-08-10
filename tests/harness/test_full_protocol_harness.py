@@ -355,7 +355,15 @@ def test_aggregate_checker_mutations_change_acceptance_to_fail(
         archive.chmod(0o444)
     elif mutation == "exact_workload":
         with sqlite3.connect(paths.sqlite_db) as connection:
-            connection.execute("UPDATE cycle_receipts SET processed_tokens_this_cycle=15")
+            connection.execute(
+                "UPDATE cycle_receipts SET processed_tokens_this_cycle=15, "
+                "effective_tokens_this_cycle=15"
+            )
+            mutated_workload = connection.execute(
+                "SELECT processed_tokens_this_cycle, effective_tokens_this_cycle "
+                "FROM cycle_receipts"
+            ).fetchone()
+        assert mutated_workload == (15, 15)
     elif mutation == "publication_identity":
         weight = run_root / "weights/epochs/e1/v1.safetensors"
         weight.chmod(0o644)
@@ -370,6 +378,8 @@ def test_aggregate_checker_mutations_change_acceptance_to_fail(
     assert artifact["status"] == "FAIL"
     assert artifact["errors"]
     assert artifact["cleanup"]["eligible"] is False
+    if mutation == "exact_workload":
+        assert "at least one durable receipt has the wrong cycle workload" in artifact["errors"]
 
 
 def test_checker_parser_freezes_topology_workload_and_fault_oracles(tmp_path: Path) -> None:
