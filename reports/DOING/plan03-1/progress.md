@@ -843,3 +843,20 @@
 - Transition: `PREFORMAL_PLAN_CURRENT_STATE_REVIEW` -> `PLAN_REMEDIATION`.
   Implement the ordered remediation, freeze it, run affected focused tests and
   complete one-node validation, then perform a Codex incremental rereview.
+
+## 2026-08-10T20:56:08+09:00 — P4 preformal remediation frozen
+
+- Continuous remediation target:
+  `59abff8978f795e05cb35fc1bf8abb80a8a8bc1a`; rejected target
+  `1f02e7b7a4d96cbacca7451b8b902ceebb34de2e` is its verified ancestor.
+- P4-R2-F1 now gives contributor progress direct durable ownership of the last
+  planned update, advances the sole fresh authority schema to revision 10, and
+  has no migration or fallback path. P4-R2-F2 binds registered support to the
+  gate's own evidence paths and requires all U1 raw/JUnit files. P4-R2-F3
+  retains complete runtime evidence through completed checking and archive.
+- Login-safe Ruff format/lint, Python compilation, JSON/YAML parsing, PBS/shell
+  syntax, literal group checks and Git whitespace checks pass. Formal source
+  scopes are clean; no project runtime test ran on the login node.
+- Transition: `PLAN_REMEDIATION` -> `STAGED_TEST_EXECUTION`. Acquire one
+  confirmed Miyabi compute node, run the affected focused group, then run the
+  complete U1 producer from this exact source target.

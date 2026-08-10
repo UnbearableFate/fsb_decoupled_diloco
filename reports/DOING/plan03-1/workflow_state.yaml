@@ -3,13 +3,13 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P4-formal-and-docs
-work_unit_id: P4-W4-plan-remediation
-state: PLAN_REMEDIATION
+work_unit_id: P4-W5-remediation-candidate-validation
+state: STAGED_TEST_EXECUTION
 base_commit: e1f76a85f77c33765ebaaddb4828e40cc45d4d24
-target_commit: 1f02e7b7a4d96cbacca7451b8b902ceebb34de2e
+target_commit: 59abff8978f795e05cb35fc1bf8abb80a8a8bc1a
 formal_source_commit: null
 formal_source_fingerprint: null
-experiment_id: p4-candidate-validation-01
+experiment_id: p4-preformal-remediation-validation-01
 experiment_domain: harness
 failure_counters:
   "harness:p2-one-node-validation-01": 0
@@ -47,4 +47,4 @@ open_blocking_findings:
   - P4-R2-F1
   - P4-R2-F2
   - P4-R2-F3
-allowed_next_action: implement_and_freeze_preformal_remediation
+allowed_next_action: acquire_one_node_and_run_remediation_validation
