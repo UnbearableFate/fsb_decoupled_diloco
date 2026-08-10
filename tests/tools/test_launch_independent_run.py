@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -70,9 +71,12 @@ def test_launch_uses_one_syncer_and_scalar_learner_jobs(
         project_root=tmp_path,
         submit=False,
         allow_dirty_snapshot=False,
+        actor_queue="debug-g",
     )
 
     assert Path(result["syncer_qsub"][-1]).name == "run_syncer.pbs"
+    assert result["syncer_qsub"][result["syncer_qsub"].index("-q") + 1] == "debug-g"
+    assert all(command[command.index("-q") + 1] == "debug-g" for command in result["learner_qsubs"])
     assert {Path(command[-1]).name for command in result["learner_qsubs"]} == {"run_learner.pbs"}
     if mode == "static":
         assert len(result["learner_qsubs"]) == config.sync.num_learners
@@ -138,3 +142,78 @@ def test_submit_returns_every_scalar_actor_job_id(
     assert result["learner_job_ids"] == [
         f"job-{index}" for index in range(2, config.sync.num_learners + 2)
     ]
+    receipt = json.loads((tmp_path / "logs/submission_receipt.json").read_text(encoding="utf-8"))
+    assert receipt["submission_status"] == "submitted"
+    assert len(tuple((tmp_path / "logs/submission_receipts").glob("*.json"))) == (
+        1 + config.sync.num_learners
+    )
+
+
+def test_submission_receipts_are_create_only_and_preserve_partial_acceptance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config("static")
+    descriptor = {
+        "shared_root": config.run.shared_root,
+        "descriptor_sha256": "d" * 64,
+    }
+    monkeypatch.setattr(launch_independent_run, "resolve_config", lambda *args, **kwargs: config)
+    monkeypatch.setattr(
+        launch_independent_run, "bind_source_identity", lambda *_args, **_kwargs: {}
+    )
+    monkeypatch.setattr(
+        launch_independent_run,
+        "initialize_run",
+        lambda *args, **kwargs: {"descriptor": descriptor, "bootstrap": {}},
+    )
+    call_count = 0
+
+    def fake_qsub(command: list[str]) -> dict[str, object]:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 3:
+            return {"status": "failed", "returncode": 1, "stderr": "fixture rejection"}
+        return {"status": "submitted", "job_id": f"job-{call_count}"}
+
+    monkeypatch.setattr(launch_independent_run, "_qsub", fake_qsub)
+
+    result = launch_independent_run.launch(
+        config_path=tmp_path / "config.yaml",
+        run_id="run",
+        shared_root=config.run.shared_root,
+        project_root=tmp_path,
+        submit=True,
+        allow_dirty_snapshot=False,
+        syncer_walltime="00:10:00",
+        learner_walltime="00:10:00",
+        log_root=tmp_path / "logs",
+        actor_queue="debug-g",
+    )
+
+    assert result["submission_status"] == "partial"
+    assert result["accepted_learner_job_ids"] == ["job-2"]
+    stages = sorted((tmp_path / "logs/submission_receipts").glob("*.json"))
+    assert [path.name for path in stages] == [
+        "000-syncer.json",
+        "001-learner_000.json",
+        "002-learner_001.json",
+    ]
+    final_path = tmp_path / "logs/submission_receipt.json"
+    final = json.loads(final_path.read_text(encoding="utf-8"))
+    assert final["submission_status"] == "partial"
+    assert final["accepted_learner_job_ids"] == ["job-2"]
+    with pytest.raises(FileExistsError):
+        launch_independent_run._publish_submission_receipt(final_path, final)
+    with pytest.raises(FileExistsError):
+        launch_independent_run.launch(
+            config_path=tmp_path / "config.yaml",
+            run_id="run",
+            shared_root=config.run.shared_root,
+            project_root=tmp_path,
+            submit=True,
+            allow_dirty_snapshot=False,
+            syncer_walltime="00:10:00",
+            learner_walltime="00:10:00",
+            log_root=tmp_path / "logs",
+            actor_queue="debug-g",
+        )

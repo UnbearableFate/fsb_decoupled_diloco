@@ -356,7 +356,7 @@ def _evidence_paths(
         candidates.extend(sorted(attestation_root.rglob("*.json")))
     if log_root.is_dir():
         candidates.extend(
-            path for path in log_root.iterdir() if path.is_file() and not path.is_symlink()
+            path for path in log_root.rglob("*") if path.is_file() and not path.is_symlink()
         )
     candidates.extend(
         sorted((run_root / "control/syncer_epochs").glob("e*_*/terminal/stop_*.json"))
@@ -390,6 +390,7 @@ def validate_run(
     expected_contributors: int,
     expected_hosts: int,
     expected_scheduler_jobs: int,
+    expected_actor_queue: str | None,
     fault_scenario: str,
     syncer_takeover_boundary_version: int,
 ) -> dict[str, Any]:
@@ -837,6 +838,8 @@ def validate_run(
             if (
                 receipt.get("submission_status") != "submitted"
                 or receipt.get("membership_mode") != "static"
+                or not expected_actor_queue
+                or receipt.get("actor_queue") != expected_actor_queue
                 or not isinstance(syncer_job_id, str)
                 or not isinstance(learner_job_ids, list)
                 or len(learner_job_ids) != expected_contributors
@@ -865,6 +868,7 @@ def validate_run(
                         "actor attestations do not match the independent submission receipt"
                     )
                 launch_topology = {
+                    "actor_queue": receipt["actor_queue"],
                     "syncer_job_id": syncer_job_id,
                     "learner_job_ids": learner_job_ids,
                 }
@@ -1051,6 +1055,7 @@ def validate_run(
         "topology": {
             "expected_hosts": expected_hosts,
             "expected_scheduler_jobs": expected_scheduler_jobs,
+            "expected_actor_queue": expected_actor_queue,
             "attested_hosts": sorted(hosts),
             "attested_scheduler_job_ids": sorted(scheduler_job_ids),
             "learner_attestation_count": len(learner_attestations),
@@ -1254,6 +1259,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-contributors", type=_positive_integer, required=True)
     parser.add_argument("--expected-hosts", type=_positive_integer, required=True)
     parser.add_argument("--expected-scheduler-jobs", type=_positive_integer, required=True)
+    parser.add_argument("--expected-actor-queue", type=_safe_identifier)
     parser.add_argument(
         "--fault-scenario",
         choices=("none", "learner_replacement", "syncer_takeover"),
@@ -1302,6 +1308,7 @@ def main(argv: list[str] | None = None) -> None:
                 expected_contributors=args.expected_contributors,
                 expected_hosts=args.expected_hosts,
                 expected_scheduler_jobs=args.expected_scheduler_jobs,
+                expected_actor_queue=args.expected_actor_queue,
                 fault_scenario=args.fault_scenario,
                 syncer_takeover_boundary_version=args.syncer_takeover_boundary_version,
             )

@@ -301,6 +301,7 @@ def _build_valid_checker_fixture(
             {
                 "submission_status": "submitted",
                 "membership_mode": "static",
+                "actor_queue": "debug-g",
                 "syncer_job_id": scheduler_job_id,
                 "learner_job_ids": [learner_scheduler_job_id],
             },
@@ -372,6 +373,7 @@ def _build_valid_checker_fixture(
         "1",
         "--expected-scheduler-jobs",
         "2" if independent_scheduler_jobs else "1",
+        *(["--expected-actor-queue", "debug-g"] if independent_scheduler_jobs else []),
         "--fault-scenario",
         fault_scenario,
         "--syncer-takeover-boundary-version",
@@ -451,6 +453,7 @@ def test_aggregate_checker_accepts_independent_actor_jobs(tmp_path: Path) -> Non
     ]
     assert artifact["environment"]["pbs_job_id"] == "fixture-checker.opbs"
     assert artifact["environment"]["launch_topology"] == {
+        "actor_queue": "debug-g",
         "syncer_job_id": "fixture-syncer.opbs",
         "learner_job_ids": ["fixture-learner.opbs"],
     }
@@ -475,6 +478,24 @@ def test_aggregate_checker_rejects_submission_receipt_mismatch(tmp_path: Path) -
     assert (
         "actor attestations do not match the independent submission receipt" in artifact["errors"]
     )
+
+
+def test_aggregate_checker_rejects_actor_queue_mismatch(tmp_path: Path) -> None:
+    _run_root, output, command, environment = _build_valid_checker_fixture(
+        tmp_path,
+        independent_scheduler_jobs=True,
+    )
+    receipt_path = tmp_path / "logs/submission_receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["actor_queue"] = "regular-g"
+    receipt_path.chmod(0o644)
+    receipt_path.write_text(json.dumps(receipt) + "\n", encoding="utf-8")
+
+    completed, artifact = _run_checker(command, environment, output)
+
+    assert completed.returncode == 1
+    assert artifact["status"] == "FAIL"
+    assert "independent submission receipt is not complete and exact" in artifact["errors"]
 
 
 @pytest.mark.parametrize(
@@ -789,6 +810,7 @@ def test_checker_parser_freezes_topology_workload_and_fault_oracles(tmp_path: Pa
         "expected_contributors": 4,
         "expected_hosts": 5,
         "expected_scheduler_jobs": 1,
+        "expected_actor_queue": None,
         "fault_scenario": "learner_replacement",
         "syncer_takeover_boundary_version": 2,
         "blocked_reason": None,
@@ -1161,11 +1183,12 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     assert "fs_diloco.tools.launch_independent_run" in independent_launcher
     assert '--log-root "$LOG_ROOT"' in independent_launcher
     assert '--actor-queue "$ACTOR_QUEUE"' in independent_launcher
-    assert 'cp -- "$LAUNCH_RECEIPT" "$LOG_ROOT/init_run.json"' in independent_launcher
+    assert 'ln -- "$LAUNCH_RECEIPT" "$LOG_ROOT/init_run.json"' in independent_launcher
     independent_checker = (ROOT / "scripts/miyabi/check_independent_run.pbs").read_text(
         encoding="utf-8"
     )
     assert '--expected-scheduler-jobs "$EXPECTED_SCHEDULER_JOBS"' in independent_checker
+    assert '--expected-actor-queue "$EXPECTED_ACTOR_QUEUE"' in independent_checker
     assert "capture_source_identity.py" in independent_checker
     assert "trap publish_blocked_on_exit EXIT" in independent_checker
 

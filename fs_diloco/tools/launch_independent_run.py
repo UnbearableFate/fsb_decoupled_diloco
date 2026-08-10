@@ -75,15 +75,20 @@ def _qsub(command: list[str]) -> dict[str, Any]:
     return receipt
 
 
-def _write_submission_receipt(path: Path, payload: dict[str, Any]) -> None:
+def _publish_submission_receipt(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(temporary_name)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, sort_keys=True, indent=2)
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary_name, path)
+            os.fchmod(handle.fileno(), 0o444)
+            os.fsync(handle.fileno())
+        os.link(temporary, path)
+        temporary.unlink()
         directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(directory_fd)
@@ -91,7 +96,7 @@ def _write_submission_receipt(path: Path, payload: dict[str, Any]) -> None:
             os.close(directory_fd)
     except BaseException:
         try:
-            os.unlink(temporary_name)
+            temporary.unlink()
         except FileNotFoundError:
             pass
         raise
@@ -209,15 +214,17 @@ def launch(
     if submit:
         assert resolved_log_root is not None
         receipt_path = resolved_log_root / "submission_receipt.json"
+        stage_root = resolved_log_root / "submission_receipts"
         syncer_receipt = _qsub(syncer_command)
         result["syncer_submission"] = syncer_receipt
         if syncer_receipt["status"] != "submitted":
             result["submission_status"] = "failed"
-            _write_submission_receipt(receipt_path, result)
+            _publish_submission_receipt(stage_root / "000-syncer.json", result)
+            _publish_submission_receipt(receipt_path, result)
             return result
         result["syncer_job_id"] = syncer_receipt["job_id"]
         result["submission_status"] = "submitting"
-        _write_submission_receipt(receipt_path, result)
+        _publish_submission_receipt(stage_root / "000-syncer.json", result)
 
         learner_receipts: list[dict[str, Any]] = []
         result["learner_submissions"] = learner_receipts
@@ -235,12 +242,19 @@ def launch(
                 # Accepted IDs are the durable operator receipt.  Never qdel a
                 # partial topology implicitly.
                 result["submission_status"] = "partial"
-                _write_submission_receipt(receipt_path, result)
+                _publish_submission_receipt(
+                    stage_root / f"{slot + 1:03d}-learner_{slot:03d}.json",
+                    result,
+                )
+                _publish_submission_receipt(receipt_path, result)
                 return result
-            _write_submission_receipt(receipt_path, result)
+            _publish_submission_receipt(
+                stage_root / f"{slot + 1:03d}-learner_{slot:03d}.json",
+                result,
+            )
         result["learner_job_ids"] = [receipt["job_id"] for receipt in learner_receipts]
         result["submission_status"] = "submitted"
-        _write_submission_receipt(receipt_path, result)
+        _publish_submission_receipt(receipt_path, result)
     return result
 
 

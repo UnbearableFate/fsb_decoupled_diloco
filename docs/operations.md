@@ -9,7 +9,7 @@ bash -n scripts/miyabi/*.pbs
 bash -n scripts/miyabi/*.sh
 ```
 
-walltime 必须根据当前 workload 和近期证据估算，至少十分钟。`launch_independent_run` 要求 syncer 和 learner walltime 都显式传入。
+walltime 必须根据当前 workload 和近期证据估算，至少十分钟。`launch_independent_run` 要求 actor queue、log root、syncer walltime 和 learner walltime 都显式传入。
 
 ## 初始化与独立 actor
 
@@ -31,7 +31,15 @@ python -m fs_diloco.tools.launch_independent_run \
 
 该工具先创建 immutable run，然后提交一条 `run_syncer.pbs` 和每个 learner 各一条 scalar `run_learner.pbs`；static 模式不使用 PBS job array。部分 qsub 成功时不会隐式 qdel；返回的 accepted job IDs 是 operator receipt，必须先核对 scheduler 再决定后续操作。
 
-Miyabi login node 不运行 Python。正式提交使用 `run_independent_launcher.pbs` 在短 compute allocation 中完成初始化和 actor qsub；actor 终态后再提交 `check_independent_run.pbs`。后者从九个 immutable actor attestations 验证九个不同的 scheduler job ID 和九个 host，不把 checker 自己的一节点 nodefile 误当成 actor topology。
+Miyabi login node 不运行 Python。正式提交使用 `run_independent_launcher.pbs` 在短 compute allocation 中完成初始化和 actor qsub，例如：
+
+```bash
+qsub -q debug-g -l walltime=00:10:00 \
+  -v PROJECT_ROOT=/absolute/project,ACTOR_QUEUE=debug-g,RUN_ID=RUN_ID,SHARED_ROOT=/absolute/run/root,LOG_ROOT=/absolute/log/root,LAUNCH_RECEIPT=/absolute/report/launch.json,SYNCER_WALLTIME=00:10:00,LEARNER_WALLTIME=00:10:00 \
+  scripts/miyabi/run_independent_launcher.pbs
+```
+
+`ACTOR_QUEUE` 会通过每条 actor `qsub -q` 覆盖 PBS 脚本中的默认 queue。actor 终态后再提交 `check_independent_run.pbs`，并令 `EXPECTED_ACTOR_QUEUE` 与 launch receipt 一致。Checker 从九个 immutable actor attestations 验证九个不同的 scheduler job ID 和九个 host，不把 checker 自己的一节点 nodefile 误当成 actor topology。
 
 ## Static learner replacement
 

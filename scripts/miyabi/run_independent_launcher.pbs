@@ -22,11 +22,7 @@ LEARNER_WALLTIME="${LEARNER_WALLTIME:-00:10:00}"
 
 cd "$PROJECT_ROOT"
 test -x "$PYTHON_BIN"
-[[ ! -e "$LAUNCH_RECEIPT" ]] || {
-  echo "LAUNCH_RECEIPT already exists: $LAUNCH_RECEIPT" >&2
-  exit 2
-}
-
+set -o noclobber
 "$PYTHON_BIN" -m fs_diloco.tools.launch_independent_run \
   --config "$CONFIG" \
   --run-id "$RUN_ID" \
@@ -38,4 +34,6 @@ test -x "$PYTHON_BIN"
   --learner-walltime "$LEARNER_WALLTIME" \
   --log-root "$LOG_ROOT" \
   > "$LAUNCH_RECEIPT"
-cp -- "$LAUNCH_RECEIPT" "$LOG_ROOT/init_run.json"
+set +o noclobber
+ln -- "$LAUNCH_RECEIPT" "$LOG_ROOT/init_run.json"
+chmod a-w -- "$LAUNCH_RECEIPT"
