@@ -19,6 +19,7 @@ from fs_diloco.core.source_identity import capture_source_identity
 from fs_diloco.core.versions import (
     ACTOR_ATTESTATION_FORMAT_VERSION,
     AUTHORITY_SCHEMA_VERSION,
+    CONTROL_FORMAT_VERSION,
     PROTOCOL_VERSION,
 )
 from fs_diloco.protocol.contributor import StaticMembershipScope
@@ -572,12 +573,35 @@ def validate_run(
         errors.append(f"final version is {final_version}, expected {expected_global_steps}")
     if [int(row["version"]) for row in versions] != expected_versions:
         errors.append("global publication history is not exact and contiguous")
-    if int(summary.get("final_version", -1)) != final_version or int(
-        stop.get("final_version", -2)
-    ) != final_version:
-        errors.append("filesystem terminal controls disagree with authority")
     if len(terminal) == 1:
         terminal_row = terminal[0]
+        expected_stop = {
+            **terminal_row,
+            "format_version": CONTROL_FORMAT_VERSION,
+            "kind": "terminal",
+            "run_id": str(descriptor["run_id"]),
+            "epoch": int(terminal_row["finalized_by_epoch"]),
+            "owner_id": str(terminal_row["finalized_by_owner_id"]),
+        }
+        expected_summary = {
+            "format_version": CONTROL_FORMAT_VERSION,
+            "run_id": str(descriptor["run_id"]),
+            "authority": "full_protocol",
+            "all_learners_stopped": terminal_row["state"] == "finalized",
+            "final_version": int(terminal_row["final_version"]),
+            "direct_weight_tokens_applied": int(
+                terminal_row["direct_weight_tokens_applied"]
+            ),
+            "stop_reason": terminal_row["stop_reason"],
+            "terminal_generation": int(terminal_row["generation"]),
+            "finalized_by_epoch": int(terminal_row["finalized_by_epoch"]),
+            "finalized_by_owner_id": terminal_row["finalized_by_owner_id"],
+            "finalized_at": float(terminal_row["finalized_at"]),
+        }
+        if stop != expected_stop:
+            errors.append("terminal stop is not the exact authority projection")
+        if summary != expected_summary:
+            errors.append("terminal summary is not the exact authority projection")
         owner_id = str(terminal_row["finalized_by_owner_id"])
         owner_short = hashlib.sha256(owner_id.encode("utf-8")).hexdigest()[:12]
         immutable_stop = (
@@ -588,13 +612,11 @@ def validate_run(
             / f"stop_g{int(terminal_row['generation']):06d}.json"
         )
         try:
-            _require_regular_file(immutable_stop, label="immutable terminal control")
+            _require_immutable_file(immutable_stop, label="immutable terminal control")
             if _read_json(immutable_stop) != stop:
                 errors.append("fixed terminal control differs from its immutable publication")
         except RuntimeError as exc:
             errors.append(str(exc))
-    if summary.get("all_learners_stopped") is not True:
-        errors.append("terminal summary does not confirm all learners stopped")
     if pending or prepared:
         errors.append("authority retained pending updates or prepared publications")
     if {str(row["stable_contributor_key"]) for row in selected_credit} != (

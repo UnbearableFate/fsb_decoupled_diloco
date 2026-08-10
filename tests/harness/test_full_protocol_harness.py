@@ -18,9 +18,10 @@ from fs_diloco.core.source_identity import bind_source_identity, capture_source_
 from fs_diloco.protocol.contributor import StaticContributorFence, StaticMembershipScope
 from fs_diloco.protocol.cycle_receipt import CycleReceiptV1
 from fs_diloco.protocol.proposal import FullUpdateProposalV2, canonical_update_relative_path
-from fs_diloco.storage.atomic_io import atomic_write_json, publish_immutable_bytes
+from fs_diloco.storage.atomic_io import atomic_write_json
 from fs_diloco.storage.audit_archive import build_audit_batch, publish_audit_batch
 from fs_diloco.storage.authority import AuthorityIdentity, LeaderAuthority
+from fs_diloco.storage.control import ControlPublisher
 from fs_diloco.storage.paths import RunPaths
 from fs_diloco.tools.init_run import initialize_run
 from tests.support.protocol import (
@@ -183,24 +184,10 @@ def _build_valid_checker_fixture(
             final_update_id=update_id,
         )
         leader.finalize_terminal(command_id="finalize", reason="fixture complete")
+        terminal = authority.read.terminal_record()
+        assert terminal is not None
+        ControlPublisher(loaded.paths, token).publish_terminal(terminal)
         authority.release_leader(token)
-
-    stop = {"state": "finalized", "generation": 1, "final_version": 1}
-    atomic_write_json(loaded.paths.stop_json, stop)
-    owner_short = hashlib.sha256(b"checker-syncer").hexdigest()[:12]
-    immutable_stop = (
-        loaded.paths.syncer_epochs
-        / f"e{token.epoch:06d}_{owner_short}"
-        / "terminal/stop_g000001.json"
-    )
-    publish_immutable_bytes(
-        immutable_stop,
-        json.dumps(stop, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n",
-    )
-    atomic_write_json(
-        loaded.paths.summary_json,
-        {"state": "finalized", "final_version": 1, "all_learners_stopped": True},
-    )
 
     log_root.mkdir()
     atomic_write_json(log_root / "source_identity.json", capture_source_identity(ROOT))
@@ -326,6 +313,9 @@ def test_aggregate_checker_accepts_one_valid_current_terminal_run(tmp_path: Path
         "epoch_lifecycle",
         "attested_topology",
         "terminal_authority",
+        "terminal_stop_schema",
+        "terminal_summary_schema",
+        "terminal_control_mutability",
         "archive_integrity",
         "exact_workload",
         "publication_identity",
@@ -353,6 +343,17 @@ def test_aggregate_checker_mutations_change_acceptance_to_fail(
     elif mutation == "terminal_authority":
         with sqlite3.connect(paths.sqlite_db) as connection:
             connection.execute("UPDATE terminal_state SET final_version=0")
+    elif mutation == "terminal_stop_schema":
+        stop = json.loads(paths.stop_json.read_text(encoding="utf-8"))
+        stop["obsolete_field"] = True
+        atomic_write_json(paths.stop_json, stop)
+    elif mutation == "terminal_summary_schema":
+        summary = json.loads(paths.summary_json.read_text(encoding="utf-8"))
+        summary["obsolete_field"] = True
+        atomic_write_json(paths.summary_json, summary)
+    elif mutation == "terminal_control_mutability":
+        immutable_stop = next(paths.syncer_epochs.glob("e*_*/terminal/stop_*.json"))
+        immutable_stop.chmod(0o644)
     elif mutation == "archive_integrity":
         archive = run_root / "audit/batches/authority_history/checker-fixture.json"
         archive.chmod(0o644)
@@ -711,3 +712,83 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     assert "kill -KILL \"$primary_pid\"" in rank_runner
     assert "trap publish_blocked_on_exit EXIT" in wrapper
     assert "--blocked-reason" in wrapper
+
+
+def test_pbs_wrapper_publishes_blocked_artifact_when_allocation_exits(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+    scripts = project_root / "scripts/miyabi"
+    scripts.mkdir(parents=True)
+    (scripts / "run_full_protocol_allocation.sh").write_text(
+        "#!/bin/bash\nexit 23\n",
+        encoding="utf-8",
+    )
+    (scripts / "check_full_protocol_run.py").write_text(
+        """#!/bin/bash
+set -eu
+output=
+blocked_reason=
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output)
+      output="$2"
+      shift 2
+      ;;
+    --blocked-reason)
+      blocked_reason="$2"
+      shift 2
+      ;;
+    *)
+      shift 2
+      ;;
+  esac
+done
+[[ -n "$output" && -n "$blocked_reason" ]]
+printf '{"status":"BLOCKED","errors":["%s"]}\n' "$blocked_reason" >"$output"
+""",
+        encoding="utf-8",
+    )
+    command_bin = tmp_path / "bin"
+    command_bin.mkdir()
+    module = command_bin / "module"
+    module.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+    module.chmod(0o755)
+    output = tmp_path / "evidence.json"
+    environment = {
+        **os.environ,
+        "PATH": f"{command_bin}:{os.environ['PATH']}",
+        "EVIDENCE_OUTPUT": str(output),
+        "GATE": "F1-functional",
+        "EXPERIMENT_ID": "allocation-exit-trap",
+        "REQUIREMENT_ID": "FUNC-4L1S-01",
+        "PROJECT_ROOT": str(project_root),
+        "PRIMARY_WORKTREE_ROOT": str(tmp_path),
+        "PYTHON_BIN": "/bin/bash",
+        "RUN_ID": "allocation-exit-trap",
+        "SHARED_ROOT": str(tmp_path / "run"),
+        "LOG_ROOT": str(tmp_path / "logs"),
+        "EXPECTED_NODES": "1",
+        "NUM_LEARNERS": "1",
+        "EXPECTED_INNER_STEPS": "1",
+        "EXPECTED_GLOBAL_STEPS": "1",
+        "EXPECTED_SYNCER_EPOCHS": "1",
+        "PBS_JOBID": "fixture.opbs",
+    }
+
+    completed = subprocess.run(
+        ["bash", str(ROOT / "scripts/miyabi/run_full_protocol.pbs")],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env=environment,
+    )
+
+    assert completed.returncode == 23
+    assert json.loads(output.read_text(encoding="utf-8")) == {
+        "status": "BLOCKED",
+        "errors": [
+            "Full Protocol execution exited before gate evidence publication (exit=23)"
+        ],
+    }
