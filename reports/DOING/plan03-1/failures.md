@@ -99,3 +99,31 @@
   authority/schema, Checker, launcher and artifact flow. External review is
   omitted only under the user's explicit Codex-only directive. A fourth attempt
   is forbidden until the reviewed test logic has been rewritten.
+
+## 2026-08-10T18:03:29+09:00 — P2 one-node full-suite attempt 1
+
+- Experiment: `p2-one-node-full-suite-01`; domain: `harness`.
+- Category: `test-harness-failure`; valid attempt: yes; consecutive count: 1.
+- Allocation: retained `2519128.opbs`, node `mg0012`; source HEAD
+  `4a09e41343f7524c79e41dc7d2894f49aacb23d0` was clean apart from branch
+  tracking metadata.
+- Result: `473 passed, 16 failed` in 23.37 seconds.
+- Evidence: `artifacts/20260810-180329_p2-one-node-full-pytest_fail.log`.
+- Failure clusters:
+  1. The dead-surface test scans all filesystem files while calling them
+     tracked, so ignored legacy `__pycache__/*.pyc` files pollute its result; two
+     tracked protocol test filenames also retain `_v1`/`_v2` suffixes.
+  2. Both startup-admission tests construct the removed `config.shared.*`
+     nesting, while the current runtime correctly reads `loaded.config.sync`
+     and `.membership`.
+  3. Thirteen adoption tests still configure removed aliases `rebase_local` and
+     `predict_global`; the only current names are
+     `rebase_post_publish_delta` and `predict_post_publish_global` in both
+     validation and strategy dispatch.
+- Root cause: stale tests and filenames survived the current-only product
+  convergence. Product code is internally consistent; adding aliases or a
+  `shared` wrapper would violate the explicit no-compatibility requirement.
+- Remediation: make the architecture oracle enumerate Git-tracked paths, rename
+  the two version-suffixed test modules and their manifest references, flatten
+  the startup fixture, and rewrite all adoption inputs to current names. Review
+  the continuous test-only change with Codex before attempt 2.

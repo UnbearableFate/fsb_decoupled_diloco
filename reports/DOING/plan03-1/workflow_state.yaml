@@ -4,7 +4,7 @@ branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P2-tests-and-harness
 work_unit_id: P2-W2-one-node-validation
-state: STAGED_TEST_EXECUTION
+state: TARGETED_REMEDIATION
 base_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 target_commit: 1190f7ff1a92ae4daf8d224e0b00a428569283f9
 formal_source_commit: null
@@ -13,6 +13,7 @@ experiment_id: p2-one-node-validation-01
 experiment_domain: harness
 failure_counters:
   "harness:p2-one-node-validation-01": 0
+  "harness:p2-one-node-full-suite-01": 1
 required_tests:
   - s0-static-preflight
   - harness-focused-unit-tests
@@ -27,8 +28,9 @@ invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
   - p2-focused-attempt-3-workload-mutation-not-committed
+  - p2-full-suite-attempt-1-stale-test-surfaces
 external_review:
   pbs_job_id: 2519093.opbs
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: run_p2_one_node_full_pytest
+allowed_next_action: rewrite_stale_full_suite_surfaces_to_current_design

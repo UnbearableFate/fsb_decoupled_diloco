@@ -285,3 +285,16 @@
   `artifacts/20260810-180231_p2-one-node-post-rewrite-focused_pass.log`.
 - F1 is runtime-verified and the harness failure counter resets to zero. The
   next action is the complete pytest suite in the same retained allocation.
+
+## 2026-08-10T18:03:29+09:00 — TARGETED_REMEDIATION full-suite attempt 1
+
+- The complete suite executed 489 tests: 473 passed and 16 failed.
+- All failures are obsolete-test drift: filesystem enumeration includes ignored
+  bytecode and two versioned test filenames; startup fixtures retain removed
+  config nesting; adoption tests retain removed strategy aliases.
+- No current product API/config/schema change is required. Under the project's
+  current-only rule, the remediation deletes the stale spellings and updates
+  tests/manifest rather than reintroducing compatibility.
+- Transition: `STAGED_TEST_EXECUTION` -> `TARGETED_REMEDIATION` in the new
+  `p2-one-node-full-suite-01` domain, count 1. The retained allocation remains
+  available; Codex review is required before full-suite attempt 2.
