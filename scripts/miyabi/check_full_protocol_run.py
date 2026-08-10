@@ -971,6 +971,12 @@ def _positive_integer(value: str) -> int:
     return parsed
 
 
+def _syncer_epoch_count(value: str) -> int:
+    parsed = _positive_integer(value)
+    _registered_epoch_states(parsed)
+    return parsed
+
+
 def _diagnostic_artifact(
     args: argparse.Namespace,
     exc: Exception,
@@ -1103,7 +1109,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-inner-steps", type=_positive_integer, required=True)
     parser.add_argument("--expected-contributors", type=_positive_integer, required=True)
     parser.add_argument("--expected-hosts", type=_positive_integer, required=True)
-    parser.add_argument("--expected-syncer-epochs", type=_positive_integer, default=1)
+    parser.add_argument("--expected-syncer-epochs", type=_syncer_epoch_count, default=1)
     parser.add_argument("--expected-replaced-learner", type=_safe_identifier)
     parser.add_argument("--blocked-reason")
     parser.add_argument("--output", type=Path, required=True)
@@ -1125,6 +1131,11 @@ def main(argv: list[str] | None = None) -> None:
             if not args.run_root.resolve().is_dir():
                 raise GatePrerequisiteUnavailable(
                     f"registered run root is unavailable: {args.run_root.resolve()}"
+                )
+            if not (args.run_root.resolve() / ".complete").is_file():
+                raise GatePrerequisiteUnavailable(
+                    f"registered run completion marker is unavailable: "
+                    f"{args.run_root.resolve() / '.complete'}"
                 )
             payload = validate_run(
                 gate=args.gate,

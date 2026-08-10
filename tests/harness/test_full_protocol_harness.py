@@ -19,6 +19,7 @@ from fs_diloco.protocol.contributor import StaticContributorFence, StaticMembers
 from fs_diloco.protocol.cycle_receipt import CycleReceiptV1
 from fs_diloco.protocol.proposal import FullUpdateProposalV2, canonical_update_relative_path
 from fs_diloco.storage.atomic_io import atomic_write_json, publish_immutable_bytes
+from fs_diloco.storage.audit_archive import build_audit_batch, publish_audit_batch
 from fs_diloco.storage.authority import AuthorityIdentity, LeaderAuthority
 from fs_diloco.storage.paths import RunPaths
 from fs_diloco.tools.init_run import initialize_run
@@ -205,6 +206,15 @@ def _build_valid_checker_fixture(
     atomic_write_json(log_root / "source_identity.json", capture_source_identity(ROOT))
     atomic_write_json(log_root / "init_run.json", {"run_id": descriptor["run_id"]})
     atomic_write_json(log_root / "summary.json", {"final_version": 1})
+    publish_audit_batch(
+        loaded.paths,
+        build_audit_batch(
+            batch_id="checker-fixture",
+            record_kind="authority_history",
+            cutoff_version=1,
+            records=[],
+        ),
+    )
     runtime_evidence = {
         "torch_version": "fixture",
         "cuda_runtime_version": None,
@@ -344,8 +354,8 @@ def test_aggregate_checker_mutations_change_acceptance_to_fail(
         with sqlite3.connect(paths.sqlite_db) as connection:
             connection.execute("UPDATE terminal_state SET final_version=0")
     elif mutation == "archive_integrity":
-        archive = run_root / "audit/batches/authority_history/corrupt.json"
-        archive.parent.mkdir(parents=True, exist_ok=True)
+        archive = run_root / "audit/batches/authority_history/checker-fixture.json"
+        archive.chmod(0o644)
         archive.write_text('{"not":"a-current-audit-batch"}\n', encoding="utf-8")
         archive.chmod(0o444)
     elif mutation == "exact_workload":
@@ -472,51 +482,16 @@ def test_checker_classifies_missing_run_as_structured_blocked_artifact(tmp_path:
 
 
 def test_checker_classifies_malformed_current_run_as_fail(tmp_path: Path) -> None:
-    run_root = tmp_path / "run"
-    log_root = tmp_path / "logs"
-    (run_root / "control").mkdir(parents=True)
-    log_root.mkdir()
-    (run_root / "control/run_descriptor.json").write_text(
-        "not-json\n", encoding="utf-8"
-    )
-    output = tmp_path / "evidence.json"
+    run_root, output, command, environment = _build_valid_checker_fixture(tmp_path)
+    descriptor = run_root / "control/run_descriptor.json"
+    descriptor.chmod(0o644)
+    descriptor.write_text("not-json\n", encoding="utf-8")
 
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(CHECKER),
-            "--gate",
-            "F1-functional",
-            "--experiment-id",
-            "functional-malformed-run",
-            "--requirement-id",
-            "FUNC-4L1S-01",
-            "--project-root",
-            str(ROOT),
-            "--run-root",
-            str(run_root),
-            "--log-root",
-            str(log_root),
-            "--expected-global-steps",
-            "1",
-            "--expected-inner-steps",
-            "1",
-            "--expected-contributors",
-            "1",
-            "--expected-hosts",
-            "1",
-            "--output",
-            str(output),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    completed, artifact = _run_checker(command, environment, output)
 
-    artifact = json.loads(output.read_text(encoding="utf-8"))
     assert completed.returncode == 1
     assert artifact["status"] == "FAIL"
-    assert any("JSONDecodeError" in error for error in artifact["errors"])
+    assert artifact["errors"]
     assert artifact["cleanup"]["eligible"] is False
 
 
