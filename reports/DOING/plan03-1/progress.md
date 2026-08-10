@@ -151,3 +151,16 @@
 - The mandatory Codex critical-incremental report was saved before any external
   request and returned `APPROVE` for test-design promotion. Runtime remains
   blocked pending external reviewer terminal state and finding disposition.
+
+## 2026-08-10T17:44:46+09:00 — EXTERNAL_TEST_REVIEW terminal-control closure
+
+- Pre-submit checks passed for every PBS/shell script, literal group ID,
+  continuous ancestry and prompt SHA-256
+  `20901296696ef94597e712f25644bac576e774f2adf6d1399edb0ab1ad33de40`.
+- Submitted job `2519093.opbs`; `qstat -f` confirms one `debug-g` compute node
+  (`mg0009`), target `219abe663025adc7ff8f731f65d90fb27c42c0fe`,
+  literal group `xg24i002`, requested reviewer timeout 1200 seconds and
+  evidence-based walltime `00:25:00`.
+- The shorter limit retains margin beyond the only previously substantive
+  external response latency while avoiding another unused 30-minute request.
+  Only monitoring and evidence collection are allowed until terminal state.
