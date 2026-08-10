@@ -1183,7 +1183,7 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     assert "fs_diloco.tools.launch_independent_run" in independent_launcher
     assert '--log-root "$LOG_ROOT"' in independent_launcher
     assert '--actor-queue "$ACTOR_QUEUE"' in independent_launcher
-    assert 'ln -- "$LAUNCH_RECEIPT" "$LOG_ROOT/init_run.json"' in independent_launcher
+    assert "LAUNCH_RECEIPT" not in independent_launcher
     independent_checker = (ROOT / "scripts/miyabi/check_independent_run.pbs").read_text(
         encoding="utf-8"
     )

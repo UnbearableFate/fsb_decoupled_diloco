@@ -35,11 +35,11 @@ Miyabi login node 不运行 Python。正式提交使用 `run_independent_launche
 
 ```bash
 qsub -q debug-g -l walltime=00:10:00 \
-  -v PROJECT_ROOT=/absolute/project,ACTOR_QUEUE=debug-g,RUN_ID=RUN_ID,SHARED_ROOT=/absolute/run/root,LOG_ROOT=/absolute/log/root,LAUNCH_RECEIPT=/absolute/report/launch.json,SYNCER_WALLTIME=00:10:00,LEARNER_WALLTIME=00:10:00 \
+  -v PROJECT_ROOT=/absolute/project,ACTOR_QUEUE=regular-g,RUN_ID=RUN_ID,SHARED_ROOT=/absolute/run/root,LOG_ROOT=/absolute/log/root,SYNCER_WALLTIME=00:10:00,LEARNER_WALLTIME=00:10:00 \
   scripts/miyabi/run_independent_launcher.pbs
 ```
 
-`ACTOR_QUEUE` 会通过每条 actor `qsub -q` 覆盖 PBS 脚本中的默认 queue。actor 终态后再提交 `check_independent_run.pbs`，并令 `EXPECTED_ACTOR_QUEUE` 与 launch receipt 一致。Checker 从九个 immutable actor attestations 验证九个不同的 scheduler job ID 和九个 host，不把 checker 自己的一节点 nodefile 误当成 actor topology。
+示例中的 launcher control job 使用短时 `debug-g`，九个正式 actor 则使用 `ACTOR_QUEUE=regular-g`。`ACTOR_QUEUE` 会通过每条 actor `qsub -q` 覆盖 PBS 脚本中的默认 queue。create-only operator receipt 位于 `LOG_ROOT/submission_receipt.json`，逐次 qsub receipt 位于 `LOG_ROOT/submission_receipts/`；partial submit 时也会完整保留。actor 终态后再提交 `check_independent_run.pbs`，并令 `EXPECTED_ACTOR_QUEUE` 与 operator receipt 一致。Checker 从九个 immutable actor attestations 验证九个不同的 scheduler job ID 和九个 host，不把 checker 自己的一节点 nodefile 误当成 actor topology。
 
 ## Static learner replacement
 
