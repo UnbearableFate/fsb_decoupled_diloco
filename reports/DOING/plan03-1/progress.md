@@ -449,3 +449,15 @@
   workload, fault boundaries, durable oracles, walltime and cleanup policy are
   unchanged. Freeze this target and complete a Codex critical-incremental
   review before submitting a new normal scenario identity.
+
+## 2026-08-10T19:06:00+09:00 — P3 queue routing APPROVE
+
+- Frozen continuous target:
+  `debbcdf10267c5fb786dded33c17d2caba08f198`; the approved P3 design target is
+  its ancestor and the complete runtime source scopes are byte-identical.
+- Mandatory Codex critical-incremental review verified live queue limits,
+  explicit PBS resources, unchanged topology/workload/oracles, pre-execution
+  failure classification and source invalidation rules. Verdict: `APPROVE`.
+- External review remains skipped under user direction. The next action is one
+  new `functional-normal` submission to `debug-g`; fault scenarios remain
+  blocked until its structured terminal artifact is PASS.
