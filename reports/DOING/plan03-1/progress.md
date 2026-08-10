@@ -895,3 +895,33 @@
   the 50-local-step by 10-global-step baseline, then synchronize docs with that
   verified result. Those source/doc changes will intentionally precede and be
   included in the final target; the formal ladder will run afterward.
+
+## 2026-08-10T21:13:58+09:00 — preliminary over-baseline 9-node PASS
+
+- The first `regular-g` submission `2520613.opbs` remained queued with a
+  scheduler estimate of 22:19 and a reservation-conflict comment. It never
+  started, created no run/log/artifact path, and was cancelled before rerouting
+  the same short preliminary workload to the enabled 1--16-node debug queue.
+- PBS job `2520645.opbs` ran for 27 seconds on exact nine-node `debug-g`
+  topology `mg0008`, `mg0010`--`mg0017`, with
+  `9:ncpus=8:mpiprocs=1:mem=16gb`, requested walltime `00:10:00` and terminal
+  exit status 0.
+- Source commit `563bf5298f89ff8481fe533242a4ee2c0cdd16f9`, fingerprint
+  `sha256:0be60d35785e20f7a0dca996d9e0ac37160bbbfa2cb58d81c3187ccd01d31bee`
+  and resolved config SHA-256
+  `38afa5611bafad2315f47a05d447b6667c85c13d1da48b9f5b8a565de9d1b643`
+  bound a 51-local-step by 11-global-step workload, which exceeds the 50 by 10
+  baseline.
+- The structured Checker returned `PASS`: versions `0..11`, 11 committed
+  credits for each of 8 learners, 88 applied proposals, 71,808 direct applied
+  tokens, 34,272 direct dropped tokens, zero balance/outstanding/other fate,
+  exact 9-host attestations, one released epoch, terminal authority agreement,
+  immutable object hashes and SQLite integrity `ok`.
+- Evidence hashes: result
+  `da8ec624b289016ff680c1bead49ca64482ef9db3e7b13809a3dd69b88215b3b`;
+  PBS log
+  `df1102abb83ed5cc7d32781bcaa3531ad0746d3206af9de39ce84a9c602d6a19`.
+- README and design/operations/testing docs now describe the verified behavior,
+  authority schema/recovery ownership, evidence retention and exact result.
+  The canonical formal config is restored to 50 local steps and 10 global
+  steps. Freeze this documentation-complete source before any final gate.

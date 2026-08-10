@@ -77,3 +77,5 @@ python -m fs_diloco.tools.clean_run \
 ```
 
 确认 stdout 中的精确路径后，另加 `--execute --manifest REPORT_JSON`。工具拒绝 symlink run root、缺失 artifact policy、非 PASS evidence、authority live reference 和执行前发生变化的 inode/size/mtime。
+
+正式 gate 的完整 run、raw log 和 Checker 所列 evidence paths 必须保留到 completed completion Checker 通过且 plan 已归档；staged PASS 或 final-evidence review 本身不授权提前清理。归档后也只能使用对应 gate 的精确 PASS artifact 执行上述清理流程。

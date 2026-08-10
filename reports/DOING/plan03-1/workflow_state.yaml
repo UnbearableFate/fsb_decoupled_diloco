@@ -3,14 +3,14 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P4-formal-and-docs
-work_unit_id: P4-W7-preliminary-nine-node-doc-verification
-state: STAGED_TEST_EXECUTION
+work_unit_id: P4-W8-documentation-sync-and-final-freeze
+state: PLAN_REMEDIATION
 base_commit: e1f76a85f77c33765ebaaddb4828e40cc45d4d24
-target_commit: 2b0c9a004e04af0907ce7766d4d9df47b29cf545
+target_commit: 563bf5298f89ff8481fe533242a4ee2c0cdd16f9
 formal_source_commit: null
 formal_source_fingerprint: null
-experiment_id: p4-preformal-remediation-validation-01
-experiment_domain: harness
+experiment_id: p4-preliminary-9node-51x11
+experiment_domain: product
 failure_counters:
   "harness:p2-one-node-validation-01": 0
   "harness:p2-one-node-full-suite-01": 0
@@ -35,6 +35,8 @@ required_evidence:
   - reports/DOING/plan03-1/artifacts/20260810-205900_p4-preformal-remediation-validation.log
   - reports/DOING/plan03-1/artifacts/20260810-205900_p4-preformal-remediation-validation.log.focused-pytest.junit.xml
   - reports/DOING/plan03-1/artifacts/20260810-205900_p4-preformal-remediation-validation.log.full-pytest.junit.xml
+  - reports/DOING/plan03-1/artifacts/20260810-211104_p4-preliminary-9node-overbaseline_result.json
+  - reports/DOING/plan03-1/artifacts/20260810-211104_p4-preliminary-9node-overbaseline_pbs.log
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -48,4 +50,4 @@ external_review:
   pbs_job_id: null
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: prepare_preliminary_nine_node_overbaseline_run
+allowed_next_action: validate_docs_and_freeze_final_common_target

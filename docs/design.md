@@ -40,6 +40,8 @@ descriptor 绑定 run ID、规范化 shared root、配置哈希、Git commit、s
 5. proposal payload、pointer、receipt 和前驱哈希构成连续 contributor history。
 6. learner 等待 selection/adoption/terminal control；任何旧 fence 的写入都会被拒绝。
 
+`contributor_progress` 是恢复 cursor、receipt chain 和最后 planned update ID 的单一持久权威。receipt 摄取在同一 fenced transaction 写入这些字段；static 或 dynamic replacement admission 直接读取 progress，不依赖可能归档的 receipt history，也没有旧 schema fallback。
+
 ## Syncer cycle
 
 只有持有当前 leader token 的 syncer 可以打开 `LeaderSession`：

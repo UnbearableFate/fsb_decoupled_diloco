@@ -1,0 +1,237 @@
+Currently Loaded Modulefiles:
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9  
+
+Key:
+(symbolic-version)  
+RUN_ID=plan03_1_p4_prelim_51x11_20260810_211104
+SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan03_1_p4_prelim_51x11_20260810_211104
+DESCRIPTOR_SHA256=8521a017398069eed1e18b965885732ab5c2d0230f955772097bcacd8630b10f
+HOST mg0008
+HOST mg0010
+HOST mg0011
+HOST mg0012
+HOST mg0013
+HOST mg0014
+HOST mg0015
+HOST mg0016
+HOST mg0017
+{
+  "audit": {
+    "claimed_gc": 0,
+    "folded_batch_index_rows": 0,
+    "folded_batches": 0,
+    "hot_batches": 4,
+    "partitions": 0,
+    "pending_gc": 0
+  },
+  "authority": {
+    "ddl_sha256": "81a0d2dcd641c6562f7d293244608378c99c886730ae0c43b0b9109853947b3d",
+    "features": [],
+    "mode": "static",
+    "protocol_version": 4,
+    "schema_fingerprint": "37912d4344eb4fcd85929b1b0b8d8a87d7969d42d328afa6f1e6033d02766dca",
+    "schema_version": 10
+  },
+  "contributor_progress": {},
+  "controller": {
+    "drain_ack_deadline": 1786363981.152852,
+    "generation": 1,
+    "hard_crash_cycle_token_budget": 816,
+    "proposal_visibility_deadline": 1786363927.571919,
+    "reason": "configured_target",
+    "registration_visibility_deadline": 1786363921.152852,
+    "requested_at": 1786363921.152852,
+    "singleton": 1,
+    "state": "finalized",
+    "terminal_merge_count": 0,
+    "updated_by_epoch": 1,
+    "updated_by_owner_id": "syncer-6415c192-71ea-4b9f-b312-be983ab5c4f4"
+  },
+  "current_contributor_fences": [],
+  "dynamic": {
+    "capacity_observations": [],
+    "instances": [],
+    "launch_requests": [],
+    "streams": []
+  },
+  "integrity_check": [
+    "ok"
+  ],
+  "latest_version": {
+    "committed_at": 1786363920.1053302,
+    "committed_by_epoch": 1,
+    "committed_by_owner_id": "syncer-6415c192-71ea-4b9f-b312-be983ab5c4f4",
+    "direct_weight_tokens_applied": 6528,
+    "optim_relative_path": "optim/epochs/e000001/d61a681f9dd2/outer_v000011_pd8cd54b804ba.safetensors",
+    "optim_sha256": "7a00868e0ddddf3572e206f460b64df8e2be6547ee72934df656735c54f62c95",
+    "optim_size": 65856,
+    "predecessor_version": 10,
+    "publication_id": "d8cd54b8-04ba-482d-ac29-6e82fe6ac91c",
+    "theta_sha256": "c816b5a3777af7b957130ff1ad66b22f5bb8b775c9cc39dcd7a32259e7531dd2",
+    "version": 11,
+    "weight_relative_path": "weights/epochs/e000001/d61a681f9dd2/global_v000011_pd8cd54b804ba.safetensors",
+    "weight_sha256": "3382dda7168fdfb833f5effb22f3900a95396f84c6407840ee9daeec15a796d6",
+    "weight_size": 33104
+  },
+  "run": {
+    "config_sha256": "38afa5611bafad2315f47a05d447b6667c85c13d1da48b9f5b8a565de9d1b643",
+    "descriptor_sha256": "8521a017398069eed1e18b965885732ab5c2d0230f955772097bcacd8630b10f",
+    "mode": "static",
+    "run_id": "plan03_1_p4_prelim_51x11_20260810_211104",
+    "shared_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan03_1_p4_prelim_51x11_20260810_211104",
+    "source_fingerprint": "sha256:0be60d35785e20f7a0dca996d9e0ac37160bbbfa2cb58d81c3187ccd01d31bee"
+  },
+  "syncer_epochs": [
+    {
+      "acquired_at": 1786363900.7357528,
+      "config_sha256": "38afa5611bafad2315f47a05d447b6667c85c13d1da48b9f5b8a565de9d1b643",
+      "epoch": 1,
+      "final_at": 1786363923.136186,
+      "final_state": "released",
+      "hostname": "mg0008",
+      "last_renewed_at": 1786363923.136186,
+      "owner_id": "syncer-6415c192-71ea-4b9f-b312-be983ab5c4f4",
+      "pbs_job_id": "2520645.opbs",
+      "pid": 60026,
+      "source_fingerprint": "sha256:0be60d35785e20f7a0dca996d9e0ac37160bbbfa2cb58d81c3187ccd01d31bee",
+      "superseded_by_epoch": null
+    }
+  ],
+  "terminal": {
+    "direct_weight_tokens_applied": 71808,
+    "final_version": 11,
+    "finalized_at": 1786363922.9582267,
+    "finalized_by_epoch": 1,
+    "finalized_by_owner_id": "syncer-6415c192-71ea-4b9f-b312-be983ab5c4f4",
+    "generation": 1,
+    "singleton": 1,
+    "state": "finalized",
+    "stop_reason": "configured_target"
+  },
+  "terminal_contributor_fences": [
+    {
+      "acknowledged_at": 1786363921.6056263,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 867,
+      "close_last_cycle_seq": 17,
+      "fence_json": "{\"attempt_id\":\"attempt-17d7806b-3f32-4c2f-86cf-38aaadccd461\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_000\",\"logical_launch_id\":\"allocation-2520645-learner_000\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 17,
+      "final_update_id": "c6f68446-a5c9-4d54-b812-1f505a290291",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_000",
+      "state": "acked"
+    },
+    {
+      "acknowledged_at": 1786363921.6146905,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 867,
+      "close_last_cycle_seq": 17,
+      "fence_json": "{\"attempt_id\":\"attempt-d048ea90-01f0-4998-ac68-bcaad715d49b\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_001\",\"logical_launch_id\":\"allocation-2520645-learner_001\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 17,
+      "final_update_id": "b8d87a9c-cfa5-448a-95e0-0fb855ed84d4",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_001",
+      "state": "acked"
+    },
+    {
+      "acknowledged_at": 1786363921.6226165,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 867,
+      "close_last_cycle_seq": 17,
+      "fence_json": "{\"attempt_id\":\"attempt-ca6f8822-67df-47ba-8731-b1c3daf67116\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_002\",\"logical_launch_id\":\"allocation-2520645-learner_002\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 17,
+      "final_update_id": "c811308b-8525-4e45-bc6c-4c91da36fec3",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_002",
+      "state": "acked"
+    },
+    {
+      "acknowledged_at": 1786363922.541227,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 816,
+      "close_last_cycle_seq": 16,
+      "fence_json": "{\"attempt_id\":\"attempt-7be41138-cab3-41c4-acc7-9864cb9e8b80\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_003\",\"logical_launch_id\":\"allocation-2520645-learner_003\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 16,
+      "final_update_id": "93774ef9-dce7-4c2b-8f22-87cf0e4fcebd",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_003",
+      "state": "acked"
+    },
+    {
+      "acknowledged_at": 1786363921.630003,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 867,
+      "close_last_cycle_seq": 17,
+      "fence_json": "{\"attempt_id\":\"attempt-d9cd21e3-7e24-4269-a0c7-b603737483f9\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_004\",\"logical_launch_id\":\"allocation-2520645-learner_004\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 17,
+      "final_update_id": "f59ef313-a590-4649-9cf4-4ab90c2abb84",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_004",
+      "state": "acked"
+    },
+    {
+      "acknowledged_at": 1786363922.5522337,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 816,
+      "close_last_cycle_seq": 16,
+      "fence_json": "{\"attempt_id\":\"attempt-94774d3e-8437-44a8-b3e6-289582949852\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_005\",\"logical_launch_id\":\"allocation-2520645-learner_005\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 16,
+      "final_update_id": "470fe36b-c949-475a-ab60-8250b898ac0b",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_005",
+      "state": "acked"
+    },
+    {
+      "acknowledged_at": 1786363922.559666,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 816,
+      "close_last_cycle_seq": 16,
+      "fence_json": "{\"attempt_id\":\"attempt-d949f689-106c-4351-ae07-4bdaa68218bc\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_006\",\"logical_launch_id\":\"allocation-2520645-learner_006\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 16,
+      "final_update_id": "ea2b8ed9-2a40-4208-aaab-0f0ecf48097e",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_006",
+      "state": "acked"
+    },
+    {
+      "acknowledged_at": 1786363921.6376083,
+      "acknowledged_by_epoch": 1,
+      "close_data_cursor": 714,
+      "close_last_cycle_seq": 14,
+      "fence_json": "{\"attempt_id\":\"attempt-3dcf9796-e5b9-454c-8c0d-f26697909849\",\"binding_generation\":1,\"kind\":\"static\",\"learner_id\":\"learner_007\",\"logical_launch_id\":\"allocation-2520645-learner_007\"}",
+      "fence_kind": "static",
+      "final_cycle_seq": 14,
+      "final_update_id": "d8e2f148-565e-4d18-90aa-45a46d3dd848",
+      "generation": 1,
+      "hard_crash_gap_tokens_upper_bound": 0,
+      "stable_contributor_key": "learner_007",
+      "state": "acked"
+    }
+  ],
+  "token_ledger": {
+    "adjudicated_processed": 106080,
+    "carried_ancestry": 0,
+    "direct_applied": 71808,
+    "direct_dropped": 34272,
+    "direct_outstanding": 0,
+    "direct_quarantined_or_conflicted": 0,
+    "direct_reported_unpublished": 0,
+    "hard_crash_gap_tokens_upper_bound": 0,
+    "local_discarded": 0
+  }
+}
+PASS

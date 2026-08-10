@@ -21,6 +21,8 @@ python -m fs_diloco.tools.launch_independent_run \
 
 加上 `--submit --syncer-walltime HH:MM:SS --learner-walltime HH:MM:SS` 才会提交独立 PBS actor；两个 walltime 都必须显式给出且至少十分钟。正式 9-node 配置是 `configs/full_protocol_static.yaml`，工作量固定为每轮 50 个 local optimizer steps、10 个 committed global steps。
 
+当前 schema revision 10 和恢复路径已在 9 个独立 Miyabi GPU 节点上通过超过正式基线的 51-local-step × 11-global-step 验证：8 个 learner 各贡献 11 个 committed update，累计 71,808 direct applied tokens，版本连续到 11，token balance 和 outstanding 均为零。正式验收仍使用上面的唯一 50 × 10 配置，并在最终 source target 上重新执行。
+
 运行根目录中的权威状态是 `control/syncer_metadata.sqlite3`。配置、descriptor、source manifest、artifact policy 和 bootstrap marker 都在初始化时不可变发布；weights、outer optimizer state、receipt、proposal、control publication 和 audit history 都通过内容哈希或 authority row 绑定。
 
 详细文档：
