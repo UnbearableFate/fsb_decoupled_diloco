@@ -105,3 +105,16 @@
 - The mandatory critical-incremental Codex report was saved before requesting
   or reading any external conclusion for this round and found no new blocking
   design issue. Runtime tests remain blocked pending the external review job.
+
+## 2026-08-10T17:12:09+09:00 — EXTERNAL_TEST_REVIEW remediation
+
+- Pre-submit shell syntax, literal group, prompt hash and continuous ancestry
+  checks passed for target
+  `af54925a4d0487a37c20f298f2027003cb079d20`.
+- Submitted critical-incremental reviewer job `2518777.opbs` with one
+  `debug-g` node (`mg0006`), four parallel reviewer invocations and
+  `00:30:00` walltime. Prompt SHA-256 is
+  `78675261a99237b706cfa95476e50bbc7a2f024be91a33fc2af8acd340293888`.
+- Initial scheduler metadata confirms the exact base/target/prompt identities,
+  literal group `xg24i002` and running state. Only monitoring is allowed until
+  the job reaches terminal orchestration state.

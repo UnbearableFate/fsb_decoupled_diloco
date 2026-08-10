@@ -4,7 +4,7 @@ branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P2-tests-and-harness
 work_unit_id: P2-W1-reviewed-test-design
-state: TEST_REVIEW_TARGET
+state: EXTERNAL_TEST_REVIEW
 base_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 target_commit: af54925a4d0487a37c20f298f2027003cb079d20
 formal_source_commit: null
@@ -24,7 +24,7 @@ required_evidence:
   - reports/DOING/plan03-1/artifact-schema.md
 invalidated_evidence: []
 external_review:
-  pbs_job_id: null
-  status: not-started
+  pbs_job_id: 2518777.opbs
+  status: running
 open_blocking_findings: []
-allowed_next_action: submit_critical_incremental_test_review
+allowed_next_action: monitor_critical_incremental_test_review
