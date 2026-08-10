@@ -78,7 +78,10 @@ def _gate_payload(contract: dict[str, object], source: dict[str, object], raw: P
         "source_identity": source,
         "config_schema_identity": {"version": 1},
         "protocol_schema_identity": {"version": 1, "mode": "static"},
-        "environment": {"nodes": [f"mg{index:04d}" for index in range(contract["nodes"])]},
+        "environment": {
+            "pbs_job_id": "fixture.opbs",
+            "nodes": [f"mg{index:04d}" for index in range(contract["nodes"])],
+        },
         "workload_identity": None,
         "metrics": {},
         "errors": [],
@@ -111,12 +114,19 @@ def _gate_payload(contract: dict[str, object], source: dict[str, object], raw: P
             "steps": [
                 {
                     "name": "ruff-format",
+                    "argv": ["python", "-m", "ruff", "format", "--check", "."],
                     "result_kind": "command",
                     "returncode": 0,
                 },
-                {"name": "ruff-lint", "result_kind": "command", "returncode": 0},
+                {
+                    "name": "ruff-lint",
+                    "argv": ["python", "-m", "ruff", "check", "."],
+                    "result_kind": "command",
+                    "returncode": 0,
+                },
                 {
                     "name": "focused-pytest",
+                    "argv": ["python", "-m", "pytest", "-q", "tests"],
                     "result_kind": "pytest",
                     "returncode": 0,
                     "junit_xml": str(focused_junit.resolve()),
@@ -127,6 +137,7 @@ def _gate_payload(contract: dict[str, object], source: dict[str, object], raw: P
                 },
                 {
                     "name": "full-pytest",
+                    "argv": ["python", "-m", "pytest", "-q"],
                     "result_kind": "pytest",
                     "returncode": 0,
                     "junit_xml": str(full_junit.resolve()),

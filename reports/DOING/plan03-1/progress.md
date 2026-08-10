@@ -779,3 +779,32 @@
 - Candidate source and tests are not yet frozen or runtime-validated. Next:
   complete static hardening, commit the candidate, then run focused and full
   validation on one confirmed Miyabi compute node.
+
+## 2026-08-10T20:28:37+09:00 — P4 candidate frozen for one-node validation
+
+- Candidate target `a511318f6575bb68a069f9b53b9070bd5f746bd7` contains the
+  canonical fault oracle, resume update authority, JUnit evidence producer,
+  behavior/mutation fixtures, formal ladder manifest and completion checker.
+- Login-safe Python compilation, Ruff, JSON/YAML parsing, module-coverage
+  inventory, PBS/shell syntax, literal group-ID scan and Git whitespace checks
+  pass. All formal source scopes are clean; unrelated user-owned files and
+  untracked external-review output remain outside the candidate.
+- Transition: `TEST_REMEDIATION` -> `STAGED_TEST_EXECUTION`. Run the focused
+  candidate suite first and the complete one-node producer only after focused
+  PASS. External review remains skipped; review gates are Codex internal only.
+
+## 2026-08-10T20:34:20+09:00 — P4 focused fixture remediation
+
+- Interactive job `2520314.opbs` started on confirmed compute node `mg0012`
+  with the required one-node topology and modules. The first focused attempt
+  ran 104 tests: 102 passed and two completion-aggregator tests failed because
+  their synthetic U1 artifact omitted registered command argv fields.
+- After adding argv, the targeted retry ran seven completion tests: five passed
+  and two failed because the same synthetic artifact omitted its PBS job/node
+  identity. This is a test-fixture construction defect; production authority,
+  runtime and checker behavior did not fail.
+- The fixture now projects both command and exact one-node environment identity;
+  its seven targeted tests pass. Counter
+  `harness:p4-candidate-validation-01=2`; transition to `TEST_REMEDIATION` until
+  the complete fix is frozen, then rerun the full focused set in the same
+  allocation.

@@ -234,3 +234,15 @@
   terminal-row/control mutation proving the Checker rejects an internally
   consistent but incomplete terminal projection. Revalidate on one node and
   rerun all P3 scenarios from one new source identity.
+## 2026-08-10T20:34:20+09:00 — P4 completion fixture identity
+
+- Domain: `harness:p4-candidate-validation-01`; valid consecutive failures: 2.
+- Job/allocation: interactive `2520314.opbs`, compute node `mg0012`.
+- Attempt 1: 102/104 focused tests passed. The two failures showed that the
+  synthetic U1 artifact lacked the command argv required by the completed
+  checker; production code was not reached by either failing assertion.
+- Attempt 2: 5/7 targeted completion tests passed. The remaining two showed
+  that the synthetic U1 artifact lacked its PBS job/node identity.
+- Remediation: make the fixture project the same command and topology identity
+  as the production validation producer. The targeted seven-test suite now
+  passes. No third attempt has run yet.
