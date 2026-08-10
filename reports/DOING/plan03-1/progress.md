@@ -1009,3 +1009,15 @@
   four-lane compute-node reviewer job for the exact base/target; runtime tests
   remain blocked until the coordinator validates and disposes every valid
   result.
+
+## 2026-08-10T22:00:45+09:00 — external remediation review running
+
+- PBS job `2520922.opbs` was submitted after all repository PBS scripts passed
+  shell syntax, literal group, prompt hash, base/target ancestry and source
+  identity preflight.
+- The job is running on compute node `mg0011` with one `debug-g` node and the
+  registered 30-minute walltime. It reviews exact base
+  `5b474d5c1735beb8cca922fd6cc7b6304926df2c` and target
+  `74ecd4fb64311c69ae0d758d8c1d99b27a9c5572` using the four current lanes.
+- Runtime testing remains blocked until the terminal summary, model identity,
+  snapshot integrity and every valid finding are checked.

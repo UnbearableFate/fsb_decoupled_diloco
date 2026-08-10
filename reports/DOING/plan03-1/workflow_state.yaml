@@ -61,8 +61,8 @@ invalidated_evidence:
   - final-u1-target-5b474d5-invalidated-by-current-review-remediation
   - final-f1-normal-target-5b474d5-invalidated-by-current-review-remediation
 external_review:
-  pbs_job_id: null
-  status: not-started
+  pbs_job_id: 2520922.opbs
+  status: running
 open_blocking_findings:
   - FSD-M1
   - FSD-M2
@@ -77,4 +77,4 @@ open_blocking_findings:
   - FSD-L4
   - FSD-L5
   - FSD-L6
-allowed_next_action: submit_current_review_remediation_multi_agent_review
+allowed_next_action: await_current_review_remediation_multi_agent_review
