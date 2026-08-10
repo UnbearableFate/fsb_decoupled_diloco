@@ -362,6 +362,34 @@ def test_completion_aggregate_rejects_wrong_source_and_self_input(
         )
 
 
+def test_completion_rejects_mismatched_syncer_takeover_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _module()
+    source, manifest, manifest_path, matrix_path = _materialize_registered_inputs(module, tmp_path)
+    monkeypatch.setattr(module, "_require_tracked", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(module, "_validate_source", lambda *_args, **_kwargs: source)
+    takeover_gate = next(
+        gate for gate in manifest["gates"] if gate["id"] == "F1-final-syncer-takeover"
+    )
+    artifact_path = tmp_path / takeover_gate["artifact_path"]
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload["syncer_takeover_boundary_version"] = 3
+    artifact_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    takeover_gate["artifact_sha256"] = _sha256(artifact_path)
+    manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="runtime gate takeover boundary is not exact"):
+        module.check_completion(
+            project_root=tmp_path,
+            manifest_path=manifest_path,
+            matrix_path=matrix_path,
+            mode="staged",
+            output=tmp_path / "mismatched-boundary.json",
+        )
+
+
 def test_completion_rejects_unbound_matrix_and_non_internal_review(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
