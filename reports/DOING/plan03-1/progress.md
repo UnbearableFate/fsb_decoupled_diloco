@@ -88,3 +88,20 @@
   than extended with a second Checker mode.
 - Transition: `EXTERNAL_TEST_REVIEW` → `TEST_REMEDIATION`. Runtime execution
   remains blocked until the remediation is frozen and critically re-reviewed.
+
+## 2026-08-10T17:11:43+09:00 — TEST_REVIEW_TARGET remediation freeze
+
+- Continuous remediation target:
+  `af54925a4d0487a37c20f298f2027003cb079d20`; base is the prior reviewed
+  implementation `f14847498d0055e9efbd9639a4e73ec3cfebfb6b`.
+- C1-C4 were implemented with an aggregate valid terminal fixture plus eight
+  mutations, explicit FAIL/BLOCKED separation, exact normal/takeover epoch
+  lifecycles and an exact 80-surface coverage manifest.
+- The PBS early-exit artifact and real syncer pause seam are now covered. The
+  obsolete dynamic multi-node registration was removed without removing the
+  current dynamic product mode or its unit tests.
+- Login-safe syntax, group, JSON, manifest inventory and diff checks passed. No
+  project Python or runtime test ran on the login node.
+- The mandatory critical-incremental Codex report was saved before requesting
+  or reading any external conclusion for this round and found no new blocking
+  design issue. Runtime tests remain blocked pending the external review job.

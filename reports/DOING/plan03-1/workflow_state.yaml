@@ -4,12 +4,12 @@ branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P2-tests-and-harness
 work_unit_id: P2-W1-reviewed-test-design
-state: TEST_REMEDIATION
+state: TEST_REVIEW_TARGET
 base_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
-target_commit: f14847498d0055e9efbd9639a4e73ec3cfebfb6b
+target_commit: af54925a4d0487a37c20f298f2027003cb079d20
 formal_source_commit: null
 formal_source_fingerprint: null
-experiment_id: test-design-full-protocol-harness-01
+experiment_id: test-design-full-protocol-harness-remediation-01
 experiment_domain: harness
 failure_counters: {}
 required_tests:
@@ -24,14 +24,7 @@ required_evidence:
   - reports/DOING/plan03-1/artifact-schema.md
 invalidated_evidence: []
 external_review:
-  pbs_job_id: 2518445.opbs
-  status: complete-no-valid-report
-open_blocking_findings:
-  - C1-aggregate-checker-acceptance-untested
-  - C2-validation-failures-classified-blocked
-  - C3-takeover-epoch-lifecycle-not-asserted
-  - C4-module-coverage-inventory-missing
-  - A1-allocation-failure-artifact-missing
-  - A2-fault-injection-seam-untested
-  - A4-obsolete-dynamic-runtime-scenario-registration
-allowed_next_action: implement_test_design_remediation
+  pbs_job_id: null
+  status: not-started
+open_blocking_findings: []
+allowed_next_action: submit_critical_incremental_test_review
