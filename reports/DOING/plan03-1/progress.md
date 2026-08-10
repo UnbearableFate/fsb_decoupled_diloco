@@ -349,3 +349,22 @@
   exact per-surface test ownership and an atomic P2 validation artifact
   producer, review the continuous target, then rerun the P2 gate on one compute
   node. External review remains skipped by user direction.
+
+## 2026-08-10T18:30:16+09:00 — P2 remediation approved for runtime validation
+
+- Frozen continuous target:
+  `296b4cd595719b1b0f61ceb5fcbd97dd0585e76a`; prior phase target
+  `5f3d61400fa9fa3c6ee469fa80a75d58558e5c87` is a verified ancestor.
+- P2-F1 remediation replaces group-level coverage claims with 81 exact current
+  surface owners and adds focused CLI, inspection, manual-close,
+  learner-admission and actor-identity behavior tests.
+- P2-F2 remediation adds one create-only, atomic one-node validation producer
+  that binds fixed commands, both P2 requirements, source identity,
+  interpreter/packages, PBS topology, raw evidence and result classification.
+- Login-safe Python syntax, JSON, selector/surface equality, Ruff on the changed
+  files, shell syntax, literal group and diff checks pass.
+- Mandatory Codex continuous review verdict: `APPROVE`. External review remains
+  skipped under user direction.
+- Transition: `PHASE_REMEDIATION_AND_RETEST` -> `STAGED_TEST_EXECUTION`. Acquire
+  a main-agent-held one-node allocation and execute the new producer once from
+  this clean source target.

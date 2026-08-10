@@ -3,13 +3,13 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P2-tests-and-harness
-work_unit_id: P2-W4-phase-remediation
-state: PHASE_REMEDIATION_AND_RETEST
+work_unit_id: P2-W5-phase-remediation-validation
+state: STAGED_TEST_EXECUTION
 base_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
-target_commit: 5f3d61400fa9fa3c6ee469fa80a75d58558e5c87
+target_commit: 296b4cd595719b1b0f61ceb5fcbd97dd0585e76a
 formal_source_commit: null
 formal_source_fingerprint: null
-experiment_id: p2-phase-remediation-01
+experiment_id: p2-phase-remediation-validation-01
 experiment_domain: harness
 failure_counters:
   "harness:p2-one-node-validation-01": 0
@@ -36,6 +36,6 @@ external_review:
   pbs_job_id: 2519093.opbs
   status: skipped-by-user
 open_blocking_findings:
-  - P2-F1
-  - P2-F2
-allowed_next_action: implement_p2_phase_findings
+  - P2-F1-runtime-verification
+  - P2-F2-runtime-evidence
+allowed_next_action: acquire_one_node_and_run_validation_producer
