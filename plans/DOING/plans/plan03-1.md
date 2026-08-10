@@ -12,12 +12,12 @@
 
 ## 过程
 
-1. 分析当前fs_diloco 代码中Full Protocol v4 的路径.
-2. 将相同含义的代码进行归并,比如将fs_diloco/core/config.py中被Full Protocol v4 的路径依赖的函数或代码行归并到fs_diloco/core/config_4.py里
-3. 移除所有用不到的代码.
-4. 将v4系列代码改名, 不再携带 `v4` 世代后缀。
-5. 整理fs_diloco 代码,进行重构以符合最佳代码范式.
-6. 以模块为单位构建单元测试, 修正和测试
-6. 以功能为单位构建4 learner + 1 syncer的测试, 测试已经实现过的节点状态动态变化容错等功能,对测试代码进行多agent review,然后测试
-7. 进行8 learner + 1 syncer 的 50 local steps * 10 global steps的测试.
-8. 更新docs
+- 分析当前fs_diloco 代码中Full Protocol v4 的路径.
+- 将相同含义的代码进行归并,比如将fs_diloco/core/config.py中被Full Protocol v4 的路径依赖的函数或代码行归并到fs_diloco/core/config_4.py里
+- 移除所有用不到的代码,尤其是代表旧版本旧设计的代码, 以及fs_diloco/tools 中只是为了实施之前的计划实际上和fs_diloco没什么关系的代码.
+- 将v4系列代码改名, 不再携带 `v4` 世代后缀。
+- 整理fs_diloco 代码,进行重构以符合最佳代码范式.
+- 以模块为单位构建单元测试, 修正和测试
+- 以功能为单位构建4 learner + 1 syncer的测试, 测试已经实现过的节点状态动态变化容错等功能,对测试代码进行多agent review,然后测试
+- 进行8 learner + 1 syncer 的 50 local steps * 10 global steps的测试.
+- 更新docs
