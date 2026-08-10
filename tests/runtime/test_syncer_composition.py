@@ -20,7 +20,7 @@ from fs_diloco.storage.authority import (
     initialize_authority,
 )
 from fs_diloco.storage.paths import RunPaths, prepare_authority_dirs
-from tests.support.protocol import receipt_payload
+from tests.support.protocol import proposal, receipt_payload
 
 
 class _Telemetry:
@@ -125,5 +125,29 @@ def test_ingest_proposals_propagates_command_conflict(tmp_path: Path) -> None:
             authority,
             leader,
             control,
+            _Telemetry(),
+        )
+
+
+def test_proposal_ingest_propagates_command_conflict(tmp_path: Path) -> None:
+    paths = RunPaths(tmp_path)
+    prepare_authority_dirs(paths)
+    candidate = proposal()
+    proposal_path = paths.shared_root / "updates/proposals/learner-0/proposal.json"
+    proposal_path.parent.mkdir(parents=True, exist_ok=True)
+    proposal_path.write_bytes(candidate.canonical_bytes())
+    authority = SimpleNamespace(read=SimpleNamespace(current_contributor_fences=lambda: ()))
+    leader = SimpleNamespace(
+        ingest_proposal=lambda **_kwargs: (_ for _ in ()).throw(
+            CommandConflictError("conflicting proposal command")
+        )
+    )
+
+    with pytest.raises(CommandConflictError, match="conflicting proposal command"):
+        _ingest_proposals(
+            _loaded(paths, config_sha256=hashlib.sha256(b"config").hexdigest()),
+            authority,
+            leader,
+            SimpleNamespace(),
             _Telemetry(),
         )
