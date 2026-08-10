@@ -1294,3 +1294,13 @@
   `c4e9bb943aed3b2bd6c304575d1911acfda997ce618410028b1dce8c2dc189fa`.
 - Submit the four current reviewer lanes on one compute node. No staged
   completion artifact may be published before terminal disposition.
+
+## 2026-08-11T01:16:00+09:00 — external final-evidence review running
+
+- PBS job `2522308.opbs` is running on `mg0005` with exact base
+  `08050eed5da6e697437f796aabb7c980311c8937`, target
+  `00ba722920d01a915efa4a2a90872c46ff906aa3`, four current reviewer lanes,
+  prompt SHA-256
+  `c4e9bb943aed3b2bd6c304575d1911acfda997ce618410028b1dce8c2dc189fa`,
+  720-second lane timeout and `00:15:00` allocation walltime.
+- Only monitoring is allowed until terminal orchestration state.
