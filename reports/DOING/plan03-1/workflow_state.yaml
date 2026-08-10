@@ -3,21 +3,21 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P3-functional-faults
-work_unit_id: P3-W3-functional-normal-checker-remediation
+work_unit_id: P3-W3-functional-normal-retry
 state: STAGED_TEST_EXECUTION
 base_commit: 4e46b0026e044842cf3956ae7f4c95a5a8f2206b
 target_commit: a040cb9c9a073b87a90cdc467dc1c04f72e16ca0
 formal_source_commit: null
 formal_source_fingerprint: null
 experiment_id: p3-functional-normal-01
-experiment_domain: harness
+experiment_domain: product
 failure_counters:
   "harness:p2-one-node-validation-01": 0
   "harness:p2-one-node-full-suite-01": 0
   "product:p3-functional-normal-01": 0
   "product:p3-learner-replacement-01": 0
   "product:p3-syncer-takeover-01": 0
-  "harness:p3-functional-checker-01": 1
+  "harness:p3-functional-checker-01": 0
 required_tests:
   - p3-functional-normal
   - p3-learner-replacement
@@ -31,6 +31,8 @@ required_evidence:
   - reports/DOING/plan03-1/artifacts/20260810-190552_p3-functional-normal_pass.json
   - reports/DOING/plan03-1/artifacts/20260810-190552_p3-functional-normal_pbs.log
   - reports/DOING/code_review/plan03-1/critical-P3-normal-checker-remediation/codex-gpt_a040cb9c9a073b87a90cdc467dc1c04f72e16ca0.md
+  - reports/DOING/plan03-1/artifacts/20260810-192000_p3-checker-remediation-validation.json
+  - reports/DOING/plan03-1/artifacts/20260810-192000_p3-checker-remediation-validation.log
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -41,4 +43,4 @@ external_review:
   pbs_job_id: null
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: run_one_node_p3_checker_remediation_validation
+allowed_next_action: submit_p3_functional_normal

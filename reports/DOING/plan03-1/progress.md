@@ -509,3 +509,25 @@
 - Verdict: `APPROVE`; external review remains skipped under user direction.
   Acquire a main-agent-held one-node allocation and run the fixed validation
   producer before submitting another five-node scenario.
+
+## 2026-08-10T19:22:27+09:00 — P3 Checker remediation validation PASS
+
+- Main-agent-held allocation `2519748.opbs` ran on exact one-node
+  `interact-g` host `mg0018` with `1:ncpus=8:mem=16gb`; requested walltime was
+  `01:00:00`, terminal exit status is 0, and actual walltime was 3:17.
+- Clean source commit:
+  `44fe476898cd89e9b4fbb13930aa338e56cbd87f`; fingerprint
+  `sha256:87e6223c81c49839673b949eccb540f95fcd22d75e4aece3f9824aad124a0314`.
+- The structured validation producer returned `PASS` with no errors: Ruff
+  format covered 127 files, lint passed, the focused group passed 119 tests in
+  12.38 seconds, and the complete suite passed 505 tests in 23.89 seconds.
+- Environment: Python 3.13.13, pytest 9.1.1, pytest-timeout 2.4.0, Ruff 0.15.21
+  and Torch 2.13.0+cu132 from the project `.venv`.
+- Evidence:
+  `artifacts/20260810-192000_p3-checker-remediation-validation.json` (SHA-256
+  `a9b3adf8d491aad576f615ee171d36e51c38be0a3cb7a67b7de13aef4b723ecd`)
+  and matching raw log (SHA-256
+  `aff0c9d740de5fafd89b81f19aefbf2927d1e0d59471246420f820b896d90c14`).
+- The harness failure counter resets to zero. The interactive allocation was
+  closed normally and no unfinished job remains. Freeze this evidence, then
+  submit a new normal scenario from the same post-review source scopes.
