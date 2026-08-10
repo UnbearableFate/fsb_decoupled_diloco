@@ -272,14 +272,14 @@ def _materialize_registered_inputs(module, tmp_path: Path):
     return source, manifest, manifest_path, matrix_path
 
 
-def test_candidate_manifest_registers_exact_final_ladder() -> None:
+def test_archived_manifest_registers_exact_final_ladder() -> None:
     module = _module()
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
 
-    assert manifest["state"] == "candidate"
-    assert manifest["source_identity"] is None
+    assert manifest["state"] == "registered"
+    assert manifest["source_identity"]["dirty"] is False
     assert {gate["id"] for gate in manifest["gates"]} == set(module.GATE_CONTRACTS)
-    assert all(gate["artifact_path"] is None for gate in manifest["gates"])
+    assert all(gate["artifact_path"] for gate in manifest["gates"])
     for gate in manifest["gates"]:
         contract = module.GATE_CONTRACTS[gate["id"]]
         assert gate["topology"] == contract["topology"]
