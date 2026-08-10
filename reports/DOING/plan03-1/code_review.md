@@ -86,3 +86,16 @@ review stage is recorded as skipped-by-user rather than fabricated as approval.
   and P4-R2-F3 (cleanup may precede completed evidence checking).
 - External review is skipped by explicit user direction; untracked external
   output is not read as a conclusion or accepted as evidence.
+
+## 2026-08-10T21:03:18+09:00 — preformal remediation rereview
+
+- Rejected base: `1f02e7b7a4d96cbacca7451b8b902ceebb34de2e`.
+- Reviewed evidence target: `272fa81331a110f815a52d871c2fd61f7d1c3abb`;
+  clean compute-validation source:
+  `2b0c9a004e04af0907ce7766d4d9df47b29cf545`.
+- Mandatory report:
+  `reports/DOING/code_review/plan03-1/plan-complete-preformal-remediation/codex-gpt_272fa81331a110f815a52d871c2fd61f7d1c3abb.md`.
+- P4-R2-F1, P4-R2-F2 and P4-R2-F3 are closed. One-node evidence proves 54
+  affected tests, 169 focused tests and 527 complete tests with all registered
+  format/lint/JUnit gates passing.
+- Verdict: `APPROVE`. External review remains skipped by user direction.

@@ -32,3 +32,13 @@ External review is skipped by explicit user direction.
 
 The prior P4 candidate artifact remains retained but is invalidated for final
 promotion because the formal source and acceptance boundary change.
+
+## Closure
+
+- Remediation implementation: `59abff8978f795e05cb35fc1bf8abb80a8a8bc1a`.
+- Clean validation source: `2b0c9a004e04af0907ce7766d4d9df47b29cf545`.
+- Validation evidence target: `272fa81331a110f815a52d871c2fd61f7d1c3abb`.
+- Codex incremental report:
+  `reports/DOING/code_review/plan03-1/plan-complete-preformal-remediation/codex-gpt_272fa81331a110f815a52d871c2fd61f7d1c3abb.md`.
+- Verdict: `APPROVE`; P4-R2-F1, P4-R2-F2 and P4-R2-F3 are closed.
+- External review remains `skipped-by-user` and contributes no conclusion.

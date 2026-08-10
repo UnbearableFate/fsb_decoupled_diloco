@@ -882,3 +882,16 @@
 - Transition: `STAGED_TEST_EXECUTION` -> `TEST_REVIEW_TARGET`. Freeze the
   validation evidence and perform the required Codex critical-incremental
   rereview of P4-R2-F1 through F3. External review remains skipped.
+
+## 2026-08-10T21:03:18+09:00 — P4 preformal remediation review APPROVE
+
+- Codex reviewed the complete continuous remediation and tracked validation
+  evidence at target `272fa81331a110f815a52d871c2fd61f7d1c3abb`.
+- Direct progress ownership/schema revision, evidence-path/hash binding and
+  completed-check retention are internally consistent and covered by positive
+  and negative tests. P4-R2-F1 through F3 are closed; no blocking finding
+  remains. External review remains skipped by explicit user direction.
+- Before final common-target freeze, run one nine-node workload that exceeds
+  the 50-local-step by 10-global-step baseline, then synchronize docs with that
+  verified result. Those source/doc changes will intentionally precede and be
+  included in the final target; the formal ladder will run afterward.
