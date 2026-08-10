@@ -32,6 +32,12 @@ def test_submission_walltime_is_explicit_and_at_least_ten_minutes(value: str | N
         launch_independent_run._walltime_resource(value, required=True)
 
 
+@pytest.mark.parametrize("value", [None, "", "bad queue", "-debug-g"])
+def test_submission_queue_is_explicit_and_safe(value: str | None) -> None:
+    with pytest.raises(ValueError):
+        launch_independent_run._queue_resource(value, required=True)
+
+
 @pytest.mark.parametrize("mode", ["static", "dynamic"])
 def test_launch_uses_one_syncer_and_scalar_learner_jobs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
@@ -122,10 +128,13 @@ def test_submit_returns_every_scalar_actor_job_id(
         syncer_walltime="00:10:00",
         learner_walltime="00:10:00",
         log_root=tmp_path / "logs",
+        actor_queue="debug-g",
     )
 
     assert len(submitted) == 1 + config.sync.num_learners
     assert result["syncer_job_id"] == "job-1"
+    assert result["actor_queue"] == "debug-g"
+    assert all(command[command.index("-q") + 1] == "debug-g" for command in submitted)
     assert result["learner_job_ids"] == [
         f"job-{index}" for index in range(2, config.sync.num_learners + 2)
     ]

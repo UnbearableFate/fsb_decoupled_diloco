@@ -26,7 +26,7 @@ python -m fs_diloco.tools.launch_independent_run \
 确认输出后，加上：
 
 ```text
---submit --syncer-walltime HH:MM:SS --learner-walltime HH:MM:SS --log-root /absolute/log/root
+--submit --actor-queue QUEUE --syncer-walltime HH:MM:SS --learner-walltime HH:MM:SS --log-root /absolute/log/root
 ```
 
 该工具先创建 immutable run，然后提交一条 `run_syncer.pbs` 和每个 learner 各一条 scalar `run_learner.pbs`；static 模式不使用 PBS job array。部分 qsub 成功时不会隐式 qdel；返回的 accepted job IDs 是 operator receipt，必须先核对 scheduler 再决定后续操作。

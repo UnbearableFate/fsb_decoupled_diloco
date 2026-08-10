@@ -18,6 +18,7 @@ from .init_run import initialize_run
 
 
 _WALLTIME_RE = re.compile(r"^[0-9]{2,4}:[0-5][0-9]:[0-5][0-9]$")
+_QUEUE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
 
 def _walltime_resource(value: str | None, *, required: bool) -> list[str]:
@@ -33,6 +34,16 @@ def _walltime_resource(value: str | None, *, required: bool) -> list[str]:
     if hours * 3600 + minutes * 60 + seconds < 600:
         raise ValueError("PBS walltime must be at least 00:10:00")
     return ["-l", f"walltime={value}"]
+
+
+def _queue_resource(value: str | None, *, required: bool) -> list[str]:
+    if value is None:
+        if required:
+            raise ValueError("submitting independent jobs requires an explicit actor queue")
+        return []
+    if _QUEUE_RE.fullmatch(value) is None:
+        raise ValueError(f"invalid PBS queue: {value!r}")
+    return ["-q", value]
 
 
 def _qsub(command: list[str]) -> dict[str, Any]:
@@ -97,6 +108,7 @@ def launch(
     syncer_walltime: str | None = None,
     learner_walltime: str | None = None,
     log_root: str | Path | None = None,
+    actor_queue: str | None = None,
 ) -> dict[str, Any]:
     project_root = Path(project_root).resolve()
     # Validate scheduler resources before init_run creates the immutable run
@@ -110,6 +122,7 @@ def launch(
         learner_walltime,
         required=submit,
     )
+    actor_queue_resource = _queue_resource(actor_queue, required=submit)
     if submit and log_root is None:
         raise ValueError("submitting independent jobs requires an explicit log root")
     resolved_log_root = None if log_root is None else Path(log_root).resolve()
@@ -138,6 +151,7 @@ def launch(
     )
     syncer_command = [
         "qsub",
+        *actor_queue_resource,
         *syncer_walltime_resource,
         *([] if resolved_log_root is None else ["-o", str(resolved_log_root / "syncer.log")]),
         "-v",
@@ -149,6 +163,7 @@ def launch(
         learner_commands = [
             [
                 "qsub",
+                *actor_queue_resource,
                 *learner_walltime_resource,
                 *(
                     []
@@ -165,6 +180,7 @@ def launch(
         learner_commands = [
             [
                 "qsub",
+                *actor_queue_resource,
                 *learner_walltime_resource,
                 *(
                     []
@@ -185,6 +201,7 @@ def launch(
         **initialized,
         "syncer_qsub": syncer_command,
         "membership_mode": shared.membership.mode,
+        "actor_queue": actor_queue,
         "learner_qsubs": learner_commands,
         "log_root": None if resolved_log_root is None else str(resolved_log_root),
         "submitted": bool(submit),
@@ -240,6 +257,10 @@ def main(argv: list[str] | None = None) -> None:
         help="absolute actor log directory; required with --submit",
     )
     parser.add_argument(
+        "--actor-queue",
+        help="PBS queue for every independent actor; required with --submit",
+    )
+    parser.add_argument(
         "--syncer-walltime",
         help="estimated shortest practical PBS walltime (HH:MM:SS); required with --submit",
     )
@@ -258,6 +279,7 @@ def main(argv: list[str] | None = None) -> None:
         syncer_walltime=args.syncer_walltime,
         learner_walltime=args.learner_walltime,
         log_root=args.log_root,
+        actor_queue=args.actor_queue,
     )
     json.dump(result, sys.stdout, sort_keys=True, indent=2)
     sys.stdout.write("\n")
