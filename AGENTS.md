@@ -78,3 +78,14 @@ Do not optimize for minimizing the diff. Optimize for minimizing the complexity 
 不要把 backward compatibility 当成优点。在这个项目当前阶段，历史兼容性属于不必要的技术债务。
 
 最终代码应看起来像“这个项目从一开始就是按照当前设计实现的”，而不是“在旧设计上不断打补丁演化到当前状态”。
+
+<!-- CODEGRAPH_START -->
+## CodeGraph
+
+In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the repo root), reach for it BEFORE grep/find or reading files when you need to understand or locate code:
+
+- **MCP tool** (when available): `codegraph_explore` answers most code questions in one call — the relevant symbols' verbatim source plus the call paths between them, including dynamic-dispatch hops grep can't follow. Name a file or symbol in the query to read its current line-numbered source. If it's listed but deferred, load it by name via tool search.
+- **Shell** (always works): `codegraph explore "<symbol names or question>"` prints the same output.
+
+If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is the user's decision.
+<!-- CODEGRAPH_END -->
