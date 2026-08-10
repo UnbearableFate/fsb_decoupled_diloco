@@ -194,6 +194,7 @@ def test_candidate_cleanup_preserves_primary_failure_and_surfaces_release_failur
         paths=SimpleNamespace(
             resolved_config_yaml=config_path,
             sqlite_db=tmp_path / "authority.sqlite3",
+            bootstrap_complete_json=tmp_path / "bootstrap_complete.json",
             shared_root=tmp_path,
             actor_metrics_path=lambda *_args: tmp_path / "syncer.jsonl",
         ),
