@@ -216,3 +216,15 @@
   count is now 2. Delete the obsolete re-export rather than restoring legacy
   performance support, review the continuous diff with Codex, and retry in the
   retained allocation.
+
+## 2026-08-10T17:56:08+09:00 — STAGED_TEST_EXECUTION attempt 3 target
+
+- Deleted only the stale performance-support import and two matching exports;
+  repository-wide search confirms no current consumer or remaining active
+  reference.
+- Frozen target: `83e160d3ca6b21e7103adfc10dca7454bd661a0c`.
+- Mandatory Codex incremental review verdict: `APPROVE`; external review remains
+  skipped by user direction.
+- Transition: `TARGETED_REMEDIATION` -> `STAGED_TEST_EXECUTION`. Retry the exact
+  static/focused gate in retained allocation `2519128.opbs`. Another valid
+  failure would trigger comprehensive failure review rather than a third patch.
