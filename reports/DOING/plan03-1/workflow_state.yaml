@@ -3,10 +3,10 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P4-formal-and-docs
-work_unit_id: P4-W3-preformal-current-state-review
-state: PLAN_REVIEW_TARGET
+work_unit_id: P4-W4-plan-remediation
+state: PLAN_REMEDIATION
 base_commit: e1f76a85f77c33765ebaaddb4828e40cc45d4d24
-target_commit: 1393f38ab51ea78d193b457501947d4095070eab
+target_commit: 1f02e7b7a4d96cbacca7451b8b902ceebb34de2e
 formal_source_commit: null
 formal_source_fingerprint: null
 experiment_id: p4-candidate-validation-01
@@ -20,8 +20,8 @@ failure_counters:
   "harness:p3-functional-checker-01": 0
   "harness:p4-candidate-validation-01": 0
 required_tests:
-  - p4-focused-candidate
-  - p4-one-node-validation
+  - p4-review-remediation-focused
+  - p4-review-remediation-one-node-validation
 required_evidence:
   - reports/DOING/plan03-1/artifact-schema.md
   - reports/DOING/plan03-1/formal-ladder-manifest.json
@@ -39,8 +39,12 @@ invalidated_evidence:
   - p3-normal-attempt-1-checker-exact-total-cycle-false-negative
   - p3-normal-pass-invalidated-by-terminal-authority-source-fix
   - p3-learner-replacement-attempt-1-terminal-total-checker-false-pass
+  - p4-candidate-validation-invalidated-by-preformal-source-and-checker-remediation
 external_review:
   pbs_job_id: null
   status: skipped-by-user
-open_blocking_findings: []
-allowed_next_action: perform_codex_internal_preformal_current_state_review
+open_blocking_findings:
+  - P4-R2-F1
+  - P4-R2-F2
+  - P4-R2-F3
+allowed_next_action: implement_and_freeze_preformal_remediation

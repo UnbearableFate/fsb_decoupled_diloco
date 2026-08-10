@@ -827,3 +827,19 @@
   Transition: `STAGED_TEST_EXECUTION` -> `PLAN_REVIEW_TARGET`; commit the
   evidence, then perform the mandatory Codex internal preformal current-state
   review. External reviewers remain skipped.
+
+## 2026-08-10T20:51:53+09:00 — P4 preformal review requires remediation
+
+- Codex completed the mandatory full tracked current-state review on frozen
+  target `1f02e7b7a4d96cbacca7451b8b902ceebb34de2e`; the P3 phase-final base is its
+  verified ancestor. External review remains skipped by user direction.
+- The review accepted three blocking findings: durable contributor progress
+  must own `last_update_id`; formal supporting evidence must bind to the gate's
+  actual raw paths; and runtime inputs must survive completed checking rather
+  than only staged checking.
+- Verdict: `CHANGES_REQUIRED`. The earlier candidate PASS is retained but
+  invalidated for final promotion because the source schema/recovery semantics
+  and completion acceptance boundary change.
+- Transition: `PREFORMAL_PLAN_CURRENT_STATE_REVIEW` -> `PLAN_REMEDIATION`.
+  Implement the ordered remediation, freeze it, run affected focused tests and
+  complete one-node validation, then perform a Codex incremental rereview.

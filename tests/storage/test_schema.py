@@ -43,8 +43,8 @@ def test_fresh_schema_initializes_reopens_and_is_integral(
         tables = set(authority.read.table_names())
         assert authority.read.integrity_check() == ("ok",)
         assert metadata.ddl_sha256 == ddl_bundle_sha256(metadata.mode)
-        assert AUTHORITY_SCHEMA_VERSION == 9
-        assert metadata.schema_version == 9
+        assert AUTHORITY_SCHEMA_VERSION == 10
+        assert metadata.schema_version == 10
         assert ("learner_instances" in tables) is dynamic_expected
         assert "static_contributor_bindings" in tables
         assert "publication_intents" in tables
@@ -58,6 +58,12 @@ def test_fresh_schema_initializes_reopens_and_is_integral(
                     for row in connection.execute("PRAGMA table_info(launch_requests)").fetchall()
                 }
             assert {"reservation_released_at", "stream_id", "replace_instance_id"} <= columns
+        with sqlite3.connect(database) as connection:
+            progress_columns = {
+                str(row[1])
+                for row in connection.execute("PRAGMA table_info(contributor_progress)").fetchall()
+            }
+        assert "last_update_id" in progress_columns
     marker = database.with_name("bootstrap_complete.json")
     assert marker.stat().st_mode & 0o222 == 0
 

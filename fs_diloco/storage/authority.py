@@ -507,14 +507,7 @@ class AuthorityReadModel:
 
     def contributor_progress(self, stable_contributor_key: str) -> ContributorProgress | None:
         row = self._authority._fetchone(
-            """
-            SELECT p.*, r.planned_update_id AS last_update_id
-            FROM contributor_progress AS p
-            LEFT JOIN cycle_receipts AS r
-              ON r.stable_contributor_key=p.stable_contributor_key
-             AND r.receipt_id=p.last_receipt_id
-            WHERE p.stable_contributor_key=?
-            """,
+            "SELECT * FROM contributor_progress WHERE stable_contributor_key=?",
             (stable_contributor_key,),
         )
         return None if row is None else _decode_progress(row)
@@ -1381,12 +1374,14 @@ class LeaderSession:
                 """
                 INSERT INTO contributor_progress(
                     stable_contributor_key, last_cycle_seq, last_receipt_id,
-                    last_receipt_sha256, data_cursor, updated_by_epoch, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    last_receipt_sha256, last_update_id, data_cursor,
+                    updated_by_epoch, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(stable_contributor_key) DO UPDATE SET
                     last_cycle_seq=excluded.last_cycle_seq,
                     last_receipt_id=excluded.last_receipt_id,
                     last_receipt_sha256=excluded.last_receipt_sha256,
+                    last_update_id=excluded.last_update_id,
                     data_cursor=excluded.data_cursor,
                     updated_by_epoch=excluded.updated_by_epoch,
                     updated_at=excluded.updated_at
@@ -1396,6 +1391,7 @@ class LeaderSession:
                     receipt.cycle_seq,
                     receipt.receipt_id,
                     digest,
+                    receipt.planned_update_id,
                     receipt.data_cursor_end,
                     self.token.epoch,
                     now,
@@ -1424,9 +1420,7 @@ class LeaderSession:
                 (receipt.stable_contributor_key,),
             ).fetchone()
             assert row is not None
-            result = dict(row)
-            result["last_update_id"] = receipt.planned_update_id
-            return result
+            return dict(row)
 
         result = self._command(command_id, "ingest_cycle_receipt", request, operation)
         return _decode_progress(result)
@@ -5469,14 +5463,7 @@ class LeaderSession:
         fence: DynamicContributorFence,
     ) -> dict[str, Any]:
         progress = connection.execute(
-            """
-            SELECT p.*, r.planned_update_id AS last_update_id
-            FROM contributor_progress AS p
-            LEFT JOIN cycle_receipts AS r
-              ON r.stable_contributor_key=p.stable_contributor_key
-             AND r.receipt_id=p.last_receipt_id
-            WHERE p.stable_contributor_key=?
-            """,
+            "SELECT * FROM contributor_progress WHERE stable_contributor_key=?",
             (fence.stable_contributor_key,),
         ).fetchone()
         return {

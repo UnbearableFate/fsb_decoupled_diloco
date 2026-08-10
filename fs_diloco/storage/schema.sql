@@ -1,6 +1,6 @@
 CREATE TABLE schema_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-    schema_version INTEGER NOT NULL CHECK (schema_version = 9),
+    schema_version INTEGER NOT NULL CHECK (schema_version = 10),
     protocol_version INTEGER NOT NULL CHECK (protocol_version = 4),
     mode TEXT NOT NULL CHECK (mode IN ('static', 'dynamic')),
     features_json TEXT NOT NULL,
@@ -271,10 +271,12 @@ CREATE TABLE contributor_progress (
     last_cycle_seq INTEGER NOT NULL CHECK (last_cycle_seq >= 0),
     last_receipt_id TEXT,
     last_receipt_sha256 TEXT,
+    last_update_id TEXT,
     data_cursor INTEGER NOT NULL CHECK (data_cursor >= 0),
     updated_by_epoch INTEGER NOT NULL CHECK (updated_by_epoch >= 1),
     updated_at REAL NOT NULL,
-    CHECK ((last_cycle_seq = 0 AND last_receipt_id IS NULL AND last_receipt_sha256 IS NULL)
+    CHECK ((last_cycle_seq = 0 AND last_receipt_id IS NULL AND last_receipt_sha256 IS NULL
+            AND last_update_id IS NULL)
         OR (last_cycle_seq > 0 AND last_receipt_id IS NOT NULL
             AND length(last_receipt_sha256) = 64))
 );

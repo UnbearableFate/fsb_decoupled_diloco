@@ -62,6 +62,9 @@ Rules:
   `null`, but may not omit the top-level identity.
 - PASS requires every named evidence path to exist before publication. The
   artifact cannot list its own output or a checker derived only from itself.
+- Every formal gate hash-registers at least one tracked supporting file that is
+  also named by the gate artifact. The one-node validation gate hash-registers
+  its complete evidence set: the raw command log and both JUnit XML files.
 - The final aggregate checks exact requirement ownership, identical formal
   source identity, expected config/workload identities, artifact hashes, and
   absence of extra or missing inputs.

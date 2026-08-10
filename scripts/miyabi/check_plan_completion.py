@@ -543,7 +543,13 @@ def _validate_gate(
         if _sha256(path) != evidence["sha256"]:
             raise RuntimeError(f"supporting evidence hash differs: {evidence['path']}")
         supporting_paths.add(path)
+    if not supporting_paths <= evidence_paths:
+        raise RuntimeError(f"supporting evidence is not named by its gate artifact: {gate['id']}")
     if contract["kind"] == "validation":
+        if supporting_paths != evidence_paths:
+            raise RuntimeError(
+                "one-node validation must hash-bind its raw log and both JUnit files"
+            )
         if payload.get("cleanup") != {
             "owner": "validation_suite",
             "eligible": False,

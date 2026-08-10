@@ -71,3 +71,18 @@ review stage is recorded as skipped-by-user rather than fabricated as approval.
   terminal applied-token equality after hot-table archival.
 - `FUNC-4L1S-01` and `FAULT-4L1S-01` are complete. Verdict: `APPROVE`.
   External review remains skipped under user direction.
+
+## 2026-08-10T20:51:53+09:00 — preformal current-state review
+
+- Base: P3 phase-final
+  `e1f76a85f77c33765ebaaddb4828e40cc45d4d24`.
+- Frozen target: `1f02e7b7a4d96cbacca7451b8b902ceebb34de2e`.
+- Mandatory full-current-state report:
+  `reports/DOING/code_review/plan03-1/plan-complete-preformal-current-state/codex-gpt_1f02e7b7a4d96cbacca7451b8b902ceebb34de2e.md`.
+- Verdict: `CHANGES_REQUIRED`.
+- Blocking findings: P4-R2-F1 (resume update identity is derived from archival
+  receipt history instead of owned by durable contributor progress), P4-R2-F2
+  (hash-registered supporting evidence need not be named by its gate artifact),
+  and P4-R2-F3 (cleanup may precede completed evidence checking).
+- External review is skipped by explicit user direction; untracked external
+  output is not read as a conclusion or accepted as evidence.

@@ -59,11 +59,19 @@ def _registered_manifest(project_root: Path) -> dict[str, object]:
         supporting = project_root / f"evidence/{gate['id']}.log"
         supporting.parent.mkdir(parents=True, exist_ok=True)
         supporting.write_text(f"independent evidence for {gate['id']}\n", encoding="utf-8")
+        supporting_paths = [supporting]
+        if gate["id"] == "U1-final-one-node-validation":
+            focused_junit = supporting.with_name(f"{supporting.stem}.focused.junit.xml")
+            full_junit = supporting.with_name(f"{supporting.stem}.full.junit.xml")
+            focused_junit.write_text("<testsuites/>\n", encoding="utf-8")
+            full_junit.write_text("<testsuites/>\n", encoding="utf-8")
+            supporting_paths.extend((focused_junit, full_junit))
         gate["supporting_evidence"] = [
             {
-                "path": supporting.relative_to(project_root).as_posix(),
-                "sha256": _sha256(supporting),
+                "path": path.relative_to(project_root).as_posix(),
+                "sha256": _sha256(path),
             }
+            for path in supporting_paths
         ]
     return manifest
 
@@ -93,8 +101,8 @@ def _gate_payload(contract: dict[str, object], source: dict[str, object], raw: P
         },
     }
     if contract["kind"] == "validation":
-        focused_junit = raw.with_name("focused.junit.xml")
-        full_junit = raw.with_name("full.junit.xml")
+        focused_junit = raw.with_name(f"{raw.stem}.focused.junit.xml")
+        full_junit = raw.with_name(f"{raw.stem}.full.junit.xml")
         focused_junit.write_text("<testsuites/>\n", encoding="utf-8")
         full_junit.write_text("<testsuites/>\n", encoding="utf-8")
         common["evidence_paths"] = [
@@ -198,10 +206,9 @@ def _write_matrix(
 def _materialize_registered_inputs(module, tmp_path: Path):
     source = _source()
     manifest = _registered_manifest(tmp_path)
-    raw = tmp_path / "evidence/raw.log"
-    raw.write_text("raw gate evidence\n", encoding="utf-8")
     for gate in manifest["gates"]:
         contract = module.GATE_CONTRACTS[gate["id"]]
+        raw = tmp_path / gate["supporting_evidence"][0]["path"]
         artifact_path = tmp_path / f"artifacts/{gate['id']}.json"
         artifact_path.parent.mkdir(parents=True, exist_ok=True)
         artifact_path.write_text(
@@ -396,6 +403,35 @@ def test_completion_rejects_unbound_matrix_and_non_internal_review(
             matrix_path=matrix_path,
             mode="staged",
             output=tmp_path / "external.json",
+        )
+
+
+def test_completion_rejects_supporting_evidence_unrelated_to_gate_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _module()
+    source, manifest, manifest_path, matrix_path = _materialize_registered_inputs(module, tmp_path)
+    monkeypatch.setattr(module, "_require_tracked", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(module, "_validate_source", lambda *_args, **_kwargs: source)
+    unrelated = tmp_path / "evidence/unrelated.log"
+    unrelated.write_text("unrelated evidence\n", encoding="utf-8")
+    runtime_gate = next(gate for gate in manifest["gates"] if gate["id"].startswith("F1-"))
+    runtime_gate["supporting_evidence"] = [
+        {
+            "path": unrelated.relative_to(tmp_path).as_posix(),
+            "sha256": _sha256(unrelated),
+        }
+    ]
+    manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="not named by its gate artifact"):
+        module.check_completion(
+            project_root=tmp_path,
+            manifest_path=manifest_path,
+            matrix_path=matrix_path,
+            mode="staged",
+            output=tmp_path / "unrelated.json",
         )
 
 

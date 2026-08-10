@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -60,6 +61,12 @@ def test_contributor_progress_advances_only_contiguous_receipt_chain(tmp_path: P
         assert second_progress.last_update_id == second.planned_update_id
         assert second_progress.data_cursor == 16
         assert authority.read.contributor_progress("learner-0") == second_progress
+        with sqlite3.connect(tmp_path / "authority.sqlite3") as connection:
+            durable_last_update_id = connection.execute(
+                "SELECT last_update_id FROM contributor_progress WHERE stable_contributor_key=?",
+                ("learner-0",),
+            ).fetchone()
+        assert durable_last_update_id == (second.planned_update_id,)
     finally:
         authority.close()
 
