@@ -199,3 +199,20 @@ only after implementation, compute-node validation and Codex rereview.
 - Target `74ecd4f` is not promotable. Transition:
   `EXTERNAL_TEST_REVIEW` -> `TEST_REMEDIATION`; close the accepted findings and
   run compute-node validation before rereview.
+
+## 2026-08-10T23:00:26+09:00 — external-finding remediation rereview
+
+- Rejected target: `74ecd4fb64311c69ae0d758d8c1d99b27a9c5572`.
+- Tested target: `3b99d1a995245639f236fe73efd013e4f12c910a`;
+  clean source fingerprint
+  `sha256:e3edbda02aec61c90dcf3e7b8e88c0becee05c7dd2bc40b9671f9b77f229a367`.
+- Mandatory Codex-first report:
+  `reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/codex-gpt_3b99d1a995245639f236fe73efd013e4f12c910a.md`.
+- FSD-R1 through R9 are closed in current source and tests. Codex additionally
+  added the missing completion-layer mismatched takeover-boundary mutation and
+  corrected four stale test fixtures exposed during compute verification.
+- PBS jobs `2521177.opbs` and `2521364.opbs` verified the affected paths and
+  exact final target. The registered final-target producer passed Ruff,
+  186 focused tests and all 544 tests with no failure, error or skip.
+- Verdict: `APPROVE` for restored external multi-agent rereview. No result from
+  that not-yet-submitted round was read while producing this report.

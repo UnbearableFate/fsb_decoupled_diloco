@@ -3,10 +3,10 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P4-formal-and-docs
-work_unit_id: P4-W10-current-review-remediation
-state: TEST_REMEDIATION
+work_unit_id: P4-W11-external-finding-rereview
+state: EXTERNAL_TEST_REVIEW
 base_commit: 5b474d5c1735beb8cca922fd6cc7b6304926df2c
-target_commit: 74ecd4fb64311c69ae0d758d8c1d99b27a9c5572
+target_commit: 3b99d1a995245639f236fe73efd013e4f12c910a
 formal_source_commit: null
 formal_source_fingerprint: null
 experiment_id: plan03-1-current-review-remediation
@@ -48,6 +48,12 @@ required_evidence:
   - reports/DOING/plan03-1/artifacts/20260810-212500_final-f1-functional-normal_pbs.log
   - reports/DOING/code_review/plan03-1/critical-current-fs-diloco/finding-dispositions_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
   - reports/DOING/code_review/plan03-1/critical-current-remediation/codex-gpt_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md
+  - reports/DOING/code_review/plan03-1/critical-current-remediation/finding-dispositions_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md
+  - reports/DOING/plan03-1/artifacts/u1_validation_3b99d1a.json
+  - reports/DOING/plan03-1/artifacts/u1_validation_3b99d1a.log
+  - reports/DOING/plan03-1/artifacts/u1_validation_3b99d1a.log.focused-pytest.junit.xml
+  - reports/DOING/plan03-1/artifacts/u1_validation_3b99d1a.log.full-pytest.junit.xml
+  - reports/DOING/code_review/plan03-1/critical-current-remediation-rereview/codex-gpt_3b99d1a995245639f236fe73efd013e4f12c910a.md
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -60,17 +66,9 @@ invalidated_evidence:
   - final-r2-target-5b474d5-invalidated-by-current-review-remediation
   - final-u1-target-5b474d5-invalidated-by-current-review-remediation
   - final-f1-normal-target-5b474d5-invalidated-by-current-review-remediation
+  - current-u1-target-081e81e-superseded-by-completion-contract-mutation-test
 external_review:
-  pbs_job_id: 2520922.opbs
-  status: completed-with-findings
-open_blocking_findings:
-  - FSD-R1
-  - FSD-R2
-  - FSD-R3
-  - FSD-R4
-  - FSD-R5
-  - FSD-R6
-  - FSD-R7
-  - FSD-R8
-  - FSD-R9
-allowed_next_action: implement_external_current_review_findings
+  pbs_job_id: null
+  status: pending
+open_blocking_findings: []
+allowed_next_action: submit_external_current_remediation_rereview

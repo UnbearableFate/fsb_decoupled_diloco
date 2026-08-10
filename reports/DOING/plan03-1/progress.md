@@ -1038,3 +1038,29 @@
   remaining dependency scan non-vacuous.
 - These edits invalidate reviewed target `74ecd4f`. Next gate is focused and
   full one-node compute validation, then a Codex rereview of the tested target.
+
+## 2026-08-10T23:00:26+09:00 — remediation validation and Codex rereview PASS
+
+- Interactive job `2521177.opbs` on `mg0010` exercised the affected syncer,
+  harness, completion, cleanup, config, architecture and schema paths. It
+  exposed four stale fixture assumptions introduced around the current
+  interfaces; each was corrected without changing product behavior.
+- Codex rereview then identified one missing discriminating oracle at the final
+  completion layer. The new mutation changes only the takeover artifact value
+  from registered `2` to `3` and proves completion rejects it. Its direct test
+  passed 9/9 on compute node `mg0008`.
+- Exact tested target `3b99d1a995245639f236fe73efd013e4f12c910a`
+  passed the registered producer in interactive job `2521364.opbs`: Ruff
+  format/lint, 186 focused tests and 544 full tests, with zero failures, errors
+  or skips. The clean fingerprint is
+  `sha256:e3edbda02aec61c90dcf3e7b8e88c0becee05c7dd2bc40b9671f9b77f229a367`.
+- Evidence SHA-256 values are artifact
+  `76b774d65e54db957616ada5b13ed580d1d649f30b7590942695b827d6986d8b`,
+  raw log `985ca287578524399c9670c766d603ea6a96bef919c7f5ee4f8df8fb6cd42266`,
+  focused JUnit
+  `51ac59bb5748310cad9ce378cca65618c37c87d473a2f8d148602b24e8684cea`
+  and full JUnit
+  `89c63d59a835c68a7b426f9f028e71ad2dc29591c63ecb1a10e22e71589983ba`.
+- The mandatory Codex rereview closes FSD-R1 through R9 and returns `APPROVE`.
+  Transition: `TEST_REMEDIATION` -> `EXTERNAL_TEST_REVIEW`; submit the restored
+  four-lane reviewer job for this exact tested target.
