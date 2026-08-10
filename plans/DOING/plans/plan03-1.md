@@ -1,5 +1,11 @@
 # plan03-1 精简代码库以及重构
 
+## 参考规则
+
+1. 在测试时使用skill `$miyabi-development` 
+2. 主要原则: AGENTS.md, plans/AGENTS.md.
+3. 工作流: plans/workflow.md
+
 ## 目的
 
 把仓库收敛成只有一种可运行、可配置、可分析、可测试的 filesystem Decoupled DiLoCo 协议：`Full Protocol`。它就是当前已经实现的 Full Protocol v4 语义，但产品名、模块名、类型名、配置入口、schema 文件名和运行目录不再携带 `v4` 世代后缀。
