@@ -2,30 +2,29 @@ workflow_version: 3
 plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
-phase_id: P2-tests-and-harness
-work_unit_id: P2-W7-phase-final
-state: PHASE_FINAL
-base_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
-target_commit: 11290da38f12520ead2c9488662cfa573526fa91
+phase_id: P3-functional-faults
+work_unit_id: P3-W1-test-design
+state: IMPLEMENT_AND_DRAFT_TESTS
+base_commit: 9398e822ebe6cf9755e55567b18916802b93162f
+target_commit: null
 formal_source_commit: null
 formal_source_fingerprint: null
 experiment_id: null
-experiment_domain: harness
+experiment_domain: product
 failure_counters:
   "harness:p2-one-node-validation-01": 0
   "harness:p2-one-node-full-suite-01": 0
+  "product:p3-functional-normal-01": 0
+  "product:p3-learner-replacement-01": 0
+  "product:p3-syncer-takeover-01": 0
 required_tests:
-  - s0-static-preflight
-  - harness-focused-unit-tests
-  - one-node-full-suite
+  - p3-functional-normal
+  - p3-learner-replacement
+  - p3-syncer-takeover
 required_evidence:
-  - reports/DOING/plan03-1/inventory.md
-  - reports/DOING/plan03-1/requirement-matrix.csv
+  - reports/DOING/plan03-1/p3-functional-fault-manifest.json
   - reports/DOING/plan03-1/identity-authority.md
-  - reports/DOING/plan03-1/test-ladder.md
   - reports/DOING/plan03-1/artifact-schema.md
-  - reports/DOING/plan03-1/artifacts/20260810-183244_p2-phase-remediation-validation_pass.log
-  - reports/DOING/plan03-1/artifacts/20260810-183244_p2-phase-remediation-validation_pass.json
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -35,4 +34,4 @@ external_review:
   pbs_job_id: 2519093.opbs
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: start_p3_test_design_freeze
+allowed_next_action: freeze_p3_test_design_target

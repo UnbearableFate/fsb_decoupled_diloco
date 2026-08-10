@@ -405,3 +405,18 @@
 - P2 is complete. The next phase is P3 functional/fault testing: freeze the
   exact 4 learner + 1 syncer workload/scenarios and complete a Codex test-design
   review before the first five-node allocation.
+
+## 2026-08-10T18:40:00+09:00 — P3 test-design implementation
+
+- P2 phase-final commit: `9398e822ebe6cf9755e55567b18916802b93162f`.
+- P3 now has one exact functional/fault manifest covering the normal,
+  learner-replacement and syncer-takeover scenarios.
+- The manifest fixes the 5-node topology; synthetic model/data identity; 20
+  local steps, 4 global steps and exact 5120 direct applied tokens; every fault
+  layer, injection boundary, authority oracle, timeout, PASS formula, output
+  ownership and cleanup rule.
+- Evidence-based walltime is `00:10:00` per scenario: the minimum allowed by
+  repository policy and still more than twice the expected bounded workload,
+  including takeover lease expiry and orderly evidence teardown.
+- Next action: freeze this report-only design target and perform the mandatory
+  Codex P3 test-design review. No five-node job may be submitted before approval.
