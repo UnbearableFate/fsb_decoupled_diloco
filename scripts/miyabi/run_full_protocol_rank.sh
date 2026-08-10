@@ -174,7 +174,7 @@ run_syncer() {
 if [[ "$rank" -eq 0 ]]; then
   if [[ "$scenario" == "syncer_takeover" ]]; then
     fault_marker="$LOG_ROOT/syncer_primary_fault_boundary.json"
-    FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION=2 \
+    FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION="$SYNCER_TAKEOVER_BOUNDARY_VERSION" \
     FS_DILOCO_FAULT_PAUSE_MARKER_PATH="$fault_marker" \
     CUDA_VISIBLE_DEVICES="$SYNCER_CUDA_VISIBLE_DEVICES" \
     OMP_NUM_THREADS="$SYNCER_OMP_NUM_THREADS" \

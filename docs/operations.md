@@ -59,7 +59,7 @@ python -m fs_diloco.tools.request_static_replacement \
 
 ```bash
 python -m fs_diloco.tools.analysis RUN_ROOT
-python -m fs_diloco.cli close --shared-root RUN_ROOT --reason REASON
+python -m fs_diloco.tools.request_terminal_close --shared-root RUN_ROOT --reason REASON
 python -m fs_diloco.tools.resolve_scheduler_uncertainty --help
 ```
 

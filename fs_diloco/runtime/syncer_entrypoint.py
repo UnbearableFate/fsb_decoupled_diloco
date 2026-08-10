@@ -255,15 +255,13 @@ def main(argv: list[str] | None = None) -> None:
                 exc.add_note(f"candidate error fencing also failed: {failure_error!r}")
             raise
     finally:
-        if renewer is not None:
-            renewer.stop()
-        if token is not None and not candidate_failed:
-            try:
+        try:
+            if renewer is not None:
+                renewer.stop()
+            if token is not None and not candidate_failed:
                 authority.release_leader(token)
-            except Exception:
-                # A successor may already have fenced an expired/failed owner.
-                pass
-        authority.close()
+        finally:
+            authority.close()
 
 
 if __name__ == "__main__":

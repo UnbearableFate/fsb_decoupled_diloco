@@ -5,7 +5,11 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
+from fs_diloco.runtime import syncer_entrypoint
 from fs_diloco.runtime.syncer_entrypoint import _admit_before_runtime_import
+from fs_diloco.storage.leader_lease import StaleLeaderTokenError
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -128,3 +132,101 @@ def test_syncer_admission_modules_load_without_torch() -> None:
     )
 
     assert probe.returncode == 0, probe.stdout + probe.stderr
+
+
+def test_successful_candidate_does_not_swallow_release_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_path = tmp_path / "resolved.yaml"
+    config_path.write_text("config_schema_version: 1\n", encoding="utf-8")
+    token = SimpleNamespace(epoch=1, owner_id="owner-1")
+    closed: list[bool] = []
+
+    class FakeAuthority:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def acquire_leader(self, **_kwargs):
+            return token
+
+        def open_leader(self, _token):
+            return SimpleNamespace()
+
+        def committed_leader_lease(self, _token):
+            return SimpleNamespace()
+
+        def release_leader(self, _token) -> None:
+            raise StaleLeaderTokenError("release crossed the safety boundary")
+
+        def close(self) -> None:
+            closed.append(True)
+
+    class FakeControl:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def publish_heartbeat(self, _lease) -> None:
+            pass
+
+    class FakeRenewer:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def start(self) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+    loaded = SimpleNamespace(
+        paths=SimpleNamespace(
+            resolved_config_yaml=config_path,
+            sqlite_db=tmp_path / "authority.sqlite3",
+            shared_root=tmp_path,
+            actor_metrics_path=lambda *_args: tmp_path / "syncer.jsonl",
+        ),
+        config=SimpleNamespace(
+            membership=SimpleNamespace(mode="static"),
+            leader=SimpleNamespace(
+                lease_duration_seconds=30.0,
+                max_clock_skew_seconds=1.0,
+                business_busy_timeout_ms=5000,
+                candidate_wait_seconds=60.0,
+                candidate_acquire_poll_seconds=1.0,
+                renew_interval_seconds=5.0,
+            ),
+            maintenance=SimpleNamespace(
+                publication_orphan_grace_seconds=40.0,
+                quarantine_records_per_contributor=64,
+            ),
+        ),
+        descriptor={"static_learner_ids": ["learner_000"], "bootstrap_slots": 1},
+        identity=SimpleNamespace(
+            as_dict=lambda: {
+                "run_id": "run-current",
+                "source_fingerprint": "source",
+                "config_sha256": "a" * 64,
+            }
+        ),
+    )
+    monkeypatch.setattr(syncer_entrypoint, "load_run_descriptor", lambda *_args, **_kwargs: loaded)
+    monkeypatch.setattr(syncer_entrypoint, "_LeaseRenewer", FakeRenewer)
+    monkeypatch.setattr(
+        syncer_entrypoint, "_admit_before_runtime_import", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        syncer_entrypoint,
+        "ActorTelemetryWriter",
+        lambda *_args, **_kwargs: SimpleNamespace(event=lambda *_args, **_kwargs: None),
+    )
+    monkeypatch.setattr("fs_diloco.storage.authority.LeaderAuthority", FakeAuthority)
+    monkeypatch.setattr("fs_diloco.storage.control.ControlPublisher", FakeControl)
+    monkeypatch.setattr("fs_diloco.runtime.syncer._admit_requests", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "fs_diloco.runtime.syncer.run_fenced_syncer", lambda *_args, **_kwargs: None
+    )
+
+    with pytest.raises(StaleLeaderTokenError, match="release crossed"):
+        syncer_entrypoint.main(["--config", str(config_path), "--shared-root", str(tmp_path)])
+
+    assert closed == [True]

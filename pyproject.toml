@@ -7,7 +7,7 @@ name = "fs-diloco-miyabi"
 version = "0.1.0"
 description = "Filesystem-backed Decoupled DiLoCo prototype for Miyabi"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 dependencies = [
     "torch",
     "transformers",
@@ -23,14 +23,6 @@ dev = [
     "pytest-timeout>=2.3",
     "ruff",
 ]
-
-[project.scripts]
-fs-diloco = "fs_diloco.cli:main"
-fs-diloco-syncer = "fs_diloco.syncer:main"
-fs-diloco-learner = "fs_diloco.learner:main"
-fs-diloco-init-run = "fs_diloco.tools.init_run:main"
-fs-diloco-launch-run = "fs_diloco.tools.launch_independent_run:main"
-fs-diloco-inspect = "fs_diloco.tools.analysis:main"
 
 [tool.ruff]
 line-length = 100

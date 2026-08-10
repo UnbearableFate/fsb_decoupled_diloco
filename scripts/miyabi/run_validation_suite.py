@@ -29,6 +29,7 @@ FOCUSED_TESTS = (
     "tests/harness/test_validation_suite.py",
     "tests/runtime/test_learner_entrypoint.py",
     "tests/runtime/test_syncer_fault_boundary.py",
+    "tests/runtime/test_syncer_composition.py",
     "tests/runtime/test_syncer_startup_admission.py",
     "tests/runtime/test_terminal_service.py",
     "tests/storage/test_authority_operational.py",

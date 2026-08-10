@@ -22,11 +22,6 @@
       "tests": ["tests/architecture/test_plan_complete_dead_surfaces.py::test_only_unversioned_product_surfaces_exist"]
     },
     {
-      "surface": "fs_diloco/cli.py",
-      "boundary": "single public command dispatcher",
-      "tests": ["tests/test_cli.py::test_dispatch_forwards_remaining_arguments"]
-    },
-    {
       "surface": "fs_diloco/core/__init__.py",
       "boundary": "current core package declaration",
       "tests": ["tests/architecture/test_plan_complete_dead_surfaces.py::test_only_unversioned_product_surfaces_exist"]
@@ -223,8 +218,8 @@
     },
     {
       "surface": "fs_diloco/runtime/syncer.py",
-      "boundary": "single fenced syncer runtime composition and fault seam",
-      "tests": ["tests/runtime/test_syncer_fault_boundary.py::test_syncer_fault_boundary_orders_quiesce_marker_and_sigstop"]
+      "boundary": "single fenced syncer admission and ingest composition",
+      "tests": ["tests/runtime/test_syncer_composition.py::test_active_static_attempt_replacement_requires_matching_authorization"]
     },
     {
       "surface": "fs_diloco/runtime/syncer_entrypoint.py",

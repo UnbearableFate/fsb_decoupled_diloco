@@ -29,4 +29,8 @@ unknown key、错误类型、非有限数、非法枚举、可移动 Hub revisio
 - `configs/full_protocol_functional.yaml`：4 learners，full quorum，20 local steps，4 global steps；5-node normal/replacement/takeover harness。
 - `configs/full_protocol_dynamic.yaml`：4 个 bootstrap instances 的 dynamic membership 示例，使用 `scripts/miyabi/run_learner.pbs` 扩容或替换。
 
-static mode 不允许 scaling。dynamic mode 要求 `quorum_min <= desired_contributors <= quorum_max <= stream_pool_size`，启用 scaling 时必须显式设置至少十分钟的 learner walltime。
+static mode 不允许 scaling，也不重复声明 `stream_pool_size` 或
+`bootstrap_instances`；两者在内部唯一地由 `sync.num_learners` 推导。
+dynamic mode 要求
+`quorum_min <= desired_contributors <= quorum_max <= stream_pool_size`，启用
+scaling 时必须显式设置至少十分钟的 learner walltime。

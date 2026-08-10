@@ -1,6 +1,6 @@
 CREATE TABLE schema_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-    schema_version INTEGER NOT NULL CHECK (schema_version = 10),
+    schema_version INTEGER NOT NULL CHECK (schema_version = 11),
     protocol_version INTEGER NOT NULL CHECK (protocol_version = 4),
     mode TEXT NOT NULL CHECK (mode IN ('static', 'dynamic')),
     features_json TEXT NOT NULL,
@@ -49,7 +49,7 @@ CREATE TABLE syncer_epochs (
     pid INTEGER NOT NULL CHECK (pid >= 0),
     acquired_at REAL NOT NULL,
     last_renewed_at REAL NOT NULL,
-    final_state TEXT CHECK (final_state IN ('released', 'expired', 'terminal', 'error')),
+    final_state TEXT CHECK (final_state IN ('released', 'expired', 'error')),
     final_at REAL,
     superseded_by_epoch INTEGER,
     source_fingerprint TEXT NOT NULL,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 
 
@@ -95,8 +96,70 @@ def test_only_unversioned_product_surfaces_exist() -> None:
             text=True,
         ).splitlines()
     )
-    generation_suffix = re.compile(r"(?:^|[/_.-])v[0-9]+(?:$|[/_.-])")
+    assert tracked, "current source inventory is empty"
+    generation_suffix = re.compile(r"(?:^|[/_.-])v[0-9]+(?:$|[/_.-])", re.IGNORECASE)
     assert not any(generation_suffix.search(path) for path in tracked)
+
+
+def test_no_product_generation_suffix_in_tracked_contents() -> None:
+    tracked = tuple(
+        subprocess.check_output(
+            [
+                "git",
+                "ls-files",
+                "--",
+                "fs_diloco",
+                "configs",
+                "scripts/miyabi",
+                "tests",
+                "docs",
+                "README.md",
+                "pyproject.toml",
+            ],
+            cwd=ROOT,
+            text=True,
+        ).splitlines()
+    )
+    assert tracked, "current source inventory is empty"
+    text_files = tuple(
+        path
+        for relative in tracked
+        if (path := ROOT / relative).suffix
+        in {".py", ".yaml", ".sql", ".sh", ".pbs", ".md", ".toml"}
+    )
+    assert text_files, "current text-source inventory is empty"
+    product_generation = re.compile(
+        r"(?i)\b(?:full[ _-]?protocol|fs[ _-]?diloco|protocol|schema|config)"
+        r"[ _.-]*v[0-9]+\b|\bv[0-9]+[ _.-]*(?:full[ _-]?protocol|fs[ _-]?diloco|"
+        r"legacy|protocol|schema|config)\b"
+    )
+    violations = {
+        path.relative_to(ROOT).as_posix(): match.group(0)
+        for path in text_files
+        if (match := product_generation.search(path.read_text(encoding="utf-8")))
+    }
+    assert violations == {}
+
+    versioned_wire_types: set[str] = set()
+    for path in (ROOT / "fs_diloco").rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        versioned_wire_types.update(
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ClassDef) and re.search(r"V[0-9]+$", node.name)
+        )
+    assert versioned_wire_types == {"CycleReceiptV1", "FullUpdateProposalV2"}
+
+
+def test_python_floor_and_public_invocation_surface_are_unique() -> None:
+    metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert metadata["project"]["requires-python"] == ">=3.13"
+    assert metadata["tool"]["ruff"]["target-version"] == "py313"
+    assert (ROOT / ".python-version").read_text(encoding="utf-8").strip() == "3.13"
+    assert "scripts" not in metadata["project"]
+    assert not (ROOT / "fs_diloco/cli.py").exists()
+    protocol_init = ast.parse((ROOT / "fs_diloco/protocol/__init__.py").read_text(encoding="utf-8"))
+    assert len(protocol_init.body) == 1 and isinstance(protocol_init.body[0], ast.Expr)
 
 
 def test_artifact_versions_and_run_paths_have_explicit_owners() -> None:

@@ -24,16 +24,10 @@ syncer:
   publish_dtype: float32
 membership:
   mode: static
-  stream_pool_size: 4
-  bootstrap_instances: 4
   initial_membership_deadline_seconds: 60.0
   registration_scan_interval_seconds: 0.2
   registration_request_ttl_seconds: 20.0
   heartbeat_dead_after_seconds: 20.0
-scaling:
-  enabled: false
-  desired_contributors: 4
-  low_contributor_threshold: 3
 terminal:
   admission_close_policy: global_target
   drain_ack_timeout_seconds: 30.0

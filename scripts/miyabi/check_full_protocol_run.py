@@ -386,6 +386,7 @@ def validate_run(
     expected_contributors: int,
     expected_hosts: int,
     fault_scenario: str,
+    syncer_takeover_boundary_version: int,
 ) -> dict[str, Any]:
     validate_completed_run_for_actor(run_root)
     descriptor_path = run_root / "control/run_descriptor.json"
@@ -594,14 +595,10 @@ def validate_run(
             errors.append("terminal stop is not the exact authority projection")
         if summary != expected_summary:
             errors.append("terminal summary is not the exact authority projection")
-        owner_id = str(terminal_row["finalized_by_owner_id"])
-        owner_short = hashlib.sha256(owner_id.encode("utf-8")).hexdigest()[:12]
-        immutable_stop = (
-            run_root
-            / "control/syncer_epochs"
-            / f"e{int(terminal_row['finalized_by_epoch']):06d}_{owner_short}"
-            / "terminal"
-            / f"stop_g{int(terminal_row['generation']):06d}.json"
+        immutable_stop = RunPaths(run_root).epoch_stop_path(
+            int(terminal_row["finalized_by_epoch"]),
+            str(terminal_row["finalized_by_owner_id"]),
+            int(terminal_row["generation"]),
         )
         try:
             _require_immutable_file(immutable_stop, label="immutable terminal control")
@@ -850,7 +847,7 @@ def validate_run(
                 or not isinstance(boundary, dict)
                 or boundary.get("sqlite_transaction_active") is not False
                 or boundary.get("lease_renewer_quiesced") is not True
-                or int(boundary.get("committed_version", -1)) != 2
+                or int(boundary.get("committed_version", -1)) != syncer_takeover_boundary_version
                 or int(boundary.get("pid", -1)) != int(takeover_evidence.get("primary_pid", -2))
                 or not epochs
                 or int(boundary.get("epoch", -1)) >= int(epochs[-1]["epoch"])
@@ -1178,6 +1175,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("none", "learner_replacement", "syncer_takeover"),
         required=True,
     )
+    parser.add_argument(
+        "--syncer-takeover-boundary-version",
+        type=_positive_integer,
+        required=True,
+    )
     parser.add_argument("--blocked-reason")
     parser.add_argument("--output", type=Path, required=True)
     return parser
@@ -1216,6 +1218,7 @@ def main(argv: list[str] | None = None) -> None:
                 expected_contributors=args.expected_contributors,
                 expected_hosts=args.expected_hosts,
                 fault_scenario=args.fault_scenario,
+                syncer_takeover_boundary_version=args.syncer_takeover_boundary_version,
             )
         except GatePrerequisiteUnavailable as exc:
             payload = _diagnostic_artifact(args, exc, status="BLOCKED")

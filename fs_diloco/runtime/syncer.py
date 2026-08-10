@@ -49,6 +49,7 @@ from ..storage.authority import (
     LeaderAuthority,
     LeaderSession,
     MembershipFenceError,
+    ProposalPayloadError,
 )
 from ..storage.leader_lease import StaleLeaderTokenError
 from .pbs_scheduler import PBSScheduler
@@ -846,7 +847,9 @@ def _ingest_proposals(
                     receipt,
                     descriptor_sha256=str(loaded.descriptor["descriptor_sha256"]),
                 )
-            except Exception as exc:
+            except (AuthoritySchemaError, CommandConflictError, StaleLeaderTokenError):
+                raise
+            except (MembershipFenceError, OSError, ValueError) as exc:
                 telemetry.event(
                     "receipt_ingest_rejected",
                     path=str(path),
@@ -867,7 +870,9 @@ def _ingest_proposals(
                         update_id=proposal.update_id,
                         disposition=disposition.value,
                     )
-            except Exception as exc:
+            except (AuthoritySchemaError, CommandConflictError, StaleLeaderTokenError):
+                raise
+            except (MembershipFenceError, ProposalPayloadError, OSError, ValueError) as exc:
                 telemetry.event(
                     "proposal_ingest_rejected",
                     path=str(path),

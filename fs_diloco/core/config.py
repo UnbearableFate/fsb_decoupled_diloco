@@ -95,7 +95,7 @@ def _validate_config_value(value: Any, annotation: Any, path: str) -> None:
 
 @dataclass
 class RunSection(ConfigSection):
-    name: str = "fs_diloco_gpt2_wikitext2_8l"
+    name: str = "full_protocol"
     run_id: str | None = None
     shared_root: str | None = None
     git_commit: str | None = None
@@ -105,11 +105,11 @@ class RunSection(ConfigSection):
 
 @dataclass
 class ModelSection(ConfigSection):
-    name_or_path: str = "gpt2"
+    name_or_path: str = "synthetic-tiny"
     revision: str | None = None
     tokenizer_revision: str | None = None
     trust_remote_code: bool = False
-    dtype: str = "bfloat16"
+    dtype: str = "float32"
     compile: bool = False
     synthetic_vocab_size: int = 128
     synthetic_hidden_size: int = 32
@@ -117,11 +117,11 @@ class ModelSection(ConfigSection):
 
 @dataclass
 class DataSection(ConfigSection):
-    dataset_name: str = "Salesforce/wikitext"
-    dataset_config_name: str | None = "wikitext-2-raw-v1"
+    dataset_name: str = "synthetic"
+    dataset_config_name: str | None = None
     revision: str | None = None
     train_split: str = "train"
-    block_size: int = 1024
+    block_size: int = 16
     cache_dir: str | None = None
     shuffle_blocks: bool = True
 
@@ -341,7 +341,28 @@ def _from_dict(
 
 
 def config_to_dict(config: Config) -> dict[str, Any]:
-    return dataclasses.asdict(config)
+    payload = dataclasses.asdict(config)
+    if config.membership.mode == "static":
+        payload["membership"].pop("stream_pool_size")
+        payload["membership"].pop("bootstrap_instances")
+        payload.pop("scaling")
+    return payload
+
+
+def _validate_source_shape(data: dict[str, Any]) -> None:
+    membership = data.get("membership") or {}
+    if not isinstance(membership, dict):
+        return
+    mode = membership.get("mode", "static")
+    if mode == "static":
+        repeated = sorted({"stream_pool_size", "bootstrap_instances"} & set(membership))
+        if repeated:
+            raise ValueError(
+                "static membership derives contributor counts from sync.num_learners; "
+                f"remove: {', '.join(repeated)}"
+            )
+        if "scaling" in data:
+            raise ValueError("static membership must not declare inert scaling configuration")
 
 
 def _parse_config(path: str | Path) -> Config:
@@ -349,6 +370,7 @@ def _parse_config(path: str | Path) -> Config:
         loaded = yaml.safe_load(handle) or {}
     if not isinstance(loaded, dict):
         raise ValueError(f"config {path} must contain a mapping")
+    _validate_source_shape(loaded)
     return _from_dict(Config, loaded)
 
 
@@ -508,10 +530,11 @@ def _normalize_and_validate(config: Config) -> Config:
     if membership.mode not in {"static", "dynamic"}:
         raise ValueError("membership.mode must be one of: static, dynamic")
     dynamic = membership.mode == "dynamic"
-    if config.sync.num_learners != membership.stream_pool_size:
+    if dynamic and config.sync.num_learners != membership.stream_pool_size:
         raise ValueError("sync.num_learners must equal membership.stream_pool_size")
-    if not dynamic and membership.bootstrap_instances != config.sync.num_learners:
-        raise ValueError("static membership.bootstrap_instances must equal sync.num_learners")
+    if not dynamic:
+        membership.stream_pool_size = config.sync.num_learners
+        membership.bootstrap_instances = config.sync.num_learners
     if scaling.enabled and not dynamic:
         raise ValueError("scaling.enabled requires membership.mode=dynamic")
     if membership.stream_pool_size < membership.bootstrap_instances:
@@ -542,44 +565,49 @@ def _normalize_and_validate(config: Config) -> Config:
     ):
         if float(getattr(membership, field_name)) <= 0.0:
             raise ValueError(f"membership.{field_name} must be > 0")
-    if scaling.max_pending_launch_requests > scaling.max_total_launch_requests:
-        raise ValueError("scaling max_pending_launch_requests must not exceed max_total")
-    if scaling.max_pending_launch_requests < 0 or scaling.max_total_launch_requests < 0:
-        raise ValueError("scaling launch request budgets must be non-negative")
-    if scaling.launch_request_ttl_seconds < 2.0 * scaling.scheduler_reconcile_interval_seconds:
-        raise ValueError("scaling launch_request_ttl_seconds must cover two reconciliations")
-    if (
-        scaling.scheduler_uncertainty_timeout_seconds
-        < 3.0 * scaling.scheduler_reconcile_interval_seconds
-    ):
-        raise ValueError("scaling scheduler uncertainty timeout must cover three reconciliations")
-    if scaling.low_contributor_threshold >= scaling.desired_contributors:
-        raise ValueError("scaling low_contributor_threshold must be below desired_contributors")
-    if scaling.low_contributor_threshold < 0 or scaling.desired_contributors < 1:
-        raise ValueError("scaling contributor thresholds are invalid")
-    if scaling.consecutive_low_windows < 2:
-        raise ValueError("scaling.consecutive_low_windows must be >= 2")
-    if (
-        scaling.capacity_observation_retention_count
-        < scaling.consecutive_low_windows + scaling.productive_window_count
-    ):
-        raise ValueError("scaling capacity observation retention is too small")
-    if scaling.productive_window_count < 1:
-        raise ValueError("scaling.productive_window_count must be >= 1")
-    if (
-        not scaling.learner_pbs_script
-        or Path(scaling.learner_pbs_script).is_absolute()
-        or any(part == ".." for part in Path(scaling.learner_pbs_script).parts)
-    ):
-        raise ValueError("scaling.learner_pbs_script must be a safe relative path")
-    if scaling.productive_upload_grace_min_seconds <= 0.0:
-        raise ValueError("scaling productive upload grace minimum must be > 0")
-    if scaling.productive_upload_grace_max_seconds < scaling.productive_upload_grace_min_seconds:
-        raise ValueError("scaling productive upload grace maximum must cover minimum")
-    learner_walltime = scaling.learner_walltime
-    if scaling.enabled and learner_walltime is None:
-        raise ValueError("scaling.learner_walltime is required when scaling is enabled")
-    if learner_walltime is not None:
+    if scaling.enabled:
+        if scaling.max_pending_launch_requests > scaling.max_total_launch_requests:
+            raise ValueError("scaling max_pending_launch_requests must not exceed max_total")
+        if scaling.max_pending_launch_requests < 0 or scaling.max_total_launch_requests < 0:
+            raise ValueError("scaling launch request budgets must be non-negative")
+        if scaling.launch_request_ttl_seconds < 2.0 * scaling.scheduler_reconcile_interval_seconds:
+            raise ValueError("scaling launch_request_ttl_seconds must cover two reconciliations")
+        if (
+            scaling.scheduler_uncertainty_timeout_seconds
+            < 3.0 * scaling.scheduler_reconcile_interval_seconds
+        ):
+            raise ValueError(
+                "scaling scheduler uncertainty timeout must cover three reconciliations"
+            )
+        if scaling.low_contributor_threshold >= scaling.desired_contributors:
+            raise ValueError("scaling low_contributor_threshold must be below desired_contributors")
+        if scaling.low_contributor_threshold < 0 or scaling.desired_contributors < 1:
+            raise ValueError("scaling contributor thresholds are invalid")
+        if scaling.consecutive_low_windows < 2:
+            raise ValueError("scaling.consecutive_low_windows must be >= 2")
+        if (
+            scaling.capacity_observation_retention_count
+            < scaling.consecutive_low_windows + scaling.productive_window_count
+        ):
+            raise ValueError("scaling capacity observation retention is too small")
+        if scaling.productive_window_count < 1:
+            raise ValueError("scaling.productive_window_count must be >= 1")
+        if (
+            not scaling.learner_pbs_script
+            or Path(scaling.learner_pbs_script).is_absolute()
+            or any(part == ".." for part in Path(scaling.learner_pbs_script).parts)
+        ):
+            raise ValueError("scaling.learner_pbs_script must be a safe relative path")
+        if scaling.productive_upload_grace_min_seconds <= 0.0:
+            raise ValueError("scaling productive upload grace minimum must be > 0")
+        if (
+            scaling.productive_upload_grace_max_seconds
+            < scaling.productive_upload_grace_min_seconds
+        ):
+            raise ValueError("scaling productive upload grace maximum must cover minimum")
+        learner_walltime = scaling.learner_walltime
+        if learner_walltime is None:
+            raise ValueError("scaling.learner_walltime is required when scaling is enabled")
         parts = learner_walltime.split(":")
         if (
             len(parts) != 3
@@ -595,24 +623,25 @@ def _normalize_and_validate(config: Config) -> Config:
         walltime_seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
         if walltime_seconds < 600:
             raise ValueError("scaling.learner_walltime must be at least 00:10:00")
-    if scaling.learner_queue is not None and (
-        not scaling.learner_queue
-        or any(
-            not (character.isalnum() or character in "_.-") for character in scaling.learner_queue
-        )
-    ):
-        raise ValueError("scaling.learner_queue contains unsafe PBS characters")
-    for field_name in (
-        "startup_grace_seconds",
-        "productive_upload_grace_factor",
-        "cooldown_seconds",
-        "launch_request_ttl_seconds",
-        "scheduler_reconcile_interval_seconds",
-        "scheduler_uncertainty_timeout_seconds",
-        "starvation_observation_seconds",
-    ):
-        if float(getattr(scaling, field_name)) <= 0.0:
-            raise ValueError(f"scaling.{field_name} must be > 0")
+        if scaling.learner_queue is not None and (
+            not scaling.learner_queue
+            or any(
+                not (character.isalnum() or character in "_.-")
+                for character in scaling.learner_queue
+            )
+        ):
+            raise ValueError("scaling.learner_queue contains unsafe PBS characters")
+        for field_name in (
+            "startup_grace_seconds",
+            "productive_upload_grace_factor",
+            "cooldown_seconds",
+            "launch_request_ttl_seconds",
+            "scheduler_reconcile_interval_seconds",
+            "scheduler_uncertainty_timeout_seconds",
+            "starvation_observation_seconds",
+        ):
+            if float(getattr(scaling, field_name)) <= 0.0:
+                raise ValueError(f"scaling.{field_name} must be > 0")
     if terminal.admission_close_policy not in {
         "global_target_or_launch_budget",
         "global_target",

@@ -355,6 +355,8 @@ def _build_valid_checker_fixture(
         "1",
         "--fault-scenario",
         fault_scenario,
+        "--syncer-takeover-boundary-version",
+        "2",
         "--output",
         str(output),
     ]
@@ -670,6 +672,8 @@ def test_checker_parser_freezes_topology_workload_and_fault_oracles(tmp_path: Pa
             "5",
             "--fault-scenario",
             "learner_replacement",
+            "--syncer-takeover-boundary-version",
+            "2",
             "--output",
             str(tmp_path / "evidence.json"),
         ]
@@ -687,6 +691,7 @@ def test_checker_parser_freezes_topology_workload_and_fault_oracles(tmp_path: Pa
         "expected_contributors": 4,
         "expected_hosts": 5,
         "fault_scenario": "learner_replacement",
+        "syncer_takeover_boundary_version": 2,
         "blocked_reason": None,
         "output": tmp_path / "evidence.json",
     }
@@ -1024,6 +1029,7 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     assert '--fault-scenario "$FS_DILOCO_FAULT_SCENARIO"' in wrapper
     assert "EXPECTED_SYNCER_EPOCHS" not in wrapper
     assert "EXPECTED_REPLACED_LEARNER" not in wrapper
+    assert "readonly SYNCER_TAKEOVER_BOUNDARY_VERSION=2" in wrapper
     allocation = (ROOT / "scripts/miyabi/run_full_protocol_allocation.sh").read_text(
         encoding="utf-8"
     )
@@ -1031,7 +1037,12 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     assert "--map-by ppr:1:node" in allocation
     rank_runner = (ROOT / "scripts/miyabi/run_full_protocol_rank.sh").read_text(encoding="utf-8")
     assert "request_static_replacement" in rank_runner
-    assert "FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION=2" in rank_runner
+    assert (
+        'FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION="$SYNCER_TAKEOVER_BOUNDARY_VERSION"'
+        in rank_runner
+    )
+    assert '--syncer-takeover-boundary-version "$SYNCER_TAKEOVER_BOUNDARY_VERSION"' in wrapper
+    assert '"SYNCER_TAKEOVER_BOUNDARY_VERSION=$SYNCER_TAKEOVER_BOUNDARY_VERSION"' in allocation
     assert 'kill -KILL "$primary_pid"' in rank_runner
     assert "trap publish_blocked_on_exit EXIT" in wrapper
     assert "--blocked-reason" in wrapper

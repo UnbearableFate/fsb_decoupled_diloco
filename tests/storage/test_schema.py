@@ -43,8 +43,8 @@ def test_fresh_schema_initializes_reopens_and_is_integral(
         tables = set(authority.read.table_names())
         assert authority.read.integrity_check() == ("ok",)
         assert metadata.ddl_sha256 == ddl_bundle_sha256(metadata.mode)
-        assert AUTHORITY_SCHEMA_VERSION == 10
-        assert metadata.schema_version == 10
+        assert AUTHORITY_SCHEMA_VERSION == 11
+        assert metadata.schema_version == 11
         assert ("learner_instances" in tables) is dynamic_expected
         assert "static_contributor_bindings" in tables
         assert "publication_intents" in tables
@@ -63,7 +63,12 @@ def test_fresh_schema_initializes_reopens_and_is_integral(
                 str(row[1])
                 for row in connection.execute("PRAGMA table_info(contributor_progress)").fetchall()
             }
+            epoch_sql = connection.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='syncer_epochs'"
+            ).fetchone()[0]
         assert "last_update_id" in progress_columns
+        assert "'terminal'" not in epoch_sql
+        assert all(value in epoch_sql for value in ("'released'", "'expired'", "'error'"))
     marker = database.with_name("bootstrap_complete.json")
     assert marker.stat().st_mode & 0o222 == 0
 

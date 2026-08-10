@@ -17,7 +17,9 @@ from fs_diloco.core.config import (
 )
 
 
-CONFIGS = tuple(sorted(Path("configs").glob("full_protocol_*.yaml")))
+ROOT = Path(__file__).resolve().parents[1]
+CONFIGS = tuple(sorted((ROOT / "configs").glob("full_protocol_*.yaml")))
+assert CONFIGS, "no repository configs discovered"
 HUB_COMMIT = "a" * 40
 
 
@@ -36,6 +38,30 @@ def test_repository_configs_use_the_one_strict_schema(path: Path) -> None:
     assert config.config_schema_version == 1
     assert payload["config_schema_version"] == 1
     assert set(payload) <= {field.name for field in dataclasses.fields(Config)}
+    if config.membership.mode == "static":
+        assert "scaling" not in payload
+        assert "stream_pool_size" not in payload["membership"]
+        assert "bootstrap_instances" not in payload["membership"]
+        assert config.membership.stream_pool_size == config.sync.num_learners
+        assert config.membership.bootstrap_instances == config.sync.num_learners
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        "membership:\n  mode: static\n  stream_pool_size: 4\n",
+        "membership:\n  mode: static\n  bootstrap_instances: 4\n",
+        "membership:\n  mode: static\nscaling:\n  enabled: false\n",
+    ],
+)
+def test_static_config_rejects_repeated_or_inert_capacity_fields(
+    tmp_path: Path, extra: str
+) -> None:
+    path = tmp_path / "config.yaml"
+    path.write_text(extra, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="static membership"):
+        load_config(path)
 
 
 @pytest.mark.parametrize("revision", [None, "main", "v1.0", "A" * 40, "a" * 39])

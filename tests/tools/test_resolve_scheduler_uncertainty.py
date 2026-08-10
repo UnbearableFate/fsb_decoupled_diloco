@@ -39,7 +39,9 @@ def test_scheduler_resolution_is_dry_run_by_default_and_apply_is_create_no_repla
 
 
 def test_scheduler_resolution_module_has_no_db_pbs_or_cancel_capability() -> None:
-    source = Path("fs_diloco/tools/resolve_scheduler_uncertainty.py").read_text(encoding="utf-8")
+    source = (
+        Path(__file__).resolve().parents[2] / "fs_diloco/tools/resolve_scheduler_uncertainty.py"
+    ).read_text(encoding="utf-8")
     for forbidden in ("sqlite3", "qstat", "qsub", "qdel", "admit_dynamic"):
         assert forbidden not in source
 

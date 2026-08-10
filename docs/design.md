@@ -52,7 +52,8 @@ descriptor 绑定 run ID、规范化 shared root、配置哈希、Git commit、s
 4. 先发布 immutable weight/outer-state objects，再以一个 fenced transaction 提交 publication intent、global version、selection credit 和 token fate。
 5. 发布 latest control；重复命令通过 command receipt 幂等返回。
 
-syncer 异常时会把当前 epoch 标为 failed。successor 获得更高 epoch 后先 reconcile prepared/committed publications，再继续推进；旧 token 不能提交后续版本。
+syncer 异常时会把当前 epoch 标为 `error`。successor 获得更高 epoch 后先
+reconcile prepared/committed publications，再继续推进；旧 token 不能提交后续版本。
 
 ## Token 与终态
 
