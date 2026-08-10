@@ -1,0 +1,5 @@
+I'll conduct this final-evidence review by inspecting the read-only target snapshot. Let me start by exploring the repository structure and the evidence.
+I have the diff. Now let me read the actual artifact files to verify claims. Let me explore the artifacts directory and key supportfiles.
+Let me read the key artifacts to verify their contents and computehashes.
+Let me compute hashes of all registered artifacts/supports and read the F1 artifacts.
+All registered artifact/support hashes match the manifest exactly. Now let me verify the F1 artifacts, R2 artifact, source identities, docs, and the completion checker. I'll use two explore agents in parallel for the independent verification lanes.

@@ -295,3 +295,19 @@ only after implementation, compute-node validation and Codex rereview.
   `reports/DOING/plan03-1/artifacts/20260811-011000_r3-final-evidence_review.json`.
 - No finding is open. Verdict: `APPROVE` for restored external final-evidence
   review before publishing the staged completion artifact.
+
+## 2026-08-11T01:28:00+09:00 — external final-evidence disposition
+
+- PBS job `2522308.opbs` completed on `mg0005`; every reviewer snapshot kept
+  exact digest
+  `cff06b67ba903d00dce98b45479c9e0cff8a6f33ac06da6eb67d08d7f762d3bf`.
+- Claude Opus 5, GLM-5.2 and MiniMax M3 timed out, while DeepSeek V4 Flash
+  returned incomplete invalid output. No valid external report or verdict was
+  produced, and this is not counted as approval.
+- The partial traces recomputed all registered hashes and checked U1/F1/G1,
+  fault oracles, source identity, review bindings, manifest, matrix, Checker
+  and docs without exposing a concrete finding. Codex repeated the staged
+  aggregate preflight; it remains `PASS`.
+- Disposition:
+  `reports/DOING/code_review/plan03-1/final-evidence-r3/finding-dispositions_00ba722920d01a915efa4a2a90872c46ff906aa3.md`.
+  No blocking finding is open; staged completion may proceed.

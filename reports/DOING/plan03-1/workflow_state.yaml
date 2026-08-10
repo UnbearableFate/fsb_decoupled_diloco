@@ -102,6 +102,6 @@ invalidated_evidence:
   - current-u1-target-3b99d1a-superseded-by-effective-entrypoint-oracle
 external_review:
   pbs_job_id: 2522308.opbs
-  status: running
+  status: terminal-no-valid-report
 open_blocking_findings: []
-allowed_next_action: monitor_external_final_evidence_review
+allowed_next_action: publish_staged_plan_completion

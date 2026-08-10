@@ -1304,3 +1304,16 @@
   `c4e9bb943aed3b2bd6c304575d1911acfda997ce618410028b1dce8c2dc189fa`,
   720-second lane timeout and `00:15:00` allocation walltime.
 - Only monitoring is allowed until terminal orchestration state.
+
+## 2026-08-11T01:28:00+09:00 — external final-evidence review terminal
+
+- Job `2522308.opbs` reached terminal orchestration state with unchanged
+  snapshots. Claude Opus 5, GLM-5.2 and MiniMax M3 timed out; DeepSeek V4 Flash
+  returned incomplete invalid output. No valid external verdict exists.
+- Partial traces independently confirmed the registered hashes, JUnit counts,
+  formal source, F1 fault identities, G1 ledger, review artifacts and staged
+  completion contract. No concrete new finding was recorded. Codex disposition
+  leaves the existing final-evidence `APPROVE` intact.
+- The restored multi-agent gate has therefore been executed and disposed under
+  the best-effort policy without fabricating approval. Publish the create-only
+  staged completion artifact next.
