@@ -531,3 +531,44 @@
 - The harness failure counter resets to zero. The interactive allocation was
   closed normally and no unfinished job remains. Freeze this evidence, then
   submit a new normal scenario from the same post-review source scopes.
+
+## 2026-08-10T19:19:14+09:00 — P3 functional-normal PASS
+
+- PBS job `2519796.opbs` ran for 14 seconds on exact five-node `debug-g`
+  topology `mg0020`, `mg0024`, `mg0025`, `mg0026`, `mg0028` with one syncer,
+  four descriptor learners, five GPUs and the registered bounded resources.
+- Source is clean commit `4ebee6339fb76f63127874c655d7b109b2ec0b39`,
+  fingerprint
+  `sha256:87e6223c81c49839673b949eccb540f95fcd22d75e4aece3f9824aad124a0314`.
+- Structured Checker result is `PASS`, errors empty. Versions are exactly 0-4;
+  all four contributors have four applied proposals and credit four; exact
+  direct applied work is 5120 tokens. Twenty-three exact-workload proposals
+  were processed, with 16 applied and seven lawfully dropped (2240 tokens);
+  local discard/quarantine/unpublished/outstanding totals are zero and the
+  ledger balance is zero.
+- All actor/node attestations, the released syncer epoch, acknowledged terminal
+  fences, immutable publication hashes and SQLite integrity passed. Scheduler
+  terminal state has exit status 0.
+- Evidence:
+  `artifacts/20260810-191842_p3-functional-normal_result.json` (SHA-256
+  `87f1e97dcbfcd02faeeb841f02994213ab08a3cd3b00e3a29e3179d6238a1d44`)
+  and PBS log (SHA-256
+  `c4c4601670c5ce62b9c3b061505029aed1ccabdf5a7f46715b9984be64c6f3f2`).
+- Promotion remains serial. Do not commit or edit formal source scopes; submit
+  learner replacement next from the same commit/fingerprint.
+
+## 2026-08-10T19:20:42+09:00 — P3 learner-replacement remediation required
+
+- Job `2519816.opbs` successfully exercised the replacement fence and all
+  replacement-specific durable oracles, but its structured `PASS` is rejected
+  by coordinator audit and is not promoted.
+- Terminal authority/control reports only 2560 directly applied tokens while
+  publication history and the durable rollup report the registered 5120.
+  Finalization summed only the current hot version table after maintenance had
+  archived older versions. The Checker compared each side internally but
+  omitted their cross-authority equality.
+- Transition: `STAGED_TEST_EXECUTION` -> `TARGETED_REMEDIATION`; valid product
+  count 1 and Checker false-PASS count 1. Preserve the complete run, fix the
+  terminal authority source and Checker oracle with archive-aware tests, review
+  the continuous target, rerun one-node validation, then restart all three P3
+  scenarios from one new source commit/fingerprint.

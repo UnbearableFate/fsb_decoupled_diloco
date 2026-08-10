@@ -195,3 +195,42 @@
   and all other direct fates/local discards/outstanding work must be zero. Add a
   positive aggregate terminal-overshoot fixture and a negative non-drop-fate
   mutation before rerunning the candidate gates.
+
+## 2026-08-10T19:20:42+09:00 — P3 learner-replacement terminal total attempt 1
+
+- Experiment: `p3-learner-replacement-01`; primary domain: `product`; secondary
+  harness finding: `harness:p3-functional-checker-01`.
+- Category: `product-valid-failure`; valid product attempt: yes; learner
+  replacement consecutive product count: 1. The Checker false-PASS counter is
+  also 1 because its structured `PASS` failed an independently inspected
+  registered terminal invariant.
+- PBS job `2519816.opbs` ran 18 seconds on five exact `debug-g` nodes with the
+  same clean source commit/fingerprint as the normal candidate. SIGTERM killed
+  the original `learner_000` with status 143; generation advanced 1 -> 2; the
+  old binding history is `replaced`; the named successor contributed accepted
+  work and reached terminal acknowledgement.
+- Versions are exactly 0-4; every contributor has four applied proposals and
+  credit four; publication history and token rollup both prove 5120 directly
+  applied tokens; topology, replacement evidence, epoch release, ledger,
+  terminal fences, immutable objects and SQLite integrity otherwise pass.
+- Product defect: `terminal_state.direct_weight_tokens_applied`, `stop.json`
+  and `summary.json` contain 2560, not 5120. Online maintenance archived
+  versions 0-3 before finalization; `finalize_terminal` incorrectly sums only
+  hot `global_versions`, so its authority projection loses archived applied
+  work. `token_rollups.direct_applied` remains the durable all-history total.
+- Checker defect: it verifies terminal controls equal the erroneous terminal
+  row and separately verifies publication/rollup totals, but never requires
+  those two authorities to agree. It therefore emitted a false `PASS`. The
+  artifact's cleanup eligibility is not trusted; the complete run remains
+  retained.
+- Evidence:
+  `artifacts/20260810-192006_p3-learner-replacement_result.json` (SHA-256
+  `f81a0abea980c80483970d2758ecb151297b37ff4ada6e626d511e09864e2268`)
+  and PBS log (SHA-256
+  `c4e31795258085f72948a0f6575ef2fef5c909bdb79600ac4dba70166a0a7251`).
+- Remediation: finalize terminal direct work from fenced `token_rollups`, not
+  the prunable hot version table; extend the archive-before-terminal authority
+  test to require the complete applied total; add a synchronized
+  terminal-row/control mutation proving the Checker rejects an internally
+  consistent but incomplete terminal projection. Revalidate on one node and
+  rerun all P3 scenarios from one new source identity.
