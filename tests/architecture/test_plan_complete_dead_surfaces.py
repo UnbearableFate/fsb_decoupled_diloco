@@ -19,6 +19,15 @@ def _top_level_definitions(relative: str) -> set[str]:
     }
 
 
+def _string_literals(relative: str) -> set[str]:
+    tree = ast.parse((ROOT / relative).read_text(encoding="utf-8"))
+    return {
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+
+
 def _class_definitions(relative: str, class_name: str) -> set[str]:
     tree = ast.parse((ROOT / relative).read_text(encoding="utf-8"))
     cls = next(
@@ -82,8 +91,8 @@ def test_runtime_composition_has_one_current_actor_boundary() -> None:
     assert "run_fenced_syncer" in syncer
     assert {"build_parser", "main"} <= learner_entrypoint
     assert {"build_parser", "main"} <= syncer_entrypoint
-    assert "__main__" not in learner_entrypoint
-    assert "__main__" not in syncer_entrypoint
+    assert "__main__" not in _string_literals("fs_diloco/runtime/learner_entrypoint.py")
+    assert "__main__" not in _string_literals("fs_diloco/runtime/syncer_entrypoint.py")
     assert "from .runtime.learner_entrypoint import main" in public_learner_source
     assert '"main"' in public_learner_source
     assert "from .runtime.syncer_entrypoint import main" in public_syncer_source
