@@ -43,6 +43,11 @@ cleanup:
   targets: exact run-owned paths
 ```
 
+Full Protocol runtime gate metrics additionally project `receipt_count`,
+`proposal_count`, `applied_proposal_count`, `dropped_proposal_count` and
+`direct_dropped_tokens`. Applied work is the registered workload; processed
+work may also contain fully adjudicated supersession or terminal drops.
+
 Rules:
 
 - Static/review gates may set non-applicable config/protocol/workload fields to

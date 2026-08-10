@@ -699,12 +699,45 @@ def validate_run(
     balance = _token_balance(rollup)
     receipt_processed = sum(int(row["processed_tokens_this_cycle"]) for row in receipts)
     registered_fault = expected_replaced_learner is not None or expected_syncer_epochs > 1
-    if not registered_fault and (
-        len(receipts) != expected_global_steps * expected_contributors
-        or len(updates) != expected_global_steps * expected_contributors
-        or receipt_processed != expected_direct
-    ):
-        errors.append("fault-free run did not execute exactly one cycle per committed contribution")
+    dropped_updates = [row for row in updates if row["status"] == "dropped"]
+    if not registered_fault:
+        receipt_proposals = {
+            (
+                str(row["stable_contributor_key"]),
+                int(row["cycle_seq"]),
+                str(row["receipt_id"]),
+                str(row["planned_update_id"]),
+            )
+            for row in receipts
+            if bool(row["proposal_expected"])
+        }
+        update_receipts = {
+            (
+                str(row["stable_contributor_key"]),
+                int(row["cycle_seq"]),
+                str(row["cycle_receipt_id"]),
+                str(row["update_id"]),
+            )
+            for row in updates
+        }
+        if (
+            len(receipt_proposals) != len(receipts)
+            or len(update_receipts) != len(updates)
+            or receipt_proposals != update_receipts
+        ):
+            errors.append("fault-free receipt and proposal histories are not one-to-one")
+        expected_dropped = len(dropped_updates) * per_update_tokens
+        if (
+            len(applied_updates) + len(dropped_updates) != len(updates)
+            or receipt_processed != expected_direct + expected_dropped
+            or rollup is None
+            or int(rollup["local_discarded"]) != 0
+            or int(rollup["direct_dropped"]) != expected_dropped
+            or int(rollup["direct_quarantined_or_conflicted"]) != 0
+            or int(rollup["direct_reported_unpublished"]) != 0
+            or int(rollup["direct_outstanding"]) != 0
+        ):
+            errors.append("fault-free direct work is not exact applied-or-dropped adjudication")
     if direct_by_versions != expected_direct:
         errors.append(
             f"publication direct tokens are {direct_by_versions}, expected {expected_direct}"
@@ -889,7 +922,9 @@ def validate_run(
             "receipt_count": len(receipts),
             "proposal_count": len(updates),
             "applied_proposal_count": len(applied_updates),
+            "dropped_proposal_count": len(dropped_updates),
             "applied_by_contributor": applied_by_contributor,
+            "direct_dropped_tokens": (None if rollup is None else int(rollup["direct_dropped"])),
             "token_balance": balance,
             "publication_object_count": len(objects),
             "learner_attestation_count": len(learner_attestations),

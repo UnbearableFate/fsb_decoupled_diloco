@@ -477,3 +477,22 @@
   validate exact applied work plus lawful dropped overshoot, add positive and
   negative aggregate tests, complete Codex review, then rerun one-node
   validation before another five-node normal attempt.
+
+## 2026-08-10T19:17:00+09:00 — P3 Checker remediation target
+
+- The normal-run Checker now separates committed work from asynchronous local
+  attempts. It still requires exact applied proposals/tokens, and additionally
+  proves one-to-one receipt/proposal identity, exact per-cycle workload,
+  applied-or-dropped-only terminal fates, exact dropped-token accounting and
+  zero local discard/quarantine/unpublished/outstanding work.
+- The aggregate positive fixture now contains one fully adjudicated terminal
+  overshoot proposal. A new mutation converts that drop to quarantine while
+  preserving ledger balance and must be rejected, so the weaker false-PASS
+  interpretation is covered independently.
+- The P3 manifest and artifact description explicitly distinguish processed
+  attempts from applied work; the exact module-coverage selector follows the
+  renamed positive boundary test. Login-safe formatting, lint, Python syntax,
+  JSON and diff checks pass.
+- Transition: `TARGETED_REMEDIATION` -> `TEST_REVIEW_TARGET`. Freeze this
+  continuous target and complete mandatory Codex critical-incremental review
+  before any compute test.

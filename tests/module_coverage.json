@@ -264,7 +264,7 @@
     {
       "surface": "fs_diloco/storage/control.py",
       "boundary": "epoch-scoped and fixed control publication",
-      "tests": ["tests/harness/test_full_protocol_harness.py::test_aggregate_checker_accepts_one_valid_current_terminal_run"]
+      "tests": ["tests/harness/test_full_protocol_harness.py::test_aggregate_checker_accepts_adjudicated_terminal_overshoot"]
     },
     {
       "surface": "fs_diloco/storage/leader_lease.py",

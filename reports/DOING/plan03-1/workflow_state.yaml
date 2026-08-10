@@ -4,7 +4,7 @@ branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P3-functional-faults
 work_unit_id: P3-W3-functional-normal-checker-remediation
-state: TARGETED_REMEDIATION
+state: TEST_REVIEW_TARGET
 base_commit: 4e46b0026e044842cf3956ae7f4c95a5a8f2206b
 target_commit: null
 formal_source_commit: null
@@ -40,4 +40,4 @@ external_review:
   pbs_job_id: null
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: remediate_p3_normal_checker_terminal_overshoot
+allowed_next_action: codex_review_p3_checker_terminal_overshoot_remediation

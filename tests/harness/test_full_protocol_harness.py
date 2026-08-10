@@ -172,12 +172,51 @@ def _build_valid_checker_fixture(
             **publish_checkpoint_pair(run_root, version=1),
         )
         leader.commit_merge(command_id="commit-1", publication_id="publication-1")
+        extra_update_id = "00000000-0000-4000-8000-000000000002"
+        extra_receipt = CycleReceiptV1.from_dict(
+            {
+                **receipt.as_dict(),
+                "cycle_seq": 2,
+                "cycle_id": "10000000-0000-4000-8000-000000000002",
+                "receipt_id": "receipt-learner_000-2",
+                "previous_receipt_id": receipt.receipt_id,
+                "previous_receipt_sha256": receipt.immutable_sha256(),
+                "retained_tokens_since_base": 16,
+                "data_cursor_start": 1,
+                "data_cursor_end": 2,
+                "planned_update_id": extra_update_id,
+                "created_at": 102.0,
+            }
+        )
+        leader.ingest_cycle_receipt(command_id="receipt-2", receipt=extra_receipt)
+        extra_proposal = FullUpdateProposalV2.from_dict(
+            {
+                **proposal.as_dict(),
+                "cycle_seq": 2,
+                "cycle_id": extra_receipt.cycle_id,
+                "update_id": extra_update_id,
+                "cycle_receipt_id": extra_receipt.receipt_id,
+                "cycle_receipt_sha256": extra_receipt.immutable_sha256(),
+                "base_global_version": 1,
+                "local_step_start": 1,
+                "local_step_end": 2,
+                "retained_tokens_since_base": 16,
+                "data_cursor_start": 1,
+                "data_cursor_end": 2,
+                "payload_relative_path": canonical_update_relative_path(
+                    "learner_000", extra_update_id
+                ),
+                "created_at": 102.0,
+            }
+        )
+        publish_proposal_payload(run_root, extra_proposal)
+        leader.ingest_proposal(command_id="proposal-2", proposal=extra_proposal)
         leader.begin_terminal_close(command_id="close", reason="fixture complete")
         leader.acknowledge_terminal_contributor(
             command_id="ack-learner",
             fence=fence,
-            final_cycle_seq=1,
-            final_update_id=update_id,
+            final_cycle_seq=2,
+            final_update_id=extra_update_id,
         )
         leader.finalize_terminal(command_id="finalize", reason="fixture complete")
         terminal = authority.read.terminal_record()
@@ -266,7 +305,7 @@ def _run_checker(command: list[str], environment: dict[str, str], output: Path):
     return completed, json.loads(output.read_text(encoding="utf-8"))
 
 
-def test_aggregate_checker_accepts_one_valid_current_terminal_run(tmp_path: Path) -> None:
+def test_aggregate_checker_accepts_adjudicated_terminal_overshoot(tmp_path: Path) -> None:
     run_root, output, command, environment = _build_valid_checker_fixture(tmp_path)
 
     completed, artifact = _run_checker(command, environment, output)
@@ -282,13 +321,16 @@ def test_aggregate_checker_accepts_one_valid_current_terminal_run(tmp_path: Path
     assert artifact["workload_identity"] == {
         "configured_local_steps": 1,
         "committed_global_steps": 1,
-        "processed_tokens": 16,
+        "processed_tokens": 32,
         "direct_weight_tokens_applied": 16,
-        "cursor_terminal": {"learner_000": 1},
+        "cursor_terminal": {"learner_000": 2},
     }
     assert artifact["authority"]["integrity"] == ["ok"]
     assert [row["final_state"] for row in artifact["authority"]["epochs"]] == ["released"]
     assert artifact["metrics"]["token_balance"] == 0
+    assert artifact["metrics"]["applied_proposal_count"] == 1
+    assert artifact["metrics"]["dropped_proposal_count"] == 1
+    assert artifact["metrics"]["direct_dropped_tokens"] == 16
     assert artifact["metrics"]["publication_object_count"] == 4
     assert artifact["topology"]["learner_attestation_count"] == 1
     assert artifact["topology"]["syncer_attestation_count"] == 1
@@ -312,6 +354,7 @@ def test_aggregate_checker_accepts_one_valid_current_terminal_run(tmp_path: Path
         "terminal_control_mutability",
         "archive_integrity",
         "exact_workload",
+        "normal_non_drop_fate",
         "publication_identity",
     ],
 )
@@ -364,6 +407,21 @@ def test_aggregate_checker_mutations_change_acceptance_to_fail(
                 "FROM cycle_receipts"
             ).fetchone()
         assert mutated_workload == (15, 15)
+    elif mutation == "normal_non_drop_fate":
+        with sqlite3.connect(paths.sqlite_db) as connection:
+            dropped_receipt = connection.execute(
+                "SELECT cycle_receipt_id FROM updates WHERE status='dropped'"
+            ).fetchone()
+            assert dropped_receipt is not None
+            connection.execute(
+                "UPDATE token_fates SET direct_fate='quarantined', "
+                "fate_reason='test mutation' WHERE receipt_id=?",
+                (dropped_receipt[0],),
+            )
+            connection.execute(
+                "UPDATE token_rollups SET direct_dropped=0, "
+                "direct_quarantined_or_conflicted=16 WHERE singleton=1"
+            )
     elif mutation == "publication_identity":
         weight = run_root / "weights/epochs/e1/v1.safetensors"
         weight.chmod(0o644)
@@ -380,6 +438,11 @@ def test_aggregate_checker_mutations_change_acceptance_to_fail(
     assert artifact["cleanup"]["eligible"] is False
     if mutation == "exact_workload":
         assert "at least one durable receipt has the wrong cycle workload" in artifact["errors"]
+    if mutation == "normal_non_drop_fate":
+        assert (
+            "fault-free direct work is not exact applied-or-dropped adjudication"
+            in artifact["errors"]
+        )
 
 
 def test_checker_parser_freezes_topology_workload_and_fault_oracles(tmp_path: Path) -> None:
