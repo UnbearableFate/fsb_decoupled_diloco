@@ -669,6 +669,8 @@ def validate_run(
         * int(config["data"]["block_size"])
     )
     expected_direct = expected_global_steps * expected_contributors * per_update_tokens
+    if len(terminal) == 1 and int(terminal[0]["direct_weight_tokens_applied"]) != expected_direct:
+        errors.append("terminal direct applied tokens are not exact")
     if any(int(row["processed_tokens_this_cycle"]) != per_update_tokens for row in receipts):
         errors.append("at least one durable receipt has the wrong cycle workload")
     expected_cursor_advance = expected_inner_steps * int(

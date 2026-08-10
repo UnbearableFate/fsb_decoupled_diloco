@@ -105,7 +105,7 @@
       "durable_oracles": [
         "Exactly four learner identities and one syncer identity attest on the exact five PBS nodes.",
         "Versions are exactly 0 through 4, every contributor supplies exactly four applied proposals, and selection credit is exactly four each.",
-        "Each applied proposal represents 20 optimizer steps and 320 tokens; direct applied weight is exactly 5120 tokens.",
+        "Each applied proposal represents 20 optimizer steps and 320 tokens; publication history, token rollup, terminal authority and both terminal control projections all report exactly 5120 directly applied tokens.",
         "Total fault-free attempted cycles may exceed applied contributions because Full Protocol learners run asynchronously through supersession and terminal observation. Every receipt maps one-to-one to an exact-workload proposal; every non-applied proposal is durably dropped; dropped tokens equal processed minus applied; local discard, quarantine/conflict, reported-unpublished and outstanding totals are zero.",
         "All contributor cursors equal durable receipt history, the token ledger balances to zero, and no pending update or prepared publication remains.",
         "The sole syncer epoch is released, every contributor terminal fence is acknowledged, fixed and immutable terminal controls equal authority, publication hashes match, and SQLite integrity is ok."

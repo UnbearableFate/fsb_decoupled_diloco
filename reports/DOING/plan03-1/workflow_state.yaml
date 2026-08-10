@@ -4,7 +4,7 @@ branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P3-functional-faults
 work_unit_id: P3-W4-learner-replacement-terminal-total-remediation
-state: TARGETED_REMEDIATION
+state: TEST_REVIEW_TARGET
 base_commit: 4ebee6339fb76f63127874c655d7b109b2ec0b39
 target_commit: null
 formal_source_commit: null
@@ -49,4 +49,4 @@ external_review:
   pbs_job_id: null
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: remediate_terminal_applied_total_authority_and_checker
+allowed_next_action: codex_review_p3_terminal_applied_total_remediation

@@ -349,6 +349,7 @@ def test_aggregate_checker_accepts_adjudicated_terminal_overshoot(tmp_path: Path
         "epoch_lifecycle",
         "attested_topology",
         "terminal_authority",
+        "terminal_applied_total",
         "terminal_stop_schema",
         "terminal_summary_schema",
         "terminal_control_mutability",
@@ -380,6 +381,21 @@ def test_aggregate_checker_mutations_change_acceptance_to_fail(
     elif mutation == "terminal_authority":
         with sqlite3.connect(paths.sqlite_db) as connection:
             connection.execute("UPDATE terminal_state SET final_version=0")
+    elif mutation == "terminal_applied_total":
+        with sqlite3.connect(paths.sqlite_db) as connection:
+            connection.execute(
+                "UPDATE terminal_state SET direct_weight_tokens_applied=0 WHERE singleton=1"
+            )
+        stop = json.loads(paths.stop_json.read_text(encoding="utf-8"))
+        stop["direct_weight_tokens_applied"] = 0
+        atomic_write_json(paths.stop_json, stop)
+        summary = json.loads(paths.summary_json.read_text(encoding="utf-8"))
+        summary["direct_weight_tokens_applied"] = 0
+        atomic_write_json(paths.summary_json, summary)
+        immutable_stop = next(paths.syncer_epochs.glob("e*_*/terminal/stop_*.json"))
+        immutable = json.loads(immutable_stop.read_text(encoding="utf-8"))
+        immutable["direct_weight_tokens_applied"] = 0
+        atomic_write_json(immutable_stop, immutable, mode=0o444)
     elif mutation == "terminal_stop_schema":
         stop = json.loads(paths.stop_json.read_text(encoding="utf-8"))
         stop["obsolete_field"] = True
@@ -443,6 +459,8 @@ def test_aggregate_checker_mutations_change_acceptance_to_fail(
             "fault-free direct work is not exact applied-or-dropped adjudication"
             in artifact["errors"]
         )
+    if mutation == "terminal_applied_total":
+        assert "terminal direct applied tokens are not exact" in artifact["errors"]
 
 
 def test_checker_parser_freezes_topology_workload_and_fault_oracles(tmp_path: Path) -> None:

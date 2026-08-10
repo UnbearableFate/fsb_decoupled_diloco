@@ -4735,17 +4735,17 @@ class LeaderSession:
                 """,
                 (int(controller["generation"]),),
             ).fetchone()[0]
-            token_outstanding = connection.execute(
-                "SELECT COALESCE(direct_outstanding, 0) FROM token_rollups WHERE singleton=1"
+            token_rollup = connection.execute(
+                "SELECT direct_applied, direct_outstanding FROM token_rollups WHERE singleton=1"
             ).fetchone()
-            if awaiting or (token_outstanding is not None and int(token_outstanding[0]) != 0):
+            if token_rollup is None:
+                raise AuthoritySchemaError("terminal finalization requires the token ledger")
+            if awaiting or int(token_rollup["direct_outstanding"]) != 0:
                 raise RuntimeError("terminal finalization requires drained contributor/token state")
             latest = connection.execute("SELECT MAX(version) FROM global_versions").fetchone()[0]
             if latest is None:
                 raise RuntimeError("cannot finalize before the genesis version is committed")
-            direct = connection.execute(
-                "SELECT COALESCE(SUM(direct_weight_tokens_applied), 0) FROM global_versions"
-            ).fetchone()[0]
+            direct = int(token_rollup["direct_applied"])
             state = "error" if error else "finalized"
             generation = max(1, int(controller["generation"]))
             connection.execute(
@@ -4761,7 +4761,7 @@ class LeaderSession:
                     state,
                     reason,
                     int(latest),
-                    int(direct),
+                    direct,
                     self.token.epoch,
                     self.token.owner_id,
                     now,

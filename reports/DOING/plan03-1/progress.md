@@ -572,3 +572,25 @@
   terminal authority source and Checker oracle with archive-aware tests, review
   the continuous target, rerun one-node validation, then restart all three P3
   scenarios from one new source commit/fingerprint.
+
+## 2026-08-10T19:27:10+09:00 — P3 terminal applied-total remediation target
+
+- Terminal finalization now reads the all-history `direct_applied` total from
+  the singleton token rollup inside the same fenced transaction. It rejects a
+  missing ledger or nonzero outstanding work and no longer derives terminal
+  accounting from the prunable hot publication table.
+- The existing archive-before-terminal authority test now requires the
+  terminal total and durable rollup to retain both committed updates after the
+  older publication is archived. The aggregate Checker independently requires
+  terminal authority to equal the registered exact workload.
+- A synchronized negative mutation rewrites terminal authority, both fixed
+  controls and the immutable terminal publication to the same incomplete
+  value. It leaves publication history and rollup intact, so only the new
+  cross-authority oracle can reject the internally consistent false projection.
+- The P3 manifest and artifact contract now state the exact five-way agreement
+  across publication history, rollup, terminal authority and fixed/immutable
+  controls. Login-safe formatting, lint, syntax, JSON and whitespace checks
+  pass; project runtime tests remain intentionally unrun on the login node.
+- Transition: `TARGETED_REMEDIATION` -> `TEST_REVIEW_TARGET`. Freeze this
+  continuous target and complete the mandatory Codex critical-incremental
+  review; external review remains skipped under user direction.

@@ -60,5 +60,8 @@ Rules:
 - PBS exit status and actor logs are diagnostic fields. Durable SQLite rows,
   immutable object hashes, contributor fences, terminal acknowledgements, and
   scheduler history are the success oracles.
+- Runtime PASS requires the exact registered directly applied token total to
+  agree across publication history, the durable token rollup, terminal
+  authority, fixed terminal controls, and the immutable terminal publication.
 - Failure artifacts preserve actual identity, partial metrics, error class, raw
   paths, and cleanup eligibility; they are never overwritten by a retry.

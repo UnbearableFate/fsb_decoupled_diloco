@@ -1355,6 +1355,10 @@ def test_online_archive_retains_each_current_receipt_until_terminal_ack(
                 == "acked"
             )
         assert leader.finalize_terminal(command_id="finalize", reason="done").value == "finalized"
+        terminal = authority.read.terminal_record()
+        rollup = authority.read.token_ledger_summary()
+        assert terminal is not None
+        assert terminal["direct_weight_tokens_applied"] == rollup.direct_applied == 12
 
         terminal_records = authority.read.audit_history_records(cutoff_version=1)
         assert any(
