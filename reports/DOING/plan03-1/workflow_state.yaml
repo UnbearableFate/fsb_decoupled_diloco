@@ -4,9 +4,9 @@ branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P4-formal-and-docs
 work_unit_id: P4-W10-current-review-remediation
-state: PLAN_REMEDIATION
+state: EXTERNAL_TEST_REVIEW
 base_commit: 5b474d5c1735beb8cca922fd6cc7b6304926df2c
-target_commit: null
+target_commit: 74ecd4fb64311c69ae0d758d8c1d99b27a9c5572
 formal_source_commit: null
 formal_source_fingerprint: null
 experiment_id: plan03-1-current-review-remediation
@@ -47,6 +47,7 @@ required_evidence:
   - reports/DOING/plan03-1/artifacts/20260810-212500_final-f1-functional-normal_result.json
   - reports/DOING/plan03-1/artifacts/20260810-212500_final-f1-functional-normal_pbs.log
   - reports/DOING/code_review/plan03-1/critical-current-fs-diloco/finding-dispositions_4ebee6339fb76f63127874c655d7b109b2ec0b39.md
+  - reports/DOING/code_review/plan03-1/critical-current-remediation/codex-gpt_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -76,4 +77,4 @@ open_blocking_findings:
   - FSD-L4
   - FSD-L5
   - FSD-L6
-allowed_next_action: freeze_current_review_remediation_target
+allowed_next_action: submit_current_review_remediation_multi_agent_review

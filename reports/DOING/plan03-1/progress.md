@@ -995,3 +995,17 @@
   `tests/test_cli.py`; shell syntax, Python compilation, focused Ruff format
   and lint, literal PBS groups and diff whitespace checks pass. Freeze the
   remediation target for Codex-first and then external multi-agent review.
+
+## 2026-08-10T21:57:09+09:00 — remediation review target frozen
+
+- Frozen target `74ecd4fb64311c69ae0d758d8c1d99b27a9c5572` has clean formal source
+  fingerprint
+  `sha256:df143611ba42181cdfea90c3b205b2c758997dc99817d345256ecea4d9bef078`.
+- Codex completed the mandatory first review without reading any result from
+  the not-yet-submitted external round. It verified the current disposition,
+  caught and fixed the stale focused-suite path, added direct proposal-ingest
+  conflict coverage and returned `APPROVE`.
+- Transition: `PLAN_REMEDIATION` -> `EXTERNAL_TEST_REVIEW`. Submit one
+  four-lane compute-node reviewer job for the exact base/target; runtime tests
+  remain blocked until the coordinator validates and disposes every valid
+  result.

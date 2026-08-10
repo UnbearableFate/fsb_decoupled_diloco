@@ -167,3 +167,19 @@ only after implementation, compute-node validation and Codex rereview.
 - The current remediation will be frozen and reviewed by Codex before the
   external job is submitted. Runtime validation remains blocked until any
   valid external findings are disposed.
+
+## 2026-08-10T21:57:09+09:00 — current-review remediation Codex pass
+
+- Continuity base: `5b474d5c1735beb8cca922fd6cc7b6304926df2c`.
+- Frozen target: `74ecd4fb64311c69ae0d758d8c1d99b27a9c5572`.
+- Formal source fingerprint:
+  `sha256:df143611ba42181cdfea90c3b205b2c758997dc99817d345256ecea4d9bef078`.
+- Mandatory Codex-first report:
+  `reports/DOING/code_review/plan03-1/critical-current-remediation/codex-gpt_74ecd4fb64311c69ae0d758d8c1d99b27a9c5572.md`.
+- Codex rechecked every accepted current-review finding and the restored
+  reviewer workflow. A stale deleted test path and missing proposal-branch
+  conflict test were fixed before target freeze. No open finding remains in
+  the frozen source/test design. Verdict: `APPROVE` for external review and,
+  after disposition, compute validation.
+- This report was saved before submitting or reading any external result from
+  this review round.
