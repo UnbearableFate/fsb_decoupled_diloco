@@ -420,3 +420,16 @@
   including takeover lease expiry and orderly evidence teardown.
 - Next action: freeze this report-only design target and perform the mandatory
   Codex P3 test-design review. No five-node job may be submitted before approval.
+
+## 2026-08-10T18:41:21+09:00 — P3 test design APPROVE
+
+- Frozen design target: `4688bedebda2cee94137bf943425ca3d9c31ed17`;
+  P2 phase-final `9398e822ebe6cf9755e55567b18916802b93162f` is its
+  ancestor and the runtime source scopes are identical.
+- Mandatory Codex review inspected topology, workload arithmetic, both fault
+  layers, launcher mapping, Checker durable oracles, result classification,
+  walltime, source invalidation and cleanup. Verdict: `APPROVE`.
+- External reviewers remain skipped under user direction.
+- Promotion is serial: submit only `functional-normal` after PBS script syntax,
+  literal group, clean-source and create-only path checks. Fault scenarios stay
+  blocked until the normal artifact is terminal PASS.

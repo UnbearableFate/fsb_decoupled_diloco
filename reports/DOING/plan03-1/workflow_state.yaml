@@ -3,8 +3,8 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P3-functional-faults
-work_unit_id: P3-W2-test-design-review
-state: TEST_REVIEW_TARGET
+work_unit_id: P3-W3-functional-normal
+state: STAGED_TEST_EXECUTION
 base_commit: 9398e822ebe6cf9755e55567b18916802b93162f
 target_commit: 4688bedebda2cee94137bf943425ca3d9c31ed17
 formal_source_commit: null
@@ -25,13 +25,14 @@ required_evidence:
   - reports/DOING/plan03-1/p3-functional-fault-manifest.json
   - reports/DOING/plan03-1/identity-authority.md
   - reports/DOING/plan03-1/artifact-schema.md
+  - reports/DOING/code_review/plan03-1/test-P3-functional-fault-design/codex-gpt_4688bedebda2cee94137bf943425ca3d9c31ed17.md
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
   - p2-focused-attempt-3-workload-mutation-not-committed
   - p2-full-suite-attempt-1-stale-test-surfaces
 external_review:
-  pbs_job_id: 2519093.opbs
+  pbs_job_id: null
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: run_codex_p3_test_design_review
+allowed_next_action: submit_p3_functional_normal
