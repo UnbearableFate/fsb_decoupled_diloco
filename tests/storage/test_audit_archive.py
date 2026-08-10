@@ -14,7 +14,6 @@ from fs_diloco.storage.atomic_io import read_json
 from fs_diloco.storage.paths import RunPaths
 
 
-
 def _record(value: int) -> dict:
     return {"table": "events", "primary_key": "1", "row": {"value": value}}
 

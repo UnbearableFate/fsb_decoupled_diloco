@@ -30,9 +30,7 @@ def _completed_run(project: Path, name: str = "completed-run") -> tuple[Path, Pa
         "descriptor_sha256": f"descriptor-{name}",
         "source_fingerprint": "sha256:test-source",
     }
-    (run / "control" / "run_descriptor.json").write_text(
-        json.dumps(descriptor), encoding="utf-8"
-    )
+    (run / "control" / "run_descriptor.json").write_text(json.dumps(descriptor), encoding="utf-8")
     policy = run / "control" / "artifact_policy.json"
     policy.write_text(json.dumps(build_artifact_policy()), encoding="utf-8")
     policy.chmod(0o444)
@@ -59,10 +57,7 @@ def _completed_run(project: Path, name: str = "completed-run") -> tuple[Path, Pa
         connection.execute("UPDATE run_identity SET run_id=?", (name,))
     owner_short = hashlib.sha256(b"syncer-owner").hexdigest()[:12]
     immutable_stop = (
-        run
-        / "control/syncer_epochs"
-        / f"e000001_{owner_short}"
-        / "terminal/stop_g000001.json"
+        run / "control/syncer_epochs" / f"e000001_{owner_short}" / "terminal/stop_g000001.json"
     )
     immutable_stop.parent.mkdir(parents=True)
     immutable_stop.write_text(json.dumps(stop), encoding="utf-8")

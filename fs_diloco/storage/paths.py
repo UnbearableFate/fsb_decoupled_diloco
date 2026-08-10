@@ -277,6 +277,7 @@ class RunPaths:
     def relative(self, path: str | Path) -> str:
         return str(Path(path).resolve().relative_to(self.shared_root.resolve()))
 
+
 def prepare_authority_dirs(paths: RunPaths) -> None:
     """Create the fixed run authority directories during explicit initialization."""
     for directory in (

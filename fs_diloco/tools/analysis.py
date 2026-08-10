@@ -63,9 +63,7 @@ def summarize_run(shared_root: str | Path) -> dict[str, Any]:
             "contributor_progress": progress,
             "token_ledger": _json_value(authority.read.token_ledger_summary()),
             "terminal": authority.read.terminal_record(),
-            "terminal_contributor_fences": list(
-                authority.read.terminal_contributor_fences()
-            ),
+            "terminal_contributor_fences": list(authority.read.terminal_contributor_fences()),
             "syncer_epochs": list(authority.read.syncer_epochs()),
             "dynamic": {
                 "streams": list(authority.read.dynamic_streams()),

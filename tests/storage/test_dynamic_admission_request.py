@@ -10,7 +10,6 @@ from fs_diloco.storage.atomic_io import read_json
 from fs_diloco.storage.paths import RunPaths
 
 
-
 def test_dynamic_request_carries_exact_bootstrap_authorization(tmp_path: Path) -> None:
     path, _digest = publish_dynamic_request_with_sha256(
         RunPaths(tmp_path),

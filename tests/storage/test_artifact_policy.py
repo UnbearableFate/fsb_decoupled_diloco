@@ -7,7 +7,6 @@ from fs_diloco.storage.artifact_policy import (
 )
 
 
-
 def test_artifact_policy_classifies_protocol_domains_and_fails_unknown_closed() -> None:
     policy = ArtifactPolicy.from_dict(build_artifact_policy())
 

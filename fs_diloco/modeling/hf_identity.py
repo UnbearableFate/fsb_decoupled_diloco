@@ -22,9 +22,7 @@ def reject_local_reference(reference: str, *, kind: str) -> None:
     except FileNotFoundError:
         return
     except (OSError, RuntimeError) as exc:
-        raise ValueError(
-            f"cannot prove {kind} reference is non-local: {reference!r}"
-        ) from exc
+        raise ValueError(f"cannot prove {kind} reference is non-local: {reference!r}") from exc
     raise ValueError(
         f"local {kind} reference requires descriptor-bound content identity, "
         "which the Full Protocol does not support"

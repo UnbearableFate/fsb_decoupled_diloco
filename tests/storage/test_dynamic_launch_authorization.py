@@ -14,7 +14,6 @@ from fs_diloco.storage.authority import (
 )
 
 
-
 def _authority(tmp_path: Path) -> LeaderAuthority:
     identity = AuthorityIdentity("run-current", "source", hashlib.sha256(b"config").hexdigest())
     scope = DynamicMembershipScope(1)

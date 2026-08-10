@@ -7,9 +7,7 @@ import torch
 from ..core.config import OuterOptimizerSection
 
 
-def init_outer_state(
-    theta: torch.Tensor, config: OuterOptimizerSection
-) -> dict[str, torch.Tensor]:
+def init_outer_state(theta: torch.Tensor, config: OuterOptimizerSection) -> dict[str, torch.Tensor]:
     state: dict[str, torch.Tensor] = {"step": torch.tensor(0, dtype=torch.int64)}
     name = config.name
     if name in {"sgd", "momentum", "nesterov"}:

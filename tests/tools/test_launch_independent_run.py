@@ -67,6 +67,4 @@ def test_launch_uses_one_syncer_and_one_learner_script(
     )
 
     assert Path(result["syncer_qsub"][-1]).name == "run_syncer.pbs"
-    assert {Path(command[-1]).name for command in result["learner_qsubs"]} == {
-        "run_learner.pbs"
-    }
+    assert {Path(command[-1]).name for command in result["learner_qsubs"]} == {"run_learner.pbs"}

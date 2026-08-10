@@ -151,9 +151,7 @@ def _build_valid_checker_fixture(
                 "data_cursor_start": 0,
                 "data_cursor_end": 1,
                 "contributor_fence": fence.as_dict(),
-                "payload_relative_path": canonical_update_relative_path(
-                    "learner_000", update_id
-                ),
+                "payload_relative_path": canonical_update_relative_path("learner_000", update_id),
                 "payload_size": len(DEFAULT_PAYLOAD),
                 "payload_sha256": PAYLOAD_DIGEST,
                 "tensor_schema_sha256": SCHEMA_DIGEST,
@@ -164,9 +162,7 @@ def _build_valid_checker_fixture(
         )
         publish_proposal_payload(run_root, proposal)
         leader.ingest_proposal(command_id="proposal-1", proposal=proposal)
-        selected = leader.try_select_batch(
-            command_id="select-1", quorum_min=1, quorum_max=1
-        )
+        selected = leader.try_select_batch(command_id="select-1", quorum_min=1, quorum_max=1)
         assert selected.batch is not None
         leader.prepare_publication(
             command_id="prepare-1",
@@ -291,9 +287,7 @@ def test_aggregate_checker_accepts_one_valid_current_terminal_run(tmp_path: Path
         "cursor_terminal": {"learner_000": 1},
     }
     assert artifact["authority"]["integrity"] == ["ok"]
-    assert [row["final_state"] for row in artifact["authority"]["epochs"]] == [
-        "released"
-    ]
+    assert [row["final_state"] for row in artifact["authority"]["epochs"]] == ["released"]
     assert artifact["metrics"]["token_balance"] == 0
     assert artifact["metrics"]["publication_object_count"] == 4
     assert artifact["topology"]["learner_attestation_count"] == 1
@@ -361,9 +355,7 @@ def test_aggregate_checker_mutations_change_acceptance_to_fail(
         archive.chmod(0o444)
     elif mutation == "exact_workload":
         with sqlite3.connect(paths.sqlite_db) as connection:
-            connection.execute(
-                "UPDATE cycle_receipts SET processed_tokens_this_cycle=15"
-            )
+            connection.execute("UPDATE cycle_receipts SET processed_tokens_this_cycle=15")
     elif mutation == "publication_identity":
         weight = run_root / "weights/epochs/e1/v1.safetensors"
         weight.chmod(0o644)
@@ -670,9 +662,7 @@ def test_token_balance_oracle_classifies_every_direct_fate() -> None:
     ("count", "states"),
     [(1, ("released",)), (2, ("expired", "released"))],
 )
-def test_checker_registers_exact_epoch_lifecycle(
-    count: int, states: tuple[str, ...]
-) -> None:
+def test_checker_registers_exact_epoch_lifecycle(count: int, states: tuple[str, ...]) -> None:
     module = _checker_module()
 
     assert module._registered_epoch_states(count) == states
@@ -695,7 +685,7 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     wrapper = (ROOT / "scripts/miyabi/run_full_protocol.pbs").read_text(encoding="utf-8")
     assert "#PBS -l walltime=00:15:00" in wrapper
     assert all(
-        f'${{{name}:?{name} is required}}' in wrapper
+        f"${{{name}:?{name} is required}}" in wrapper
         for name in ("GATE", "EXPERIMENT_ID", "REQUIREMENT_ID")
     )
     assert wrapper.count("run_full_protocol_allocation.sh") == 1
@@ -704,12 +694,10 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     )
     assert '"RUN_ID=$RUN_ID"' in allocation
     assert "--map-by ppr:1:node" in allocation
-    rank_runner = (ROOT / "scripts/miyabi/run_full_protocol_rank.sh").read_text(
-        encoding="utf-8"
-    )
+    rank_runner = (ROOT / "scripts/miyabi/run_full_protocol_rank.sh").read_text(encoding="utf-8")
     assert "request_static_replacement" in rank_runner
     assert "FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION=2" in rank_runner
-    assert "kill -KILL \"$primary_pid\"" in rank_runner
+    assert 'kill -KILL "$primary_pid"' in rank_runner
     assert "trap publish_blocked_on_exit EXIT" in wrapper
     assert "--blocked-reason" in wrapper
 
@@ -788,7 +776,5 @@ printf '{"status":"BLOCKED","errors":["%s"]}\n' "$blocked_reason" >"$output"
     assert completed.returncode == 23
     assert json.loads(output.read_text(encoding="utf-8")) == {
         "status": "BLOCKED",
-        "errors": [
-            "Full Protocol execution exited before gate evidence publication (exit=23)"
-        ],
+        "errors": ["Full Protocol execution exited before gate evidence publication (exit=23)"],
     }

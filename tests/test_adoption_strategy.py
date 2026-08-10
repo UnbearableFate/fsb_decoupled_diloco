@@ -59,8 +59,7 @@ def _context(
         last_loaded_latest={"version": 1},
         tokens_since_global_load=64,
         read_latest_if_newer_fn=read_latest or (lambda *_args: None),
-        wait_for_latest_if_newer_fn=wait_latest
-        or (lambda *_args, **_kwargs: (None, 0.0)),
+        wait_for_latest_if_newer_fn=wait_latest or (lambda *_args, **_kwargs: (None, 0.0)),
         adopt_global_fn=lambda **kwargs: int(kwargs["latest"]["version"]),
         rebase_local_delta_fn=lambda **kwargs: (
             int(kwargs["latest"]["version"]),
@@ -379,9 +378,7 @@ def test_ha_adoption_ignores_polluted_fixed_stop_without_authoritative_terminal(
 
     assert calls
     assert action.reset_optimizer_reason == (
-        "global_prediction_started"
-        if strategy_type is PredictGlobalAdoptionStrategy
-        else None
+        "global_prediction_started" if strategy_type is PredictGlobalAdoptionStrategy else None
     )
 
 
@@ -392,9 +389,7 @@ def test_ha_adoption_ignores_polluted_fixed_stop_without_authoritative_terminal(
         (RebaseGlobalAdoptionStrategy, "rebase_local"),
     ],
 )
-def test_stop_does_not_skip_already_visible_direct_adoption(
-    tmp_path, strategy_type, strategy_name
-):
+def test_stop_does_not_skip_already_visible_direct_adoption(tmp_path, strategy_type, strategy_name):
     config = _config(strategy_name)
     paths = RunPaths(tmp_path)
     atomic_write_json(paths.stop_json, {"reason": "stop_after_outer_steps"})

@@ -178,9 +178,7 @@ def _terminal_identity(run_root: Path) -> tuple[str, dict[str, Any], dict[str, A
     connection.execute("PRAGMA query_only=ON")
     try:
         integrity = [str(row[0]) for row in connection.execute("PRAGMA integrity_check")]
-        terminal = connection.execute(
-            "SELECT * FROM terminal_state WHERE singleton=1"
-        ).fetchone()
+        terminal = connection.execute("SELECT * FROM terminal_state WHERE singleton=1").fetchone()
         controller = connection.execute(
             "SELECT state FROM controller_state WHERE singleton=1"
         ).fetchone()
@@ -268,9 +266,11 @@ def _matching_pass_evidence(
     if evidence.get("terminal_summary") != summary:
         raise CleanupRefusedError("completion evidence terminal summary no longer matches")
     cleanup = evidence.get("cleanup")
-    if not isinstance(cleanup, dict) or cleanup.get("eligible") is not True or cleanup.get(
-        "targets"
-    ) != [str(run_root)]:
+    if (
+        not isinstance(cleanup, dict)
+        or cleanup.get("eligible") is not True
+        or cleanup.get("targets") != [str(run_root)]
+    ):
         raise CleanupRefusedError("completion evidence does not authorize this cleanup target")
 
     descriptor = _load_json(run_root / "control" / "run_descriptor.json", label="run descriptor")

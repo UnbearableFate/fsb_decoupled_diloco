@@ -420,13 +420,15 @@ def _normalize_and_validate(config: Config) -> Config:
         raise ValueError("run.run_id must be a safe non-empty identity component")
     if config.run.shared_root is not None and not config.run.shared_root:
         raise ValueError("run.shared_root must not be empty when set")
-    if config.run.git_commit is not None and _IMMUTABLE_HUB_REVISION.fullmatch(
-        config.run.git_commit
-    ) is None:
+    if (
+        config.run.git_commit is not None
+        and _IMMUTABLE_HUB_REVISION.fullmatch(config.run.git_commit) is None
+    ):
         raise ValueError("run.git_commit must be a 40-character lowercase commit SHA")
-    if config.run.source_fingerprint is not None and re.fullmatch(
-        r"sha256:[0-9a-f]{64}", config.run.source_fingerprint
-    ) is None:
+    if (
+        config.run.source_fingerprint is not None
+        and re.fullmatch(r"sha256:[0-9a-f]{64}", config.run.source_fingerprint) is None
+    ):
         raise ValueError("run.source_fingerprint must be a sha256 digest")
     for name, value in (
         ("model.name_or_path", config.model.name_or_path),
@@ -564,8 +566,10 @@ def _normalize_and_validate(config: Config) -> Config:
         raise ValueError("scaling capacity observation retention is too small")
     if scaling.productive_window_count < 1:
         raise ValueError("scaling.productive_window_count must be >= 1")
-    if not scaling.learner_pbs_script or Path(scaling.learner_pbs_script).is_absolute() or any(
-        part == ".." for part in Path(scaling.learner_pbs_script).parts
+    if (
+        not scaling.learner_pbs_script
+        or Path(scaling.learner_pbs_script).is_absolute()
+        or any(part == ".." for part in Path(scaling.learner_pbs_script).parts)
     ):
         raise ValueError("scaling.learner_pbs_script must be a safe relative path")
     if scaling.productive_upload_grace_min_seconds <= 0.0:
@@ -587,17 +591,14 @@ def _normalize_and_validate(config: Config) -> Config:
             or int(parts[2]) >= 60
             or all(int(part) == 0 for part in parts)
         ):
-            raise ValueError(
-                "scaling.learner_walltime must be an estimated HH:MM:SS value"
-            )
+            raise ValueError("scaling.learner_walltime must be an estimated HH:MM:SS value")
         walltime_seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
         if walltime_seconds < 600:
             raise ValueError("scaling.learner_walltime must be at least 00:10:00")
     if scaling.learner_queue is not None and (
         not scaling.learner_queue
         or any(
-            not (character.isalnum() or character in "_.-")
-            for character in scaling.learner_queue
+            not (character.isalnum() or character in "_.-") for character in scaling.learner_queue
         )
     ):
         raise ValueError("scaling.learner_queue contains unsafe PBS characters")

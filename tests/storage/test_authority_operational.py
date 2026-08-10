@@ -53,7 +53,6 @@ from tests.support.protocol import (
 )
 
 
-
 class Clock:
     def __init__(self) -> None:
         self.now = 100.0

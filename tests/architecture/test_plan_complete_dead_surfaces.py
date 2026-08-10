@@ -80,9 +80,7 @@ def test_only_unversioned_product_surfaces_exist() -> None:
 
 
 def test_artifact_versions_and_run_paths_have_explicit_owners() -> None:
-    constants = ast.parse(
-        (ROOT / "fs_diloco/core/constants.py").read_text(encoding="utf-8")
-    )
+    constants = ast.parse((ROOT / "fs_diloco/core/constants.py").read_text(encoding="utf-8"))
     versions = ast.parse((ROOT / "fs_diloco/core/versions.py").read_text(encoding="utf-8"))
     paths = _class_definitions("fs_diloco/storage/paths.py", "RunPaths")
     path_functions = _top_level_definitions("fs_diloco/storage/paths.py")

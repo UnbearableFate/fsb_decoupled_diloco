@@ -101,8 +101,7 @@ def capture_source_identity(project_root: str | Path) -> dict[str, Any]:
         if (project_root / scope).is_file() or (project_root / scope).is_symlink()
     )
     source_files = [
-        _source_record(project_root, relative_path)
-        for relative_path in sorted(relative_path_set)
+        _source_record(project_root, relative_path) for relative_path in sorted(relative_path_set)
     ]
     fingerprint_payload = {
         "fingerprint_format": 1,

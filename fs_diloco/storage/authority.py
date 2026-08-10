@@ -257,9 +257,7 @@ def _configure_connection(connection: sqlite3.Connection, *, busy_timeout_ms: in
     connection.execute(f"PRAGMA busy_timeout={int(busy_timeout_ms)}")
 
 
-def _configure_read_connection(
-    connection: sqlite3.Connection, *, busy_timeout_ms: int
-) -> None:
+def _configure_read_connection(connection: sqlite3.Connection, *, busy_timeout_ms: int) -> None:
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys=ON")
     connection.execute("PRAGMA synchronous=FULL")

@@ -7,7 +7,6 @@ import pytest
 from fs_diloco.runtime.learner_control import configured_global_close_target_visible
 
 
-
 def _config(*, policy: str = "global_target", target: int | None = 2):
     return SimpleNamespace(
         terminal=SimpleNamespace(admission_close_policy=policy),

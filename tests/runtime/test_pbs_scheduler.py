@@ -8,7 +8,6 @@ import pytest
 from fs_diloco.runtime.pbs_scheduler import PBSScheduler
 
 
-
 def test_historical_request_scan_uses_qstat_history_and_matches_exact_variable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

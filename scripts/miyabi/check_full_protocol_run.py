@@ -209,9 +209,10 @@ def _attestations(run_root: Path) -> list[dict[str, Any]]:
         _protocol_file(run_root, path.relative_to(run_root).as_posix())
         _require_immutable_file(path, label="actor attestation")
         payload = _read_json(path)
-        if set(payload) != required_fields or payload.get(
-            "format_version"
-        ) != ACTOR_ATTESTATION_FORMAT_VERSION:
+        if (
+            set(payload) != required_fields
+            or payload.get("format_version") != ACTOR_ATTESTATION_FORMAT_VERSION
+        ):
             raise RuntimeError(f"actor attestation schema is invalid: {path}")
         identity = (
             str(payload["actor_kind"]),
@@ -352,16 +353,10 @@ def _evidence_paths(
     if attestations and attestation_root.is_dir():
         candidates.extend(sorted(attestation_root.rglob("*.json")))
     candidates.extend(
-        sorted(
-            (run_root / "control/syncer_epochs").glob("e*_*/terminal/stop_*.json")
-        )
+        sorted((run_root / "control/syncer_epochs").glob("e*_*/terminal/stop_*.json"))
     )
     return sorted(
-        {
-            str(path.resolve())
-            for path in candidates
-            if path.is_file() and not path.is_symlink()
-        }
+        {str(path.resolve()) for path in candidates if path.is_file() and not path.is_symlink()}
     )
 
 
@@ -505,22 +500,18 @@ def validate_run(
     errors: list[str] = []
     final_version = int(terminal[0]["final_version"]) if len(terminal) == 1 else -1
     expected_versions = list(range(expected_global_steps + 1))
-    expected_contributor_ids = {
-        f"learner_{index:03d}" for index in range(expected_contributors)
-    }
+    expected_contributor_ids = {f"learner_{index:03d}" for index in range(expected_contributors)}
     expected_epoch_states = _registered_epoch_states(expected_syncer_epochs)
 
-    if descriptor.get("descriptor_sha256") != _json_sha256_without(
-        descriptor, "descriptor_sha256"
-    ):
+    if descriptor.get("descriptor_sha256") != _json_sha256_without(descriptor, "descriptor_sha256"):
         errors.append("run descriptor self-checksum is invalid")
     if descriptor.get("resolved_config_sha256") != _sha256(resolved_config_path):
         errors.append("resolved config checksum differs from the run descriptor")
     source_manifest = _read_json(source_manifest_path)
-    if (
-        descriptor.get("source_manifest_sha256") != _sha256(source_manifest_path)
-        or source_manifest.get("manifest_sha256")
-        != _json_sha256_without(source_manifest, "manifest_sha256")
+    if descriptor.get("source_manifest_sha256") != _sha256(
+        source_manifest_path
+    ) or source_manifest.get("manifest_sha256") != _json_sha256_without(
+        source_manifest, "manifest_sha256"
     ):
         errors.append("source manifest checksum is invalid")
     if any(
@@ -539,9 +530,10 @@ def validate_run(
         errors.append("resolved global stop does not equal the registered workload")
     if int(config.get("sync", {}).get("num_learners", -1)) != expected_contributors:
         errors.append("resolved learner count does not equal the registered topology")
-    if int(config.get("sync", {}).get("quorum_min", -1)) != expected_contributors or int(
-        config.get("sync", {}).get("quorum_max", -1)
-    ) != expected_contributors:
+    if (
+        int(config.get("sync", {}).get("quorum_min", -1)) != expected_contributors
+        or int(config.get("sync", {}).get("quorum_max", -1)) != expected_contributors
+    ):
         errors.append("formal selection quorum is not the full contributor set")
     if integrity != ["ok"]:
         errors.append(f"SQLite integrity failed: {integrity}")
@@ -589,9 +581,7 @@ def validate_run(
             "authority": "full_protocol",
             "all_learners_stopped": terminal_row["state"] == "finalized",
             "final_version": int(terminal_row["final_version"]),
-            "direct_weight_tokens_applied": int(
-                terminal_row["direct_weight_tokens_applied"]
-            ),
+            "direct_weight_tokens_applied": int(terminal_row["direct_weight_tokens_applied"]),
             "stop_reason": terminal_row["stop_reason"],
             "terminal_generation": int(terminal_row["generation"]),
             "finalized_by_epoch": int(terminal_row["finalized_by_epoch"]),
@@ -631,9 +621,7 @@ def validate_run(
         errors.append("contributor progress does not cover the registered topology")
     if {
         str(row["stable_contributor_key"]) for row in terminal_fences
-    } != expected_contributor_ids or {
-        row["state"] for row in terminal_fences
-    } != {"acked"}:
+    } != expected_contributor_ids or {row["state"] for row in terminal_fences} != {"acked"}:
         errors.append("terminal contributor acknowledgements are incomplete")
     if {str(row["learner_id"]) for row in bindings} != expected_contributor_ids or {
         row["status"] for row in bindings
@@ -687,8 +675,7 @@ def validate_run(
         config["training"]["gradient_accumulation_steps"]
     )
     if any(
-        int(row["data_cursor_end"]) - int(row["data_cursor_start"])
-        != expected_cursor_advance
+        int(row["data_cursor_end"]) - int(row["data_cursor_start"]) != expected_cursor_advance
         for row in receipts
     ):
         errors.append("at least one durable receipt has the wrong cursor advance")
@@ -700,9 +687,7 @@ def validate_run(
         errors.append("at least one durable proposal has the wrong local-step workload")
     applied_updates = [row for row in updates if row["status"] == "applied"]
     applied_by_contributor = {
-        learner_id: sum(
-            row["stable_contributor_key"] == learner_id for row in applied_updates
-        )
+        learner_id: sum(row["stable_contributor_key"] == learner_id for row in applied_updates)
         for learner_id in expected_contributor_ids
     }
     if len(applied_updates) != expected_global_steps * expected_contributors or any(
@@ -739,8 +724,7 @@ def validate_run(
     pbs_job_id = os.environ.get("PBS_JOBID")
     nodes = _pbs_nodes()
     if any(
-        row.get("attestation_sha256")
-        != _json_sha256_without(row, "attestation_sha256")
+        row.get("attestation_sha256") != _json_sha256_without(row, "attestation_sha256")
         or row.get("run_id") != descriptor.get("run_id")
         or row.get("descriptor_sha256") != descriptor.get("descriptor_sha256")
         or row.get("source_fingerprint") != descriptor.get("source_fingerprint")
@@ -755,9 +739,7 @@ def validate_run(
         errors.append(f"attested topology used {len(hosts)} hosts, expected {expected_hosts}")
     if len(nodes) != expected_hosts or set(nodes) != hosts:
         errors.append("PBS nodefile and actor attestations describe different topologies")
-    if not pbs_job_id or any(
-        row.get("scheduler_job_id") != pbs_job_id for row in attestations
-    ):
+    if not pbs_job_id or any(row.get("scheduler_job_id") != pbs_job_id for row in attestations):
         errors.append("actor attestations are not bound to the current full PBS job ID")
 
     replacement_evidence: dict[str, Any] | None = None
@@ -808,17 +790,17 @@ def validate_run(
                 or boundary.get("sqlite_transaction_active") is not False
                 or boundary.get("lease_renewer_quiesced") is not True
                 or int(boundary.get("committed_version", -1)) != 2
-                or int(boundary.get("pid", -1))
-                != int(takeover_evidence.get("primary_pid", -2))
+                or int(boundary.get("pid", -1)) != int(takeover_evidence.get("primary_pid", -2))
                 or not epochs
                 or int(boundary.get("epoch", -1)) >= int(epochs[-1]["epoch"])
             ):
                 errors.append("syncer takeover evidence does not prove the registered fault layer")
 
     source = _source_identity(project_root)
-    if descriptor.get("git_commit") != source["commit"] or descriptor.get(
-        "source_fingerprint"
-    ) != source["fingerprint"]:
+    if (
+        descriptor.get("git_commit") != source["commit"]
+        or descriptor.get("source_fingerprint") != source["fingerprint"]
+    ):
         errors.append("descriptor source identity differs from the validation target")
     if bool(descriptor.get("git_dirty")) or source["dirty"]:
         errors.append("validation source is dirty")
@@ -893,9 +875,7 @@ def validate_run(
         "workload_identity": {
             "configured_local_steps": expected_inner_steps,
             "committed_global_steps": final_version,
-            "processed_tokens": (
-                None if rollup is None else int(rollup["adjudicated_processed"])
-            ),
+            "processed_tokens": (None if rollup is None else int(rollup["adjudicated_processed"])),
             "direct_weight_tokens_applied": (
                 None if rollup is None else int(rollup["direct_applied"])
             ),
@@ -1075,8 +1055,10 @@ def validate_gate_artifact(payload: dict[str, Any], *, output: Path) -> None:
     if payload["status"] not in {"PASS", "FAIL", "BLOCKED", "REVIEW"}:
         raise RuntimeError("gate artifact status is invalid")
     requirements = payload["requirements_covered"]
-    if not isinstance(requirements, list) or not requirements or any(
-        not isinstance(item, str) or not item for item in requirements
+    if (
+        not isinstance(requirements, list)
+        or not requirements
+        or any(not isinstance(item, str) or not item for item in requirements)
     ):
         raise RuntimeError("gate artifact requirements_covered is invalid")
     errors = payload["errors"]

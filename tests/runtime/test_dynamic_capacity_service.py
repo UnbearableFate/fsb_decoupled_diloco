@@ -25,7 +25,6 @@ from fs_diloco.storage.paths import RunPaths
 from tests.support import FakePBS
 
 
-
 class Clock:
     def __init__(self) -> None:
         self.now = 100.0

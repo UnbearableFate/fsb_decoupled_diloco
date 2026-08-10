@@ -8,7 +8,6 @@ import pytest
 from fs_diloco.tools.resolve_scheduler_uncertainty import main
 
 
-
 def test_scheduler_resolution_is_dry_run_by_default_and_apply_is_create_no_replace(
     tmp_path: Path, capsys
 ) -> None:

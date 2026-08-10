@@ -11,7 +11,6 @@ from fs_diloco.storage.terminal_request import (
 )
 
 
-
 def test_manual_terminal_request_is_immutable_identity_bound_and_replayable(
     tmp_path: Path,
 ) -> None:

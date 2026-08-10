@@ -81,9 +81,7 @@ def test_each_precomplete_crash_prefix_is_invisible_and_same_staging_retry_recov
     assert loaded.descriptor["model_identity"]["revision"] == MODEL_COMMIT
     assert loaded.descriptor["dataset_identity"]["revision"] == DATASET_COMMIT
     assert (
-        find_reserved_staging(
-            Path(config.run.shared_root).resolve(), allow_missing_owner=True
-        )
+        find_reserved_staging(Path(config.run.shared_root).resolve(), allow_missing_owner=True)
         is None
     )
 

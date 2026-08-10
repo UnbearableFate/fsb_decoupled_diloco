@@ -46,9 +46,7 @@ def test_authority_module_owns_the_canonical_schema_and_read_write_surfaces() ->
     source = (ROOT / "fs_diloco/storage/authority.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     definitions = {
-        node.name
-        for node in tree.body
-        if isinstance(node, (ast.ClassDef, ast.FunctionDef))
+        node.name for node in tree.body if isinstance(node, (ast.ClassDef, ast.FunctionDef))
     }
 
     assert {"AuthorityReader", "LeaderAuthority", "LeaderSession", "initialize_authority"} <= (
