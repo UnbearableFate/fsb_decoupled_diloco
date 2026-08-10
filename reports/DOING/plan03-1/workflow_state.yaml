@@ -4,9 +4,9 @@ branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P2-tests-and-harness
 work_unit_id: P2-W2-one-node-validation
-state: TARGETED_REMEDIATION
+state: STAGED_TEST_EXECUTION
 base_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
-target_commit: 219abe663025adc7ff8f731f65d90fb27c42c0fe
+target_commit: bb0023184abd78b6e220c487967d9c245adf36d5
 formal_source_commit: null
 formal_source_fingerprint: null
 experiment_id: p2-one-node-validation-01
@@ -29,4 +29,4 @@ external_review:
   pbs_job_id: 2519093.opbs
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: format_current_python_surface
+allowed_next_action: rerun_p2_static_and_focused_tests

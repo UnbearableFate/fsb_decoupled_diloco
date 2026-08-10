@@ -191,3 +191,16 @@
 - Transition: `STAGED_TEST_EXECUTION` -> `TARGETED_REMEDIATION`. The retained
   allocation will be used to apply and verify the mechanical formatter change,
   followed by a mandatory Codex-only incremental review before retrying tests.
+
+## 2026-08-10T17:53:39+09:00 — STAGED_TEST_EXECUTION retry target
+
+- Ruff formatted all 26 files reported by attempt 1; the formatter completed
+  successfully and left the other 95 Python files unchanged.
+- Frozen remediation target:
+  `bb0023184abd78b6e220c487967d9c245adf36d5`.
+- Mandatory Codex review compared the complete formatter diff and independently
+  verified AST equality for all 26 before/after files (`mismatches=[]`). Verdict:
+  `APPROVE`; external review is skipped per the user's directive.
+- Transition: `TARGETED_REMEDIATION` -> `STAGED_TEST_EXECUTION`. Retry format,
+  lint and focused harness/runtime/architecture tests in allocation
+  `2519128.opbs` before considering the full suite.
