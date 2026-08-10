@@ -12,7 +12,7 @@ formal_source_fingerprint: null
 experiment_id: p2-one-node-validation-01
 experiment_domain: harness
 failure_counters:
-  "harness:p2-one-node-validation-01": 3
+  "harness:p2-one-node-validation-01": 0
 required_tests:
   - s0-static-preflight
   - harness-focused-unit-tests
@@ -31,4 +31,4 @@ external_review:
   pbs_job_id: 2519093.opbs
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: run_p2_post_rewrite_static_and_focused_attempt_4
+allowed_next_action: run_p2_one_node_full_pytest

@@ -270,3 +270,18 @@
 - Transition: `LOGIC_REWRITE` -> `STAGED_TEST_EXECUTION`. The comprehensive
   review authorizes one post-rewrite attempt of the exact static/focused gate in
   retained allocation `2519128.opbs`, followed by the full suite only on PASS.
+
+## 2026-08-10T18:02:31+09:00 — P2 post-rewrite focused PASS
+
+- Allocation: `2519128.opbs`, one `interact-g` node `mg0012`; source HEAD
+  `7022c405fca8ea65ddd0dbe96cb8155fcaa41fa3`, clean worktree, expected
+  NVIDIA/HPC-X modules.
+- Ruff format checked all 121 Python files and lint passed.
+- The registered harness/runtime/architecture/config/source/cleanup focused
+  command passed all 93 tests in 8.49 seconds. The positive aggregate Checker,
+  11 mutations, terminal-control projections, PBS exit trap, syncer fault
+  boundary and retained-surface inventory all executed in this group.
+- Evidence:
+  `artifacts/20260810-180231_p2-one-node-post-rewrite-focused_pass.log`.
+- F1 is runtime-verified and the harness failure counter resets to zero. The
+  next action is the complete pytest suite in the same retained allocation.
