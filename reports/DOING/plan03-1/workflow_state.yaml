@@ -3,10 +3,10 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P4-formal-and-docs
-work_unit_id: P4-W5-remediation-candidate-validation
-state: STAGED_TEST_EXECUTION
+work_unit_id: P4-W6-preformal-remediation-rereview
+state: TEST_REVIEW_TARGET
 base_commit: e1f76a85f77c33765ebaaddb4828e40cc45d4d24
-target_commit: 59abff8978f795e05cb35fc1bf8abb80a8a8bc1a
+target_commit: 2b0c9a004e04af0907ce7766d4d9df47b29cf545
 formal_source_commit: null
 formal_source_fingerprint: null
 experiment_id: p4-preformal-remediation-validation-01
@@ -31,6 +31,10 @@ required_evidence:
   - reports/DOING/plan03-1/artifacts/20260810-203000_p4-candidate-validation.log
   - reports/DOING/plan03-1/artifacts/20260810-203000_p4-candidate-validation.log.focused-pytest.junit.xml
   - reports/DOING/plan03-1/artifacts/20260810-203000_p4-candidate-validation.log.full-pytest.junit.xml
+  - reports/DOING/plan03-1/artifacts/20260810-205900_p4-preformal-remediation-validation.json
+  - reports/DOING/plan03-1/artifacts/20260810-205900_p4-preformal-remediation-validation.log
+  - reports/DOING/plan03-1/artifacts/20260810-205900_p4-preformal-remediation-validation.log.focused-pytest.junit.xml
+  - reports/DOING/plan03-1/artifacts/20260810-205900_p4-preformal-remediation-validation.log.full-pytest.junit.xml
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -47,4 +51,4 @@ open_blocking_findings:
   - P4-R2-F1
   - P4-R2-F2
   - P4-R2-F3
-allowed_next_action: acquire_one_node_and_run_remediation_validation
+allowed_next_action: perform_codex_internal_preformal_remediation_rereview

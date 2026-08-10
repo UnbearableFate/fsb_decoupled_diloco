@@ -1,0 +1,142 @@
+{
+  "artifact_version": 1,
+  "cleanup": {
+    "eligible": false,
+    "owner": "validation_suite",
+    "targets": []
+  },
+  "config_schema_identity": null,
+  "environment": {
+    "interpreter": {
+      "executable": "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+      "version": "3.13.13 (main, May 10 2026, 19:28:34) [Clang 22.1.3 ]"
+    },
+    "nodes": [
+      "mg0032"
+    ],
+    "packages": {
+      "pytest": "9.1.1",
+      "pytest-timeout": "2.4.0",
+      "ruff": "0.15.21",
+      "torch": "2.13.0+cu132"
+    },
+    "pbs_job_id": "2520559.opbs",
+    "topology": {
+      "validation_runner": "mg0032"
+    }
+  },
+  "errors": [],
+  "evidence_paths": [
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/20260810-205900_p4-preformal-remediation-validation.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/20260810-205900_p4-preformal-remediation-validation.log.focused-pytest.junit.xml",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/20260810-205900_p4-preformal-remediation-validation.log.full-pytest.junit.xml"
+  ],
+  "experiment_id": "plan03-1-current-suite",
+  "gate": "U1-one-node-validation",
+  "metrics": {
+    "steps": [
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+          "-m",
+          "ruff",
+          "format",
+          "--check",
+          "."
+        ],
+        "elapsed_seconds": 0.13306976697640494,
+        "name": "ruff-format",
+        "result_kind": "command",
+        "returncode": 0
+      },
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+          "-m",
+          "ruff",
+          "check",
+          "."
+        ],
+        "elapsed_seconds": 0.04963734099874273,
+        "name": "ruff-lint",
+        "result_kind": "command",
+        "returncode": 0
+      },
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+          "-m",
+          "pytest",
+          "-q",
+          "tests/architecture",
+          "tests/harness/test_full_protocol_harness.py",
+          "tests/harness/test_plan_completion.py",
+          "tests/harness/test_validation_suite.py",
+          "tests/runtime/test_learner_entrypoint.py",
+          "tests/runtime/test_syncer_fault_boundary.py",
+          "tests/runtime/test_syncer_startup_admission.py",
+          "tests/runtime/test_terminal_service.py",
+          "tests/storage/test_authority_operational.py",
+          "tests/storage/test_contributor_progress.py",
+          "tests/storage/test_dynamic_admission_request.py",
+          "tests/test_capture_source_identity.py",
+          "tests/test_clean_run.py",
+          "tests/test_cli.py",
+          "tests/test_config.py",
+          "tests/tools/test_analysis.py",
+          "tests/tools/test_launch_independent_run.py",
+          "tests/tools/test_request_terminal_close.py",
+          "--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/20260810-205900_p4-preformal-remediation-validation.log.focused-pytest.junit.xml"
+        ],
+        "elapsed_seconds": 15.08227697800612,
+        "errors": 0,
+        "failures": 0,
+        "junit_xml": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/20260810-205900_p4-preformal-remediation-validation.log.focused-pytest.junit.xml",
+        "name": "focused-pytest",
+        "result_kind": "pytest",
+        "returncode": 0,
+        "skipped": 0,
+        "tests": 169
+      },
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+          "-m",
+          "pytest",
+          "-q",
+          "--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/20260810-205900_p4-preformal-remediation-validation.log.full-pytest.junit.xml"
+        ],
+        "elapsed_seconds": 30.7103792509879,
+        "errors": 0,
+        "failures": 0,
+        "junit_xml": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan03-1/artifacts/20260810-205900_p4-preformal-remediation-validation.log.full-pytest.junit.xml",
+        "name": "full-pytest",
+        "result_kind": "pytest",
+        "returncode": 0,
+        "skipped": 0,
+        "tests": 527
+      }
+    ]
+  },
+  "protocol_schema_identity": null,
+  "requirements_covered": [
+    "UNIT-01",
+    "HARNESS-01"
+  ],
+  "source_identity": {
+    "commit": "2b0c9a004e04af0907ce7766d4d9df47b29cf545",
+    "dirty": false,
+    "fingerprint": "sha256:6b4615945eadb0eea33f344dab2c9d2ad8ce3fb5525bd4af4b5d530172b9af4f",
+    "scopes": [
+      "fs_diloco",
+      "configs",
+      "scripts/miyabi",
+      "tests",
+      "pyproject.toml",
+      "README.md",
+      "docs"
+    ]
+  },
+  "status": "PASS",
+  "workload_identity": null
+}

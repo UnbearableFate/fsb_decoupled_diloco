@@ -860,3 +860,25 @@
 - Transition: `PLAN_REMEDIATION` -> `STAGED_TEST_EXECUTION`. Acquire one
   confirmed Miyabi compute node, run the affected focused group, then run the
   complete U1 producer from this exact source target.
+
+## 2026-08-10T21:01:03+09:00 — P4 preformal remediation validation PASS
+
+- Interactive PBS job `2520559.opbs` ran on exact one-node `interact-g`
+  topology `mg0032` with `1:ncpus=8:mem=16gb`, loaded `nvidia/25.9` and
+  `nv-hpcx/25.9`, and finished with scheduler exit status 0 after 3:13.
+- The affected authority/schema/admission/completion group passed 54 tests.
+  The registered producer then passed Ruff format/lint, 169 focused tests and
+  527 full tests with zero failures, errors or skips.
+- Clean execution source commit:
+  `2b0c9a004e04af0907ce7766d4d9df47b29cf545`; fingerprint
+  `sha256:6b4615945eadb0eea33f344dab2c9d2ad8ce3fb5525bd4af4b5d530172b9af4f`.
+- Evidence hashes: artifact
+  `faf3b6a8e7f4ff7c09d0d593c02f2222176c43db8bfababbddd74dd46ed31b01`,
+  raw log `51a802e29a04463380b87f6f61c503ec502e4b3cd7d5c9499093c60731215881`,
+  focused JUnit
+  `b90f9710253273069a1d3561722d693cd437dfeafe406351a1221f1ed4738d47`,
+  and full JUnit
+  `3c49ca0baab6dcb188fc343828e35552914aeb685b8c4763d0cfdd7f51dae478`.
+- Transition: `STAGED_TEST_EXECUTION` -> `TEST_REVIEW_TARGET`. Freeze the
+  validation evidence and perform the required Codex critical-incremental
+  rereview of P4-R2-F1 through F3. External review remains skipped.
