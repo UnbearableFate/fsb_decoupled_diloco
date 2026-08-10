@@ -808,3 +808,22 @@
   `harness:p4-candidate-validation-01=2`; transition to `TEST_REMEDIATION` until
   the complete fix is frozen, then rerun the full focused set in the same
   allocation.
+
+## 2026-08-10T20:37:18+09:00 — P4 one-node candidate PASS
+
+- Frozen target `1393f38ab51ea78d193b457501947d4095070eab` passed the
+  complete changed-surface rerun: 104 tests passed. The subsequent registered
+  validation producer passed Ruff format/lint, 168 focused tests and 526 full
+  tests with zero failures, errors or skips on `mg0012` in interactive job
+  `2520314.opbs`.
+- The structured artifact binds clean source fingerprint
+  `sha256:0acb6acce3804b049ffa70b500b7771721db7204368c84402234b9d4da829c51`,
+  the raw command log and two distinct JUnit files. SHA-256 values are:
+  artifact `e3cf4031b7df5de175132439763e88239e8baaefdc6b3493f6d43c165175a8da`,
+  raw log `c17b4261323faa18e855320554f2c6b9eeddc1b2297161780cf2f680a0ba938c`,
+  focused JUnit `c71a14379ff0c4d0cb61ad7b793416eb945fb54f0bd4c68b0b7cd0b6ce06f0cf`
+  and full JUnit `07850bf56ea054acc28713a80ea5b611c8389c4a59ea94bfe0d5f1b8e5c85759`.
+- The successful full gate resets the consecutive candidate failure counter.
+  Transition: `STAGED_TEST_EXECUTION` -> `PLAN_REVIEW_TARGET`; commit the
+  evidence, then perform the mandatory Codex internal preformal current-state
+  review. External reviewers remain skipped.
