@@ -267,3 +267,16 @@ only after implementation, compute-node validation and Codex rereview.
   `reports/DOING/code_review/plan03-1/final-common-target-r3/finding-dispositions_1558e1112108ec38388cc2361b69e2cf78d49217.md`.
   No blocking finding is open. The best-effort external gate is terminal and
   the fresh final ladder may begin.
+
+## 2026-08-11T00:02:00+09:00 — final-target preformal review artifact
+
+- Codex recorded the required `preformal-current-state` review for exact source
+  `1558e1112108ec38388cc2361b69e2cf78d49217`, covering `SURFACE-01`,
+  `CONFIG-01`, `SCHEMA-01`, `CLEAN-01` and `ARCH-01`.
+- Report:
+  `reports/DOING/code_review/plan03-1/plan-complete-final-target-r3/codex-gpt_1558e1112108ec38388cc2361b69e2cf78d49217.md`.
+  Machine artifact:
+  `reports/DOING/plan03-1/artifacts/20260811-000200_r2-preformal-current-state_review.json`.
+- The report incorporates exact-source U1 and all three F1 PASS results while
+  keeping unavailable external lanes distinct from approval. No finding is
+  open. Verdict: `APPROVE`.

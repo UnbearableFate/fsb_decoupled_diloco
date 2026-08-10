@@ -1229,3 +1229,15 @@
 - It uses the same detached formal source, canonical static 50 x 10 config,
   eight learners and one syncer. Only monitoring is allowed until the job
   reaches terminal state.
+
+## 2026-08-11T00:02:00+09:00 — R2 machine review artifact complete
+
+- The exact-target Codex `preformal-current-state` report and schema-2 machine
+  artifact bind fingerprint
+  `sha256:9fdff5a7c613e044a7f97523ede2c566f60d4fc9fbf5a5cb4edd5c416ee06337`
+  and cover `SURFACE-01`, `CONFIG-01`, `SCHEMA-01`, `CLEAN-01` and `ARCH-01`.
+- Artifact SHA-256:
+  `23bf04611fe220777022426b6f95f951aa528c78201940ac083c32c4740cb0bc`;
+  report SHA-256:
+  `1e3fec2c283a06447d332cdc9e9fcde85c2ce881ecd3cf7e314cedbb031c659c`.
+  Verdict: `APPROVE`; final G1 remains queued.

@@ -79,6 +79,8 @@ required_evidence:
   - reports/DOING/plan03-1/artifacts/20260810-235900_final-f1-syncer-takeover_result.json
   - reports/DOING/plan03-1/artifacts/20260810-235900_final-f1-syncer-takeover_pbs.log
   - logs/qsub_plan03_1_final_f1_syncer_takeover_20260810_235900/source_identity.json
+  - reports/DOING/code_review/plan03-1/plan-complete-final-target-r3/codex-gpt_1558e1112108ec38388cc2361b69e2cf78d49217.md
+  - reports/DOING/plan03-1/artifacts/20260811-000200_r2-preformal-current-state_review.json
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
