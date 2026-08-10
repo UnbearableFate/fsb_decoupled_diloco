@@ -3,10 +3,10 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P3-functional-faults
-work_unit_id: P3-W6-phase-closure-review
-state: PHASE_REVIEW_TARGET
+work_unit_id: P3-W7-phase-final
+state: PHASE_FINAL
 base_commit: 9398e822ebe6cf9755e55567b18916802b93162f
-target_commit: null
+target_commit: a133a98a431566dbd1aef1af6a7f496f2c301d38
 formal_source_commit: null
 formal_source_fingerprint: null
 experiment_id: null
@@ -47,6 +47,8 @@ required_evidence:
   - reports/DOING/plan03-1/artifacts/20260810-193500_p3-learner-replacement_pbs.log
   - reports/DOING/plan03-1/artifacts/20260810-193700_p3-syncer-takeover_result.json
   - reports/DOING/plan03-1/artifacts/20260810-193700_p3-syncer-takeover_pbs.log
+  - reports/DOING/plan03-1/requirement-matrix.csv
+  - reports/DOING/code_review/plan03-1/P3-phase-closure-review/codex-gpt_a133a98a431566dbd1aef1af6a7f496f2c301d38.md
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -59,4 +61,4 @@ external_review:
   pbs_job_id: null
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: codex_review_p3_code_and_evidence
+allowed_next_action: start_p4_preformal_candidate_and_review_design

@@ -59,3 +59,15 @@ review stage is recorded as skipped-by-user rather than fabricated as approval.
   gate, 118 focused tests and 504 complete tests on one PBS compute node.
 - P2-F1 and P2-F2 are closed; `UNIT-01` and `HARNESS-01` are complete.
 - Verdict: `APPROVE`. External review remains skipped by user direction.
+
+## 2026-08-10T19:40:27+09:00 — P3 phase closure review
+
+- Base: P2 phase-final `9398e822ebe6cf9755e55567b18916802b93162f`.
+- Frozen target: `a133a98a431566dbd1aef1af6a7f496f2c301d38`.
+- Mandatory report:
+  `reports/DOING/code_review/plan03-1/P3-phase-closure-review/codex-gpt_a133a98a431566dbd1aef1af6a7f496f2c301d38.md`.
+- Verified one-node 120/506 PASS and three exact-source five-node PASS
+  artifacts, including binding replacement, leader takeover and five-way
+  terminal applied-token equality after hot-table archival.
+- `FUNC-4L1S-01` and `FAULT-4L1S-01` are complete. Verdict: `APPROVE`.
+  External review remains skipped under user direction.

@@ -750,3 +750,18 @@
   complete evidence set, then perform the mandatory Codex P3 code-and-evidence
   review from P2 phase-final `9398e822ebe6cf9755e55567b18916802b93162f`.
   External review remains skipped under user direction.
+
+## 2026-08-10T19:40:27+09:00 — P3 PHASE_FINAL
+
+- Mandatory Codex phase review approved frozen target
+  `a133a98a431566dbd1aef1af6a7f496f2c301d38` after checking the complete P3
+  source increment, one-node validation, all three final five-node artifacts,
+  raw logs, source identity, scheduler history and durable authority paths.
+- The final scenarios share exact source commit/fingerprint, and the reviewed
+  evidence proves normal operation, learner fencing/replacement, syncer
+  expiry/takeover and archive-safe terminal token accounting. Earlier failed
+  evidence remains invalidated; no blocking finding remains.
+- `FUNC-4L1S-01` and `FAULT-4L1S-01` are complete. External review was not
+  invoked, following the user's Codex-only directive.
+- P3 is complete. Begin P4 by freezing the preformal candidate/current-state
+  review design before the formal 8+1 experiment and documentation closure.
