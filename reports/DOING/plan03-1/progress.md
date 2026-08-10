@@ -624,3 +624,17 @@
   review before any compute test; `P3-TAT-001` remains open until that verdict.
 - Transition: `TEST_REMEDIATION` -> `TEST_REVIEW_TARGET`; external review is
   skipped under user direction.
+
+## 2026-08-10T19:29:48+09:00 — P3 terminal applied-total remediation APPROVE
+
+- Frozen continuous target:
+  `8e7f87432895f3a699c93dc252aa225b7d9944a8`; rereview base is the rejected
+  target `36987b41daa67558ff83024abb282122f40065bf`.
+- Mandatory Codex review rechecked both sparse-zero and archived-positive
+  ledger states, terminal transaction fencing, control projections, Checker
+  row merging, exact workload identity and the synchronized mutation.
+- `P3-TAT-001` is closed. No remaining blocking finding was identified;
+  verdict: `APPROVE`. External review remains skipped under user direction.
+- Transition: `TEST_REVIEW_TARGET` -> `STAGED_TEST_EXECUTION`. Acquire one
+  main-agent-held `interact-g` node and run focused plus complete validation
+  before any five-node scenario is resubmitted.
