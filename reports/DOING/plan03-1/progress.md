@@ -333,3 +333,19 @@
 - P2 implementation, harness and one-node candidate tests are complete. Freeze
   this evidence for mandatory Codex phase review; external review remains
   disabled by the user.
+
+## 2026-08-10T18:18:37+09:00 — P2 phase remediation required
+
+- The mandatory Codex phase review inspected the complete branch-point to
+  target increment and returned `CHANGES_REQUIRED` for target
+  `5f3d61400fa9fa3c6ee469fa80a75d58558e5c87`.
+- P2-F1: the group-level module manifest proves file inventory equality but can
+  cite unrelated tests for an uncovered module; concrete inspection/CLI
+  boundaries have no focused behavior test.
+- P2-F2: the useful 93/489/Ruff PASS logs are ignored, absent from the frozen
+  target and not structured gate artifacts with complete source/environment
+  identity.
+- Transition: `PHASE_REVIEW_TARGET` -> `PHASE_REMEDIATION_AND_RETEST`. Implement
+  exact per-surface test ownership and an atomic P2 validation artifact
+  producer, review the continuous target, then rerun the P2 gate on one compute
+  node. External review remains skipped by user direction.

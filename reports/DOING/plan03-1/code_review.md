@@ -36,3 +36,15 @@ review stage is recorded as skipped-by-user rather than fabricated as approval.
   rejected.
 - External failure review is skipped by explicit user direction. No fourth
   attempt is allowed before implementing and reviewing the complete rewrite.
+
+## 2026-08-10T18:18:37+09:00 — P2 phase review
+
+- Base: `7d4a607b753744d9b57b54fe0400d1267b13cc40`.
+- Frozen target: `5f3d61400fa9fa3c6ee469fa80a75d58558e5c87`.
+- Mandatory report:
+  `reports/DOING/code_review/plan03-1/P2-phase-code-and-evidence-review/codex-gpt_5f3d61400fa9fa3c6ee469fa80a75d58558e5c87.md`.
+- Verdict: `CHANGES_REQUIRED`.
+- Blocking findings: P2-F1 (group-level manifest can falsely claim per-module
+  coverage) and P2-F2 (ignored ad-hoc logs are absent from the frozen target and
+  do not satisfy the structured gate artifact contract).
+- External phase review is skipped under the user's Codex-only direction.
