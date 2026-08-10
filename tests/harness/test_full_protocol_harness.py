@@ -940,6 +940,7 @@ def test_gate_artifact_validator_rejects_self_proof(tmp_path: Path) -> None:
         "experiment_id": "self-proof",
         "requirements_covered": ["FUNC-4L1S-01"],
         "fault_scenario": "none",
+        "syncer_takeover_boundary_version": 2,
         "source_identity": None,
         "config_schema_identity": None,
         "protocol_schema_identity": None,
