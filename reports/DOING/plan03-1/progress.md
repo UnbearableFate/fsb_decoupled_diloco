@@ -1106,3 +1106,28 @@
   fresh nine-node over-baseline run because the earlier result predates the
   current schema/Checker source; documentation synchronization follows only
   after that verification.
+
+## 2026-08-10T23:33:00+09:00 — current revision-11 over-baseline 9-node PASS
+
+- Source commit `8dc2b727c64eab66f6627e1ed3a70ad9ef093631`, fingerprint
+  `sha256:cc5a483060e2a6e13c6cd1967d32b37581c642a9706c7ed8919034c90b1f4a98`
+  and config SHA-256
+  `68bf4ef660f4e44f4244149d45449a72af8709e8d8de2805e7f3cb42ba294e55`
+  bound the 51-local-step by 11-global-step revision-11 workload.
+- PBS job `2521638.opbs` ran on exact nine-node `debug-g` topology `mg0001`,
+  `mg0004`, `mg0008`, `mg0009`, `mg0012`, `mg0013`, `mg0015`, `mg0018` and
+  `mg0019`, with `9:ncpus=8:mpiprocs=1:mem=16gb`, requested walltime
+  `00:10:00` and scheduler exit 0.
+- The structured Checker returned `PASS`: versions `0..11`, 11 committed
+  credits for every learner, 88 applied proposals, 71,808 direct applied
+  tokens, 22 dropped proposals/17,952 dropped tokens, 89,760 adjudicated
+  processed tokens, zero balance/outstanding/other fate, exact attestations,
+  one released epoch, terminal authority agreement, immutable object hashes
+  and SQLite integrity `ok`.
+- Result SHA-256 is
+  `52102369a44e1d0a54b66ea3fcf9d8476ca5ca9239863891d964d6dc75574392`;
+  PBS log SHA-256 is
+  `d23eb054abc0cc515ae315f5fdc6b7a9c5ab79497c940d58004952225d641874`.
+- README, design and testing documentation now reflect the verified current
+  behavior; the canonical formal config is restored to 50 × 10. Freeze and
+  review this documentation-complete common target before restarting U1/F1/G1.

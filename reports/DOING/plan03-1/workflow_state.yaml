@@ -3,8 +3,8 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P4-formal-and-docs
-work_unit_id: P4-W12-current-overbaseline
-state: PLAN_REMEDIATION
+work_unit_id: P4-W13-final-common-target
+state: PLAN_REVIEW_TARGET
 base_commit: 5b474d5c1735beb8cca922fd6cc7b6304926df2c
 target_commit: 47662f8d872f4a5e451908796a6b677105a28c52
 formal_source_commit: null
@@ -61,6 +61,8 @@ required_evidence:
   - reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log
   - reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log.focused-pytest.junit.xml
   - reports/DOING/plan03-1/artifacts/u1_validation_47662f8.log.full-pytest.junit.xml
+  - reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json
+  - reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_pbs.log
 invalidated_evidence:
   - target-219abe663025adc7ff8f731f65d90fb27c42c0fe-runtime-not-started
   - p2-focused-attempt-2-collection-failed
@@ -79,4 +81,4 @@ external_review:
   pbs_job_id: 2521428.opbs
   status: completed-unavailable
 open_blocking_findings: []
-allowed_next_action: run_current_9node_overbaseline
+allowed_next_action: freeze_and_review_final_common_target

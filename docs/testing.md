@@ -45,13 +45,15 @@ syncer epoch 和 fault evidence 全部由该场景唯一推导；normal 场景�
 
 ## 超基线文档同步验证
 
-2026-08-10 的 preliminary run `plan03_1_p4_prelim_51x11_20260810_211104` 使用 source commit `563bf5298f89ff8481fe533242a4ee2c0cdd16f9`、authority schema revision 10 和 9 个独立 `debug-g` 节点（PBS `2520645.opbs`），执行了 51 local steps × 11 committed global steps，超过正式 50 × 10 基线。27 秒的 PBS 作业得到结构化 `PASS`：
+2026-08-10 的 current run `plan03_1_p4_current_51x11_20260810_233100` 使用 source commit `8dc2b727c64eab66f6627e1ed3a70ad9ef093631`、authority schema revision 11 和 9 个独立 `debug-g` 节点（PBS `2521638.opbs`），执行了 51 local steps × 11 committed global steps，超过正式 50 × 10 基线，并得到结构化 `PASS`：
 
 - versions 恰好为 `0..11`，8 个 learner 各有 11 次 committed selection credit；
 - 88 个 applied proposal，每个 816 tokens，direct applied 总计 71,808；
-- 34,272 个异步 supersession/terminal dropped tokens 全部被 durable ledger 裁决；
+- 22 个 dropped proposal 共 17,952 tokens；89,760 processed tokens 全部被 durable ledger 裁决；
 - token balance、outstanding、quarantine/conflict、reported-unpublished 和 local discard 均为零；
 - 8 个 learner 加 1 个 syncer attestation 覆盖 exact PBS nodefile；唯一 leader epoch 正常 released；
 - terminal authority/control 总量一致，publication hashes 通过，SQLite `integrity_check=ok`。
 
-该 run 只证明文档同步前的 over-baseline 行为，不替代最终 formal gate。文档和正式配置恢复为 50 × 10 后会冻结新的 common target，并在该 target 上重跑 U1、三种 4+1 场景和正式 9-node G1。
+结构化结果和 PBS 原始日志分别保存在 `reports/DOING/plan03-1/artifacts/20260810-233100_p4-current-9node-overbaseline_result.json` 与 `20260810-233100_p4-current-9node-overbaseline_pbs.log`，SHA-256 为 `52102369a44e1d0a54b66ea3fcf9d8476ca5ca9239863891d964d6dc75574392` 和 `d23eb054abc0cc515ae315f5fdc6b7a9c5ab79497c940d58004952225d641874`。
+
+该 run 证明 revision 11 的 over-baseline 行为并授权本次文档同步，但不替代最终 formal gate。文档和正式配置恢复为 50 × 10 后冻结新的 common target，并在该 target 上重跑 U1、三种 4+1 场景和正式 9-node G1。
