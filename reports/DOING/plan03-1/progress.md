@@ -257,3 +257,16 @@
 - Transition: `FAILURE_REVIEW` -> `LOGIC_REWRITE`. External failure review is
   skipped per user direction; the retained allocation remains available, but
   no retry may run until rewrite implementation and Codex review are frozen.
+
+## 2026-08-10T18:02:00+09:00 — STAGED_TEST_EXECUTION post-rewrite attempt 4
+
+- Frozen rewrite target:
+  `1190f7ff1a92ae4daf8d224e0b00a428569283f9`.
+- The exact-workload mutation now commits a schema-valid `(processed=15,
+  effective=15)` receipt, proves the persisted values and requires the exact
+  Checker workload error.
+- Mandatory Codex rewrite review verdict: `APPROVE`; F1 is fixed pending runtime
+  verification. External review remains skipped under the user's directive.
+- Transition: `LOGIC_REWRITE` -> `STAGED_TEST_EXECUTION`. The comprehensive
+  review authorizes one post-rewrite attempt of the exact static/focused gate in
+  retained allocation `2519128.opbs`, followed by the full suite only on PASS.

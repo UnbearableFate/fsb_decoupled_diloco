@@ -4,9 +4,9 @@ branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P2-tests-and-harness
 work_unit_id: P2-W2-one-node-validation
-state: LOGIC_REWRITE
+state: STAGED_TEST_EXECUTION
 base_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
-target_commit: 83e160d3ca6b21e7103adfc10dca7454bd661a0c
+target_commit: 1190f7ff1a92ae4daf8d224e0b00a428569283f9
 formal_source_commit: null
 formal_source_fingerprint: null
 experiment_id: p2-one-node-validation-01
@@ -30,6 +30,5 @@ invalidated_evidence:
 external_review:
   pbs_job_id: 2519093.opbs
   status: skipped-by-user
-open_blocking_findings:
-  - F1-exact-workload-mutation-rejected-before-checker
-allowed_next_action: implement_schema_valid_workload_mutation_rewrite
+open_blocking_findings: []
+allowed_next_action: run_p2_post_rewrite_static_and_focused_attempt_4
