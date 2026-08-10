@@ -3,13 +3,13 @@ plan_id: plan03-1
 branch_point: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 workflow_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 phase_id: P2-tests-and-harness
-work_unit_id: P2-W6-phase-closure-review
-state: PHASE_REVIEW_TARGET
+work_unit_id: P2-W7-phase-final
+state: PHASE_FINAL
 base_commit: 7d4a607b753744d9b57b54fe0400d1267b13cc40
 target_commit: 11290da38f12520ead2c9488662cfa573526fa91
 formal_source_commit: null
 formal_source_fingerprint: null
-experiment_id: p2-phase-closure-review-01
+experiment_id: null
 experiment_domain: harness
 failure_counters:
   "harness:p2-one-node-validation-01": 0
@@ -35,4 +35,4 @@ external_review:
   pbs_job_id: 2519093.opbs
   status: skipped-by-user
 open_blocking_findings: []
-allowed_next_action: run_codex_p2_phase_closure_review
+allowed_next_action: start_p3_test_design_freeze
