@@ -47,3 +47,4 @@ tests/test_config.py
 tests/test_summarize_runs.py
 tools/clean_run.py
 tools/summarize_runs.py
+website/app/reference-data/api-manifest.json
