@@ -35,10 +35,10 @@ PYTHON_BIN="$PROJECT_ROOT/.venv/bin/python"
 CONFIG="$PROJECT_ROOT/configs/dynamic_full/gpt2_wikitext2_8l_200x10.yaml"
 PBS_SCRIPT="$SCRIPT_DIR/run_scenario.pbs"
 SUPERVISOR_QUEUE="debug-g"
-SUPERVISOR_WALLTIME="00:25:00"
+SUPERVISOR_WALLTIME="00:30:00"
 ACTOR_QUEUE="debug-g"
-ACTOR_WALLTIME="00:20:00"
-TIMEOUT_SECONDS="1200"
+ACTOR_WALLTIME="00:25:00"
+TIMEOUT_SECONDS="1500"
 
 test -x "$PYTHON_BIN"
 test -f "$CONFIG"
@@ -49,7 +49,7 @@ command -v rg >/dev/null
 
 SOURCE_STATUS="$(
   git -C "$PROJECT_ROOT" status --short --untracked-files=all -- \
-    fs_diloco configs do_experiments scripts/miyabi tests tools \
+    fs_diloco configs do_experiments scripts/miyabi tests tools torch_ddp_baselines \
     pyproject.toml README.md docs
 )"
 if [[ -n "$SOURCE_STATUS" ]]; then

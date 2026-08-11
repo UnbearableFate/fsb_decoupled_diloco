@@ -3,7 +3,7 @@
 set -eEuo pipefail
 
 PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
-PBS_SCRIPT="$PROJECT_ROOT/torch_ddp_baselines/scripts/miyabi/run_gpt2_wikitext2_500steps.pbs"
+PBS_SCRIPT="$PROJECT_ROOT/torch_ddp_baselines/scripts/miyabi/run_gpt2_wikitext2_2000steps.pbs"
 STAMP="$(date +%Y%m%d_%H%M%S)"
 
 case "$(hostname)" in
@@ -35,10 +35,10 @@ if [[ -n "$source_status" ]]; then
   exit 2
 fi
 
-ddp_run_id="${STAMP}_torch_ddp_gpt2_wikitext2_8n_500"
-periodic_run_id="${STAMP}_torch_periodic_average_gpt2_wikitext2_8n_500"
-ddp_job="$(qsub -N torch_ddp_500 -v "MODE=ddp,RUN_ID=$ddp_run_id" "$PBS_SCRIPT")"
+ddp_run_id="${STAMP}_torch_ddp_gpt2_wikitext2_8n_2000"
+periodic_run_id="${STAMP}_torch_periodic_average_gpt2_wikitext2_8n_2000"
+ddp_job="$(qsub -N torch_ddp_2000 -v "MODE=ddp,RUN_ID=$ddp_run_id" "$PBS_SCRIPT")"
 printf 'DDP_JOB=%s DDP_RUN_ID=%s\n' "$ddp_job" "$ddp_run_id"
-periodic_job="$(qsub -N torch_pavg_500 -v "MODE=periodic_average,RUN_ID=$periodic_run_id" "$PBS_SCRIPT")"
+periodic_job="$(qsub -N torch_pavg_2000 -v "MODE=periodic_average,RUN_ID=$periodic_run_id" "$PBS_SCRIPT")"
 
 printf 'PERIODIC_JOB=%s PERIODIC_RUN_ID=%s\n' "$periodic_job" "$periodic_run_id"

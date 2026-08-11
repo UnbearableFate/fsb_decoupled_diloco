@@ -3,7 +3,7 @@
 #PBS -q debug-g
 #PBS -W group_list=xg24i002
 #PBS -l select=1:mpiprocs=1
-#PBS -l walltime=00:25:00
+#PBS -l walltime=00:30:00
 #PBS -j oe
 #PBS -m ae
 
@@ -20,8 +20,8 @@ PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 CONFIG="${CONFIG:-$PROJECT_ROOT/configs/dynamic_full/gpt2_wikitext2_8l_200x10.yaml}"
 ACTOR_QUEUE="${ACTOR_QUEUE:-debug-g}"
-ACTOR_WALLTIME="${ACTOR_WALLTIME:-00:20:00}"
-TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-1200}"
+ACTOR_WALLTIME="${ACTOR_WALLTIME:-00:25:00}"
+TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-1500}"
 
 export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
 export TOKENIZERS_PARALLELISM=false

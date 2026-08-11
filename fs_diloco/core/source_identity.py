@@ -18,6 +18,7 @@ SOURCE_SCOPES = (
     "scripts/miyabi",
     "tests",
     "tools",
+    "torch_ddp_baselines",
     "pyproject.toml",
     "README.md",
     "docs",

@@ -850,8 +850,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--log-root", type=Path, required=True)
     parser.add_argument("--evidence-output", type=Path, required=True)
     parser.add_argument("--actor-queue", default="debug-g")
-    parser.add_argument("--actor-walltime", default="00:20:00")
-    parser.add_argument("--timeout-seconds", type=float, default=1200.0)
+    parser.add_argument("--actor-walltime", default="00:25:00")
+    parser.add_argument("--timeout-seconds", type=float, default=1500.0)
     return parser
 
 
