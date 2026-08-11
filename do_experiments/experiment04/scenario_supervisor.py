@@ -862,9 +862,7 @@ def _publication_object_evidence(
                 for component in parsed.parts[:-1]:
                     current = current / component
                     if not stat.S_ISDIR(current.lstat().st_mode):
-                        raise RuntimeError(
-                            "publication object path parent is not a directory"
-                        )
+                        raise RuntimeError("publication object path parent is not a directory")
                 metadata = expected_path.lstat()
             except FileNotFoundError as exc:
                 raise RuntimeError(f"publication object is missing: {relative}") from exc
@@ -877,10 +875,7 @@ def _publication_object_evidence(
                 for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                     digest.update(chunk)
             observed_sha256 = digest.hexdigest()
-            if (
-                metadata.st_size != int(row[size_field])
-                or observed_sha256 != str(row[sha_field])
-            ):
+            if metadata.st_size != int(row[size_field]) or observed_sha256 != str(row[sha_field]):
                 raise RuntimeError(f"publication object identity mismatch: {relative}")
             evidence.append(
                 {
