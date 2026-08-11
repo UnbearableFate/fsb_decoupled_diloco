@@ -365,7 +365,8 @@ def _terminal_fences(connection: sqlite3.Connection, *, path: Path) -> list[dict
         if controller is None or controller["state"] != "finalized":
             raise RunParseError(f"{path}: controller is not finalized")
         rows = connection.execute(
-            "SELECT stable_contributor_key, fence_json, state, final_cycle_seq "
+            "SELECT stable_contributor_key, fence_json, state, final_cycle_seq, "
+            "hard_crash_gap_tokens_upper_bound "
             "FROM terminal_contributor_fences WHERE generation=? "
             "ORDER BY stable_contributor_key",
             (int(controller["generation"]),),
@@ -374,8 +375,9 @@ def _terminal_fences(connection: sqlite3.Connection, *, path: Path) -> list[dict
         raise RunParseError(f"cannot read terminal contributor fences: {path}") from exc
     fences: list[dict[str, Any]] = []
     for row in rows:
-        if row["state"] != "acked":
-            raise RunParseError(f"{path}: terminal contributor is not acknowledged")
+        state = str(row["state"])
+        if state not in {"acked", "hard_crash"}:
+            raise RunParseError(f"{path}: terminal contributor is not adjudicated")
         try:
             fence = json.loads(row["fence_json"])
         except json.JSONDecodeError as exc:
@@ -385,28 +387,36 @@ def _terminal_fences(connection: sqlite3.Connection, *, path: Path) -> list[dict
         except (TypeError, ValueError) as exc:
             raise RunParseError(f"{path}: terminal fence has an invalid current shape") from exc
         final_cycle_seq = row["final_cycle_seq"]
-        if (
+        if state == "acked" and (
             isinstance(final_cycle_seq, bool)
             or not isinstance(final_cycle_seq, int)
             or final_cycle_seq < 1
         ):
             raise RunParseError(f"{path}: terminal fence has no valid final cycle sequence")
+        if state == "hard_crash" and (
+            final_cycle_seq is not None or int(row["hard_crash_gap_tokens_upper_bound"]) <= 0
+        ):
+            raise RunParseError(f"{path}: hard-crash fence has invalid bounded-gap evidence")
         decoded = typed_fence.as_dict()
         decoded["stable_contributor_key"] = str(row["stable_contributor_key"])
         decoded["canonical_json"] = str(row["fence_json"])
         decoded["final_cycle_seq"] = final_cycle_seq
+        decoded["terminal_state"] = state
+        decoded["hard_crash_gap_tokens_upper_bound"] = int(row["hard_crash_gap_tokens_upper_bound"])
         fences.append(decoded)
     return fences
 
 
-def _last_proposal_loss(run_dir: Path, fence: dict[str, Any]) -> float:
-    """Return the last proposal loss emitted by one terminal instance."""
+def _last_proposal_loss(run_dir: Path, fence: dict[str, Any], *, required: bool) -> float | None:
+    """Return the last proposal loss, allowing absent telemetry only for a hard crash."""
 
     instance_id = fence.get("instance_id")
     if not isinstance(instance_id, str) or not instance_id:
         raise RunParseError(f"{run_dir}: terminal fence has no instance ID")
     metric_paths = sorted((run_dir / "metrics" / "learner" / instance_id).glob("*.jsonl"))
     if len(metric_paths) != 1:
+        if not required and not metric_paths:
+            return None
         raise RunParseError(
             f"{run_dir}: expected one telemetry attempt for {instance_id}, found {len(metric_paths)}"
         )
@@ -432,6 +442,8 @@ def _last_proposal_loss(run_dir: Path, fence: dict[str, Any]) -> float:
         if selected is None or timestamp > selected[0]:
             selected = (timestamp, loss)
     if selected is None:
+        if not required:
+            return None
         raise RunParseError(f"{run_dir}: terminal instance {instance_id} has no proposal loss")
     return selected[1]
 
@@ -487,7 +499,22 @@ def _parse_full_protocol_run(run_dir: Path) -> dict[str, Any]:
             primary_key="update_id",
         )
         inner_steps = _integer(training, "inner_steps", path=config_path)
-        steps = [int(fence["final_cycle_seq"]) * inner_steps for fence in fences]
+        progress_rows = connection.execute(
+            "SELECT stable_contributor_key, last_cycle_seq FROM contributor_progress"
+        ).fetchall()
+        progress = {
+            str(row["stable_contributor_key"]): int(row["last_cycle_seq"]) for row in progress_rows
+        }
+        steps = []
+        for fence in fences:
+            if fence["terminal_state"] == "acked":
+                cycle_seq = int(fence["final_cycle_seq"])
+            else:
+                key = str(fence["stable_contributor_key"])
+                if key not in progress:
+                    raise RunParseError(f"{authority_path}: hard-crash stream has no progress row")
+                cycle_seq = progress[key]
+            steps.append(cycle_seq * inner_steps)
         job_rows = connection.execute(
             "SELECT pbs_job_id FROM learner_instances WHERE pbs_job_id IS NOT NULL "
             "UNION SELECT pbs_job_id FROM syncer_epochs WHERE pbs_job_id IS NOT NULL"
@@ -512,12 +539,20 @@ def _parse_full_protocol_run(run_dir: Path) -> dict[str, Any]:
     if actual_counts != expected_counts:
         raise RunParseError(f"{run_dir}: applied updates do not match every exact merge threshold")
 
-    losses = [_last_proposal_loss(run_dir, fence) for fence in fences]
+    loss_reports = [
+        (fence, _last_proposal_loss(run_dir, fence, required=fence["terminal_state"] == "acked"))
+        for fence in fences
+    ]
+    available_losses = [loss for _fence, loss in loss_reports if loss is not None]
+    if not available_losses:
+        raise RunParseError(f"{run_dir}: Full Protocol run has no proposal loss reports")
     beta1, beta2 = _optimizer_betas(optimizer, path=config_path)
     micro_batch = _integer(training, "micro_batch_size", path=config_path)
     accumulation = _integer(training, "gradient_accumulation_steps", path=config_path)
     block_size = _integer(data, "block_size", path=config_path)
-    coordinate = ";".join(str(fence["stable_contributor_key"]) for fence in fences)
+    coordinate = ";".join(
+        str(fence["stable_contributor_key"]) for fence, loss in loss_reports if loss is not None
+    )
     return {
         "run_id": run_id,
         "run_dir": str(run_dir),
@@ -553,9 +588,9 @@ def _parse_full_protocol_run(run_dir: Path) -> dict[str, Any]:
         "merge_contributors": merge_contributors,
         "synchronization_interval": inner_steps,
         "synchronization_count": final_version,
-        "final_report_count": len(losses),
+        "final_report_count": len(available_losses),
         "final_report_coordinate": coordinate,
-        "final_mean_loss": math.fsum(losses) / len(losses),
+        "final_mean_loss": math.fsum(available_losses) / len(available_losses),
         "training_time_seconds": training_time,
         "synchronization_time_seconds": "",
         "synchronization_time_fraction": "",

@@ -167,6 +167,36 @@ def test_bootstrap_slot_is_one_use_and_replacement_requires_exact_qsub_job(
             )
 
 
+def test_admission_requires_one_explicit_authorization_source(tmp_path: Path) -> None:
+    """The final writer rejects implicit or ambiguous admission authorization."""
+
+    with _authority(tmp_path) as authority:
+        leader = authority.open_leader(
+            authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
+        )
+        leader.initialize_membership(command_id="initialize-membership")
+        common = {
+            "instance_id": "instance-1",
+            "placement_id": "placement-1",
+            "stream_id": 0,
+            "admission_token_sha256": "a" * 64,
+            "hostname": "host",
+            "pid": 1,
+        }
+
+        with pytest.raises(ValueError, match="exactly one bootstrap slot or launch request ID"):
+            leader.admit_incarnation(command_id="implicit", **common)
+        with pytest.raises(ValueError, match="exactly one bootstrap slot or launch request ID"):
+            leader.admit_incarnation(
+                command_id="ambiguous",
+                bootstrap_slot=0,
+                launch_request_id="launch-1",
+                **common,
+            )
+
+        assert authority.read.instances() == ()
+
+
 def test_stream_cannot_hold_two_unreleased_launch_reservations(tmp_path: Path) -> None:
     """A stream can reserve capacity for only one outstanding authorized launch."""
 
@@ -212,3 +242,54 @@ def test_stream_cannot_hold_two_unreleased_launch_reservations(tmp_path: Path) -
                 max_pending_requests=2,
                 max_total_requests=2,
             )
+
+
+def test_launch_capacity_observation_survives_hot_history_retention(tmp_path: Path) -> None:
+    """A launch keeps its causal capacity observation after later windows are pruned."""
+
+    with _authority(tmp_path) as authority:
+        leader = authority.open_leader(
+            authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
+        )
+        leader.initialize_membership(command_id="initialize-membership")
+        leader.record_capacity_observation(
+            command_id="observe-launch",
+            observation_key="capacity-launch",
+            global_version=0,
+            eligible_contributors=0,
+            selected_contributors=0,
+            productive_instances=0,
+            reserved_launch_capacity=0,
+            desired_contributors=1,
+            action="low",
+            retention_count=1,
+        )
+        leader.plan_launch_request(
+            command_id="plan-launch",
+            request_id="launch-1",
+            observation_key="capacity-launch",
+            stream_id=0,
+            replace_instance_id=None,
+            reason="low capacity",
+            expires_at=200.0,
+            max_pending_requests=1,
+            max_total_requests=1,
+        )
+        for sequence in range(2, 5):
+            leader.record_capacity_observation(
+                command_id=f"observe-{sequence}",
+                observation_key=f"capacity-{sequence}",
+                global_version=0,
+                eligible_contributors=0,
+                selected_contributors=0,
+                productive_instances=0,
+                reserved_launch_capacity=1,
+                desired_contributors=1,
+                action="sufficient",
+                retention_count=1,
+            )
+
+        assert {row["observation_key"] for row in authority.read.capacity_observations()} == {
+            "capacity-launch",
+            "capacity-4",
+        }

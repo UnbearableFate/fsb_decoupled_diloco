@@ -41,42 +41,108 @@ def _fence(instance_id: str, stream_id: int) -> dict[str, object]:
     }
 
 
-def _finalized_authority(path: Path, *, hard_crash_stream: int | None = None) -> None:
-    """Create the minimal finalized authority required by current formal oracles."""
+def _finalized_authority(
+    path: Path,
+    *,
+    hard_crash_stream: int | None = None,
+    replacement_stream: int | None = None,
+) -> None:
+    """Create one finalized authority with exact receipt and token-ledger evidence."""
 
     connection = sqlite3.connect(path)
     connection.executescript(
         """
         CREATE TABLE controller_state(singleton INTEGER, generation INTEGER, state TEXT);
-        CREATE TABLE terminal_state(singleton INTEGER, final_version INTEGER);
+        CREATE TABLE terminal_state(
+            singleton INTEGER, state TEXT, final_version INTEGER,
+            direct_weight_tokens_applied INTEGER
+        );
         CREATE TABLE terminal_contributor_fences(
             generation INTEGER,
             stable_contributor_key TEXT,
+            fence_json TEXT,
             state TEXT,
             final_cycle_seq INTEGER,
             hard_crash_gap_tokens_upper_bound INTEGER
         );
+        CREATE TABLE cycle_receipts(
+            receipt_id TEXT,
+            receipt_sha256 TEXT,
+            stable_contributor_key TEXT,
+            cycle_seq INTEGER,
+            previous_receipt_id TEXT,
+            previous_receipt_sha256 TEXT,
+            processed_tokens_this_cycle INTEGER,
+            effective_tokens_this_cycle INTEGER,
+            local_discarded_tokens_this_cycle INTEGER,
+            retained_tokens_since_base INTEGER,
+            data_cursor_start INTEGER,
+            data_cursor_end INTEGER,
+            proposal_expected INTEGER,
+            planned_update_id TEXT,
+            fence_json TEXT,
+            ingested_at REAL
+        );
+        CREATE TABLE contributor_progress(
+            stable_contributor_key TEXT,
+            last_cycle_seq INTEGER,
+            last_receipt_id TEXT,
+            last_receipt_sha256 TEXT,
+            data_cursor INTEGER
+        );
         CREATE TABLE updates(
             update_id TEXT,
+            cycle_receipt_id TEXT,
+            cycle_receipt_sha256 TEXT,
+            stable_contributor_key TEXT,
+            cycle_seq INTEGER,
             status TEXT,
             applied_version INTEGER,
             inner_steps INTEGER,
+            processed_tokens_this_cycle INTEGER,
+            effective_tokens_this_update INTEGER,
+            local_discarded_tokens_this_cycle INTEGER,
+            data_cursor_start INTEGER,
+            data_cursor_end INTEGER,
             fence_json TEXT,
-            created_at REAL
+            created_at REAL,
+            ingested_at REAL
+        );
+        CREATE TABLE token_fates(
+            receipt_id TEXT,
+            local_discarded_tokens INTEGER,
+            direct_weight_tokens INTEGER,
+            direct_fate TEXT
+        );
+        CREATE TABLE token_rollups(
+            singleton INTEGER,
+            adjudicated_processed INTEGER,
+            local_discarded INTEGER,
+            direct_applied INTEGER,
+            direct_dropped INTEGER,
+            direct_quarantined_or_conflicted INTEGER,
+            direct_reported_unpublished INTEGER,
+            direct_outstanding INTEGER,
+            carried_ancestry INTEGER
         );
         CREATE TABLE launch_requests(
             request_id TEXT,
+            observation_key TEXT,
             bootstrap_slot INTEGER,
             role TEXT,
             reason TEXT,
             stream_id INTEGER,
+            replace_instance_id TEXT,
             state TEXT,
             admitted_instance_id TEXT,
-            created_at REAL
+            pbs_job_id TEXT,
+            created_at REAL,
+            updated_at REAL
         );
         CREATE TABLE learner_instances(
             instance_id TEXT,
             registered_at REAL,
+            admitted_at REAL,
             status TEXT,
             placement_id TEXT,
             placement_epoch INTEGER,
@@ -93,59 +159,200 @@ def _finalized_authority(path: Path, *, hard_crash_stream: int | None = None) ->
         CREATE TABLE global_versions(
             version INTEGER,
             committed_by_epoch INTEGER,
-            committed_at REAL
+            committed_at REAL,
+            direct_weight_tokens_applied INTEGER
+        );
+        CREATE TABLE command_records(
+            command_id TEXT,
+            command_kind TEXT,
+            result_json TEXT
+        );
+        CREATE TABLE capacity_observations(
+            observation_key TEXT,
+            observation_seq INTEGER,
+            kind TEXT,
+            action TEXT,
+            desired_contributors INTEGER,
+            productive_instances INTEGER,
+            reserved_launch_capacity INTEGER
+        );
+        CREATE TABLE admission_history(
+            admission_id INTEGER,
+            instance_id TEXT,
+            event TEXT
         );
         INSERT INTO controller_state VALUES(1, 1, 'finalized');
-        INSERT INTO terminal_state VALUES(1, 10);
+        INSERT INTO terminal_state VALUES(1, 'finalized', 10, 131072000);
         INSERT INTO syncer_epochs VALUES(1, '100.opbs', 'released');
+        INSERT INTO token_rollups VALUES(
+            1, 131072000, 0, 131072000, 0, 0, 0, 0, 0
+        );
         """
     )
+    receipt_sha256: dict[tuple[int, int], str] = {}
     for stream in range(8):
         crashed = stream == hard_crash_stream
+        replaced = stream == replacement_stream
+        terminal_instance = f"instance-{stream}-replacement" if replaced else f"instance-{stream}"
+        terminal_fence = _fence(terminal_instance, stream)
+        if replaced:
+            terminal_fence["placement_id"] = f"placement-{stream}-replacement"
+            terminal_fence["placement_epoch"] = 2
+            terminal_fence["stream_epoch"] = 2
+            terminal_fence["admission_generation"] = 2
         connection.execute(
-            "INSERT INTO terminal_contributor_fences VALUES(1, ?, ?, ?, ?)",
+            "INSERT INTO terminal_contributor_fences VALUES(1, ?, ?, ?, ?, ?)",
             (
                 str(stream),
+                json.dumps(terminal_fence, sort_keys=True, separators=(",", ":")),
                 "hard_crash" if crashed else "acked",
-                None if crashed else 4,
-                1 if crashed else 0,
+                None if crashed else 5,
+                3_276_800 if crashed else 0,
             ),
         )
         connection.execute(
-            "INSERT INTO learner_instances VALUES(?, ?, ?, ?, 1, ?, 1, 1, ?)",
+            "INSERT INTO learner_instances VALUES(?, ?, ?, ?, ?, 1, ?, 1, 1, ?)",
             (
                 f"instance-{stream}",
                 float(stream),
-                "expired" if crashed else "stopped",
+                float(stream),
+                "expired" if crashed or replaced else "stopped",
                 f"placement-{stream}",
                 stream,
                 f"{stream:x}" * 64,
             ),
         )
         connection.execute(
-            "INSERT INTO launch_requests VALUES(?, ?, 'bootstrap', 'initial_bootstrap', "
-            "?, 'admitted', ?, ?)",
-            (f"bootstrap-{stream}", stream, stream, f"instance-{stream}", float(stream)),
+            "INSERT INTO launch_requests VALUES(?, NULL, ?, 'bootstrap', "
+            "'initial_bootstrap', ?, NULL, 'admitted', ?, ?, ?, ?)",
+            (
+                f"bootstrap-{stream}",
+                stream,
+                stream,
+                f"instance-{stream}",
+                f"{stream}.opbs",
+                float(stream),
+                float(stream),
+            ),
         )
+        connection.execute(
+            "INSERT INTO admission_history VALUES(?, ?, 'admitted')",
+            (stream + 1, f"instance-{stream}"),
+        )
+        if replaced:
+            connection.execute(
+                "INSERT INTO learner_instances VALUES(?, 104.0, 104.0, 'stopped', ?, 2, ?, 2, 2, ?)",
+                (
+                    terminal_instance,
+                    f"placement-{stream}-replacement",
+                    stream,
+                    f"{stream + 1:x}" * 64,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO capacity_observations VALUES("
+                "'capacity-replacement', 1, 'scheduler_window', 'low', 8, 6, 0)"
+            )
+            connection.execute(
+                "INSERT INTO launch_requests VALUES("
+                "'launch-replacement', 'capacity-replacement', NULL, 'replacement', "
+                "'confirmed_scheduler_terminal_after_progress_stall', ?, ?, 'admitted', ?, "
+                "'200.opbs', 103.0, 104.0)",
+                (stream, f"instance-{stream}", terminal_instance),
+            )
+            connection.execute(
+                "INSERT INTO command_records VALUES(?, 'transition_launch_request', ?)",
+                (
+                    "submitted-replacement",
+                    json.dumps(
+                        {
+                            "request_id": "launch-replacement",
+                            "state": "submitted",
+                            "evidence_source": "qsub_receipt",
+                            "pbs_job_id": "200",
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                ),
+            )
+            connection.executemany(
+                "INSERT INTO admission_history VALUES(?, ?, ?)",
+                (
+                    (100, f"instance-{stream}", "expired"),
+                    (101, terminal_instance, "admitted"),
+                    (102, terminal_instance, "stopped"),
+                ),
+            )
     for version in range(11):
         connection.execute(
-            "INSERT INTO global_versions VALUES(?, 1, ?)",
-            (version, 100.0 + version),
+            "INSERT INTO global_versions VALUES(?, 1, ?, ?)",
+            (version, 100.0 + version, 0 if version == 0 else 13_107_200),
         )
     for version in range(1, 11):
         for contributor in range(4):
-            stream = contributor if hard_crash_stream != contributor else 4
+            stream = (version * 4 + contributor) % 8
+            cycle_seq = (version + 1) // 2
+            instance_id = f"instance-{stream}"
+            fence = _fence(instance_id, stream)
+            if stream == replacement_stream and cycle_seq >= 3:
+                fence = _fence(f"instance-{stream}-replacement", stream)
+                fence["placement_id"] = f"placement-{stream}-replacement"
+                fence["placement_epoch"] = 2
+                fence["stream_epoch"] = 2
+                fence["admission_generation"] = 2
+            fence_json = json.dumps(fence, sort_keys=True, separators=(",", ":"))
+            receipt_id = f"receipt-{stream}-{cycle_seq}"
+            digest = f"{stream:x}{cycle_seq:x}".ljust(64, "0")
+            receipt_sha256[(stream, cycle_seq)] = digest
+            previous_id = None if cycle_seq == 1 else f"receipt-{stream}-{cycle_seq - 1}"
+            previous_sha = None if cycle_seq == 1 else receipt_sha256[(stream, cycle_seq - 1)]
+            cursor_start = (cycle_seq - 1) * 1600
+            update_id = f"update-{version}-{contributor}"
+            ingested_at = 100.0 + version
             connection.execute(
-                "INSERT INTO updates VALUES(?, 'applied', ?, 200, ?, ?)",
+                "INSERT INTO cycle_receipts VALUES(?, ?, ?, ?, ?, ?, 3276800, 3276800, "
+                "0, 3276800, ?, ?, 1, ?, ?, ?)",
                 (
-                    f"update-{version}-{contributor}",
-                    version,
-                    json.dumps(
-                        _fence(f"instance-{stream}", stream), sort_keys=True, separators=(",", ":")
-                    ),
-                    100.0 + version,
+                    receipt_id,
+                    digest,
+                    str(stream),
+                    cycle_seq,
+                    previous_id,
+                    previous_sha,
+                    cursor_start,
+                    cursor_start + 1600,
+                    update_id,
+                    fence_json,
+                    ingested_at,
                 ),
             )
+            connection.execute(
+                "INSERT INTO updates VALUES(?, ?, ?, ?, ?, 'applied', ?, 200, 3276800, "
+                "3276800, 0, ?, ?, ?, ?, ?)",
+                (
+                    update_id,
+                    receipt_id,
+                    digest,
+                    str(stream),
+                    cycle_seq,
+                    version,
+                    cursor_start,
+                    cursor_start + 1600,
+                    fence_json,
+                    ingested_at,
+                    ingested_at,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO token_fates VALUES(?, 0, 3276800, 'applied')",
+                (receipt_id,),
+            )
+    for stream in range(8):
+        connection.execute(
+            "INSERT INTO contributor_progress VALUES(?, 5, ?, ?, 8000)",
+            (str(stream), f"receipt-{stream}-5", receipt_sha256[(stream, 5)]),
+        )
     connection.commit()
     connection.close()
 
@@ -208,6 +415,50 @@ def test_qsub_output_replacement_and_victim_selection_are_exact() -> None:
     )
 
 
+def test_replacement_topology_binds_the_admitted_instance_attestation(tmp_path: Path) -> None:
+    """Independent topology includes the exact replacement instance and scheduler job."""
+
+    module = _module()
+    jobs = [str(index) for index in range(8)]
+    attestations = [
+        ("learner", f"instance-{index}", str(index), f"host-{index}") for index in range(8)
+    ]
+    attestations.extend(
+        (
+            ("syncer", "syncer-1", "100", "host-8"),
+            ("learner", "instance-7-replacement", "200", "host-7"),
+        )
+    )
+    for actor_kind, actor_id, job_id, hostname in attestations:
+        path = (
+            tmp_path / "metrics" / "attestations" / actor_kind / actor_id / f"attempt-{job_id}.json"
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "actor_kind": actor_kind,
+                    "actor_id": actor_id,
+                    "attempt_id": f"attempt-{job_id}",
+                    "hostname": hostname,
+                    "scheduler_job_id": f"{job_id}.opbs",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    topology = module._attestation_topology(
+        tmp_path,
+        jobs,
+        "100.opbs",
+        replacement_job_id="200.opbs",
+        replacement_instance_id="instance-7-replacement",
+    )
+
+    assert len(topology["initial_distinct_hosts"]) == 9
+    assert topology["replacement_actor"]["actor_id"] == "instance-7-replacement"
+
+
 def test_no_failure_authority_oracle_requires_ten_exact_four_way_merges(tmp_path: Path) -> None:
     """The healthy oracle rejects any global version lacking four 200-step proposals."""
 
@@ -218,6 +469,7 @@ def test_no_failure_authority_oracle_requires_ten_exact_four_way_merges(tmp_path
     evidence = module._final_authority_evidence(
         database,
         run_root=tmp_path,
+        config=module.load_config(ROOT / "configs/experiments/gpt2_wikitext2_8l_200x10_fixed.yaml"),
         scenario=module.SCENARIOS["no_failure"],
         first_syncer_job_id="100.opbs",
         victim=None,
@@ -235,6 +487,34 @@ def test_no_failure_authority_oracle_requires_ten_exact_four_way_merges(tmp_path
         module._final_authority_evidence(
             database,
             run_root=tmp_path,
+            config=module.load_config(
+                ROOT / "configs/experiments/gpt2_wikitext2_8l_200x10_fixed.yaml"
+            ),
+            scenario=module.SCENARIOS["no_failure"],
+            first_syncer_job_id="100.opbs",
+            victim=None,
+            replacement=None,
+        )
+
+
+def test_authority_oracle_rejects_token_rollup_drift(tmp_path: Path) -> None:
+    """Formal success requires receipt-level token fates to equal the terminal rollup."""
+
+    module = _module()
+    database = tmp_path / "authority.sqlite3"
+    _finalized_authority(database)
+    connection = sqlite3.connect(database)
+    connection.execute("UPDATE token_rollups SET direct_applied=direct_applied-1")
+    connection.commit()
+    connection.close()
+
+    with pytest.raises(RuntimeError, match="token rollup"):
+        module._final_authority_evidence(
+            database,
+            run_root=tmp_path,
+            config=module.load_config(
+                ROOT / "configs/experiments/gpt2_wikitext2_8l_200x10_fixed.yaml"
+            ),
             scenario=module.SCENARIOS["no_failure"],
             first_syncer_job_id="100.opbs",
             victim=None,
@@ -256,6 +536,7 @@ def test_fixed_failure_oracle_requires_one_hard_crash_and_no_launch(tmp_path: Pa
     evidence = module._final_authority_evidence(
         database,
         run_root=tmp_path,
+        config=module.load_config(ROOT / "configs/experiments/gpt2_wikitext2_8l_200x10_fixed.yaml"),
         scenario=module.SCENARIOS["failure_no_replacement"],
         first_syncer_job_id="100.opbs",
         victim=victim,
@@ -264,3 +545,52 @@ def test_fixed_failure_oracle_requires_one_hard_crash_and_no_launch(tmp_path: Pa
 
     assert evidence["launch_requests"] == []
     assert evidence["replacement_boundary"]["late_created_update_ids"] == []
+
+
+def test_authorized_replacement_oracle_requires_capacity_qsub_and_cursor_continuity(
+    tmp_path: Path,
+) -> None:
+    """Replacement evidence binds capacity, qsub, fence order, and resumed stream cursor."""
+
+    module = _module()
+    database = tmp_path / "authority.sqlite3"
+    _finalized_authority(database, replacement_stream=7)
+    config = module.load_config(ROOT / "configs/experiments/gpt2_wikitext2_8l_200x10.yaml")
+    victim = {"instance_id": "instance-7", "fault_requested_at": 103.0}
+    replacement = {
+        "admitted_instance_id": "instance-7-replacement",
+        "pbs_job_id": "200.opbs",
+    }
+
+    evidence = module._final_authority_evidence(
+        database,
+        run_root=tmp_path,
+        config=config,
+        scenario=module.SCENARIOS["failure_authorized_replacement"],
+        first_syncer_job_id="100.opbs",
+        victim=victim,
+        replacement=replacement,
+    )
+
+    boundary = evidence["replacement_boundary"]
+    assert boundary["capacity_observation"]["observation_key"] == "capacity-replacement"
+    assert boundary["qsub_receipt_transition"]["pbs_job_id"] == "200"
+    assert boundary["last_old_receipt"]["cycle_seq"] == 2
+    assert boundary["first_new_receipt"]["cycle_seq"] == 3
+    assert boundary["late_old_receipt_ids"] == []
+    assert boundary["late_old_update_ids"] == []
+
+    connection = sqlite3.connect(database)
+    connection.execute("UPDATE cycle_receipts SET ingested_at=200.0 WHERE receipt_id='receipt-7-2'")
+    connection.commit()
+    connection.close()
+    with pytest.raises(RuntimeError, match="later old-fence effect"):
+        module._final_authority_evidence(
+            database,
+            run_root=tmp_path,
+            config=config,
+            scenario=module.SCENARIOS["failure_authorized_replacement"],
+            first_syncer_job_id="100.opbs",
+            victim=victim,
+            replacement=replacement,
+        )

@@ -1867,6 +1867,10 @@ class LeaderSession:
                 WHERE observation_seq <= (
                     SELECT COALESCE(MAX(observation_seq), 0) - ? FROM capacity_observations
                 )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM launch_requests
+                    WHERE launch_requests.observation_key = capacity_observations.observation_key
+                  )
                 """,
                 (retention_count,),
             )
@@ -2425,13 +2429,16 @@ class LeaderSession:
             raise ValueError("admission_token_sha256 must be a lowercase SHA-256 digest")
         if replacement_reason is not None and not replacement_reason:
             raise ValueError("replacement_reason must not be empty")
+        if (bootstrap_slot is None) == (launch_request_id is None):
+            raise ValueError("admission requires exactly one bootstrap slot or launch request ID")
+        if bootstrap_slot is not None and (
+            replace_instance_id is not None or replacement_reason is not None
+        ):
+            raise ValueError("bootstrap admission cannot carry replacement fields")
+        if (replace_instance_id is None) != (replacement_reason is None):
+            raise ValueError("replacement instance and reason must be provided together")
         if replace_instance_id is not None and launch_request_id is None:
             raise ValueError("replacement requires an explicit launch request ID")
-        if launch_request_id is not None and bootstrap_slot is not None:
-            raise ValueError("admission cannot be both bootstrap and launch-authorized")
-        effective_bootstrap_slot = (
-            stream_id if launch_request_id is None and bootstrap_slot is None else bootstrap_slot
-        )
         request = {
             "instance_id": instance_id,
             "placement_id": placement_id,
@@ -2440,7 +2447,7 @@ class LeaderSession:
             "hostname": hostname,
             "pid": pid,
             "pbs_job_id": pbs_job_id,
-            "bootstrap_slot": effective_bootstrap_slot,
+            "bootstrap_slot": bootstrap_slot,
             "launch_request_id": launch_request_id,
             "replace_instance_id": replace_instance_id,
             "replacement_reason": replacement_reason,
@@ -2518,11 +2525,12 @@ class LeaderSession:
                 ):
                     raise MembershipFenceError("launch scheduler job does not match")
             else:
-                if effective_bootstrap_slot != stream_id:
+                assert bootstrap_slot is not None
+                if bootstrap_slot != stream_id:
                     raise MembershipFenceError("bootstrap slot must equal its stream ID")
                 prior_bootstrap = connection.execute(
                     "SELECT * FROM launch_requests WHERE bootstrap_slot=?",
-                    (effective_bootstrap_slot,),
+                    (bootstrap_slot,),
                 ).fetchone()
                 if prior_bootstrap is not None:
                     raise MembershipFenceError("bootstrap slot was already consumed")
@@ -2655,9 +2663,10 @@ class LeaderSession:
                 ),
             )
             if launch_row is None:
-                bootstrap_request_id = f"bootstrap-{effective_bootstrap_slot}"
+                assert bootstrap_slot is not None
+                bootstrap_request_id = f"bootstrap-{bootstrap_slot}"
                 bootstrap_request = {
-                    "bootstrap_slot": effective_bootstrap_slot,
+                    "bootstrap_slot": bootstrap_slot,
                     "stream_id": stream_id,
                     "instance_id": instance_id,
                     "pbs_job_id": pbs_job_id,
@@ -2676,7 +2685,7 @@ class LeaderSession:
                     """,
                     (
                         bootstrap_request_id,
-                        effective_bootstrap_slot,
+                        bootstrap_slot,
                         stream_id,
                         self.token.epoch,
                         hashlib.sha256(

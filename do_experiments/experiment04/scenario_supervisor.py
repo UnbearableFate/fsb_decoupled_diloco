@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from fs_diloco.core.config import load_config
+from fs_diloco.core.config import Config, load_config
 from fs_diloco.core.source_identity import SOURCE_SCOPES
 from fs_diloco.runtime.pbs_scheduler import PBSScheduler
 from fs_diloco.storage.audit_archive import read_logical_authority_rows
@@ -304,16 +304,28 @@ def _best_effort_cancel(job_ids: set[str]) -> list[dict[str, Any]]:
 
 
 def _attestation_topology(
-    run_root: Path, initial_job_ids: list[str], syncer_job_id: str
+    run_root: Path,
+    initial_job_ids: list[str],
+    syncer_job_id: str,
+    *,
+    replacement_job_id: str | None,
+    replacement_instance_id: str | None,
 ) -> dict[str, Any]:
-    """Prove that the initial eight learners and first syncer used distinct allocations."""
+    """Prove initial independent placement and any replacement actor allocation."""
 
-    expected = {_normalize_job_id(item) for item in [*initial_job_ids, syncer_job_id]}
+    initial_expected = {_normalize_job_id(item) for item in [*initial_job_ids, syncer_job_id]}
+    expected = set(initial_expected)
+    if (replacement_job_id is None) != (replacement_instance_id is None):
+        raise RuntimeError("replacement topology requires both scheduler and instance identity")
+    if replacement_job_id is not None:
+        expected.add(_normalize_job_id(replacement_job_id))
     matched: dict[str, dict[str, Any]] = {}
     for path in sorted((run_root / "metrics" / "attestations").glob("*/*/*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            continue
         raw_job_id = payload.get("scheduler_job_id")
-        if not isinstance(payload, dict) or not isinstance(raw_job_id, str):
+        if not isinstance(raw_job_id, str):
             continue
         normalized = _normalize_job_id(raw_job_id)
         if normalized in expected:
@@ -326,14 +338,310 @@ def _attestation_topology(
                 "path": str(path),
             }
     if set(matched) != expected:
-        raise RuntimeError("initial actor attestations do not cover all submitted jobs")
-    hosts = {str(item["hostname"]) for item in matched.values()}
+        raise RuntimeError("actor attestations do not cover all submitted jobs")
+    hosts = {str(matched[job_id]["hostname"]) for job_id in initial_expected}
     if len(hosts) != 9:
         raise RuntimeError(f"initial independent topology used {len(hosts)} hosts, expected 9")
+    replacement_actor = (
+        None if replacement_job_id is None else matched[_normalize_job_id(replacement_job_id)]
+    )
+    if replacement_actor is not None and (
+        replacement_actor["actor_kind"] != "learner"
+        or replacement_actor["actor_id"] != replacement_instance_id
+    ):
+        raise RuntimeError("replacement scheduler job lacks a learner attestation")
     return {
-        "expected_job_ids": sorted(expected),
-        "distinct_hosts": sorted(hosts),
+        "initial_expected_job_ids": sorted(initial_expected),
+        "initial_distinct_hosts": sorted(hosts),
+        "replacement_actor": replacement_actor,
         "actors": matched,
+    }
+
+
+def _formal_workload_contract(config: Config) -> dict[str, int]:
+    """Validate and derive the sole Plan05 formal workload accounting contract."""
+
+    actual = {
+        "stream_pool_size": int(config.membership.stream_pool_size),
+        "bootstrap_instances": int(config.membership.bootstrap_instances),
+        "inner_steps": int(config.training.inner_steps),
+        "micro_batch_size": int(config.training.micro_batch_size),
+        "gradient_accumulation_steps": int(config.training.gradient_accumulation_steps),
+        "block_size": int(config.data.block_size),
+        "quorum_min": int(config.sync.quorum_min),
+        "quorum_max": int(config.sync.quorum_max),
+        "global_steps": int(config.sync.stop_after_outer_steps),
+        "max_terminal_merges": int(config.terminal.max_terminal_merges),
+    }
+    expected = {
+        "stream_pool_size": 8,
+        "bootstrap_instances": 8,
+        "inner_steps": 200,
+        "micro_batch_size": 2,
+        "gradient_accumulation_steps": 8,
+        "block_size": 1024,
+        "quorum_min": 4,
+        "quorum_max": 4,
+        "global_steps": 10,
+        "max_terminal_merges": 0,
+    }
+    if actual != expected:
+        raise RuntimeError(f"formal workload contract differs from Plan05: {actual}")
+    identity = (
+        config.model.name_or_path,
+        config.model.revision,
+        config.model.tokenizer_revision,
+        config.model.dtype,
+        config.data.dataset_name,
+        config.data.dataset_config_name,
+        config.data.revision,
+        config.data.train_split,
+        config.training.completion_mode,
+    )
+    expected_identity = (
+        "gpt2",
+        "607a30d783dfa663caf39e06633721c8d4cfcd7e",
+        "607a30d783dfa663caf39e06633721c8d4cfcd7e",
+        "bfloat16",
+        "Salesforce/wikitext",
+        "wikitext-2-raw-v1",
+        "b08601e04326c79dfdd32d625aee71d232d685c3",
+        "train",
+        "global_only",
+    )
+    if identity != expected_identity:
+        raise RuntimeError("formal model, data, or completion identity differs from Plan05")
+    return {
+        **actual,
+        "cursor_advance_per_cycle": (actual["inner_steps"] * actual["gradient_accumulation_steps"]),
+        "processed_tokens_per_cycle": (
+            actual["inner_steps"]
+            * actual["gradient_accumulation_steps"]
+            * actual["micro_batch_size"]
+            * actual["block_size"]
+        ),
+    }
+
+
+def _token_accounting_evidence(
+    *,
+    receipts: list[dict[str, Any]],
+    updates: list[dict[str, Any]],
+    fates: list[dict[str, Any]],
+    rollup: dict[str, Any],
+    progress: list[dict[str, Any]],
+    versions: list[dict[str, Any]],
+    terminal: dict[str, Any],
+    workload: dict[str, int],
+) -> dict[str, Any]:
+    """Cross-check receipt chains, proposal payloads, token fates, and version totals."""
+
+    receipt_by_id = {str(row["receipt_id"]): row for row in receipts}
+    fate_by_id = {str(row["receipt_id"]): row for row in fates}
+    update_by_receipt = {str(row["cycle_receipt_id"]): row for row in updates}
+    if len(receipt_by_id) != len(receipts) or len(fate_by_id) != len(fates):
+        raise RuntimeError("receipt or token-fate identity is duplicated")
+    if len(update_by_receipt) != len(updates):
+        raise RuntimeError("multiple updates claim one cycle receipt")
+    if set(fate_by_id) != set(receipt_by_id):
+        raise RuntimeError("token fates do not cover every exact cycle receipt")
+
+    processed_per_cycle = workload["processed_tokens_per_cycle"]
+    cursor_advance = workload["cursor_advance_per_cycle"]
+    by_stream: dict[str, list[dict[str, Any]]] = {}
+    fate_totals = {
+        "applied": 0,
+        "dropped": 0,
+        "quarantined": 0,
+        "conflicted": 0,
+        "unpublished": 0,
+        "outstanding": 0,
+    }
+    for receipt in receipts:
+        receipt_id = str(receipt["receipt_id"])
+        stream = str(receipt["stable_contributor_key"])
+        by_stream.setdefault(stream, []).append(receipt)
+        processed = int(receipt["processed_tokens_this_cycle"])
+        effective = int(receipt["effective_tokens_this_cycle"])
+        discarded = int(receipt["local_discarded_tokens_this_cycle"])
+        if (
+            processed != processed_per_cycle
+            or processed != effective + discarded
+            or int(receipt["data_cursor_end"]) - int(receipt["data_cursor_start"]) != cursor_advance
+        ):
+            raise RuntimeError("cycle receipt violates the configured workload accounting")
+        fate = fate_by_id[receipt_id]
+        direct_fate = str(fate["direct_fate"])
+        if (
+            int(fate["local_discarded_tokens"]) != discarded
+            or int(fate["direct_weight_tokens"]) != effective
+            or direct_fate not in fate_totals
+        ):
+            raise RuntimeError("token fate differs from its immutable cycle receipt")
+        fate_totals[direct_fate] += effective
+        proposal_expected = bool(int(receipt["proposal_expected"]))
+        update = update_by_receipt.get(receipt_id)
+        if proposal_expected:
+            if (
+                update is None
+                or direct_fate not in {"applied", "dropped"}
+                or effective != processed
+            ):
+                raise RuntimeError("proposal-bearing receipt lacks one terminal update fate")
+            matching_fields = (
+                str(update["update_id"]) == str(receipt["planned_update_id"]),
+                str(update["cycle_receipt_sha256"]) == str(receipt["receipt_sha256"]),
+                str(update["stable_contributor_key"]) == stream,
+                int(update["cycle_seq"]) == int(receipt["cycle_seq"]),
+                int(update["processed_tokens_this_cycle"]) == processed,
+                int(update["effective_tokens_this_update"]) == effective,
+                int(update["local_discarded_tokens_this_cycle"]) == discarded,
+                int(update["data_cursor_start"]) == int(receipt["data_cursor_start"]),
+                int(update["data_cursor_end"]) == int(receipt["data_cursor_end"]),
+                str(update["fence_json"]) == str(receipt["fence_json"]),
+                str(update["status"]) == direct_fate,
+            )
+            if not all(matching_fields):
+                raise RuntimeError("proposal row differs from its promised cycle receipt")
+        elif update is not None or effective != 0 or direct_fate != "unpublished":
+            raise RuntimeError("receipt-only cycle has a proposal or non-unpublished direct fate")
+    if set(update_by_receipt) != {
+        receipt_id
+        for receipt_id, row in receipt_by_id.items()
+        if int(row["proposal_expected"]) == 1
+    }:
+        raise RuntimeError("updates are not a one-to-one projection of proposal-bearing receipts")
+
+    progress_by_stream = {str(row["stable_contributor_key"]): row for row in progress}
+    if set(progress_by_stream) != {str(index) for index in range(workload["stream_pool_size"])}:
+        raise RuntimeError("contributor progress does not cover the exact stream pool")
+    chain_evidence: dict[str, dict[str, Any]] = {}
+    for stream in sorted(progress_by_stream, key=int):
+        rows = by_stream.get(stream, [])
+        ordered = sorted(rows, key=lambda row: int(row["cycle_seq"]))
+        expected_cursor = 0
+        previous: dict[str, Any] | None = None
+        for sequence, row in enumerate(ordered, start=1):
+            if (
+                int(row["cycle_seq"]) != sequence
+                or int(row["data_cursor_start"]) != expected_cursor
+            ):
+                raise RuntimeError("receipt chain has a cycle or data-cursor discontinuity")
+            if previous is None:
+                if (
+                    row["previous_receipt_id"] is not None
+                    or row["previous_receipt_sha256"] is not None
+                ):
+                    raise RuntimeError("first receipt unexpectedly names a predecessor")
+            elif (
+                row["previous_receipt_id"] != previous["receipt_id"]
+                or row["previous_receipt_sha256"] != previous["receipt_sha256"]
+            ):
+                raise RuntimeError("receipt predecessor identity is not contiguous")
+            expected_cursor = int(row["data_cursor_end"])
+            previous = row
+        latest = progress_by_stream[stream]
+        if previous is None:
+            if (
+                int(latest["last_cycle_seq"]) != 0
+                or latest["last_receipt_id"] is not None
+                or latest["last_receipt_sha256"] is not None
+                or int(latest["data_cursor"]) != 0
+            ):
+                raise RuntimeError("empty receipt chain differs from durable contributor progress")
+            chain_evidence[stream] = {
+                "last_cycle_seq": 0,
+                "data_cursor": 0,
+                "fence_transitions": 0,
+            }
+            continue
+        if (
+            int(latest["last_cycle_seq"]) != int(previous["cycle_seq"])
+            or latest["last_receipt_id"] != previous["receipt_id"]
+            or latest["last_receipt_sha256"] != previous["receipt_sha256"]
+            or int(latest["data_cursor"]) != int(previous["data_cursor_end"])
+        ):
+            raise RuntimeError("durable contributor progress differs from its receipt chain")
+        chain_evidence[stream] = {
+            "last_cycle_seq": int(previous["cycle_seq"]),
+            "data_cursor": int(previous["data_cursor_end"]),
+            "fence_transitions": sum(
+                left["fence_json"] != right["fence_json"]
+                for left, right in zip(ordered, ordered[1:])
+            ),
+        }
+
+    direct_by_version: dict[int, int] = {}
+    applied_counts: dict[int, int] = {}
+    for update in updates:
+        if update["status"] != "applied":
+            continue
+        version = int(update["applied_version"])
+        direct_by_version[version] = direct_by_version.get(version, 0) + int(
+            update["effective_tokens_this_update"]
+        )
+        applied_counts[version] = applied_counts.get(version, 0) + 1
+    expected_counts = {
+        version: workload["quorum_min"] for version in range(1, workload["global_steps"] + 1)
+    }
+    if applied_counts != expected_counts:
+        raise RuntimeError("applied updates do not form every exact configured quorum")
+    version_by_id = {int(row["version"]): row for row in versions}
+    if set(version_by_id) != set(range(workload["global_steps"] + 1)):
+        raise RuntimeError("global version history is not complete and contiguous")
+    if int(version_by_id[0]["direct_weight_tokens_applied"]) != 0:
+        raise RuntimeError("genesis version carries direct applied tokens")
+    for version, direct in direct_by_version.items():
+        if int(version_by_id[version]["direct_weight_tokens_applied"]) != direct:
+            raise RuntimeError("global-version token total differs from its applied updates")
+
+    expected_rollup = {
+        "adjudicated_processed": sum(int(row["processed_tokens_this_cycle"]) for row in receipts),
+        "local_discarded": sum(int(row["local_discarded_tokens_this_cycle"]) for row in receipts),
+        "direct_applied": fate_totals["applied"],
+        "direct_dropped": fate_totals["dropped"],
+        "direct_quarantined_or_conflicted": (
+            fate_totals["quarantined"] + fate_totals["conflicted"]
+        ),
+        "direct_reported_unpublished": fate_totals["unpublished"],
+        "direct_outstanding": fate_totals["outstanding"],
+        "carried_ancestry": sum(
+            int(row["retained_tokens_since_base"]) - int(row["effective_tokens_this_cycle"])
+            for row in receipts
+        ),
+    }
+    actual_rollup = {key: int(rollup[key]) for key in expected_rollup}
+    if actual_rollup != expected_rollup or actual_rollup["direct_outstanding"] != 0:
+        raise RuntimeError("terminal token rollup differs from receipt-level token fates")
+    balance = (
+        actual_rollup["adjudicated_processed"]
+        - actual_rollup["local_discarded"]
+        - sum(
+            actual_rollup[key]
+            for key in (
+                "direct_applied",
+                "direct_dropped",
+                "direct_quarantined_or_conflicted",
+                "direct_reported_unpublished",
+                "direct_outstanding",
+            )
+        )
+    )
+    if (
+        balance != 0
+        or int(terminal["direct_weight_tokens_applied"]) != actual_rollup["direct_applied"]
+    ):
+        raise RuntimeError("terminal direct-token balance is not zero")
+    return {
+        "receipt_count": len(receipts),
+        "update_count": len(updates),
+        "token_fate_count": len(fates),
+        "applied_update_count": sum(applied_counts.values()),
+        "applied_counts_by_version": applied_counts,
+        "direct_tokens_by_version": direct_by_version,
+        "rollup": actual_rollup,
+        "balance": balance,
+        "receipt_chains": chain_evidence,
     }
 
 
@@ -341,12 +649,15 @@ def _final_authority_evidence(
     database: Path,
     *,
     run_root: Path,
+    config: Config,
     scenario: Scenario,
     first_syncer_job_id: str,
     victim: dict[str, Any] | None,
     replacement: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Validate terminal, merge, membership, replacement, and lease invariants."""
+    """Validate terminal, accounting, membership, replacement, and lease invariants."""
+
+    workload = _formal_workload_contract(config)
 
     connection = sqlite3.connect(f"file:{database.resolve()}?mode=ro", uri=True, timeout=5.0)
     connection.row_factory = sqlite3.Row
@@ -375,6 +686,44 @@ def _final_authority_evidence(
             table="updates",
             primary_key="update_id",
         )
+        receipts = read_logical_authority_rows(
+            connection,
+            RunPaths(run_root),
+            table="cycle_receipts",
+            primary_key="receipt_id",
+        )
+        token_fates = read_logical_authority_rows(
+            connection,
+            RunPaths(run_root),
+            table="token_fates",
+            primary_key="receipt_id",
+        )
+        command_records = read_logical_authority_rows(
+            connection,
+            RunPaths(run_root),
+            table="command_records",
+            primary_key="command_id",
+        )
+        progress = [
+            dict(row)
+            for row in connection.execute(
+                "SELECT * FROM contributor_progress ORDER BY stable_contributor_key"
+            )
+        ]
+        rollup_row = connection.execute("SELECT * FROM token_rollups WHERE singleton=1").fetchone()
+        if rollup_row is None:
+            raise RuntimeError("terminal authority has no durable token rollup")
+        rollup = dict(rollup_row)
+        capacity_observations = [
+            dict(row)
+            for row in connection.execute(
+                "SELECT * FROM capacity_observations ORDER BY observation_seq"
+            )
+        ]
+        admission_history = [
+            dict(row)
+            for row in connection.execute("SELECT * FROM admission_history ORDER BY admission_id")
+        ]
         launches = [
             dict(row)
             for row in connection.execute(
@@ -421,17 +770,50 @@ def _final_authority_evidence(
         aggregate["min_inner_steps"] = min(aggregate["min_inner_steps"], inner_steps)
         aggregate["max_inner_steps"] = max(aggregate["max_inner_steps"], inner_steps)
     merge_counts = [merge_totals[version] for version in sorted(merge_totals)]
+    accounting = _token_accounting_evidence(
+        receipts=receipts,
+        updates=updates,
+        fates=token_fates,
+        rollup=rollup,
+        progress=progress,
+        versions=versions,
+        terminal=terminal,
+        workload=workload,
+    )
 
-    if controller["state"] != "finalized" or int(terminal["final_version"]) != 10:
+    if (
+        controller["state"] != "finalized"
+        or terminal["state"] != "finalized"
+        or int(terminal["final_version"]) != workload["global_steps"]
+    ):
         raise RuntimeError("terminal authority did not finalize global version 10")
-    if len(fences) != 8:
+    if len(fences) != workload["stream_pool_size"]:
         raise RuntimeError("terminal authority does not cover the eight-stream pool")
+    progress_by_key = {str(row["stable_contributor_key"]): row for row in progress}
+    for fence_row in fences:
+        key = str(fence_row["stable_contributor_key"])
+        latest_receipts = sorted(
+            (row for row in receipts if str(row["stable_contributor_key"]) == key),
+            key=lambda row: int(row["cycle_seq"]),
+        )
+        latest_receipt = None if not latest_receipts else latest_receipts[-1]
+        expected_final_cycle = int(progress_by_key[key]["last_cycle_seq"])
+        if (
+            fence_row["state"] == "acked"
+            and int(fence_row["final_cycle_seq"]) != expected_final_cycle
+        ):
+            raise RuntimeError("terminal acknowledgement differs from durable stream progress")
+        if latest_receipt is not None and latest_receipt["fence_json"] != fence_row["fence_json"]:
+            raise RuntimeError("terminal contributor fence differs from the latest receipt fence")
     hard_crashes = [row for row in fences if row["state"] == "hard_crash"]
     if scenario.inject_learner_failure and not scenario.scaling_enabled:
         if len(hard_crashes) != 1 or sum(row["state"] == "acked" for row in fences) != 7:
             raise RuntimeError("fixed-capacity learner failure lacks one bounded hard-crash fence")
-        if int(hard_crashes[0]["hard_crash_gap_tokens_upper_bound"]) <= 0:
-            raise RuntimeError("fixed-capacity hard crash lacks a positive one-cycle token bound")
+        if (
+            int(hard_crashes[0]["hard_crash_gap_tokens_upper_bound"])
+            != workload["processed_tokens_per_cycle"]
+        ):
+            raise RuntimeError("fixed-capacity hard crash lacks the exact one-cycle token bound")
     elif {row["state"] for row in fences} != {"acked"} or any(
         int(row["hard_crash_gap_tokens_upper_bound"]) != 0 for row in fences
     ):
@@ -443,7 +825,7 @@ def _final_authority_evidence(
             "min_inner_steps": 200,
             "max_inner_steps": 200,
         }
-        for version in range(1, 11)
+        for version in range(1, workload["global_steps"] + 1)
     ]
     if merge_counts != expected_merges:
         raise RuntimeError("global versions are not ten exact 4-contributor/200-step merges")
@@ -475,6 +857,41 @@ def _final_authority_evidence(
             or launch_row["admitted_instance_id"] != replacement["admitted_instance_id"]
         ):
             raise RuntimeError("replacement launch identity or durable state is incorrect")
+        observation = next(
+            (
+                row
+                for row in capacity_observations
+                if row["observation_key"] == launch_row["observation_key"]
+            ),
+            None,
+        )
+        if observation is None or (
+            observation["kind"] != "scheduler_window"
+            or observation["action"] != "low"
+            or int(observation["desired_contributors"]) != int(config.scaling.desired_contributors)
+            or int(observation["productive_instances"])
+            + int(observation["reserved_launch_capacity"])
+            > int(config.scaling.low_contributor_threshold)
+        ):
+            raise RuntimeError("replacement lacks its exact durable low-capacity observation")
+        launch_transitions = []
+        for record in command_records:
+            if record["command_kind"] != "transition_launch_request":
+                continue
+            result = json.loads(str(record["result_json"]))
+            if result.get("request_id") == launch_row["request_id"]:
+                launch_transitions.append(result)
+        qsub_receipts = [
+            row
+            for row in launch_transitions
+            if row.get("state") == "submitted"
+            and row.get("evidence_source") == "qsub_receipt"
+            and isinstance(row.get("pbs_job_id"), str)
+            and _normalize_job_id(str(row["pbs_job_id"]))
+            == _normalize_job_id(str(launch_row["pbs_job_id"]))
+        ]
+        if len(qsub_receipts) != 1:
+            raise RuntimeError("replacement lacks one exact durable qsub receipt transition")
         old = by_instance_id[str(victim["instance_id"])]
         new = by_instance_id[str(replacement["admitted_instance_id"])]
         if (
@@ -510,9 +927,82 @@ def _final_authority_evidence(
         old_max = max(old_versions, default=None)
         if old_max is not None and int(old_max) > replacement_version:
             raise RuntimeError("expired learner produced an authority effect after replacement")
+        new_fence = json.dumps(
+            {
+                "instance_id": new["instance_id"],
+                "placement_id": new["placement_id"],
+                "placement_epoch": new["placement_epoch"],
+                "stream_id": new["stream_id"],
+                "stream_epoch": new["stream_epoch"],
+                "admission_generation": new["admission_generation"],
+                "admission_token_sha256": new["admission_token_sha256"],
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        stream_receipts = sorted(
+            (
+                row
+                for row in receipts
+                if str(row["stable_contributor_key"]) == str(new["stream_id"])
+            ),
+            key=lambda row: int(row["cycle_seq"]),
+        )
+        old_receipts = [row for row in stream_receipts if row["fence_json"] == old_fence]
+        new_receipts = [row for row in stream_receipts if row["fence_json"] == new_fence]
+        if len(old_receipts) + len(new_receipts) != len(stream_receipts) or not new_receipts:
+            raise RuntimeError("replacement stream receipt chain contains an unauthorized fence")
+        first_new = new_receipts[0]
+        last_old = None if not old_receipts else old_receipts[-1]
+        if last_old is None:
+            continuous = (
+                int(first_new["cycle_seq"]) == 1
+                and int(first_new["data_cursor_start"]) == 0
+                and first_new["previous_receipt_id"] is None
+            )
+        else:
+            continuous = (
+                int(first_new["cycle_seq"]) == int(last_old["cycle_seq"]) + 1
+                and int(first_new["data_cursor_start"]) == int(last_old["data_cursor_end"])
+                and first_new["previous_receipt_id"] == last_old["receipt_id"]
+                and first_new["previous_receipt_sha256"] == last_old["receipt_sha256"]
+            )
+        if not continuous:
+            raise RuntimeError("replacement did not resume the exact durable stream cursor")
+        late_old_receipts = [
+            str(row["receipt_id"])
+            for row in old_receipts
+            if float(row["ingested_at"]) > float(new["admitted_at"])
+        ]
+        late_old_updates = [
+            str(row["update_id"])
+            for row in updates
+            if row["fence_json"] == old_fence
+            and float(row["ingested_at"]) > float(new["admitted_at"])
+        ]
+        history = [
+            row
+            for row in admission_history
+            if row["instance_id"] in {old["instance_id"], new["instance_id"]}
+        ]
+        history_events = [(row["instance_id"], row["event"]) for row in history]
+        try:
+            expired_index = history_events.index((old["instance_id"], "expired"))
+            replacement_index = history_events.index((new["instance_id"], "admitted"))
+        except ValueError as exc:
+            raise RuntimeError("replacement admission history is incomplete") from exc
+        if late_old_receipts or late_old_updates or replacement_index != expired_index + 1:
+            raise RuntimeError("replacement fence boundary permits a later old-fence effect")
         replacement_boundary = {
             "version_at_admission": replacement_version,
             "old_max_applied_version": old_max,
+            "capacity_observation": observation,
+            "qsub_receipt_transition": qsub_receipts[0],
+            "last_old_receipt": last_old,
+            "first_new_receipt": first_new,
+            "late_old_receipt_ids": late_old_receipts,
+            "late_old_update_ids": late_old_updates,
+            "admission_history": history,
             "old_instance": old,
             "new_instance": new,
             "launch": launch_row,
@@ -564,12 +1054,15 @@ def _final_authority_evidence(
         "controller": controller,
         "terminal": terminal,
         "terminal_contributor_fences": fences,
+        "workload_contract": workload,
+        "token_accounting": accounting,
         "merge_counts": merge_counts,
         "bootstrap_launches": bootstrap,
         "launch_requests": nonbootstrap,
         "learner_instances": instances,
         "syncer_epochs": epochs,
         "global_versions": versions,
+        "capacity_observations": capacity_observations,
         "replacement_boundary": replacement_boundary,
     }
 
@@ -607,6 +1100,7 @@ def supervise(
 
     scenario = SCENARIOS[scenario_name]
     resolved_experiment_config = load_config(config)
+    workload = _formal_workload_contract(resolved_experiment_config)
     if resolved_experiment_config.scaling.enabled is not scenario.scaling_enabled:
         raise RuntimeError("scenario scaling policy differs from its config")
     if evidence_output.exists() or run_root.exists() or log_root.exists():
@@ -697,12 +1191,21 @@ def supervise(
         authority = _final_authority_evidence(
             database,
             run_root=run_root,
+            config=resolved_experiment_config,
             scenario=scenario,
             first_syncer_job_id=first_syncer_job_id,
             victim=victim,
             replacement=replacement,
         )
-        topology = _attestation_topology(run_root, initial_job_ids, first_syncer_job_id)
+        topology = _attestation_topology(
+            run_root,
+            initial_job_ids,
+            first_syncer_job_id,
+            replacement_job_id=(None if replacement is None else str(replacement["pbs_job_id"])),
+            replacement_instance_id=(
+                None if replacement is None else str(replacement["admitted_instance_id"])
+            ),
+        )
         summary_csv = _summary_row(project_root, run_root, log_root)
         evidence = {
             "status": "PASS",
@@ -726,10 +1229,10 @@ def supervise(
                 "resolved_path": descriptor["resolved_config_path"],
                 "descriptor_sha256": descriptor["descriptor_sha256"],
                 "workload": {
-                    "learners": 8,
-                    "inner_steps": 200,
-                    "global_steps": 10,
-                    "merge_contributors": 4,
+                    "learners": workload["stream_pool_size"],
+                    "inner_steps": workload["inner_steps"],
+                    "global_steps": workload["global_steps"],
+                    "merge_contributors": workload["quorum_min"],
                 },
                 "scenario": scenario_name,
                 "timeline": {

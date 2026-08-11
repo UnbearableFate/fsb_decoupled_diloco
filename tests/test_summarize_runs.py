@@ -141,6 +141,7 @@ def _write_full_protocol_run(
     run_id: str,
     *,
     archive_through_version: int | None = None,
+    hard_crash_stream: int | None = None,
 ) -> Path:
     """Create a finalized eight-stream Full Protocol authority and telemetry fixture."""
 
@@ -199,7 +200,12 @@ def _write_full_protocol_run(
             stable_contributor_key TEXT,
             fence_json TEXT,
             state TEXT,
-            final_cycle_seq INTEGER
+            final_cycle_seq INTEGER,
+            hard_crash_gap_tokens_upper_bound INTEGER
+        );
+        CREATE TABLE contributor_progress(
+            stable_contributor_key TEXT,
+            last_cycle_seq INTEGER
         );
         CREATE TABLE updates(
             update_id TEXT,
@@ -232,11 +238,24 @@ def _write_full_protocol_run(
             separators=(",", ":"),
         )
         fences.append(fence)
+        crashed = stream == hard_crash_stream
         connection.execute(
-            "INSERT INTO terminal_contributor_fences VALUES(1, ?, ?, 'acked', 10)",
-            (str(stream), fence),
+            "INSERT INTO terminal_contributor_fences VALUES(1, ?, ?, ?, ?, ?)",
+            (
+                str(stream),
+                fence,
+                "hard_crash" if crashed else "acked",
+                None if crashed else 10,
+                3_276_800 if crashed else 0,
+            ),
+        )
+        connection.execute(
+            "INSERT INTO contributor_progress VALUES(?, ?)",
+            (str(stream), 3 if crashed else 10),
         )
         connection.execute("INSERT INTO learner_instances VALUES(?)", (f"{stream}.opbs",))
+        if crashed:
+            continue
         metrics = run / "metrics" / "learner" / instance_id
         metrics.mkdir(parents=True)
         (metrics / f"attempt-{stream}.jsonl").write_text(
@@ -345,6 +364,22 @@ def test_parse_full_protocol_includes_maintenance_archives(tmp_path: Path) -> No
     assert row["global_steps"] == 10
     assert row["optimizer_steps_min"] == 2000
     assert row["optimizer_steps_max"] == 2000
+
+
+def test_parse_full_protocol_accepts_one_bounded_hard_crash(tmp_path: Path) -> None:
+    """A fixed-capacity fault remains summarizable without fabricated crash telemetry."""
+
+    module = _module()
+    run = _write_full_protocol_run(
+        tmp_path / "runs", "hard-crash-full-protocol-run", hard_crash_stream=7
+    )
+
+    row = module.parse_completed_run(run)
+
+    assert row["terminal_contributors"] == 8
+    assert row["optimizer_steps_min"] == 600
+    assert row["final_report_count"] == 7
+    assert "7" not in row["final_report_coordinate"].split(";")
 
 
 def test_csv_update_discovers_both_layouts_and_deduplicates(tmp_path: Path) -> None:

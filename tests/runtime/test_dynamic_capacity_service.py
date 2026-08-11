@@ -151,11 +151,11 @@ def test_initial_bootstrap_deadline_suppresses_ordinary_scale_out(tmp_path: Path
             instance_id="instance-0",
             placement_id="placement-0",
             stream_id=0,
+            bootstrap_slot=0,
             admission_token_sha256="1" * 64,
             hostname="host",
             pid=1,
             pbs_job_id="bootstrap-0.opbs",
-            bootstrap_slot=0,
         )
 
         assert service.tick(global_version=0, eligible_contributors=1, selected_contributors=0) == (
@@ -189,11 +189,11 @@ def test_replacement_loss_window_starts_at_its_own_admission(
             instance_id="instance-0",
             placement_id="placement-0",
             stream_id=0,
+            bootstrap_slot=0,
             admission_token_sha256="1" * 64,
             hostname="host",
             pid=1,
             pbs_job_id="replacement.opbs",
-            bootstrap_slot=0,
         )
         instances = authority.read.instances()
         monkeypatch.setattr(
@@ -595,6 +595,7 @@ def test_replacement_requires_stale_progress_and_terminal_scheduler_evidence(
             instance_id="instance-old",
             placement_id="placement-old",
             stream_id=0,
+            bootstrap_slot=0,
             admission_token_sha256="a" * 64,
             hostname="host",
             pid=1,
@@ -634,6 +635,7 @@ def test_suspended_or_unknown_scheduler_state_never_authorizes_replacement(
             instance_id="instance-paused",
             placement_id="placement-paused",
             stream_id=0,
+            bootstrap_slot=0,
             admission_token_sha256="b" * 64,
             hostname="host",
             pid=2,
@@ -663,6 +665,7 @@ def test_shared_running_pbs_job_never_proves_one_child_process_lost(tmp_path: Pa
                 instance_id=f"instance-{stream_id}",
                 placement_id=f"placement-{stream_id}",
                 stream_id=stream_id,
+                bootstrap_slot=stream_id,
                 admission_token_sha256=f"{stream_id + 1}" * 64,
                 hostname="host",
                 pid=stream_id + 1,
