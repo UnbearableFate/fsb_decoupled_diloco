@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceRevision": "c96108c8be6b84ea240c0e7343d9342fffcd6015",
+  "sourceRevision": "ce5ae661c9a72597f63275ae9bada02fb94f5ecb",
   "stats": {
     "modules": 63,
     "packages": 9,
@@ -9581,7 +9581,7 @@
       "module": "fs_diloco.runtime.adoption",
       "route": "/reference/fs_diloco/runtime/adoption",
       "sourcePath": "fs_diloco/runtime/adoption.py",
-      "sourceSha256": "50cad1044a0c57490b0fdf7b6556ac74085b42d97ea1392bd26376124f1acb6d",
+      "sourceSha256": "f191887268fec94e88854b21097cc5d06c445290e3343e7c156cd557226d687f",
       "isPackage": false,
       "visibility": "public",
       "summary": "实现 Full Learner 的全局版本采纳状态机。",
@@ -9595,7 +9595,7 @@
           "type": "dict[str, type[GlobalAdoptionStrategy]]",
           "default": "{strategy_type.name: strategy_type for strategy_type in (ReplaceGlobalAdoptionStrategy, RebaseGlobalAdoptionStrategy, PredictGlobalAdoptionStrategy)}",
           "summary": "保存`STRATEGY_TYPES` 对应的数据。默认值为 `{strategy_type.name: strategy_type for strategy_type in (ReplaceGlobalAdoptionStrategy, RebaseGlobalAdoptionStrategy, PredictGlobalAdoptionStrategy)}`。",
-          "line": 661
+          "line": 669
         }
       ],
       "classes": [
@@ -10310,7 +10310,7 @@
           "visibility": "public",
           "signature": "class GlobalAdoptionStrategy(ABC)",
           "summary": "封装 `GlobalAdoptionStrategy` 的状态与操作。",
-          "docstring": null,
+          "docstring": "Define lifecycle hooks for one configured global-adoption strategy.",
           "bases": [
             "ABC"
           ],
@@ -10323,7 +10323,7 @@
               "type": "ClassVar[str]",
               "default": null,
               "summary": "保存`name` 对应的数据。",
-              "line": 250
+              "line": 252
             }
           ],
           "methods": [
@@ -10352,8 +10352,8 @@
               "decorators": [
                 "classmethod"
               ],
-              "line": 253,
-              "endLine": 255
+              "line": 255,
+              "endLine": 257
             },
             {
               "name": "wants_inner_poll",
@@ -10382,8 +10382,8 @@
               "decorators": [
                 "abstractmethod"
               ],
-              "line": 258,
-              "endLine": 259
+              "line": 260,
+              "endLine": 261
             },
             {
               "name": "on_newer_latest",
@@ -10419,8 +10419,8 @@
               "decorators": [
                 "abstractmethod"
               ],
-              "line": 262,
-              "endLine": 267
+              "line": 264,
+              "endLine": 269
             },
             {
               "name": "on_cycle_end",
@@ -10445,8 +10445,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 269,
-              "endLine": 270
+              "line": 271,
+              "endLine": 272
             },
             {
               "name": "before_publish",
@@ -10471,8 +10471,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 272,
-              "endLine": 273
+              "line": 274,
+              "endLine": 275
             },
             {
               "name": "on_after_publish",
@@ -10508,8 +10508,8 @@
               "decorators": [
                 "abstractmethod"
               ],
-              "line": 276,
-              "endLine": 281
+              "line": 278,
+              "endLine": 283
             },
             {
               "name": "on_local_tokens",
@@ -10534,8 +10534,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 283,
-              "endLine": 284
+              "line": 285,
+              "endLine": 286
             },
             {
               "name": "on_stop",
@@ -10560,8 +10560,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 286,
-              "endLine": 288
+              "line": 288,
+              "endLine": 290
             },
             {
               "name": "_final_global_horizon_reached",
@@ -10588,8 +10588,8 @@
               "decorators": [
                 "staticmethod"
               ],
-              "line": 291,
-              "endLine": 299
+              "line": 293,
+              "endLine": 301
             },
             {
               "name": "_poll_after_publish",
@@ -10621,8 +10621,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 301,
-              "endLine": 334
+              "line": 303,
+              "endLine": 336
             },
             {
               "name": "_direct_adoption",
@@ -10661,12 +10661,12 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 336,
-              "endLine": 363
+              "line": 338,
+              "endLine": 365
             }
           ],
           "line": 249,
-          "endLine": 363
+          "endLine": 365
         },
         {
           "name": "ReplaceGlobalAdoptionStrategy",
@@ -10674,7 +10674,7 @@
           "visibility": "public",
           "signature": "class ReplaceGlobalAdoptionStrategy(GlobalAdoptionStrategy)",
           "summary": "封装 `ReplaceGlobalAdoptionStrategy` 的状态与操作。",
-          "docstring": null,
+          "docstring": "Adopt each visible global checkpoint without retaining a local delta.",
           "bases": [
             "GlobalAdoptionStrategy"
           ],
@@ -10687,7 +10687,7 @@
               "type": "Any",
               "default": "'replace'",
               "summary": "保存`name` 对应的数据。默认值为 `'replace'`。",
-              "line": 367
+              "line": 371
             }
           ],
           "methods": [
@@ -10716,8 +10716,8 @@
               "decorators": [
                 "classmethod"
               ],
-              "line": 370,
-              "endLine": 372
+              "line": 374,
+              "endLine": 376
             },
             {
               "name": "wants_inner_poll",
@@ -10742,8 +10742,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 374,
-              "endLine": 375
+              "line": 378,
+              "endLine": 379
             },
             {
               "name": "on_newer_latest",
@@ -10775,8 +10775,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 377,
-              "endLine": 382
+              "line": 381,
+              "endLine": 386
             },
             {
               "name": "on_after_publish",
@@ -10808,12 +10808,12 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 384,
-              "endLine": 394
+              "line": 388,
+              "endLine": 398
             }
           ],
-          "line": 366,
-          "endLine": 394
+          "line": 368,
+          "endLine": 398
         },
         {
           "name": "RebaseGlobalAdoptionStrategy",
@@ -10821,7 +10821,7 @@
           "visibility": "public",
           "signature": "class RebaseGlobalAdoptionStrategy(GlobalAdoptionStrategy)",
           "summary": "封装 `RebaseGlobalAdoptionStrategy` 的状态与操作。",
-          "docstring": null,
+          "docstring": "Carry local work by rebasing its delta onto a newer global checkpoint.",
           "bases": [
             "GlobalAdoptionStrategy"
           ],
@@ -10834,7 +10834,7 @@
               "type": "Any",
               "default": "'rebase_post_publish_delta'",
               "summary": "保存`name` 对应的数据。默认值为 `'rebase_post_publish_delta'`。",
-              "line": 398
+              "line": 404
             },
             {
               "name": "_anchor_update_id",
@@ -10843,7 +10843,7 @@
               "type": "str | None",
               "default": "None",
               "summary": "保存更新的稳定标识。",
-              "line": 403
+              "line": 409
             },
             {
               "name": "_carried_tokens",
@@ -10852,7 +10852,7 @@
               "type": "Any",
               "default": "0",
               "summary": "保存Token。默认值为 `0`。",
-              "line": 402
+              "line": 408
             },
             {
               "name": "_reference_flat",
@@ -10861,7 +10861,7 @@
               "type": "Any | None",
               "default": "None",
               "summary": "保存`reference_flat` 对应的数据。默认值为 `None`。",
-              "line": 401
+              "line": 407
             }
           ],
           "methods": [
@@ -10880,8 +10880,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 400,
-              "endLine": 403
+              "line": 406,
+              "endLine": 409
             },
             {
               "name": "validate",
@@ -10908,8 +10908,8 @@
               "decorators": [
                 "classmethod"
               ],
-              "line": 406,
-              "endLine": 407
+              "line": 412,
+              "endLine": 413
             },
             {
               "name": "wants_inner_poll",
@@ -10934,8 +10934,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 409,
-              "endLine": 412
+              "line": 415,
+              "endLine": 418
             },
             {
               "name": "on_local_tokens",
@@ -10960,8 +10960,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 414,
-              "endLine": 416
+              "line": 420,
+              "endLine": 422
             },
             {
               "name": "on_newer_latest",
@@ -10995,8 +10995,8 @@
                 "RuntimeError"
               ],
               "decorators": [],
-              "line": 418,
-              "endLine": 452
+              "line": 424,
+              "endLine": 458
             },
             {
               "name": "before_publish",
@@ -11021,8 +11021,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 454,
-              "endLine": 456
+              "line": 460,
+              "endLine": 462
             },
             {
               "name": "on_after_publish",
@@ -11054,8 +11054,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 458,
-              "endLine": 492
+              "line": 464,
+              "endLine": 498
             },
             {
               "name": "_clear_anchor",
@@ -11072,12 +11072,12 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 494,
-              "endLine": 497
+              "line": 500,
+              "endLine": 503
             }
           ],
-          "line": 397,
-          "endLine": 497
+          "line": 401,
+          "endLine": 503
         },
         {
           "name": "PredictGlobalAdoptionStrategy",
@@ -11085,7 +11085,7 @@
           "visibility": "public",
           "signature": "class PredictGlobalAdoptionStrategy(GlobalAdoptionStrategy)",
           "summary": "封装 `PredictGlobalAdoptionStrategy` 的状态与操作。",
-          "docstring": null,
+          "docstring": "Predict the next global state and reconcile it when publication becomes visible.",
           "bases": [
             "GlobalAdoptionStrategy"
           ],
@@ -11098,7 +11098,7 @@
               "type": "Any",
               "default": "'predict_post_publish_global'",
               "summary": "保存`name` 对应的数据。默认值为 `'predict_post_publish_global'`。",
-              "line": 501
+              "line": 509
             },
             {
               "name": "_state",
@@ -11107,7 +11107,7 @@
               "type": "Any",
               "default": "PredictionState()",
               "summary": "保存状态的当前状态。",
-              "line": 504
+              "line": 512
             }
           ],
           "methods": [
@@ -11126,8 +11126,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 503,
-              "endLine": 504
+              "line": 511,
+              "endLine": 512
             },
             {
               "name": "validate",
@@ -11154,8 +11154,8 @@
               "decorators": [
                 "classmethod"
               ],
-              "line": 507,
-              "endLine": 508
+              "line": 515,
+              "endLine": 516
             },
             {
               "name": "wants_inner_poll",
@@ -11180,8 +11180,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 510,
-              "endLine": 511
+              "line": 518,
+              "endLine": 519
             },
             {
               "name": "on_local_tokens",
@@ -11206,8 +11206,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 513,
-              "endLine": 515
+              "line": 521,
+              "endLine": 523
             },
             {
               "name": "on_newer_latest",
@@ -11239,8 +11239,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 517,
-              "endLine": 540
+              "line": 525,
+              "endLine": 548
             },
             {
               "name": "on_cycle_end",
@@ -11267,8 +11267,8 @@
                 "TimeoutError"
               ],
               "decorators": [],
-              "line": 542,
-              "endLine": 580
+              "line": 550,
+              "endLine": 588
             },
             {
               "name": "before_publish",
@@ -11295,8 +11295,8 @@
                 "RuntimeError"
               ],
               "decorators": [],
-              "line": 582,
-              "endLine": 585
+              "line": 590,
+              "endLine": 593
             },
             {
               "name": "on_after_publish",
@@ -11330,8 +11330,8 @@
                 "RuntimeError"
               ],
               "decorators": [],
-              "line": 587,
-              "endLine": 645
+              "line": 595,
+              "endLine": 653
             },
             {
               "name": "on_stop",
@@ -11356,12 +11356,12 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 647,
-              "endLine": 658
+              "line": 655,
+              "endLine": 666
             }
           ],
-          "line": 500,
-          "endLine": 658
+          "line": 506,
+          "endLine": 666
         }
       ],
       "functions": [
@@ -11444,8 +11444,8 @@
             "ValueError"
           ],
           "decorators": [],
-          "line": 671,
-          "endLine": 676
+          "line": 679,
+          "endLine": 684
         },
         {
           "name": "make_global_adoption_strategy",
@@ -11470,8 +11470,8 @@
           },
           "raises": [],
           "decorators": [],
-          "line": 679,
-          "endLine": 682
+          "line": 687,
+          "endLine": 690
         }
       ],
       "dependencies": [
@@ -11480,7 +11480,7 @@
       "usedBy": [
         "fs_diloco.runtime.learner"
       ],
-      "lineCount": 682
+      "lineCount": 690
     },
     {
       "module": "fs_diloco.runtime.learner",

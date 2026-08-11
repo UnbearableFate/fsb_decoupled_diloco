@@ -121,3 +121,13 @@
 - 最小症状：`website-test` 中 `${PYTHON_BIN:-python3}` 选择了该节点的旧系统 Python；reference generator 在 `zip(..., strict=True)` 处以 `TypeError` 退出。PBS wrapper 只设置 shell-local `PYTHON_BIN`，没有把它传递给 validation runner 的子进程。
 - 处置：validation runner 对每个 step 显式设置 `PYTHON_BIN=sys.executable`，使 Python tests 与 npm 间接调用的 reference generator 使用同一已记录解释器；现有 harness owner 验证该环境绑定。
 - 下一验证：fresh candidate `961e564` 的 PBS `2531753.opbs` 已通过同一完整 ladder；后续 formal-oracle 修缮后的最终 U1 仍需再次通过。
+
+## U1 candidate 24：Python 文档修缮后生成的 API reference 未预先提交
+
+- 分类：`source-invalid`，不计入有效失败；全部执行门禁本身均通过。
+- Source：commit `e2ae21b2b005c888e06f0382cbc20ab83bcf289f`，启动时 clean fingerprint `sha256:8aa53faae2cab861c8466fb8bfb4457cfa74905c0d561a5b05564e5e5f7b9fd4`。
+- 环境：PBS job `2532027.opbs`，compute node `mg0845`；Ruff、focused `261 passed`、full `592 passed`、website lint 和 14 项 rendered-site test 全部通过。
+- 证据：`reports/DOING/plan05/artifacts/validation_candidate24.json`、raw log 与两份 JUnit。
+- 最小症状：为全部 branch-modified Python responsibility 补齐英文 docstring 后，没有在提交 candidate 前重新生成 `website/app/reference-data/api-manifest.json`。website test 按设计更新 adoption API 的 class docstring、line identity 和 source revision，validation 因 source-before/source-after 不一致发布 `FAIL`。
+- 处置：提交该唯一 generated reference 变更；不关闭 source-mutation 检查，也不忽略 reference drift。
+- 下一验证：fresh clean U1 必须证明 reference generation 无差异，并再次通过全部门禁。
