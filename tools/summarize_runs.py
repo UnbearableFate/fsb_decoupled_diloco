@@ -22,6 +22,9 @@ from typing import Any
 
 import yaml
 
+from fs_diloco.storage.audit_archive import read_logical_authority_rows
+from fs_diloco.storage.paths import RunPaths
+
 
 CSV_FIELDS = (
     "run_id",
@@ -361,7 +364,7 @@ def _terminal_fences(connection: sqlite3.Connection, *, path: Path) -> list[dict
         if controller is None or controller["state"] != "finalized":
             raise RunParseError(f"{path}: controller is not finalized")
         rows = connection.execute(
-            "SELECT stable_contributor_key, fence_json, state "
+            "SELECT stable_contributor_key, fence_json, state, final_cycle_seq "
             "FROM terminal_contributor_fences WHERE generation=? "
             "ORDER BY stable_contributor_key",
             (int(controller["generation"]),),
@@ -378,8 +381,16 @@ def _terminal_fences(connection: sqlite3.Connection, *, path: Path) -> list[dict
             raise RunParseError(f"{path}: terminal fence JSON is malformed") from exc
         if not isinstance(fence, dict) or fence.get("kind") != "dynamic":
             raise RunParseError(f"{path}: Dynamic Full requires dynamic terminal fences")
+        final_cycle_seq = row["final_cycle_seq"]
+        if (
+            isinstance(final_cycle_seq, bool)
+            or not isinstance(final_cycle_seq, int)
+            or final_cycle_seq < 1
+        ):
+            raise RunParseError(f"{path}: terminal fence has no valid final cycle sequence")
         fence["stable_contributor_key"] = str(row["stable_contributor_key"])
         fence["canonical_json"] = str(row["fence_json"])
+        fence["final_cycle_seq"] = final_cycle_seq
         fences.append(fence)
     return fences
 
@@ -467,25 +478,27 @@ def _parse_full_protocol_run(run_dir: Path) -> dict[str, Any]:
             raise RunParseError(
                 f"{run_dir}: expected {expected} terminal contributors, found {len(fences)}"
             )
-        steps: list[int] = []
-        for fence in fences:
-            row = connection.execute(
-                "SELECT MAX(local_step_end) AS value FROM updates WHERE fence_json=?",
-                (fence["canonical_json"],),
-            ).fetchone()
-            if row is None or row["value"] is None:
-                raise RunParseError(f"{run_dir}: terminal fence has no ingested update")
-            steps.append(int(row["value"]))
+        logical_updates = read_logical_authority_rows(
+            connection,
+            RunPaths(run_dir),
+            table="updates",
+            primary_key="update_id",
+        )
+        inner_steps = _integer(training, "inner_steps", path=config_path)
+        steps = [int(fence["final_cycle_seq"]) * inner_steps for fence in fences]
         job_rows = connection.execute(
             "SELECT pbs_job_id FROM learner_instances WHERE pbs_job_id IS NOT NULL "
             "UNION SELECT pbs_job_id FROM syncer_epochs WHERE pbs_job_id IS NOT NULL"
         ).fetchall()
         pbs_job_ids = sorted({str(row["pbs_job_id"]) for row in job_rows})
-        counts = connection.execute(
-            "SELECT applied_version, COUNT(*) AS count FROM updates "
-            "WHERE status='applied' GROUP BY applied_version ORDER BY applied_version"
-        ).fetchall()
-    except sqlite3.Error as exc:
+        counts_by_version: dict[int, int] = {}
+        for row in logical_updates:
+            if row["status"] == "applied":
+                version = int(row["applied_version"])
+                counts_by_version[version] = counts_by_version.get(version, 0) + 1
+    except RunParseError:
+        raise
+    except (OSError, RuntimeError, ValueError, sqlite3.Error) as exc:
         raise RunParseError(f"cannot summarize Full Protocol authority: {authority_path}") from exc
     finally:
         connection.close()
@@ -493,7 +506,7 @@ def _parse_full_protocol_run(run_dir: Path) -> dict[str, Any]:
     if _integer(sync, "quorum_max", path=config_path) != merge_contributors:
         raise RunParseError(f"{run_dir}: Dynamic Full requires one exact merge threshold")
     expected_counts = [(version, merge_contributors) for version in range(1, final_version + 1)]
-    actual_counts = [(int(row["applied_version"]), int(row["count"])) for row in counts]
+    actual_counts = sorted(counts_by_version.items())
     if actual_counts != expected_counts:
         raise RunParseError(f"{run_dir}: applied updates do not match every exact merge threshold")
 
@@ -536,7 +549,7 @@ def _parse_full_protocol_run(run_dir: Path) -> dict[str, Any]:
         "warmup_steps": _integer(optimizer, "warmup_steps", path=config_path),
         "min_lr_ratio": _number(optimizer, "min_lr_ratio", path=config_path),
         "merge_contributors": merge_contributors,
-        "synchronization_interval": _integer(training, "inner_steps", path=config_path),
+        "synchronization_interval": inner_steps,
         "synchronization_count": final_version,
         "final_report_count": len(losses),
         "final_report_coordinate": coordinate,

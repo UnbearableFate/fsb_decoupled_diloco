@@ -19,6 +19,8 @@ from typing import Any
 
 from fs_diloco.core.source_identity import SOURCE_SCOPES
 from fs_diloco.runtime.pbs_scheduler import PBSScheduler
+from fs_diloco.storage.audit_archive import read_logical_authority_rows
+from fs_diloco.storage.paths import RunPaths
 from fs_diloco.tools.launch_independent_run import launch
 
 
@@ -397,6 +399,7 @@ def _attestation_topology(
 def _final_authority_evidence(
     database: Path,
     *,
+    run_root: Path,
     scenario: Scenario,
     first_syncer_job_id: str,
     second_syncer_job_id: str | None,
@@ -426,15 +429,12 @@ def _final_authority_evidence(
                 (generation,),
             )
         ]
-        merge_counts = [
-            dict(row)
-            for row in connection.execute(
-                "SELECT applied_version, COUNT(*) AS contributor_count, "
-                "MIN(inner_steps) AS min_inner_steps, MAX(inner_steps) AS max_inner_steps "
-                "FROM updates WHERE status='applied' GROUP BY applied_version "
-                "ORDER BY applied_version"
-            )
-        ]
+        updates = read_logical_authority_rows(
+            connection,
+            RunPaths(run_root),
+            table="updates",
+            primary_key="update_id",
+        )
         launches = [
             dict(row)
             for row in connection.execute(
@@ -450,20 +450,44 @@ def _final_authority_evidence(
         epochs = [
             dict(row) for row in connection.execute("SELECT * FROM syncer_epochs ORDER BY epoch")
         ]
-        versions = [
-            dict(row)
-            for row in connection.execute(
-                "SELECT version, committed_by_epoch, committed_at FROM global_versions "
-                "ORDER BY version"
-            )
-        ]
+        versions = sorted(
+            read_logical_authority_rows(
+                connection,
+                RunPaths(run_root),
+                table="global_versions",
+                primary_key="version",
+            ),
+            key=lambda row: int(row["version"]),
+        )
     finally:
         connection.close()
+
+    merge_totals: dict[int, dict[str, int]] = {}
+    for row in updates:
+        if row["status"] != "applied":
+            continue
+        version = int(row["applied_version"])
+        inner_steps = int(row["inner_steps"])
+        aggregate = merge_totals.setdefault(
+            version,
+            {
+                "applied_version": version,
+                "contributor_count": 0,
+                "min_inner_steps": inner_steps,
+                "max_inner_steps": inner_steps,
+            },
+        )
+        aggregate["contributor_count"] += 1
+        aggregate["min_inner_steps"] = min(aggregate["min_inner_steps"], inner_steps)
+        aggregate["max_inner_steps"] = max(aggregate["max_inner_steps"], inner_steps)
+    merge_counts = [merge_totals[version] for version in sorted(merge_totals)]
 
     if controller["state"] != "finalized" or int(terminal["final_version"]) != 10:
         raise RuntimeError("terminal authority did not finalize global version 10")
     if len(fences) != 8 or {row["state"] for row in fences} != {"acked"}:
         raise RuntimeError("terminal authority does not contain eight acknowledged contributors")
+    if {int(row["final_cycle_seq"]) for row in fences} != {10}:
+        raise RuntimeError("terminal contributors did not each complete ten local cycles")
     if any(int(row["hard_crash_gap_tokens_upper_bound"]) != 0 for row in fences):
         raise RuntimeError("terminal authority recorded an unexpected hard-crash token gap")
     expected_merges = [
@@ -521,15 +545,12 @@ def _final_authority_evidence(
             sort_keys=True,
             separators=(",", ":"),
         )
-        connection = sqlite3.connect(f"file:{database.resolve()}?mode=ro", uri=True, timeout=5.0)
-        try:
-            row = connection.execute(
-                "SELECT MAX(applied_version) FROM updates WHERE fence_json=?",
-                (old_fence,),
-            ).fetchone()
-        finally:
-            connection.close()
-        old_max = None if row is None else row[0]
+        old_versions = [
+            int(row["applied_version"])
+            for row in updates
+            if row["fence_json"] == old_fence and row["applied_version"] is not None
+        ]
+        old_max = max(old_versions, default=None)
         if old_max is not None and int(old_max) > replacement_version:
             raise RuntimeError("expired learner produced an authority effect after replacement")
         replacement_boundary = {
@@ -728,6 +749,7 @@ def supervise(
         scheduler_history = _wait_owned_jobs_finished(known_job_ids, timeout_seconds=180.0)
         authority = _final_authority_evidence(
             database,
+            run_root=run_root,
             scenario=scenario,
             first_syncer_job_id=first_syncer_job_id,
             second_syncer_job_id=second_syncer_job_id,

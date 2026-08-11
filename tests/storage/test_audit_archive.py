@@ -1,4 +1,9 @@
+"""Validate immutable audit publication, compaction, and logical reads."""
+
 from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -6,16 +11,53 @@ from fs_diloco.storage.audit_archive import (
     build_audit_batch,
     build_audit_partition,
     deduplicate_audit_records,
-    publish_audit_partition,
-    validate_audit_partition_manifest,
     delete_claimed_audit_batch_object,
+    publish_audit_batch,
+    publish_audit_partition,
+    read_logical_authority_rows,
+    validate_audit_partition_manifest,
 )
 from fs_diloco.storage.atomic_io import read_json
 from fs_diloco.storage.paths import RunPaths
 
 
 def _record(value: int) -> dict:
+    """Return one minimal immutable audit record."""
+
     return {"table": "events", "primary_key": "1", "row": {"value": value}}
+
+
+def test_logical_rows_merge_hot_and_validated_archived_records(tmp_path: Path) -> None:
+    """Consumers must see one conflict-free table across maintenance boundaries."""
+
+    paths = RunPaths(tmp_path)
+    payload = build_audit_batch(
+        batch_id="through-v1",
+        record_kind="authority_history",
+        cutoff_version=1,
+        records=[
+            {
+                "table": "events",
+                "primary_key": "archived",
+                "row": {"event_id": "archived", "value": 1},
+            }
+        ],
+    )
+    publish_audit_batch(paths, payload)
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    connection.execute("CREATE TABLE events(event_id TEXT, value INTEGER)")
+    connection.execute("INSERT INTO events VALUES('hot', 2)")
+
+    rows = read_logical_authority_rows(
+        connection,
+        paths,
+        table="events",
+        primary_key="event_id",
+    )
+
+    assert {row["event_id"]: row["value"] for row in rows} == {"archived": 1, "hot": 2}
+    connection.close()
 
 
 def test_audit_identity_components_cannot_escape_the_audit_root() -> None:

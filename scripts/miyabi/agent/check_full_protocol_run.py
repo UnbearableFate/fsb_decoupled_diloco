@@ -28,11 +28,7 @@ from fs_diloco.storage.authority import (
     AuthorityReader,
     ddl_bundle_sha256,
 )
-from fs_diloco.storage.audit_archive import (
-    validate_audit_batch,
-    validate_audit_partition,
-    validate_audit_partition_manifest,
-)
+from fs_diloco.storage.audit_archive import read_logical_authority_rows
 from fs_diloco.storage.paths import RunPaths
 from fs_diloco.storage.run_initializer import validate_completed_run_for_actor
 
@@ -113,65 +109,6 @@ def _pbs_nodes() -> list[str]:
     if not path.is_file():
         return []
     return sorted({line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line})
-
-
-def _merge_history_rows(
-    hot: list[dict[str, Any]],
-    archived: list[dict[str, Any]],
-    *,
-    key: str,
-) -> list[dict[str, Any]]:
-    merged: dict[str, dict[str, Any]] = {}
-    for row in [*archived, *hot]:
-        identity = str(row[key])
-        previous = merged.get(identity)
-        if previous is not None and previous != row:
-            raise RuntimeError(f"conflicting hot and archived {key}: {identity}")
-        merged[identity] = row
-    return list(merged.values())
-
-
-def _audit_rows(run_root: Path, table: str) -> list[dict[str, Any]]:
-    records: dict[str, dict[str, Any]] = {}
-    roots = (
-        ("batch", run_root / "audit/batches/authority_history"),
-        ("partition", run_root / "audit/partitions/authority_history"),
-    )
-    for artifact_kind, root in roots:
-        try:
-            root_metadata = root.lstat()
-        except FileNotFoundError:
-            continue
-        if not stat.S_ISDIR(root_metadata.st_mode):
-            raise RuntimeError(f"audit {artifact_kind} root is not a directory: {root}")
-        for path in sorted(root.glob("*.json")):
-            if path.name.endswith(".manifest.json"):
-                continue
-            _require_immutable_file(path, label=f"audit {artifact_kind}")
-            payload = _read_json(path)
-            if artifact_kind == "batch":
-                validate_audit_batch(payload)
-            else:
-                validate_audit_partition(payload)
-                manifest_path = path.with_suffix(".manifest.json")
-                _require_immutable_file(manifest_path, label="audit partition manifest")
-                validate_audit_partition_manifest(
-                    paths=RunPaths(run_root),
-                    partition=payload,
-                    manifest=_read_json(manifest_path),
-                )
-            for record in payload.get("records", []):
-                if not isinstance(record, dict) or record.get("table") != table:
-                    continue
-                key = str(record.get("primary_key"))
-                row = record.get("row")
-                if not key or not isinstance(row, dict):
-                    raise RuntimeError(f"invalid {table} audit record: {path}")
-                previous = records.get(key)
-                if previous is not None and previous != row:
-                    raise RuntimeError(f"conflicting {table} audit record: {key}")
-                records[key] = row
-    return list(records.values())
 
 
 def _attestations(run_root: Path) -> list[dict[str, Any]]:
@@ -394,6 +331,8 @@ def validate_run(
     fault_scenario: str,
     syncer_takeover_boundary_version: int,
 ) -> dict[str, Any]:
+    """Validate one completed run against its registered formal gate."""
+
     validate_completed_run_for_actor(run_root)
     descriptor_path = run_root / "control/run_descriptor.json"
     resolved_config_path = run_root / "control/run_config.resolved.yaml"
@@ -439,14 +378,32 @@ def validate_run(
         terminal = _rows(connection, "SELECT * FROM terminal_state")
         controller = _rows(connection, "SELECT * FROM controller_state WHERE singleton=1")
         epochs = _rows(connection, "SELECT * FROM syncer_epochs ORDER BY epoch")
-        hot_versions = _rows(connection, "SELECT * FROM global_versions ORDER BY version")
-        hot_receipts = _rows(
-            connection,
-            "SELECT * FROM cycle_receipts ORDER BY stable_contributor_key, cycle_seq",
+        versions = sorted(
+            read_logical_authority_rows(
+                connection,
+                RunPaths(run_root),
+                table="global_versions",
+                primary_key="version",
+            ),
+            key=lambda row: int(row["version"]),
         )
-        hot_updates = _rows(
-            connection,
-            "SELECT * FROM updates ORDER BY stable_contributor_key, cycle_seq",
+        receipts = sorted(
+            read_logical_authority_rows(
+                connection,
+                RunPaths(run_root),
+                table="cycle_receipts",
+                primary_key="receipt_id",
+            ),
+            key=lambda row: (str(row["stable_contributor_key"]), int(row["cycle_seq"])),
+        )
+        updates = sorted(
+            read_logical_authority_rows(
+                connection,
+                RunPaths(run_root),
+                table="updates",
+                primary_key="update_id",
+            ),
+            key=lambda row: (str(row["stable_contributor_key"]), int(row["cycle_seq"])),
         )
         progress = _rows(
             connection,
@@ -481,30 +438,6 @@ def validate_run(
     finally:
         connection.close()
 
-    versions = sorted(
-        _merge_history_rows(
-            hot_versions,
-            _audit_rows(run_root, "global_versions"),
-            key="version",
-        ),
-        key=lambda row: int(row["version"]),
-    )
-    receipts = sorted(
-        _merge_history_rows(
-            hot_receipts,
-            _audit_rows(run_root, "cycle_receipts"),
-            key="receipt_id",
-        ),
-        key=lambda row: (str(row["stable_contributor_key"]), int(row["cycle_seq"])),
-    )
-    updates = sorted(
-        _merge_history_rows(
-            hot_updates,
-            _audit_rows(run_root, "updates"),
-            key="update_id",
-        ),
-        key=lambda row: (str(row["stable_contributor_key"]), int(row["cycle_seq"])),
-    )
     errors: list[str] = []
     final_version = int(terminal[0]["final_version"]) if len(terminal) == 1 else -1
     expected_versions = list(range(expected_global_steps + 1))

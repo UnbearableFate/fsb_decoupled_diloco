@@ -10,6 +10,9 @@ from types import ModuleType
 
 import pytest
 
+from fs_diloco.storage.audit_archive import build_audit_batch, publish_audit_batch
+from fs_diloco.storage.paths import RunPaths
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SUPERVISOR = ROOT / "do_experiments" / "experiment04" / "scenario_supervisor.py"
@@ -38,6 +41,7 @@ def _normal_authority(path: Path) -> None:
             generation INTEGER,
             stable_contributor_key TEXT,
             state TEXT,
+            final_cycle_seq INTEGER,
             hard_crash_gap_tokens_upper_bound INTEGER
         );
         CREATE TABLE updates(
@@ -83,7 +87,7 @@ def _normal_authority(path: Path) -> None:
     )
     for stream in range(8):
         connection.execute(
-            "INSERT INTO terminal_contributor_fences VALUES(1, ?, 'acked', 0)",
+            "INSERT INTO terminal_contributor_fences VALUES(1, ?, 'acked', 10, 0)",
             (str(stream),),
         )
         connection.execute(
@@ -105,6 +109,29 @@ def _normal_authority(path: Path) -> None:
                 "INSERT INTO updates VALUES(?, 'applied', ?, 200, '{}')",
                 (f"update-{version}-{contributor}", version),
             )
+    connection.commit()
+    connection.close()
+
+
+def _archive_early_updates(run_root: Path, database: Path) -> None:
+    """Move versions 1 through 9 into one immutable authority-history batch."""
+
+    connection = sqlite3.connect(database)
+    connection.row_factory = sqlite3.Row
+    rows = [
+        dict(row)
+        for row in connection.execute(
+            "SELECT * FROM updates WHERE applied_version<=9 ORDER BY update_id"
+        )
+    ]
+    payload = build_audit_batch(
+        batch_id="through-v9",
+        record_kind="authority_history",
+        cutoff_version=9,
+        records=[{"table": "updates", "primary_key": row["update_id"], "row": row} for row in rows],
+    )
+    publish_audit_batch(RunPaths(run_root), payload)
+    connection.execute("DELETE FROM updates WHERE applied_version<=9")
     connection.commit()
     connection.close()
 
@@ -189,9 +216,11 @@ def test_normal_authority_oracle_requires_ten_exact_four_way_merges(tmp_path: Pa
     module = _module()
     database = tmp_path / "authority.sqlite3"
     _normal_authority(database)
+    _archive_early_updates(tmp_path, database)
 
     evidence = module._final_authority_evidence(
         database,
+        run_root=tmp_path,
         scenario=module.SCENARIOS["normal"],
         first_syncer_job_id="100.opbs",
         second_syncer_job_id=None,
@@ -208,6 +237,7 @@ def test_normal_authority_oracle_requires_ten_exact_four_way_merges(tmp_path: Pa
     with pytest.raises(RuntimeError, match="ten exact"):
         module._final_authority_evidence(
             database,
+            run_root=tmp_path,
             scenario=module.SCENARIOS["normal"],
             first_syncer_job_id="100.opbs",
             second_syncer_job_id=None,

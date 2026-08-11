@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 import stat
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
@@ -330,6 +331,82 @@ def validate_audit_partition_manifest(
         raise ValueError("audit partition manifest identity mismatch")
 
 
+def read_audit_rows(paths: RunPaths, *, table: str) -> tuple[dict[str, Any], ...]:
+    """Read one logical table from validated immutable batches and partitions."""
+
+    _safe_component(table, name="table")
+    records: dict[str, dict[str, Any]] = {}
+    roots = (
+        ("batch", paths.audit_batches / "authority_history"),
+        ("partition", paths.audit_partitions / "authority_history"),
+    )
+    for artifact_kind, root in roots:
+        try:
+            root_metadata = root.lstat()
+        except FileNotFoundError:
+            continue
+        if not stat.S_ISDIR(root_metadata.st_mode):
+            raise RuntimeError(f"audit {artifact_kind} root is not a real directory: {root}")
+        for path in sorted(root.glob("*.json")):
+            if path.name.endswith(".manifest.json"):
+                continue
+            metadata = path.lstat()
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
+                raise RuntimeError(f"audit {artifact_kind} is not immutable: {path}")
+            payload = read_json(path)
+            if artifact_kind == "batch":
+                validate_audit_batch(payload)
+            else:
+                validate_audit_partition(payload)
+                manifest_path = path.with_suffix(".manifest.json")
+                manifest_metadata = manifest_path.lstat()
+                if not stat.S_ISREG(manifest_metadata.st_mode) or manifest_metadata.st_mode & 0o222:
+                    raise RuntimeError(
+                        f"audit partition manifest is not immutable: {manifest_path}"
+                    )
+                validate_audit_partition_manifest(
+                    paths=paths,
+                    partition=payload,
+                    manifest=read_json(manifest_path),
+                )
+            for record in payload["records"]:
+                if record.get("table") != table:
+                    continue
+                primary_key = str(record.get("primary_key", ""))
+                row = record.get("row")
+                if not primary_key or not isinstance(row, dict):
+                    raise RuntimeError(f"invalid {table} audit record: {path}")
+                previous = records.get(primary_key)
+                if previous is not None and previous != row:
+                    raise RuntimeError(f"conflicting {table} audit record: {primary_key}")
+                records[primary_key] = dict(row)
+    return tuple(records[key] for key in sorted(records))
+
+
+def read_logical_authority_rows(
+    connection: sqlite3.Connection,
+    paths: RunPaths,
+    *,
+    table: str,
+    primary_key: str,
+) -> tuple[dict[str, Any], ...]:
+    """Merge current SQLite rows with immutable archived rows without conflicts."""
+
+    table_name = _safe_sql_identifier(table, name="table")
+    key_name = _safe_sql_identifier(primary_key, name="primary_key")
+    hot = [dict(row) for row in connection.execute(f"SELECT * FROM {table_name}").fetchall()]
+    merged: dict[str, dict[str, Any]] = {}
+    for row in [*read_audit_rows(paths, table=table_name), *hot]:
+        if key_name not in row:
+            raise RuntimeError(f"{table_name} row has no {key_name}")
+        identity = str(row[key_name])
+        previous = merged.get(identity)
+        if previous is not None and previous != row:
+            raise RuntimeError(f"conflicting hot and archived {table_name} row: {identity}")
+        merged[identity] = row
+    return tuple(merged[key] for key in sorted(merged))
+
+
 def delete_claimed_audit_batch_object(
     paths: RunPaths,
     *,
@@ -373,6 +450,19 @@ def _safe_component(value: Any, *, name: str) -> str:
     ):
         raise ValueError(f"{name} must be a safe path component")
     return value
+
+
+def _safe_sql_identifier(value: Any, *, name: str) -> str:
+    """Return one ASCII SQL identifier that cannot alter a generated query."""
+
+    result = _safe_component(value, name=name)
+    if (
+        not result.isascii()
+        or not (result[0].isalpha() or result[0] == "_")
+        or any(not (character.isalnum() or character == "_") for character in result)
+    ):
+        raise ValueError(f"{name} must be an ASCII SQL identifier")
+    return result
 
 
 def _canonical(value: Any) -> bytes:

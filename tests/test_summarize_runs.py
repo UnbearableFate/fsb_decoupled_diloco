@@ -13,6 +13,9 @@ from types import ModuleType
 import pytest
 import yaml
 
+from fs_diloco.storage.audit_archive import build_audit_batch, publish_audit_batch
+from fs_diloco.storage.paths import RunPaths
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "tools" / "summarize_runs.py"
@@ -133,7 +136,12 @@ def _write_baseline_run(
     return run
 
 
-def _write_full_protocol_run(runs_root: Path, run_id: str) -> Path:
+def _write_full_protocol_run(
+    runs_root: Path,
+    run_id: str,
+    *,
+    archive_through_version: int | None = None,
+) -> Path:
     """Create a finalized eight-stream Dynamic Full authority and telemetry fixture."""
 
     run = runs_root / "full_protocol" / run_id
@@ -191,7 +199,8 @@ def _write_full_protocol_run(runs_root: Path, run_id: str) -> Path:
             generation INTEGER,
             stable_contributor_key TEXT,
             fence_json TEXT,
-            state TEXT
+            state TEXT,
+            final_cycle_seq INTEGER
         );
         CREATE TABLE updates(
             update_id TEXT,
@@ -217,7 +226,7 @@ def _write_full_protocol_run(runs_root: Path, run_id: str) -> Path:
         )
         fences.append(fence)
         connection.execute(
-            "INSERT INTO terminal_contributor_fences VALUES(1, ?, ?, 'acked')",
+            "INSERT INTO terminal_contributor_fences VALUES(1, ?, ?, 'acked', 10)",
             (str(stream), fence),
         )
         connection.execute("INSERT INTO learner_instances VALUES(?)", (f"{stream}.opbs",))
@@ -243,6 +252,28 @@ def _write_full_protocol_run(runs_root: Path, run_id: str) -> Path:
                 "INSERT INTO updates VALUES(?, ?, ?, 200, 'applied', ?)",
                 (f"update-{version}-{offset}", fences[stream], local_steps[stream], version),
             )
+    if archive_through_version is not None:
+        connection.row_factory = sqlite3.Row
+        rows = [
+            dict(row)
+            for row in connection.execute(
+                "SELECT * FROM updates WHERE applied_version<=? ORDER BY update_id",
+                (archive_through_version,),
+            )
+        ]
+        payload = build_audit_batch(
+            batch_id=f"through-v{archive_through_version}",
+            record_kind="authority_history",
+            cutoff_version=archive_through_version,
+            records=[
+                {"table": "updates", "primary_key": row["update_id"], "row": row} for row in rows
+            ],
+        )
+        publish_audit_batch(RunPaths(run), payload)
+        connection.execute(
+            "DELETE FROM updates WHERE applied_version<=?",
+            (archive_through_version,),
+        )
     connection.commit()
     connection.close()
     return run
@@ -286,10 +317,27 @@ def test_parse_dynamic_full_uses_terminal_fences_and_exact_merge_counts(
     assert row["terminal_contributors"] == 8
     assert row["global_steps"] == 10
     assert row["merge_contributors"] == 4
-    assert row["optimizer_steps_min"] == 1000
-    assert row["optimizer_steps_max"] == 1000
+    assert row["optimizer_steps_min"] == 2000
+    assert row["optimizer_steps_max"] == 2000
     assert row["final_report_count"] == 8
     assert row["final_mean_loss"] == pytest.approx(2.35)
+
+
+def test_parse_dynamic_full_includes_maintenance_archives(tmp_path: Path) -> None:
+    """Completed summaries must reconstruct early updates removed from the hot database."""
+
+    module = _module()
+    run = _write_full_protocol_run(
+        tmp_path / "runs",
+        "archived-dynamic-run",
+        archive_through_version=9,
+    )
+
+    row = module.parse_completed_run(run)
+
+    assert row["global_steps"] == 10
+    assert row["optimizer_steps_min"] == 2000
+    assert row["optimizer_steps_max"] == 2000
 
 
 def test_csv_update_discovers_both_layouts_and_deduplicates(tmp_path: Path) -> None:
