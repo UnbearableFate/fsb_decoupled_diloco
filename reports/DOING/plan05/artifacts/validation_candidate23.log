@@ -1,0 +1,210 @@
+project_root=/work/xg24i002/x10041/fsb_decoupled_diloco
+started_at=1786467488.5156126
+step=ruff-format
+argv=["/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python", "-m", "ruff", "format", "--check", "."]
+result_kind=command
+returncode=0
+elapsed_seconds=0.14221599511802197
+143 files already formatted
+
+step=ruff-lint
+argv=["/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python", "-m", "ruff", "check", "."]
+result_kind=command
+returncode=0
+elapsed_seconds=0.056445718044415116
+All checks passed!
+
+step=focused-pytest
+argv=["/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python", "-m", "pytest", "-q", "tests/architecture", "tests/harness/test_full_protocol_harness.py", "tests/harness/test_plan04_experiment.py", "tests/harness/test_validation_suite.py", "tests/protocol/test_cycle_receipt.py", "tests/runtime/test_learner_entrypoint.py", "tests/runtime/test_syncer_fault_boundary.py", "tests/runtime/test_syncer_composition.py", "tests/runtime/test_syncer_startup_admission.py", "tests/runtime/test_terminal_service.py", "tests/storage/test_authority_operational.py", "tests/storage/test_contributor_progress.py", "tests/storage/test_admission_request.py", "tests/storage/test_run_initializer.py", "tests/storage/test_schema.py", "tests/test_capture_source_identity.py", "tests/test_clean_run.py", "tests/test_config.py", "tests/test_summarize_runs.py", "tests/tools/test_analysis.py", "tests/tools/test_launch_independent_run.py", "tests/tools/test_request_terminal_close.py", "--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan05/artifacts/validation_candidate23.log.focused-pytest.junit.xml"]
+result_kind=pytest
+returncode=0
+elapsed_seconds=24.394192441832274
+........................................................................ [ 27%]
+........................................................................ [ 55%]
+........................................................................ [ 82%]
+.............................................                            [100%]
+261 passed in 22.91s
+
+junit={"argv": ["/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python", "-m", "pytest", "-q", "tests/architecture", "tests/harness/test_full_protocol_harness.py", "tests/harness/test_plan04_experiment.py", "tests/harness/test_validation_suite.py", "tests/protocol/test_cycle_receipt.py", "tests/runtime/test_learner_entrypoint.py", "tests/runtime/test_syncer_fault_boundary.py", "tests/runtime/test_syncer_composition.py", "tests/runtime/test_syncer_startup_admission.py", "tests/runtime/test_terminal_service.py", "tests/storage/test_authority_operational.py", "tests/storage/test_contributor_progress.py", "tests/storage/test_admission_request.py", "tests/storage/test_run_initializer.py", "tests/storage/test_schema.py", "tests/test_capture_source_identity.py", "tests/test_clean_run.py", "tests/test_config.py", "tests/test_summarize_runs.py", "tests/tools/test_analysis.py", "tests/tools/test_launch_independent_run.py", "tests/tools/test_request_terminal_close.py", "--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan05/artifacts/validation_candidate23.log.focused-pytest.junit.xml"], "elapsed_seconds": 24.394192441832274, "errors": 0, "failures": 0, "junit_xml": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan05/artifacts/validation_candidate23.log.focused-pytest.junit.xml", "name": "focused-pytest", "result_kind": "pytest", "returncode": 0, "skipped": 0, "tests": 261}
+step=full-pytest
+argv=["/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python", "-m", "pytest", "-q", "--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan05/artifacts/validation_candidate23.log.full-pytest.junit.xml"]
+result_kind=pytest
+returncode=0
+elapsed_seconds=39.17760245013051
+........................................................................ [ 12%]
+........................................................................ [ 24%]
+........................................................................ [ 36%]
+........................................................................ [ 48%]
+........................................................................ [ 60%]
+........................................................................ [ 72%]
+........................................................................ [ 85%]
+........................................................................ [ 97%]
+................                                                         [100%]
+592 passed in 38.33s
+
+junit={"argv": ["/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python", "-m", "pytest", "-q", "--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan05/artifacts/validation_candidate23.log.full-pytest.junit.xml"], "elapsed_seconds": 39.17760245013051, "errors": 0, "failures": 0, "junit_xml": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan05/artifacts/validation_candidate23.log.full-pytest.junit.xml", "name": "full-pytest", "result_kind": "pytest", "returncode": 0, "skipped": 0, "tests": 592}
+step=website-lint
+argv=["/work/xg24i002/x10041/fsb_decoupled_diloco/.cache/node-v22.13.1-linux-arm64/bin/npm", "--prefix", "website", "run", "lint"]
+result_kind=command
+returncode=0
+elapsed_seconds=7.146085241809487
+
+> fs-diloco-documentation@0.1.0 lint
+> eslint . --ignore-pattern dist --ignore-pattern .next
+
+
+step=website-test
+argv=["/work/xg24i002/x10041/fsb_decoupled_diloco/.cache/node-v22.13.1-linux-arm64/bin/npm", "--prefix", "website", "test"]
+result_kind=command
+returncode=0
+elapsed_seconds=6.582617094973102
+
+> fs-diloco-documentation@0.1.0 test
+> npm run build && node --test tests/rendered-html.test.mjs
+
+
+> fs-diloco-documentation@0.1.0 build
+> npm run reference:generate && WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build
+
+
+> fs-diloco-documentation@0.1.0 reference:generate
+> ${PYTHON_BIN:-python3} scripts/generate_reference.py
+
+{"classes": 105, "fields": 560, "functions": 296, "methods": 329, "modules": 63, "packages": 9, "symbols": 1341, "variables": 51}
+
+  vinext build  (Vite 8.0.13)
+
+(node:992184) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:992184) ExperimentalWarning: glob is an experimental feature and might change at any time
+[1/5] analyze client references...
+[2K
+transforming...✓ 242 modules transformed.
+rendering chunks...
+✓ built in 661ms
+[2/5] analyze server references...
+[2K
+transforming...✓ 110 modules transformed.
+rendering chunks...
+✓ built in 139ms
+[3/5] build rsc environment...
+[2K
+transforming...✓ 240 modules transformed.
+rendering chunks...
+computing gzip size...
+✓ built in 599ms
+[4/5] build client environment...
+[2K
+transforming...✓ 119 modules transformed.
+rendering chunks...
+computing gzip size...
+✓ built in 398ms
+[5/5] build ssr environment...
+[2K
+transforming...✓ 116 modules transformed.
+rendering chunks...
+computing gzip size...
+✓ built in 341ms
+[0m
+  Route (app)
+  ┌ ? /                          
+  ├ ? /architecture              
+  ├ ? /concepts                  
+  ├ ? /experiments               
+  ├ ? /getting-started           
+  ├ ? /overview                  
+  ├ ? /reference                 
+  ├ ? /reference/fs_diloco       
+  ├ ƒ /reference/fs_diloco/:slug+
+  └ ? /user-guide                
+
+  ƒ Dynamic  ? Unknown
+
+  ? Some routes could not be classified. vinext currently uses static analysis
+    and cannot detect dynamic API usage (headers(), cookies(), etc.) at build time.
+    Automatic classification will be improved in a future release.
+
+  Build complete. Run `vinext start` to start the production server.
+
+TAP version 13
+# Subtest: server-renders /
+ok 1 - server-renders /
+  ---
+  duration_ms: 113.088748
+  ...
+# Subtest: server-renders /overview
+ok 2 - server-renders /overview
+  ---
+  duration_ms: 17.513206
+  ...
+# Subtest: server-renders /getting-started
+ok 3 - server-renders /getting-started
+  ---
+  duration_ms: 13.560034
+  ...
+# Subtest: server-renders /concepts
+ok 4 - server-renders /concepts
+  ---
+  duration_ms: 12.062618
+  ...
+# Subtest: server-renders /user-guide
+ok 5 - server-renders /user-guide
+  ---
+  duration_ms: 13.385858
+  ...
+# Subtest: server-renders /architecture
+ok 6 - server-renders /architecture
+  ---
+  duration_ms: 13.629218
+  ...
+# Subtest: server-renders /reference
+ok 7 - server-renders /reference
+  ---
+  duration_ms: 31.140346
+  ...
+# Subtest: server-renders /experiments
+ok 8 - server-renders /experiments
+  ---
+  duration_ms: 9.243725
+  ...
+# Subtest: exposes every required documentation section from the landing page
+ok 9 - exposes every required documentation section from the landing page
+  ---
+  duration_ms: 14.021924
+  ...
+# Subtest: renders internal navigation as native anchors
+ok 10 - renders internal navigation as native anchors
+  ---
+  duration_ms: 9.380879
+  ...
+# Subtest: indexes every Python source file as a unique API module page
+ok 11 - indexes every Python source file as a unique API module page
+  ---
+  duration_ms: 0.7761
+  ...
+# Subtest: pins generated source links to the latest fs_diloco commit
+ok 12 - pins generated source links to the latest fs_diloco commit
+  ---
+  duration_ms: 17.350485
+  ...
+# Subtest: server-renders every generated Python API module page
+ok 13 - server-renders every generated Python API module page
+  ---
+  duration_ms: 816.676783
+  ...
+# Subtest: renders complete member details for the hf_data API example
+ok 14 - renders complete member details for the hf_data API example
+  ---
+  duration_ms: 12.709535
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1168.461744
+
+finished_at=1786467566.4385324
