@@ -1232,6 +1232,8 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     assert "OPENCODE_MODEL_LIST" not in review_runner
     assert "run_claude" not in review_runner
     assert "CLAUDE_MODEL" not in review_runner
+    assert 'any(character in raw for character in "*?")' in review_runner
+    assert 'any(character in raw for character in "*?[")' not in review_runner
 
 
 def test_pbs_wrapper_publishes_blocked_artifact_when_allocation_exits(

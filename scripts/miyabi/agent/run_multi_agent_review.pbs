@@ -163,7 +163,7 @@ for line_number, raw in enumerate(content[:-1].split("\n"), start=1):
         or ":" in raw
         or "\\" in raw
         or "`" in raw
-        or any(character in raw for character in "*?[")
+        or any(character in raw for character in "*?")
         or any(ord(character) < 32 for character in raw)
         or any(part in {"", ".", ".."} for part in path.parts)
         or path.as_posix() != raw
