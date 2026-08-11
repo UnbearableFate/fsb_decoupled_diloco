@@ -69,7 +69,7 @@ class ValidationStep:
             raise ValueError("pytest validation steps reserve --junitxml for the evidence runner")
 
 
-def default_steps() -> tuple[ValidationStep, ...]:
+def default_steps(*, npm_bin: str = "npm") -> tuple[ValidationStep, ...]:
     """Return the complete Python and documentation validation ladder."""
 
     return (
@@ -85,8 +85,16 @@ def default_steps() -> tuple[ValidationStep, ...]:
             "pytest",
         ),
         ValidationStep("full-pytest", (sys.executable, "-m", "pytest", "-q"), "pytest"),
-        ValidationStep("website-lint", ("npm", "--prefix", "website", "run", "lint"), "command"),
-        ValidationStep("website-test", ("npm", "--prefix", "website", "test"), "command"),
+        ValidationStep(
+            "website-lint",
+            (npm_bin, "--prefix", "website", "run", "lint"),
+            "command",
+        ),
+        ValidationStep(
+            "website-test",
+            (npm_bin, "--prefix", "website", "test"),
+            "command",
+        ),
     )
 
 
@@ -308,6 +316,7 @@ def run_validation(
     project_root: Path,
     raw_log: Path,
     output: Path,
+    npm_bin: str = "npm",
     steps: Sequence[ValidationStep] | None = None,
 ) -> dict[str, Any]:
     """Run the registered clean-source steps and publish one create-only result artifact."""
@@ -317,7 +326,7 @@ def run_validation(
     output = output.resolve()
     if raw_log == output:
         raise ValueError("raw log and artifact paths must differ")
-    selected_steps = tuple(steps if steps is not None else default_steps())
+    selected_steps = tuple(steps if steps is not None else default_steps(npm_bin=npm_bin))
     if not selected_steps or len({step.name for step in selected_steps}) != len(selected_steps):
         raise ValueError("validation steps must have unique names")
     junit_paths = {
@@ -454,11 +463,13 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--raw-log", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--npm-bin", default="npm")
     args = parser.parse_args(argv)
     artifact = run_validation(
         project_root=args.project_root,
         raw_log=args.raw_log,
         output=args.output,
+        npm_bin=args.npm_bin,
     )
     print(artifact["status"])
     if artifact["status"] != "PASS":

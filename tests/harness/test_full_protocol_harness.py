@@ -1144,6 +1144,8 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     assert "run_validation_suite.py" in validation_wrapper
     assert "${VALIDATION_RAW_LOG:?VALIDATION_RAW_LOG is required}" in validation_wrapper
     assert "${VALIDATION_OUTPUT:?VALIDATION_OUTPUT is required}" in validation_wrapper
+    assert 'NPM_BIN="${NPM_BIN:-npm}"' in validation_wrapper
+    assert '--npm-bin "$NPM_BIN"' in validation_wrapper
 
     review_runner = (ROOT / "scripts/miyabi/agent/run_multi_agent_review.pbs").read_text(
         encoding="utf-8"

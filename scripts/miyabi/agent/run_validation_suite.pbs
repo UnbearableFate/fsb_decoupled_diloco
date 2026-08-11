@@ -13,10 +13,17 @@ trap 'echo "[ERROR] validation suite failed at line $LINENO" >&2' ERR
 : "${VALIDATION_OUTPUT:?VALIDATION_OUTPUT is required}"
 PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+NPM_BIN="${NPM_BIN:-npm}"
 
 cd "$PROJECT_ROOT"
 test -x "$PYTHON_BIN"
+if [[ "$NPM_BIN" == */* ]]; then
+  test -x "$NPM_BIN"
+else
+  command -v "$NPM_BIN" >/dev/null
+fi
 exec "$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/agent/run_validation_suite.py" \
   --project-root "$PROJECT_ROOT" \
   --raw-log "$VALIDATION_RAW_LOG" \
-  --output "$VALIDATION_OUTPUT"
+  --output "$VALIDATION_OUTPUT" \
+  --npm-bin "$NPM_BIN"

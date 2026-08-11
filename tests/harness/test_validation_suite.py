@@ -148,6 +148,17 @@ def test_validation_runner_rejects_duplicate_evidence_step_names(tmp_path: Path)
         )
 
 
+def test_default_steps_use_the_explicit_npm_binary() -> None:
+    """Website validation must use the compute environment's registered npm path."""
+
+    module = _module()
+    steps = module.default_steps(npm_bin="/tooling/node/bin/npm")
+
+    website_steps = {step.name: step for step in steps if step.name.startswith("website-")}
+    assert set(website_steps) == {"website-lint", "website-test"}
+    assert {step.argv[0] for step in website_steps.values()} == {"/tooling/node/bin/npm"}
+
+
 def test_validation_runner_records_machine_checkable_pytest_counts(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -1,0 +1,56 @@
+#!/bin/bash
+#PBS -N plan05_web_setup
+#PBS -q regular-g
+#PBS -W group_list=xg24i002
+#PBS -l select=1:mpiprocs=1
+#PBS -l walltime=00:10:00
+#PBS -j oe
+
+set -eEuo pipefail
+trap 'echo "[ERROR] website toolchain setup failed at line $LINENO" >&2' ERR
+
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-}}"
+: "${PROJECT_ROOT:?PROJECT_ROOT or PBS_O_WORKDIR is required}"
+PROJECT_ROOT="$(cd "$PROJECT_ROOT" && pwd -P)"
+
+readonly NODE_VERSION="22.13.1"
+readonly NODE_DIST="node-v${NODE_VERSION}-linux-arm64"
+readonly TOOL_CACHE="$PROJECT_ROOT/.cache"
+readonly NODE_ROOT="$TOOL_CACHE/$NODE_DIST"
+readonly NPM_CACHE="$TOOL_CACHE/npm"
+
+mkdir -p "$TOOL_CACHE" "$NPM_CACHE"
+if [[ ! -x "$NODE_ROOT/bin/node" || ! -x "$NODE_ROOT/bin/npm" ]]; then
+  [[ ! -e "$NODE_ROOT" ]] || {
+    echo "[ERROR] incomplete Node toolchain already exists: $NODE_ROOT" >&2
+    exit 2
+  }
+  SETUP_TMP="$(mktemp -d "$TOOL_CACHE/.node-setup.XXXXXX")"
+  cleanup() {
+    if [[ -n "${SETUP_TMP:-}" && -d "$SETUP_TMP" && "$SETUP_TMP" == "$TOOL_CACHE"/.node-setup.* ]]; then
+      rm -rf -- "$SETUP_TMP"
+    fi
+  }
+  trap cleanup EXIT
+  curl --fail --location --retry 3 \
+    --output "$SETUP_TMP/$NODE_DIST.tar.xz" \
+    "https://nodejs.org/dist/v${NODE_VERSION}/$NODE_DIST.tar.xz"
+  curl --fail --location --retry 3 \
+    --output "$SETUP_TMP/SHASUMS256.txt" \
+    "https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt"
+  grep "  $NODE_DIST.tar.xz$" "$SETUP_TMP/SHASUMS256.txt" \
+    >"$SETUP_TMP/node-checksum.txt"
+  (cd "$SETUP_TMP" && sha256sum --check node-checksum.txt)
+  tar -xJf "$SETUP_TMP/$NODE_DIST.tar.xz" -C "$SETUP_TMP"
+  mv -- "$SETUP_TMP/$NODE_DIST" "$NODE_ROOT"
+fi
+
+export PATH="$NODE_ROOT/bin:$PATH"
+node --version
+npm --version
+npm ci \
+  --prefix "$PROJECT_ROOT/website" \
+  --cache "$NPM_CACHE" \
+  --no-audit \
+  --no-fund
+echo "NPM_BIN=$NODE_ROOT/bin/npm"

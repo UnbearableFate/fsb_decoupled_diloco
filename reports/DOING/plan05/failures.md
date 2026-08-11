@@ -29,3 +29,13 @@
 - 最小症状：`.identity` 接受 checksum 正确的未知旧字段；authority reopen 没有把调用者的 stream-pool scope 与 durable identity 比较；receipt path 测试仍要求旧 `learner-` key；summary 测试的改名后顺序期望与 fixture 的 `full_protocol/`、`torch_ddp_baselines/` 目录顺序不符。
 - 全面审查：见 `reports/DOING/code_review/plan05/failure-U1-one-node-validation-round1/codex-gpt_af7c1b980203113870cdded20c8aa8d6de9727f6_2530890.md`。审查已追踪输入、状态转换、持久化、恢复、PBS 生命周期、oracle 与输出，并拒绝间接 config-hash scope 校验、延迟 streams row-count 校验、generic identity producer 和恢复旧 receipt 前缀等方案。
 - 下一验证：先实施审查确定的 identity 逻辑改写与两项测试迁移，再从 fresh clean commit 运行不变的 U1 ladder；不得放宽通过条件。
+
+## U1 candidate 4：compute 环境缺少 Node.js 工具链
+
+- 分类：`infra-invalid`，不计入三连失败；Python 产品与 harness 门禁均已通过。
+- Source：commit `6495c2d04f2f0b0c393d8f86ee8b99c68384ff14`，clean source fingerprint `sha256:a27cda2861e099b55571a4ff2072102d571ae1ff5f52ee727d691372bc1d78c8`。
+- 环境：PBS job `2530971.opbs`，compute node `mg0837`；focused suite 250 项、full suite 579 项全部通过。
+- 证据：`reports/DOING/plan05/artifacts/validation_candidate5.json`、`validation_candidate5.log` 与 focused/full JUnit。
+- 最小症状：Miyabi compute PATH 中没有 `npm`，runner 在启动 `website-lint` 前以 `FileNotFoundError` 发布 `BLOCKED`。
+- 处置：validation CLI/PBS 显式接收并验证唯一 `NPM_BIN`；在 compute job 中安装满足 `website/package.json` 的固定 Node.js 22 工具链和 lockfile dependencies，不删除或跳过网站门禁。
+- 下一验证：使用显式 Node/npm 路径提交 fresh U1 job；Python 与网站步骤必须在同一 clean target 上全部通过。
