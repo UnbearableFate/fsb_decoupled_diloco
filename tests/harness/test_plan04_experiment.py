@@ -106,10 +106,13 @@ def _finalized_authority(
     path: Path,
     *,
     hard_crash_stream: int | None = None,
+    crash_before_first_receipt: bool = False,
     replacement_stream: int | None = None,
 ) -> None:
     """Create one finalized authority with exact receipt and token-ledger evidence."""
 
+    if crash_before_first_receipt and hard_crash_stream != 7:
+        raise ValueError("the early-crash fixture reserves stream 7 as the absent contributor")
     connection = sqlite3.connect(path)
     connection.executescript(
         """
@@ -387,10 +390,18 @@ def _finalized_authority(
                 0 if version == 0 else 13_107_200,
             ),
         )
+    cycle_counts = {stream: 0 for stream in range(8)}
     for version in range(1, 11):
         for contributor in range(4):
             stream = (version * 4 + contributor) % 8
-            cycle_seq = (version + 1) // 2
+            if crash_before_first_receipt and stream == hard_crash_stream:
+                stream = 0
+            if crash_before_first_receipt:
+                cycle_counts[stream] += 1
+                cycle_seq = cycle_counts[stream]
+            else:
+                cycle_seq = (version + 1) // 2
+                cycle_counts[stream] = max(cycle_counts[stream], cycle_seq)
             instance_id = f"instance-{stream}"
             fence = _fence(instance_id, stream)
             if stream == replacement_stream and cycle_seq >= 3:
@@ -447,7 +458,7 @@ def _finalized_authority(
                 "INSERT INTO token_fates VALUES(?, 0, 3276800, 'applied')",
                 (receipt_id,),
             )
-    if hard_crash_stream is not None:
+    if hard_crash_stream is not None and not crash_before_first_receipt:
         stream = hard_crash_stream
         receipt_id = f"receipt-{stream}-6"
         digest = f"{stream:x}6".ljust(64, "0")
@@ -476,7 +487,19 @@ def _finalized_authority(
             "direct_dropped=direct_dropped+3276800"
         )
     for stream in range(8):
-        final_cycle = 6 if stream == hard_crash_stream else 5
+        if crash_before_first_receipt and stream == hard_crash_stream:
+            continue
+        final_cycle = (
+            6
+            if stream == hard_crash_stream and not crash_before_first_receipt
+            else cycle_counts[stream]
+        )
+        if stream != hard_crash_stream:
+            connection.execute(
+                "UPDATE terminal_contributor_fences SET final_cycle_seq=? "
+                "WHERE stable_contributor_key=?",
+                (final_cycle, str(stream)),
+            )
         connection.execute(
             "INSERT INTO contributor_progress VALUES(?, ?, ?, ?, ?)",
             (
@@ -787,6 +810,38 @@ def test_fixed_failure_oracle_requires_one_hard_crash_and_no_launch(tmp_path: Pa
     assert evidence["token_accounting"]["receipt_count"] == 41
     assert evidence["token_accounting"]["update_count"] == 40
     assert evidence["token_accounting"]["rollup"]["direct_dropped"] == 3_276_800
+
+
+def test_fixed_failure_oracle_accepts_crash_before_first_receipt(tmp_path: Path) -> None:
+    """A killed admitted learner may have no progress row before its first durable cycle."""
+
+    module = _module()
+    database = tmp_path / "authority.sqlite3"
+    _finalized_authority(
+        database,
+        hard_crash_stream=7,
+        crash_before_first_receipt=True,
+    )
+
+    evidence = module._final_authority_evidence(
+        database,
+        run_root=tmp_path,
+        config=module.load_config(ROOT / "configs/experiments/gpt2_wikitext2_8l_200x10_fixed.yaml"),
+        scenario=module.SCENARIOS["failure_no_replacement"],
+        first_syncer_job_id="100.opbs",
+        victim={"instance_id": "instance-7", "fault_requested_at": 150.0},
+        replacement=None,
+    )
+
+    crashed_chain = evidence["token_accounting"]["receipt_chains"]["7"]
+    assert crashed_chain == {
+        "last_cycle_seq": 0,
+        "data_cursor": 0,
+        "fence_transitions": 0,
+        "progress_row_present": False,
+    }
+    assert evidence["token_accounting"]["receipt_count"] == 40
+    assert evidence["token_accounting"]["rollup"]["direct_dropped"] == 0
 
 
 def test_authorized_replacement_oracle_requires_capacity_qsub_and_cursor_continuity(

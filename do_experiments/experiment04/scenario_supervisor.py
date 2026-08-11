@@ -587,7 +587,7 @@ def _token_accounting_evidence(
     versions: list[dict[str, Any]],
     terminal: dict[str, Any],
     workload: dict[str, int],
-    hard_crash_fences: set[str],
+    hard_crash_fences: dict[str, str],
 ) -> dict[str, Any]:
     """Cross-check receipt chains, proposal payloads, token fates, and version totals."""
 
@@ -601,6 +601,7 @@ def _token_accounting_evidence(
     if set(fate_by_id) != set(receipt_by_id):
         raise RuntimeError("token fates do not cover every exact cycle receipt")
 
+    hard_crash_fence_values = set(hard_crash_fences.values())
     processed_per_cycle = workload["processed_tokens_per_cycle"]
     cursor_advance = workload["cursor_advance_per_cycle"]
     by_stream: dict[str, list[dict[str, Any]]] = {}
@@ -641,7 +642,7 @@ def _token_accounting_evidence(
                 if (
                     direct_fate != "dropped"
                     or effective != processed
-                    or receipt["fence_json"] not in hard_crash_fences
+                    or receipt["fence_json"] not in hard_crash_fence_values
                 ):
                     raise RuntimeError(
                         "only a hard-crashed fence may terminalize a promised proposal as absent"
@@ -672,19 +673,34 @@ def _token_accounting_evidence(
         if int(row["proposal_expected"]) == 1
         and not (
             receipt_id not in update_by_receipt
-            and row["fence_json"] in hard_crash_fences
+            and row["fence_json"] in hard_crash_fence_values
             and fate_by_id[receipt_id]["direct_fate"] == "dropped"
         )
     }:
         raise RuntimeError("updates are not a one-to-one projection of proposal-bearing receipts")
 
     progress_by_stream = {str(row["stable_contributor_key"]): row for row in progress}
-    if set(progress_by_stream) != {str(index) for index in range(workload["stream_pool_size"])}:
-        raise RuntimeError("contributor progress does not cover the exact stream pool")
+    expected_streams = {str(index) for index in range(workload["stream_pool_size"])}
+    if not set(progress_by_stream).issubset(expected_streams):
+        raise RuntimeError("contributor progress contains a stream outside the exact pool")
+    missing_progress = expected_streams - set(progress_by_stream)
+    if not missing_progress.issubset(hard_crash_fences):
+        raise RuntimeError("only hard-crashed streams may lack contributor progress")
     chain_evidence: dict[str, dict[str, Any]] = {}
-    for stream in sorted(progress_by_stream, key=int):
+    for stream in sorted(expected_streams, key=int):
         rows = by_stream.get(stream, [])
         ordered = sorted(rows, key=lambda row: int(row["cycle_seq"]))
+        latest = progress_by_stream.get(stream)
+        if latest is None:
+            if ordered:
+                raise RuntimeError("a stream without contributor progress has durable receipts")
+            chain_evidence[stream] = {
+                "last_cycle_seq": 0,
+                "data_cursor": 0,
+                "fence_transitions": 0,
+                "progress_row_present": False,
+            }
+            continue
         expected_cursor = 0
         previous: dict[str, Any] | None = None
         for sequence, row in enumerate(ordered, start=1):
@@ -706,7 +722,6 @@ def _token_accounting_evidence(
                 raise RuntimeError("receipt predecessor identity is not contiguous")
             expected_cursor = int(row["data_cursor_end"])
             previous = row
-        latest = progress_by_stream[stream]
         if previous is None:
             if (
                 int(latest["last_cycle_seq"]) != 0
@@ -719,6 +734,7 @@ def _token_accounting_evidence(
                 "last_cycle_seq": 0,
                 "data_cursor": 0,
                 "fence_transitions": 0,
+                "progress_row_present": True,
             }
             continue
         if (
@@ -735,6 +751,7 @@ def _token_accounting_evidence(
                 left["fence_json"] != right["fence_json"]
                 for left, right in zip(ordered, ordered[1:])
             ),
+            "progress_row_present": True,
         }
 
     direct_by_version: dict[int, int] = {}
@@ -1075,7 +1092,9 @@ def _final_authority_evidence(
         terminal=terminal,
         workload=workload,
         hard_crash_fences={
-            str(row["fence_json"]) for row in fences if row["state"] == "hard_crash"
+            str(row["stable_contributor_key"]): str(row["fence_json"])
+            for row in fences
+            if row["state"] == "hard_crash"
         },
     )
 
@@ -1095,12 +1114,12 @@ def _final_authority_evidence(
             key=lambda row: int(row["cycle_seq"]),
         )
         latest_receipt = None if not latest_receipts else latest_receipts[-1]
-        expected_final_cycle = int(progress_by_key[key]["last_cycle_seq"])
-        if (
-            fence_row["state"] == "acked"
-            and int(fence_row["final_cycle_seq"]) != expected_final_cycle
-        ):
-            raise RuntimeError("terminal acknowledgement differs from durable stream progress")
+        progress_row = progress_by_key.get(key)
+        if fence_row["state"] == "acked":
+            if progress_row is None or int(fence_row["final_cycle_seq"]) != int(
+                progress_row["last_cycle_seq"]
+            ):
+                raise RuntimeError("terminal acknowledgement differs from durable stream progress")
         if latest_receipt is not None and latest_receipt["fence_json"] != fence_row["fence_json"]:
             raise RuntimeError("terminal contributor fence differs from the latest receipt fence")
     hard_crashes = [row for row in fences if row["state"] == "hard_crash"]
