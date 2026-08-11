@@ -61,6 +61,15 @@ def _normal_authority(path: Path) -> None:
             pbs_job_id TEXT,
             final_state TEXT
         );
+        CREATE TABLE syncer_leader(
+            singleton INTEGER,
+            epoch INTEGER,
+            owner_id TEXT,
+            pbs_job_id TEXT,
+            state TEXT,
+            acquired_at REAL,
+            lease_expires_at REAL
+        );
         CREATE TABLE global_versions(
             version INTEGER,
             committed_by_epoch INTEGER,
@@ -69,6 +78,7 @@ def _normal_authority(path: Path) -> None:
         INSERT INTO controller_state VALUES(1, 1, 'finalized');
         INSERT INTO terminal_state VALUES(1, 10);
         INSERT INTO syncer_epochs VALUES(1, '100.opbs', 'released');
+        INSERT INTO syncer_leader VALUES(1, 1, 'syncer-1', '100.opbs', 'active', 90.0, 130.0);
         """
     )
     for stream in range(8):
@@ -136,6 +146,22 @@ def test_syncer_fault_timelines_preserve_registered_waits() -> None:
     assert module.SCENARIOS["syncer_loss"].second_syncer_delay == 80.0
     assert module.SCENARIOS["dual_syncer"].second_syncer_delay == 60.0
     assert module.SCENARIOS["dual_syncer"].fault_delay == 120.0
+
+
+def test_syncer_fault_requires_the_first_submitted_job_to_hold_the_active_lease(
+    tmp_path: Path,
+) -> None:
+    """Fault injection must fail closed before deleting a non-leader syncer job."""
+
+    module = _module()
+    database = tmp_path / "authority.sqlite3"
+    _normal_authority(database)
+
+    leader = module._require_active_first_syncer(database, "100.opbs")
+
+    assert leader["epoch"] == 1
+    with pytest.raises(RuntimeError, match="not the active first syncer"):
+        module._require_active_first_syncer(database, "200.opbs")
 
 
 def test_qsub_output_replacement_and_victim_selection_are_exact() -> None:

@@ -278,6 +278,27 @@ def _wait_terminal(summary_path: Path, *, timeout_seconds: float) -> dict[str, A
     raise TimeoutError("Dynamic Full run did not publish terminal summary")
 
 
+def _require_active_first_syncer(database: Path, first_syncer_job_id: str) -> dict[str, Any]:
+    """Require the injected syncer fault to target the current leader lease owner."""
+
+    rows = _read_rows(
+        database,
+        "SELECT epoch, owner_id, pbs_job_id, state, acquired_at, lease_expires_at "
+        "FROM syncer_leader WHERE singleton=1",
+    )
+    if len(rows) != 1:
+        raise RuntimeError("syncer fault target has no unique current leader lease")
+    leader = rows[0]
+    pbs_job_id = leader.get("pbs_job_id")
+    if (
+        leader.get("state") != "active"
+        or not isinstance(pbs_job_id, str)
+        or _normalize_job_id(pbs_job_id) != _normalize_job_id(first_syncer_job_id)
+    ):
+        raise RuntimeError("syncer fault target is not the active first syncer")
+    return leader
+
+
 def _scheduler_history(job_id: str, scheduler: PBSScheduler) -> dict[str, Any]:
     """Capture current and historical scheduler observations for one owned job."""
 
@@ -681,8 +702,15 @@ def supervise(
                     known_job_ids.add(second_syncer_job_id)
                     faults.append({"kind": "second_syncer_submitted", "receipt": receipt})
                 else:
+                    active_leader = _require_active_first_syncer(database, first_syncer_job_id)
                     deletion = _qdel(first_syncer_job_id, reason="inject_syncer_loss")
-                    faults.append({"kind": "first_syncer_deleted", "qdel": deletion})
+                    faults.append(
+                        {
+                            "kind": "first_syncer_deleted",
+                            "active_leader_before_qdel": active_leader,
+                            "qdel": deletion,
+                        }
+                    )
         _atomic_json(
             log_root / "scenario_state.json", {"submissions": submissions, "faults": faults}
         )
