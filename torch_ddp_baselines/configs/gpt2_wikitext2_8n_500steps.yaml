@@ -30,4 +30,3 @@ distributed:
   backend: nccl
   require_distinct_hosts: true
   periodic_average_interval: 100
-

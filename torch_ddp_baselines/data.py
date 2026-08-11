@@ -116,4 +116,3 @@ def build_batch_iterator(
         shuffle=config.data.shuffle_blocks,
         seed=config.training.seed + rank * 100_003,
     )
-

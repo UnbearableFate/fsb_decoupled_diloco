@@ -13,4 +13,3 @@ periodic_job="$(qsub -N torch_pavg_500 -v "MODE=periodic_average,RUN_ID=$periodi
 
 printf 'DDP_JOB=%s DDP_RUN_ID=%s\n' "$ddp_job" "$ddp_run_id"
 printf 'PERIODIC_JOB=%s PERIODIC_RUN_ID=%s\n' "$periodic_job" "$periodic_run_id"
-

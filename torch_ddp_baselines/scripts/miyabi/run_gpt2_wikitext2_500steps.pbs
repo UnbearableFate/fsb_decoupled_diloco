@@ -152,4 +152,3 @@ mpirun \
 "$PYTHON_BIN" -m torch_ddp_baselines.health \
   --run-root "$RUN_ROOT" \
   --mode "$MODE" | tee "$LOG_ROOT/final_health.json"
-

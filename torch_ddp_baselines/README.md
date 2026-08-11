@@ -21,4 +21,3 @@ bash torch_ddp_baselines/scripts/miyabi/submit_500steps.sh
 Each run refuses to overwrite prior evidence and publishes a manifest, resolved
 config, per-rank metrics/logs/heartbeats, synchronization metrics, final
 safetensors checkpoint, summary, and terminal health result.
-

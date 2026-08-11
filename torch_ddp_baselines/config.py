@@ -223,4 +223,3 @@ def config_to_dict(config: BaselineConfig) -> dict[str, Any]:
     """Return a YAML-serializable snapshot of the resolved config."""
 
     return dataclasses.asdict(config)
-
