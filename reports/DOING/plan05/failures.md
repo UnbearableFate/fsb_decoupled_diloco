@@ -49,3 +49,13 @@
 - 最小症状：runner 已执行显式绝对 `NPM_BIN`，但 npm 的 `#!/usr/bin/env node` 无法在继承 PATH 中定位同目录的 `node`，`website-lint` 以 127 退出。
 - 处置：PBS wrapper 解析并验证 npm 的规范绝对路径，把其 `bin` 目录加入 PATH 后再启动 validation CLI；仍使用同一固定 Node/npm 工具链。
 - 下一验证：fresh U1 job 必须实际进入并通过 website lint/test，而不是只通过 npm 路径存在性检查。
+
+## U1 candidate 6：生成的 API source revision 落后一个提交
+
+- 分类：`source-invalid`，不计入有效失败；全部执行门禁本身均通过。
+- Source：commit `3ec7a5276bf7586c753b1fb44ffc8637ff52b72d`，启动时 clean。
+- 环境：PBS job `2531053.opbs`，compute node `mg0100`；Ruff、focused 251 项、full 580 项、website lint 和 14 项 rendered-site test 全部通过。
+- 证据：`reports/DOING/plan05/artifacts/validation_candidate7.json`、`validation_candidate7.log` 与 focused/full JUnit。
+- 最小症状：`api-manifest.json.sourceRevision` 在包含 identity 修复的 commit 创建前生成，仍指向更早的 `fc7e41f…`；website test 按设计重新生成到 `6495c2d…`，导致 validation 的 source-before/source-after identity 不一致。
+- 处置：在 fs_diloco 修改已提交后重新生成并提交 API reference；不关闭 source mutation 检查，也不忽略生成物差异。
+- 下一验证：fresh clean U1 job 必须证明 reference generation 是无差异操作，并再次通过全部门禁。
