@@ -8,7 +8,6 @@ import json
 import math
 import os
 import stat
-import struct
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -420,13 +419,27 @@ def verify_publication_artifact(
 
 
 def tensor_schema_sha256(schema: list[dict[str, object]]) -> str:
+    """Return the canonical digest for one safetensors tensor schema."""
+
     encoded = json.dumps(schema, sort_keys=True, separators=(",", ":"), allow_nan=False).encode(
         "utf-8"
     )
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _tensor_bytes_are_finite(raw: bytes, *, dtype: str) -> bool:
+    """Check one homogeneous tensor region with vectorized CPU kernels."""
+
+    torch_dtype = {"float32": torch.float32, "bfloat16": torch.bfloat16}[dtype]
+    # A writable buffer prevents torch.frombuffer from warning; this copy is still
+    # substantially cheaper than interpreting every scalar in Python.
+    values = torch.frombuffer(bytearray(raw), dtype=torch_dtype)
+    return bool(torch.isfinite(values).all().item())
+
+
 def _inspect_safetensors(descriptor: int, *, file_size: int) -> TensorSchema:
+    """Validate safetensors structure and finite tensor values from an open file."""
+
     if file_size < 12:
         raise ValueError("safetensors payload is too small")
     prefix = os.pread(descriptor, 8, 0)
@@ -503,13 +516,7 @@ def _inspect_safetensors(descriptor: int, *, file_size: int) -> TensorSchema:
         raw = os.pread(descriptor, end - start, data_start + start)
         if len(raw) != end - start:
             raise ValueError(f"safetensors tensor {key!r} data is truncated")
-        if dtype == "float32":
-            if any(not math.isfinite(value[0]) for value in struct.iter_unpack("<f", raw)):
-                raise ValueError(f"safetensors tensor {key!r} contains non-finite values")
-        elif any(
-            (int.from_bytes(raw[index : index + element_size], "little") & 0x7F80) == 0x7F80
-            for index in range(0, len(raw), element_size)
-        ):
+        if not _tensor_bytes_are_finite(raw, dtype=dtype):
             raise ValueError(f"safetensors tensor {key!r} contains non-finite values")
         expected_offset = end
     if data_start + expected_offset != file_size:

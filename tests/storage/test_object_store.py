@@ -1,3 +1,5 @@
+"""Validate identity-bound proposal payload reads and tensor inspection."""
+
 from __future__ import annotations
 
 import hashlib
@@ -18,6 +20,8 @@ from tests.support.protocol import proposal_payload
 
 
 def safetensors_payload(value: float = 1.0, *, key: str = "flat_update") -> bytes:
+    """Build one minimal float32 safetensors payload for object-store tests."""
+
     header = json.dumps(
         {key: {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]}},
         separators=(",", ":"),
@@ -28,6 +32,8 @@ def safetensors_payload(value: float = 1.0, *, key: str = "flat_update") -> byte
 
 
 def proposal_for(content: bytes, *, key: str = "flat_update") -> FullUpdateProposalV2:
+    """Bind one minimal float32 payload to a valid proposal descriptor."""
+
     payload = proposal_payload(
         payload_size=len(content), payload_sha256=hashlib.sha256(content).hexdigest()
     )
@@ -86,6 +92,8 @@ def test_payload_missing_size_and_digest_results_are_typed(tmp_path: Path) -> No
 
 
 def test_payload_digest_tensor_schema_and_nonfinite_values_fail_closed(tmp_path: Path) -> None:
+    """Reject content, schema, and finite-value violations independently."""
+
     content = safetensors_payload(1.0)
     proposal = proposal_for(content)
     path = tmp_path / proposal.payload_relative_path
@@ -109,6 +117,36 @@ def test_payload_digest_tensor_schema_and_nonfinite_values_fail_closed(tmp_path:
     nonfinite = verify_proposal_payload(tmp_path, nonfinite_proposal)
     assert nonfinite.status is ReadStatus.MALFORMED
     assert "non-finite" in str(nonfinite.diagnostic)
+
+
+def test_bfloat16_finite_scan_rejects_nan_without_scalar_python_iteration(
+    tmp_path: Path,
+) -> None:
+    """Keep the formal BF16 payload path finite while using vectorized inspection."""
+
+    header = json.dumps(
+        {"flat_update": {"dtype": "BF16", "shape": [2], "data_offsets": [0, 4]}},
+        separators=(",", ":"),
+    ).encode("utf-8")
+    padded = header + b" " * ((8 - len(header) % 8) % 8)
+    content = len(padded).to_bytes(8, "little") + padded + struct.pack("<HH", 0x3F80, 0x7FC0)
+    payload = proposal_payload(
+        payload_size=len(content), payload_sha256=hashlib.sha256(content).hexdigest()
+    )
+    payload["tensor_schema_sha256"] = tensor_schema_sha256(
+        [{"key": "flat_update", "dtype": "bfloat16", "shape": [2]}]
+    )
+    payload["tensor_dtype"] = "bfloat16"
+    payload["tensor_numel"] = 2
+    proposal = FullUpdateProposalV2.from_dict(payload)
+    path = tmp_path / proposal.payload_relative_path
+    path.parent.mkdir(parents=True)
+    path.write_bytes(content)
+
+    result = verify_proposal_payload(tmp_path, proposal)
+
+    assert result.status is ReadStatus.MALFORMED
+    assert "non-finite" in str(result.diagnostic)
 
 
 def test_payload_rename_race_fails_identity_check(tmp_path: Path, monkeypatch: Any) -> None:
