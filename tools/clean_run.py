@@ -21,8 +21,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-from ..storage.artifact_policy import ArtifactClass, ArtifactPolicy
-from ..storage.paths import RunPaths
+from fs_diloco.storage.artifact_policy import ArtifactClass, ArtifactPolicy
+from fs_diloco.storage.paths import RunPaths
 
 
 class CleanupRefusedError(RuntimeError):

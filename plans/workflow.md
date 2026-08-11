@@ -1,23 +1,10 @@
 # Plan 实施工作流
 
-Workflow version：`4`
-
 本文件只规定实施 plan 时必须遵守的最小流程。Plan 负责说明“做什么、达到什么结果”；实施细节必须从当前仓库事实逐步形成，不在 plan 中预先复制架构说明、文件清单、测试数量或完整状态机。
-
-推荐结构是：
-
-```text
-简洁 plan
-→ 当前状态盘点
-→ 精简执行包
-→ 实现与分层验证
-→ 昂贵实验前的 current-state 审查
-→ 单一正式源码目标
-→ 正式验收与归档
-```
 
 ## 1. 核心原则
 
+0. 参照project root下 `AGENTS.md`的 `## 最简设计&实现原则`一节
 1. **只实现当前设计**：旧 API、旧配置、旧 schema、旧路径、旧行为和兼容层不属于当前设计时直接删除，不为历史调用增加 alias、fallback 或 migration wrapper。
 2. **目标先于细节**：初始 plan 只冻结目标、非目标和验收结果。模块划分、函数名、文件落点和测试数量在检查当前代码后决定。
 3. **单一实现 writer**：Codex/GPT 主实例协调并修改主工作树。Reviewer 只读取冻结 snapshot 中明确列出的相对文件路径，不修改实现、Git、scheduler 或 run 数据；commit/tree 只用于 coordinator 绑定证据身份。
