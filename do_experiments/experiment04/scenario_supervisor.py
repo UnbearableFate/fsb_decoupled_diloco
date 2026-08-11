@@ -476,6 +476,7 @@ def _formal_workload_contract(config: Config) -> dict[str, int]:
         "quorum_max": int(config.sync.quorum_max),
         "global_steps": int(config.sync.stop_after_outer_steps),
         "max_terminal_merges": int(config.terminal.max_terminal_merges),
+        "seed": int(config.training.seed),
     }
     expected = {
         "stream_pool_size": 8,
@@ -488,6 +489,7 @@ def _formal_workload_contract(config: Config) -> dict[str, int]:
         "quorum_max": 4,
         "global_steps": 10,
         "max_terminal_merges": 0,
+        "seed": 1337,
     }
     if actual != expected:
         raise RuntimeError(f"formal workload contract differs from Plan05: {actual}")
@@ -500,7 +502,30 @@ def _formal_workload_contract(config: Config) -> dict[str, int]:
         config.data.dataset_config_name,
         config.data.revision,
         config.data.train_split,
+        config.data.shuffle_blocks,
+        config.sync.staleness_lambda,
+        config.syncer.device,
+        config.syncer.compute_dtype,
+        config.syncer.publish_dtype,
         config.training.completion_mode,
+        config.training.grad_clip,
+        config.inner_optimizer.name,
+        config.inner_optimizer.lr,
+        config.inner_optimizer.betas,
+        config.inner_optimizer.eps,
+        config.inner_optimizer.weight_decay,
+        config.inner_optimizer.scheduler,
+        config.inner_optimizer.warmup_steps,
+        config.inner_optimizer.scheduler_total_steps,
+        config.inner_optimizer.min_lr_ratio,
+        config.outer_optimizer.name,
+        config.outer_optimizer.lr,
+        config.outer_optimizer.momentum,
+        config.outer_optimizer.weight_decay,
+        config.io.tensor_dtype,
+        config.learner.poll_latest_during_inner_steps,
+        config.learner.adopt_global_after_upload,
+        config.learner.global_adoption_strategy,
     )
     expected_identity = (
         "gpt2",
@@ -511,10 +536,35 @@ def _formal_workload_contract(config: Config) -> dict[str, int]:
         "wikitext-2-raw-v1",
         "b08601e04326c79dfdd32d625aee71d232d685c3",
         "train",
+        True,
+        0.0,
+        "cpu",
+        "float32",
+        "bfloat16",
         "global_only",
+        1.0,
+        "adamw",
+        0.00005,
+        (0.9, 0.95),
+        1.0e-8,
+        0.1,
+        "cosine",
+        100,
+        2000,
+        0.1,
+        "nesterov",
+        0.7,
+        0.9,
+        0.0,
+        "bfloat16",
+        False,
+        True,
+        "replace",
     )
     if identity != expected_identity:
-        raise RuntimeError("formal model, data, or completion identity differs from Plan05")
+        raise RuntimeError(
+            "formal model, data, optimizer, or completion identity differs from Plan05"
+        )
     return {
         **actual,
         "cursor_advance_per_cycle": (actual["inner_steps"] * actual["gradient_accumulation_steps"]),

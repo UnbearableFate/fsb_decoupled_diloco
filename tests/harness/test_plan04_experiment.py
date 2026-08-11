@@ -476,6 +476,7 @@ def test_formal_configs_differ_only_in_capacity_policy_and_keep_200_by_10_worklo
 
     from fs_diloco.core.config import load_config
 
+    module = _module()
     scaling = load_config(ROOT / "configs/experiments/gpt2_wikitext2_8l_200x10.yaml")
     fixed = load_config(ROOT / "configs/experiments/gpt2_wikitext2_8l_200x10_fixed.yaml")
 
@@ -490,6 +491,10 @@ def test_formal_configs_differ_only_in_capacity_policy_and_keep_200_by_10_worklo
     assert scaling.scaling.low_contributor_threshold == 7
     assert asdict(scaling.model) == asdict(fixed.model)
     assert asdict(scaling.data) == asdict(fixed.data)
+    assert module._formal_workload_contract(scaling)["seed"] == 1337
+    scaling.training.seed = 42
+    with pytest.raises(RuntimeError, match="workload contract"):
+        module._formal_workload_contract(scaling)
 
 
 def test_qsub_output_replacement_and_victim_selection_are_exact() -> None:
