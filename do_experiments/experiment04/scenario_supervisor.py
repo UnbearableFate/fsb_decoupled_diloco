@@ -812,12 +812,19 @@ def _token_accounting_evidence(
 
 
 def _publication_object_evidence(
-    run_root: Path, versions: list[dict[str, Any]]
+    run_root: Path,
+    versions: list[dict[str, Any]],
+    *,
+    hot_versions: set[int],
+    gc_candidates: dict[str, str],
 ) -> list[dict[str, Any]]:
-    """Bind every committed version to its exact immutable checkpoint objects."""
+    """Bind hot objects and archived GC identities to every committed version."""
 
     paths = RunPaths(run_root)
     evidence: list[dict[str, Any]] = []
+    version_ids = {int(row["version"]) for row in versions}
+    if not hot_versions.issubset(version_ids):
+        raise RuntimeError("hot publication versions are absent from logical history")
     for row in versions:
         version = int(row["version"])
         epoch = int(row["committed_by_epoch"])
@@ -858,14 +865,43 @@ def _publication_object_evidence(
                     "publication object path is not canonical for its authority identity"
                 )
             current = run_root
-            try:
-                for component in parsed.parts[:-1]:
-                    current = current / component
-                    if not stat.S_ISDIR(current.lstat().st_mode):
-                        raise RuntimeError("publication object path parent is not a directory")
-                metadata = expected_path.lstat()
-            except FileNotFoundError as exc:
-                raise RuntimeError(f"publication object is missing: {relative}") from exc
+            object_missing = False
+            for component in parsed.parts[:-1]:
+                current = current / component
+                try:
+                    parent_metadata = current.lstat()
+                except FileNotFoundError:
+                    object_missing = True
+                    break
+                if not stat.S_ISDIR(parent_metadata.st_mode):
+                    raise RuntimeError("publication object path parent is not a directory")
+            if object_missing:
+                metadata = None
+            else:
+                try:
+                    metadata = expected_path.lstat()
+                except FileNotFoundError:
+                    metadata = None
+            authority_location = "hot" if version in hot_versions else "archive"
+            if metadata is None:
+                if version in hot_versions:
+                    raise RuntimeError(f"hot publication object is missing: {relative}")
+                if relative in gc_candidates:
+                    raise RuntimeError(
+                        f"archived publication object disappeared before GC completion: {relative}"
+                    )
+                evidence.append(
+                    {
+                        "version": version,
+                        "kind": kind,
+                        "relative_path": relative,
+                        "size": int(row[size_field]),
+                        "sha256": str(row[sha_field]),
+                        "authority_location": authority_location,
+                        "availability": "garbage_collected",
+                    }
+                )
+                continue
             if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
                 raise RuntimeError(
                     f"publication object is not an immutable regular file: {relative}"
@@ -884,6 +920,8 @@ def _publication_object_evidence(
                     "relative_path": relative,
                     "size": metadata.st_size,
                     "sha256": observed_sha256,
+                    "authority_location": authority_location,
+                    "availability": "present",
                 }
             )
     return evidence
@@ -992,6 +1030,13 @@ def _final_authority_evidence(
             ),
             key=lambda row: int(row["version"]),
         )
+        hot_versions = {
+            int(row["version"]) for row in connection.execute("SELECT version FROM global_versions")
+        }
+        gc_candidates = {
+            str(row["relative_path"]): str(row["state"])
+            for row in connection.execute("SELECT relative_path, state FROM gc_candidates")
+        }
     finally:
         connection.close()
 
@@ -1014,7 +1059,12 @@ def _final_authority_evidence(
         aggregate["min_inner_steps"] = min(aggregate["min_inner_steps"], inner_steps)
         aggregate["max_inner_steps"] = max(aggregate["max_inner_steps"], inner_steps)
     merge_counts = [merge_totals[version] for version in sorted(merge_totals)]
-    publication_objects = _publication_object_evidence(run_root, versions)
+    publication_objects = _publication_object_evidence(
+        run_root,
+        versions,
+        hot_versions=hot_versions,
+        gc_candidates=gc_candidates,
+    )
     accounting = _token_accounting_evidence(
         receipts=receipts,
         updates=updates,

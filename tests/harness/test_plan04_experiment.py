@@ -232,6 +232,7 @@ def _finalized_authority(
             committed_at REAL,
             direct_weight_tokens_applied INTEGER
         );
+        CREATE TABLE gc_candidates(relative_path TEXT, state TEXT);
         CREATE TABLE command_records(
             command_id TEXT,
             command_kind TEXT,
@@ -694,7 +695,7 @@ def test_authority_oracle_rejects_token_rollup_drift(tmp_path: Path) -> None:
 
 
 def test_authority_oracle_rejects_checkpoint_identity_drift(tmp_path: Path) -> None:
-    """Formal success requires every committed checkpoint to match its durable identity."""
+    """Formal success requires every retained checkpoint to match its durable identity."""
 
     module = _module()
     database = tmp_path / "authority.sqlite3"
@@ -718,6 +719,45 @@ def test_authority_oracle_rejects_checkpoint_identity_drift(tmp_path: Path) -> N
             first_syncer_job_id="100.opbs",
             victim=None,
             replacement=None,
+        )
+
+
+def test_checkpoint_oracle_accepts_only_completed_archive_gc(tmp_path: Path) -> None:
+    """Archived checkpoint absence is valid only after its durable GC claim is complete."""
+
+    module = _module()
+    database = tmp_path / "authority.sqlite3"
+    _finalized_authority(database)
+    connection = sqlite3.connect(database)
+    connection.row_factory = sqlite3.Row
+    versions = [
+        dict(row) for row in connection.execute("SELECT * FROM global_versions ORDER BY version")
+    ]
+    connection.close()
+    version_zero = versions[0]
+    missing_paths = (
+        str(version_zero["weight_relative_path"]),
+        str(version_zero["optim_relative_path"]),
+    )
+    for relative_path in missing_paths:
+        (tmp_path / relative_path).unlink()
+
+    evidence = module._publication_object_evidence(
+        tmp_path,
+        versions,
+        hot_versions=set(range(1, 11)),
+        gc_candidates={},
+    )
+
+    collected = [item for item in evidence if item["availability"] == "garbage_collected"]
+    assert {item["relative_path"] for item in collected} == set(missing_paths)
+    assert all(item["authority_location"] == "archive" for item in collected)
+    with pytest.raises(RuntimeError, match="before GC completion"):
+        module._publication_object_evidence(
+            tmp_path,
+            versions,
+            hot_versions=set(range(1, 11)),
+            gc_candidates={missing_paths[0]: "pending"},
         )
 
 
