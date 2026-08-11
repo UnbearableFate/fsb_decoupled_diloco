@@ -45,7 +45,7 @@ markers = [
 "fs_diloco.storage" = ["schema.sql", "schema_dynamic.sql"]
 
 [tool.setuptools.packages.find]
-include = ["fs_diloco*"]
+include = ["fs_diloco*", "torch_ddp_baselines*"]
 
 [tool.uv]
 prerelease = "allow"

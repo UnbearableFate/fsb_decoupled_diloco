@@ -420,6 +420,11 @@
       "surface": "scripts/miyabi/run_validation_suite.py",
       "boundary": "atomic one-node validation artifact producer",
       "tests": ["tests/harness/test_validation_suite.py::test_validation_runner_publishes_create_only_schema_complete_pass"]
+    },
+    {
+      "surface": "scripts/miyabi/submit_independent_8l1s_50x10.sh",
+      "boundary": "one-command login-node submission for the validated independent 8+1 shape",
+      "tests": ["tests/tools/test_launch_independent_run.py::test_one_command_submission_wrapper_freezes_the_validated_actor_shape"]
     }
   ]
 }

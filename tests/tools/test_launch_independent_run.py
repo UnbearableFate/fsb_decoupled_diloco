@@ -9,6 +9,21 @@ from fs_diloco.core.config import Config
 from fs_diloco.tools import launch_independent_run
 
 
+def test_one_command_submission_wrapper_freezes_the_validated_actor_shape() -> None:
+    """The login-node wrapper must retain one 8+1 debug launch with safe walltimes."""
+
+    script = Path("scripts/miyabi/submit_independent_8l1s_50x10.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'LAUNCHER_QUEUE="debug-g"' in script
+    assert 'ACTOR_QUEUE="debug-g"' in script
+    assert 'LAUNCHER_WALLTIME="00:10:00"' in script
+    assert 'SYNCER_WALLTIME="00:10:00"' in script
+    assert 'LEARNER_WALLTIME="00:10:00"' in script
+    assert "run_independent_launcher.pbs" in script
+
+
 def _config(mode: str) -> Config:
     config = Config()
     config.model.name_or_path = "synthetic-tiny"
