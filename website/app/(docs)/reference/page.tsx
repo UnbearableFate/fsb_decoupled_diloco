@@ -258,7 +258,7 @@ export default function ReferencePage() {
               <tr>
                 <td><code>training</code></td>
                 <td><code>inner_steps=100</code>、micro batch、gradient accumulation、max local steps、completion mode、seed、grad clip。</td>
-                <td>步数和 batch 必须为正；<code>global_only</code> 必须有全局或 token 停止目标。</td>
+                <td>步数和 batch 必须为正；<code>global_only</code> 必须有全局或 token 停止目标；<code>local_and_global</code> 必须同时声明完整 local cycle 与 global step 目标。</td>
               </tr>
               <tr>
                 <td><code>inner_optimizer</code></td>

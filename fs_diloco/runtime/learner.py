@@ -43,7 +43,10 @@ from .adoption import (
     StrategyAction,
     make_global_adoption_strategy,
 )
-from .learner_control import configured_global_close_target_visible
+from .learner_control import (
+    completed_local_steps_from_cycle,
+    configured_global_close_target_visible,
+)
 from ..storage.atomic_io import atomic_write_json, publish_immutable_bytes
 from ..storage.object_store import tensor_schema_sha256
 from ..storage.tensor_codec import (
@@ -197,8 +200,14 @@ def run_admitted_learner(
     weight_path = paths.shared_root / str(latest["weight_path"])
     load_global_weights_into_model(weight_path, model, param_index)
     base_version = int(latest["version"])
+    resumed_local_steps = completed_local_steps_from_cycle(
+        next_cycle_seq=admission.resume.next_cycle_seq,
+        inner_steps=config.training.inner_steps,
+    )
     optimizer, scheduler = build_inner_optimizer_and_scheduler(
-        model, config, completed_local_steps=0
+        model,
+        config,
+        completed_local_steps=resumed_local_steps,
     )
     latest_metadata = latest
     tokens_since_global_load = 0
@@ -477,15 +486,12 @@ def run_admitted_learner(
     previous_receipt_id = admission.resume.last_receipt_id
     previous_receipt_sha256 = admission.resume.last_receipt_sha256
     last_cycle_update_id = admission.resume.last_update_id
-    local_step = 0
+    local_step = resumed_local_steps
     awaiting_configured_close = False
     while True:
         max_steps = config.training.max_local_steps
-        if (
-            max_steps is not None
-            and local_step >= max_steps
-            and config.training.completion_mode != "global_only"
-        ):
+        local_limit_reached = max_steps is not None and local_step >= max_steps
+        if local_limit_reached and config.training.completion_mode == "local_or_global":
             telemetry.event("local_limit_reached", local_step=local_step)
             return
         current = read_current_control(
@@ -503,7 +509,11 @@ def run_admitted_learner(
                 final_update_id=last_cycle_update_id,
             )
             return
-        if configured_global_close_target_visible(config, current):
+        if configured_global_close_target_visible(
+            config,
+            current,
+            completed_local_steps=local_step,
+        ):
             if not awaiting_configured_close:
                 assert current is not None and current.latest is not None
                 telemetry.event(
@@ -515,6 +525,9 @@ def run_admitted_learner(
                 )
             awaiting_configured_close = True
         if awaiting_configured_close:
+            time.sleep(config.sync.scan_interval_seconds)
+            continue
+        if local_limit_reached and config.training.completion_mode == "local_and_global":
             time.sleep(config.sync.scan_interval_seconds)
             continue
         cycle_id = str(uuid.uuid4())

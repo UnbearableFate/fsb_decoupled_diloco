@@ -171,6 +171,31 @@ sync:
     assert yaml.safe_load(resolved_config_bytes(config))["sync"] == payload["sync"]
 
 
+@pytest.mark.parametrize(
+    ("max_local_steps", "outer_steps", "message"),
+    [
+        (None, 10, "requires training.max_local_steps"),
+        (1999, 10, "whole inner cycles"),
+        (2000, None, "requires a global step target"),
+    ],
+)
+def test_local_and_global_completion_requires_two_exact_horizons(
+    max_local_steps: int | None,
+    outer_steps: int | None,
+    message: str,
+) -> None:
+    """The joint completion mode must describe complete local cycles and a global target."""
+
+    config = synthetic_config()
+    config.training.inner_steps = 200
+    config.training.max_local_steps = max_local_steps
+    config.training.completion_mode = "local_and_global"
+    config.sync.stop_after_outer_steps = outer_steps
+
+    with pytest.raises(ValueError, match=message):
+        config.validate()
+
+
 def test_resolution_owns_run_identity_and_path_substitution(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -64,7 +64,8 @@ training:
   inner_steps: 200
   micro_batch_size: 2
   gradient_accumulation_steps: 8
-  completion_mode: global_only
+  max_local_steps: 2000
+  completion_mode: local_and_global
   seed: 1337
   grad_clip: 1.0
 inner_optimizer:

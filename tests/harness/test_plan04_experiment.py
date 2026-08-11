@@ -164,6 +164,19 @@ def test_registered_scenarios_cover_eight_bootstrap_slots_once() -> None:
     ]
 
 
+def test_formal_config_requires_two_thousand_steps_per_learner() -> None:
+    """Plan04 must require both ten global merges and ten 200-step local cycles."""
+
+    from fs_diloco.core.config import load_config
+
+    config = load_config(ROOT / "configs/dynamic_full/gpt2_wikitext2_8l_200x10.yaml")
+
+    assert config.training.inner_steps == 200
+    assert config.training.max_local_steps == 2000
+    assert config.training.completion_mode == "local_and_global"
+    assert config.sync.stop_after_outer_steps == 10
+
+
 def test_syncer_fault_timelines_preserve_registered_waits() -> None:
     """Syncer scenarios must encode the required delete, wait, and conflict windows."""
 

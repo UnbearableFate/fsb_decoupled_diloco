@@ -130,6 +130,7 @@ def run_fenced_syncer(
         MergeAttemptStatus,
         MergeService,
         TerminalService,
+        configured_target_waiting_for_local_completion,
         terminal_close_reason,
     )
 
@@ -252,10 +253,19 @@ def run_fenced_syncer(
             maintenance_service.tick(force=True)
             telemetry.event("terminal_finalized", terminal=terminal)
             return
-        outcome = merge_service.merge_once(
-            quorum_min=config.sync.quorum_min,
-            quorum_max=config.sync.quorum_max,
-            purpose="normal",
+        waiting_for_local_completion = configured_target_waiting_for_local_completion(
+            loaded,
+            authority,
+            version=latest.version,
+        )
+        outcome = (
+            MergeAttemptStatus.NO_BATCH
+            if waiting_for_local_completion
+            else merge_service.merge_once(
+                quorum_min=config.sync.quorum_min,
+                quorum_max=config.sync.quorum_max,
+                purpose="normal",
+            )
         )
         if capacity_service is not None:
             current = authority.read.latest_committed_version()
@@ -263,7 +273,9 @@ def run_fenced_syncer(
             actions = capacity_service.tick(
                 global_version=current.version,
                 eligible_contributors=len(authority.read.current_contributor_fences()),
-                selected_contributors=merge_service.last_selected_contributors,
+                selected_contributors=(
+                    0 if waiting_for_local_completion else merge_service.last_selected_contributors
+                ),
             )
             for action in actions:
                 telemetry.event("dynamic_capacity_action", action=action)

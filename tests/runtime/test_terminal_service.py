@@ -15,7 +15,11 @@ from fs_diloco.core.run_descriptor import (
 from fs_diloco.observability.logging_utils import ActorTelemetryWriter
 from fs_diloco.protocol.contributor import StaticMembershipScope
 from fs_diloco.runtime.services.merge import MergeAttemptStatus
-from fs_diloco.runtime.services.terminal import TerminalService, terminal_close_reason
+from fs_diloco.runtime.services.terminal import (
+    TerminalService,
+    configured_target_waiting_for_local_completion,
+    terminal_close_reason,
+)
 from fs_diloco.storage.authority import (
     AuthorityIdentity,
     LeaderAuthority,
@@ -388,6 +392,37 @@ def test_terminal_close_reason_consumes_global_target_and_deadline_policy(
         )
     finally:
         authority.close()
+
+
+def test_global_target_waits_for_every_contributor_local_horizon() -> None:
+    """The syncer must hold version 10 while any stream has fewer than ten cycles."""
+
+    loaded = SimpleNamespace(
+        config=SimpleNamespace(
+            training=SimpleNamespace(
+                completion_mode="local_and_global",
+                max_local_steps=2000,
+                inner_steps=200,
+            ),
+            terminal=SimpleNamespace(admission_close_policy="global_target"),
+            sync=SimpleNamespace(stop_after_outer_steps=10),
+        )
+    )
+    fences = (
+        SimpleNamespace(stable_contributor_key="0"),
+        SimpleNamespace(stable_contributor_key="1"),
+    )
+    cycles = {"0": 10, "1": 9}
+    read = SimpleNamespace(
+        current_contributor_fences=lambda: fences,
+        contributor_progress=lambda key: SimpleNamespace(last_cycle_seq=cycles[key]),
+    )
+    authority = SimpleNamespace(read=read)
+
+    assert configured_target_waiting_for_local_completion(loaded, authority, version=9) is False
+    assert configured_target_waiting_for_local_completion(loaded, authority, version=10) is True
+    cycles["1"] = 10
+    assert configured_target_waiting_for_local_completion(loaded, authority, version=10) is False
 
 
 @pytest.mark.parametrize(

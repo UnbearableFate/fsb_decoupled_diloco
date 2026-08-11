@@ -487,7 +487,11 @@ def _normalize_and_validate(config: Config) -> Config:
         configured = getattr(config.syncer, field_name)
         if configured not in allowed_dtypes:
             raise ValueError(f"unsupported syncer.{field_name}: {configured}")
-    if config.training.completion_mode not in {"local_or_global", "global_only"}:
+    if config.training.completion_mode not in {
+        "local_or_global",
+        "global_only",
+        "local_and_global",
+    }:
         raise ValueError(f"unsupported training.completion_mode: {config.training.completion_mode}")
     if config.training.max_local_steps is not None and config.training.max_local_steps <= 0:
         raise ValueError("training.max_local_steps must be > 0 when set")
@@ -690,6 +694,16 @@ def _normalize_and_validate(config: Config) -> Config:
     ):
         if value <= 0:
             raise ValueError(f"{name} must be > 0")
+    if config.training.completion_mode == "local_and_global":
+        local_target = config.training.max_local_steps
+        if local_target is None:
+            raise ValueError("local_and_global completion requires training.max_local_steps")
+        if local_target % config.training.inner_steps != 0:
+            raise ValueError(
+                "local_and_global training.max_local_steps must contain whole inner cycles"
+            )
+        if config.sync.stop_after_outer_steps is None:
+            raise ValueError("local_and_global completion requires a global step target")
     direct_token_target = config.sync.stop_after_direct_weight_tokens_applied
     if direct_token_target is not None and direct_token_target <= 0:
         raise ValueError("sync.stop_after_direct_weight_tokens_applied must be > 0")
