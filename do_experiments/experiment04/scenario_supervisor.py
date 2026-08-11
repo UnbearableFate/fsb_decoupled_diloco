@@ -314,7 +314,7 @@ def _attestation_topology(
     run_id: str,
     descriptor_sha256: str,
     source_fingerprint: str,
-    source_lock_sha256: str,
+    source_lock_sha256: str | None,
     initial_instance_by_job: dict[str, str],
     syncer_owner_id: str,
     replacement_job_id: str | None,
@@ -1520,7 +1520,7 @@ def supervise(
             run_id=str(descriptor["run_id"]),
             descriptor_sha256=str(descriptor["descriptor_sha256"]),
             source_fingerprint=str(descriptor["source_fingerprint"]),
-            source_lock_sha256=str(descriptor["source_lock_sha256"]),
+            source_lock_sha256=descriptor["source_lock_sha256"],
             initial_instance_by_job={
                 _normalize_job_id(str(row["pbs_job_id"])): str(row["admitted_instance_id"])
                 for row in authority["bootstrap_launches"]
