@@ -1,0 +1,16 @@
+[INFO] PBS_JOBID=2533012.opbs
+[INFO] HOSTNAME=mg0988
+[INFO] PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco
+[INFO] REVIEW_KIND=critical-incremental
+[INFO] TARGET_COMMIT=0a1fb0f47f6c3440397f3ea2ed1da59c30e99140
+[INFO] REPORT_DIR=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/code_review/plan05/critical-incremental-02
+[INFO] PROMPT_SHA256=645455d5afb1f92a71b8a427e19c91a5c310fe6c852c846ea25469a07ccfd1f4
+[INFO] REVIEW_PATH_COUNT=13
+[INFO] REVIEW_PATHS_SHA256=b4668a712b95c4e845f4bbbad614e7aea8b90cea60b4e71284c73e7d9faf8b52
+[INFO] OPENCODE_MODEL=opencode-go/deepseek-v4-flash
+Currently Loaded Modulefiles:
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9  
+
+Key:
+(symbolic-version)  
+Terminated

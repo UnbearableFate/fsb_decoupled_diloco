@@ -1,0 +1,246 @@
+{
+  "cleanup": {
+    "owner": "scenario_supervisor",
+    "qdel_receipts": []
+  },
+  "config": {
+    "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/configs/experiments/gpt2_wikitext2_8l_200x10_fixed.yaml",
+    "scenario": "no_failure"
+  },
+  "environment": {
+    "actor_queue": "debug-g",
+    "actor_walltime": "00:25:00",
+    "supervisor_pbs_job_id": "2533014.opbs"
+  },
+  "errors": [
+    {
+      "message": "actor attestation identity differs from the formal run",
+      "traceback": "Traceback (most recent call last):\n  File \"/work/xg24i002/x10041/fsb_decoupled_diloco/do_experiments/experiment04/scenario_supervisor.py\", line 1515, in supervise\n    topology = _attestation_topology(\n        run_root,\n    ...<15 lines>...\n        ),\n    )\n  File \"/work/xg24i002/x10041/fsb_decoupled_diloco/do_experiments/experiment04/scenario_supervisor.py\", line 395, in _attestation_topology\n    raise RuntimeError(\"actor attestation identity differs from the formal run\")\nRuntimeError: actor attestation identity differs from the formal run\n",
+      "type": "RuntimeError"
+    }
+  ],
+  "evidence_paths": {
+    "log_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_no_failure_20260812_041515",
+    "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_no_failure_20260812_041515"
+  },
+  "experiment_id": "1",
+  "gate": "plan05-full-protocol-no_failure",
+  "metrics": {
+    "failed_at": 1786476025.0768366,
+    "started_at": 1786475719.7055871
+  },
+  "requirements": [
+    "P05-R06",
+    "P05-R10"
+  ],
+  "scheduler": {
+    "faults": [],
+    "submissions": [
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_no_failure_20260812_041515/syncer_000.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_no_failure_20260812_041515,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=5f8a69509943f3126bc2591e025a0fc1d0d549d299b78d0b877008c713192f91,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_syncer.pbs"
+        ],
+        "job_id": "2533015.opbs",
+        "job_id_normalized": "2533015",
+        "returncode": 0,
+        "role": "syncer",
+        "slot": 0,
+        "stderr": "",
+        "stdout": "2533015.opbs",
+        "submitted_at": 1786475720.2185743
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_no_failure_20260812_041515/bootstrap_000.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_no_failure_20260812_041515,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=5f8a69509943f3126bc2591e025a0fc1d0d549d299b78d0b877008c713192f91,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=0",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533016.opbs",
+        "job_id_normalized": "2533016",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 0,
+        "stderr": "",
+        "stdout": "2533016.opbs",
+        "submitted_at": 1786475720.287939
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_no_failure_20260812_041515/bootstrap_001.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_no_failure_20260812_041515,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=5f8a69509943f3126bc2591e025a0fc1d0d549d299b78d0b877008c713192f91,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=1",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533017.opbs",
+        "job_id_normalized": "2533017",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 1,
+        "stderr": "",
+        "stdout": "2533017.opbs",
+        "submitted_at": 1786475720.403684
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_no_failure_20260812_041515/bootstrap_002.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_no_failure_20260812_041515,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=5f8a69509943f3126bc2591e025a0fc1d0d549d299b78d0b877008c713192f91,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=2",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533018.opbs",
+        "job_id_normalized": "2533018",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 2,
+        "stderr": "",
+        "stdout": "2533018.opbs",
+        "submitted_at": 1786475720.545885
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_no_failure_20260812_041515/bootstrap_003.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_no_failure_20260812_041515,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=5f8a69509943f3126bc2591e025a0fc1d0d549d299b78d0b877008c713192f91,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=3",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533019.opbs",
+        "job_id_normalized": "2533019",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 3,
+        "stderr": "",
+        "stdout": "2533019.opbs",
+        "submitted_at": 1786475720.6516948
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_no_failure_20260812_041515/bootstrap_004.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_no_failure_20260812_041515,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=5f8a69509943f3126bc2591e025a0fc1d0d549d299b78d0b877008c713192f91,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=4",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533020.opbs",
+        "job_id_normalized": "2533020",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 4,
+        "stderr": "",
+        "stdout": "2533020.opbs",
+        "submitted_at": 1786475720.7991707
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_no_failure_20260812_041515/bootstrap_005.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_no_failure_20260812_041515,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=5f8a69509943f3126bc2591e025a0fc1d0d549d299b78d0b877008c713192f91,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=5",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533021.opbs",
+        "job_id_normalized": "2533021",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 5,
+        "stderr": "",
+        "stdout": "2533021.opbs",
+        "submitted_at": 1786475720.9119565
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_no_failure_20260812_041515/bootstrap_006.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_no_failure_20260812_041515,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=5f8a69509943f3126bc2591e025a0fc1d0d549d299b78d0b877008c713192f91,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=6",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533022.opbs",
+        "job_id_normalized": "2533022",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 6,
+        "stderr": "",
+        "stdout": "2533022.opbs",
+        "submitted_at": 1786475721.0559325
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_no_failure_20260812_041515/bootstrap_007.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_no_failure_20260812_041515,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=5f8a69509943f3126bc2591e025a0fc1d0d549d299b78d0b877008c713192f91,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=7",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533023.opbs",
+        "job_id_normalized": "2533023",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 7,
+        "stderr": "",
+        "stdout": "2533023.opbs",
+        "submitted_at": 1786475721.1702077
+      }
+    ]
+  },
+  "source": {
+    "commit": null,
+    "dirty": null,
+    "fingerprint": null,
+    "scopes": null
+  },
+  "status": "FAIL"
+}

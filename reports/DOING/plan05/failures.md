@@ -131,3 +131,43 @@
 - 最小症状：为全部 branch-modified Python responsibility 补齐英文 docstring 后，没有在提交 candidate 前重新生成 `website/app/reference-data/api-manifest.json`。website test 按设计更新 adoption API 的 class docstring、line identity 和 source revision，validation 因 source-before/source-after 不一致发布 `FAIL`。
 - 处置：提交该唯一 generated reference 变更；不关闭 source-mutation 检查，也不忽略 reference drift。
 - 下一验证：fresh clean U1 必须证明 reference generation 无差异，并再次通过全部门禁。
+
+## Formal orchestration：并行提交导致 actor queue starvation
+
+- 分类：`orchestration-invalid`，不计为源码或 oracle finding。
+- Source：commit `7575461ff735fe4d097ded28d168fb23b1dc32be`；三个正式场景被错误地同时提交，no-failure 占用可调度资源后使两个 fault supervisor 的 bootstrap actor 无法在 admission deadline 内全部启动。
+- 环境：fault supervisors 为 PBS `2532897.opbs` 与 `2532898.opbs`；确认 starvation 后只按 exact owned actor job ID 执行 `qdel`，supervisor 分别发布 `20260812_040218_failure_no_replacement.json` 和 `20260812_040218_failure_authorized_replacement.json`。
+- 最小症状：两份 artifact 均为 `FAIL`，错误为 8 个 bootstrap learner 未全部 admitted；没有进入预注册 fault boundary，因此不能用于产品结论。
+- 处置：正式场景改为串行提交，每次等待 supervisor 及全部 owned actor terminal 后再启动下一场；保留失败 artifact，不删除 run root 或 scheduler evidence。
+
+## Formal no-failure：oracle 错误要求已完成 GC 的 archive checkpoint 仍存在
+
+- 分类：`oracle-failure`；有效 formal failure。
+- Source：commit `7575461ff735fe4d097ded28d168fb23b1dc32be`，supervisor PBS `2532896.opbs`，artifact `20260812_040211_no_failure.json`。
+- 最小症状：生产 maintenance 已把旧 global version row 归档，并在 durable GC candidate 完成后删除旧 checkpoint object；formal oracle 仍要求 v0 至 v10 的全部 object 均存在，因而误拒绝合法终态。
+- 处置：publication oracle 现在要求 hot object 必须存在；archive-only object 仅在没有 pending/claimed GC candidate 时允许 `garbage_collected`。仍存在的所有 object 必须匹配 canonical path、regular-file identity、byte size 和 SHA-256；mutation tests 覆盖 completed 与 incomplete GC。
+- 后续结果：修复 commit `0a1fb0f47f6c3440397f3ea2ed1da59c30e99140` 关闭该 finding。
+
+## Formal no-failure：缺失 source lock 被错误序列化为字符串
+
+- 分类：`oracle-integration-failure`；有效 formal failure。
+- Source：commit `0a1fb0f47f6c3440397f3ea2ed1da59c30e99140`，supervisor PBS `2533014.opbs`，artifact `20260812_041515_no_failure.json`。
+- 最小症状：descriptor 的 `source_lock_sha256` 合法值为 JSON `null`，supervisor 在传给 topology attestation oracle 时执行 `str(...)`，把它变成字符串 `"None"`，导致 exact identity comparison 失败。
+- 处置：oracle parameter 保留 `str | None`，直接传递 descriptor 值；topology mutation fixture 覆盖 absent source lock。
+- 后续结果：修复 commit `ef7ac230b5221d146162a3ff86ae51a3d586fb9a` 关闭该 finding。
+
+## Formal failure/no-replacement：victim 可在首个 durable receipt 前被硬终止
+
+- 分类：`oracle-failure`；有效 formal failure。
+- Source：commit `ef7ac230b5221d146162a3ff86ae51a3d586fb9a`，supervisor PBS `2533156.opbs`，artifact `20260812_042947_failure_no_replacement.json`。
+- 最小症状：victim 在 admission 后、首个 durable receipt 前被 `qdel`，因此该 stream 没有 `contributor_progress` row；formal accounting 错误要求所有 8 个 stream 都存在 progress row。
+- 处置：只有被 exact scheduler fault evidence 标识的 hard-crash stream 可以缺少 progress；该 stream 必须同时没有 receipt，并输出 data cursor 0、cycle seq 0、`progress_row_present=false`。acked stream 仍强制要求 progress，已有 progress 的 hard crash 仍验证其 durable chain。
+- 后续结果：修复 commit `75fd83135646b688948152e9ff7e09a6e094ad14` 使 formal oracle 本身通过。
+
+## Formal failure/no-replacement：strict summary 未接受 pre-receipt hard crash
+
+- 分类：`summary-oracle-failure`；有效 formal failure。
+- Source：commit `75fd83135646b688948152e9ff7e09a6e094ad14`，supervisor PBS `2533226.opbs`，artifact `20260812_044248_failure_no_replacement.json`。
+- 最小症状：formal authority oracle 已正确证明 pre-receipt hard crash，但 `tools/summarize_runs.py` 仍以“hard-crash stream has no progress row”拒绝同一合法证据。
+- 处置：strict summary 仅在该 hard-crash fence 没有 progress 且没有 logical update 使用它时将 durable optimizer steps 记为 0；任何没有 progress 的非 crash stream或仍有关联 update 的 crash stream继续 fail closed。测试覆盖接受和拒绝路径。
+- 后续结果：修复 commit `288f0c9d13e90ce597ddf0502e631aa509b53081` 成为最终 target；formal artifact `20260812_045342_failure_no_replacement.json` 通过。

@@ -1,0 +1,17 @@
+plans/DOING/plans/plan05.md
+configs/experiments/gpt2_wikitext2_8l_200x10.yaml
+configs/experiments/gpt2_wikitext2_8l_200x10_fixed.yaml
+do_experiments/experiment04/scenario_supervisor.py
+fs_diloco/core/run_descriptor.py
+fs_diloco/runtime/services/maintenance.py
+fs_diloco/runtime/services/terminal.py
+fs_diloco/storage/artifact_policy.py
+fs_diloco/storage/audit_archive.py
+fs_diloco/storage/authority.py
+fs_diloco/storage/paths.py
+fs_diloco/storage/schema.sql
+tests/harness/test_plan04_experiment.py
+tests/storage/test_audit_archive.py
+tests/storage/test_authority_operational.py
+tests/test_summarize_runs.py
+tools/summarize_runs.py

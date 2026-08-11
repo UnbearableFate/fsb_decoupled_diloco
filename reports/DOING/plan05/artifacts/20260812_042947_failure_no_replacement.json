@@ -1,0 +1,269 @@
+{
+  "cleanup": {
+    "owner": "scenario_supervisor",
+    "qdel_receipts": []
+  },
+  "config": {
+    "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/configs/experiments/gpt2_wikitext2_8l_200x10_fixed.yaml",
+    "scenario": "failure_no_replacement"
+  },
+  "environment": {
+    "actor_queue": "debug-g",
+    "actor_walltime": "00:25:00",
+    "supervisor_pbs_job_id": "2533156.opbs"
+  },
+  "errors": [
+    {
+      "message": "contributor progress does not cover the exact stream pool",
+      "traceback": "Traceback (most recent call last):\n  File \"/work/xg24i002/x10041/fsb_decoupled_diloco/do_experiments/experiment04/scenario_supervisor.py\", line 1506, in supervise\n    authority = _final_authority_evidence(\n        database,\n    ...<5 lines>...\n        replacement=replacement,\n    )\n  File \"/work/xg24i002/x10041/fsb_decoupled_diloco/do_experiments/experiment04/scenario_supervisor.py\", line 1068, in _final_authority_evidence\n    accounting = _token_accounting_evidence(\n        receipts=receipts,\n    ...<9 lines>...\n        },\n    )\n  File \"/work/xg24i002/x10041/fsb_decoupled_diloco/do_experiments/experiment04/scenario_supervisor.py\", line 683, in _token_accounting_evidence\n    raise RuntimeError(\"contributor progress does not cover the exact stream pool\")\nRuntimeError: contributor progress does not cover the exact stream pool\n",
+      "type": "RuntimeError"
+    }
+  ],
+  "evidence_paths": {
+    "log_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_042947",
+    "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_042947"
+  },
+  "experiment_id": "2",
+  "gate": "plan05-full-protocol-failure_no_replacement",
+  "metrics": {
+    "failed_at": 1786477021.6582518,
+    "started_at": 1786476591.8790357
+  },
+  "requirements": [
+    "P05-R06",
+    "P05-R10"
+  ],
+  "scheduler": {
+    "faults": [
+      {
+        "kind": "learner_loss",
+        "qdel": {
+          "job_id": "2533158.opbs",
+          "job_id_normalized": "2533158",
+          "reason": "inject_learner_loss",
+          "requested_at": 1786476652.4374745,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": ""
+        },
+        "victim": {
+          "admitted_at": 1786476599.392952,
+          "fault_requested_at": 1786476652.4374745,
+          "instance_id": "learner_li_ec01a6d3-afc8-4a70-903a-d84525a488fa",
+          "pbs_job_id": "2533158.opbs",
+          "selection_seed": 11827349234325142810,
+          "status": "admitted",
+          "stream_epoch": 1,
+          "stream_id": 0
+        }
+      }
+    ],
+    "submissions": [
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_042947/syncer_000.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_042947,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=bce5519c8c1adf0947ef1e88b96e1330d1232dd6b0a40e6c1106ffaedaa7c05f,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_syncer.pbs"
+        ],
+        "job_id": "2533157.opbs",
+        "job_id_normalized": "2533157",
+        "returncode": 0,
+        "role": "syncer",
+        "slot": 0,
+        "stderr": "",
+        "stdout": "2533157.opbs",
+        "submitted_at": 1786476592.3658175
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_042947/bootstrap_000.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_042947,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=bce5519c8c1adf0947ef1e88b96e1330d1232dd6b0a40e6c1106ffaedaa7c05f,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=0",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533158.opbs",
+        "job_id_normalized": "2533158",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 0,
+        "stderr": "",
+        "stdout": "2533158.opbs",
+        "submitted_at": 1786476592.4331155
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_042947/bootstrap_001.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_042947,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=bce5519c8c1adf0947ef1e88b96e1330d1232dd6b0a40e6c1106ffaedaa7c05f,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=1",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533159.opbs",
+        "job_id_normalized": "2533159",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 1,
+        "stderr": "",
+        "stdout": "2533159.opbs",
+        "submitted_at": 1786476592.543377
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_042947/bootstrap_002.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_042947,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=bce5519c8c1adf0947ef1e88b96e1330d1232dd6b0a40e6c1106ffaedaa7c05f,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=2",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533160.opbs",
+        "job_id_normalized": "2533160",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 2,
+        "stderr": "",
+        "stdout": "2533160.opbs",
+        "submitted_at": 1786476592.6828406
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_042947/bootstrap_003.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_042947,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=bce5519c8c1adf0947ef1e88b96e1330d1232dd6b0a40e6c1106ffaedaa7c05f,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=3",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533161.opbs",
+        "job_id_normalized": "2533161",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 3,
+        "stderr": "",
+        "stdout": "2533161.opbs",
+        "submitted_at": 1786476592.8003955
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_042947/bootstrap_004.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_042947,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=bce5519c8c1adf0947ef1e88b96e1330d1232dd6b0a40e6c1106ffaedaa7c05f,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=4",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533162.opbs",
+        "job_id_normalized": "2533162",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 4,
+        "stderr": "",
+        "stdout": "2533162.opbs",
+        "submitted_at": 1786476592.9450252
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_042947/bootstrap_005.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_042947,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=bce5519c8c1adf0947ef1e88b96e1330d1232dd6b0a40e6c1106ffaedaa7c05f,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=5",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533163.opbs",
+        "job_id_normalized": "2533163",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 5,
+        "stderr": "",
+        "stdout": "2533163.opbs",
+        "submitted_at": 1786476593.046885
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_042947/bootstrap_006.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_042947,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=bce5519c8c1adf0947ef1e88b96e1330d1232dd6b0a40e6c1106ffaedaa7c05f,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=6",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533164.opbs",
+        "job_id_normalized": "2533164",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 6,
+        "stderr": "",
+        "stdout": "2533164.opbs",
+        "submitted_at": 1786476593.1882572
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_042947/bootstrap_007.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_042947,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=bce5519c8c1adf0947ef1e88b96e1330d1232dd6b0a40e6c1106ffaedaa7c05f,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=7",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533165.opbs",
+        "job_id_normalized": "2533165",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 7,
+        "stderr": "",
+        "stdout": "2533165.opbs",
+        "submitted_at": 1786476593.293415
+      }
+    ]
+  },
+  "source": {
+    "commit": null,
+    "dirty": null,
+    "fingerprint": null,
+    "scopes": null
+  },
+  "status": "FAIL"
+}

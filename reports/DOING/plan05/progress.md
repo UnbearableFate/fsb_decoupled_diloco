@@ -51,3 +51,21 @@
 - 最新 coordinator current-state 审查为 `APPROVE`，见 `coordinator_current_27c5f5d74beeabe8845e8e714bca07ed14ff7296.md`；该结论仍在读取外部 reviewer 结果前独立形成。
 - 外部 old-target PREFORMAL job `2531470.opbs` 只请求 OpenCode `opencode-go/deepseek-v4-flash`，在 7,200 秒后以 `timed-out` 结束；read-only snapshot 未变，raw output 为 0 byte，没有 report、verdict 或 finding，不能视为 `APPROVE`。完整处置见 `external_disposition_d9360aae3370bb56b9700f8789aebaac2dcf6833_2531470.md`；不重复提交同一 old-target review。
 - 下一动作：对全部关键修缮 delta 执行当前 target 的固定 DeepSeek `critical-incremental` 复审；完成结果处置前不冻结 `FINAL_COMMON_TARGET`。
+
+## 2026-08-12 FORMAL：同一最终 target 的全部门禁通过
+
+- 最终源码：`FINAL_COMMON_TARGET` 为 commit `288f0c9d13e90ce597ddf0502e631aa509b53081`，source fingerprint 为 `sha256:d2e3b725d16de5c8d9768386cfabd42f94dbaf865156bb334e2c67ccf6fed3e4`。该 target 包含 archive-aware checkpoint object oracle、nullable source-lock identity、pre-receipt hard-crash evidence 和对应 strict summary。
+- U1：PBS `2533273.opbs` 在 `mg0969` 上通过 Ruff format/lint、focused `264 passed`、full `595 passed`、website lint 和 rendered-site test；create-only artifact 为 `artifacts/validation_candidate30.json`。
+- Functional：PBS `2533382.opbs` 的 4 learner + 1 syncer no-failure 与 PBS `2533383.opbs` 的 syncer takeover 均通过同一 target 的 co-allocated Checker；artifact 分别为 `functional_no_failure_final_288f0c9.json` 和 `functional_syncer_takeover_final_288f0c9.json`。
+- Formal no-failure：supervisor PBS `2533369.opbs` 启动 8 个独立 learner job 和 1 个独立 syncer job，在 9 个不同 compute host 完成 200 local × 10 global workload；v10、40 个 applied update、`131072000` direct applied token、ledger balance 0、8 个 terminal fence 与 22 个 checkpoint publication identity 全部通过。
+- Formal faults：supervisor PBS `2533281.opbs` 证明无 replacement 的 pre-receipt hard crash 可以 bounded completion；PBS `2533326.opbs` 证明 capacity observation、qsub receipt、replacement admission、stream epoch 1→2、cursor continuity 和旧 fence 隔离。两场均完成 v10、40 个 applied update、ledger balance 0。
+- Baseline：plan04 未在其 latest target 形成完成且与本 target 严格匹配的 Dynamic Full baseline，结论为 `incomparable`；不执行 20% threshold，也不以其 DDP、Periodic Average 或 diagnostic run 替代。
+- 外部审查：所有已启动的 reviewer 都只请求 OpenCode `opencode-go/deepseek-v4-flash`。三个 earlier target 的增量审查分别因 target 被 formal failure 推翻而主动终止，没有 report、verdict 或 finding；最终 target 的唯一增量审查另行保留 runner summary 与 coordinator disposition。
+- 下一动作：完成 FINAL requirement/evidence 审查，确认无自有 active/queued PBS job，然后以独立 move-only commit 归档 plan、report 和 review packet。
+
+## 2026-08-12 FINAL：证据审查通过
+
+- 外部 final-target review：PBS `2533421.opbs` 只调用 OpenCode `opencode-go/deepseek-v4-flash`，只读 snapshot 前后 hash 相同；invocation 在 7,200 秒后 `timed-out`，raw output 为 0 byte、`actual_model=null`，没有 report、verdict 或 finding，不能视为 `APPROVE`，也不重复提交同一 target。处置见 `critical-incremental-02/external_disposition_288f0c9d13e90ce597ddf0502e631aa509b53081_2533421.md`。
+- Coordinator FINAL：独立核验最终 source identity、U1、两个 functional artifact、三个 formal artifact、12 项 requirement、正式输入、scheduler topology、durable authority/checkpoint oracle、所有失效 target 与 external disposition，结论为 `APPROVE`。完整审查见 `final-evidence-01/coordinator_288f0c9d13e90ce597ddf0502e631aa509b53081.md`。
+- Cleanup：最终查询确认 PBS `2533273`、`2533281`、`2533326`、`2533369`、`2533382`、`2533383` 和 `2533421` 均无 unfinished job，`qstat -a` 没有 plan05 owned row。没有删除正式 run root、authority、checkpoint、archive 或日志。
+- 结论：当前设计、测试、配置、脚本、Checker、当前文档、正式结果与报告一致；剩余动作只是在记录 archive path map 后，以独立 move-only commit 归档 plan/report/review。

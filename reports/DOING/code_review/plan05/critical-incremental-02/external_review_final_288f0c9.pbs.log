@@ -1,0 +1,19 @@
+[INFO] PBS_JOBID=2533421.opbs
+[INFO] HOSTNAME=mg0999
+[INFO] PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco
+[INFO] REVIEW_KIND=critical-incremental
+[INFO] TARGET_COMMIT=288f0c9d13e90ce597ddf0502e631aa509b53081
+[INFO] REPORT_DIR=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/code_review/plan05/critical-incremental-02
+[INFO] PROMPT_SHA256=ed24206a6e4c975736ec2d60cc1b7e10d7d0f1030aa65973ed24332c6330b65c
+[INFO] REVIEW_PATH_COUNT=17
+[INFO] REVIEW_PATHS_SHA256=9355cd7382a2858dc3a1c19ceae5af0a8c8db4e98cfb8dafc849d0806c424e8c
+[INFO] OPENCODE_MODEL=opencode-go/deepseek-v4-flash
+Currently Loaded Modulefiles:
+ 1) nvidia/25.9(default)   2) nv-hpcx/25.9  
+
+Key:
+(symbolic-version)  
+[INFO] external reviewer job reached terminal orchestration state
+[INFO] summary=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/code_review/plan05/critical-incremental-02/reviewer-job_288f0c9d13e90ce597ddf0502e631aa509b53081_2533421.json
+[INFO] target_tree=49b0a0bcb5568675a1f0b7259392e748ede7d3c5
+[INFO] review_paths_sha256=9355cd7382a2858dc3a1c19ceae5af0a8c8db4e98cfb8dafc849d0806c424e8c

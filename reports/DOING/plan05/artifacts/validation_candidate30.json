@@ -1,0 +1,176 @@
+{
+  "artifact_version": 1,
+  "cleanup": {
+    "eligible": false,
+    "owner": "validation_suite",
+    "targets": []
+  },
+  "config_schema_identity": null,
+  "environment": {
+    "interpreter": {
+      "executable": "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+      "version": "3.13.13 (main, May 10 2026, 19:28:34) [Clang 22.1.3 ]"
+    },
+    "nodes": [
+      "mg0969"
+    ],
+    "packages": {
+      "pytest": "9.1.1",
+      "pytest-timeout": "2.4.0",
+      "ruff": "0.15.21",
+      "torch": "2.13.0+cu132"
+    },
+    "pbs_job_id": "2533273.opbs",
+    "topology": {
+      "validation_runner": "mg0969"
+    }
+  },
+  "errors": [],
+  "evidence_paths": [
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan05/artifacts/validation_candidate30.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan05/artifacts/validation_candidate30.log.focused-pytest.junit.xml",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan05/artifacts/validation_candidate30.log.full-pytest.junit.xml"
+  ],
+  "experiment_id": "plan05-current-suite",
+  "gate": "U1-one-node-validation",
+  "metrics": {
+    "steps": [
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+          "-m",
+          "ruff",
+          "format",
+          "--check",
+          "."
+        ],
+        "elapsed_seconds": 0.1918832021765411,
+        "name": "ruff-format",
+        "result_kind": "command",
+        "returncode": 0
+      },
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+          "-m",
+          "ruff",
+          "check",
+          "."
+        ],
+        "elapsed_seconds": 0.05636054207570851,
+        "name": "ruff-lint",
+        "result_kind": "command",
+        "returncode": 0
+      },
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+          "-m",
+          "pytest",
+          "-q",
+          "tests/architecture",
+          "tests/harness/test_full_protocol_harness.py",
+          "tests/harness/test_plan04_experiment.py",
+          "tests/harness/test_validation_suite.py",
+          "tests/protocol/test_cycle_receipt.py",
+          "tests/runtime/test_learner_entrypoint.py",
+          "tests/runtime/test_syncer_fault_boundary.py",
+          "tests/runtime/test_syncer_composition.py",
+          "tests/runtime/test_syncer_startup_admission.py",
+          "tests/runtime/test_terminal_service.py",
+          "tests/storage/test_authority_operational.py",
+          "tests/storage/test_contributor_progress.py",
+          "tests/storage/test_admission_request.py",
+          "tests/storage/test_run_initializer.py",
+          "tests/storage/test_schema.py",
+          "tests/test_capture_source_identity.py",
+          "tests/test_clean_run.py",
+          "tests/test_config.py",
+          "tests/test_summarize_runs.py",
+          "tests/tools/test_analysis.py",
+          "tests/tools/test_launch_independent_run.py",
+          "tests/tools/test_request_terminal_close.py",
+          "--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan05/artifacts/validation_candidate30.log.focused-pytest.junit.xml"
+        ],
+        "elapsed_seconds": 25.36036758683622,
+        "errors": 0,
+        "failures": 0,
+        "junit_xml": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan05/artifacts/validation_candidate30.log.focused-pytest.junit.xml",
+        "name": "focused-pytest",
+        "result_kind": "pytest",
+        "returncode": 0,
+        "skipped": 0,
+        "tests": 264
+      },
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python",
+          "-m",
+          "pytest",
+          "-q",
+          "--junitxml=/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan05/artifacts/validation_candidate30.log.full-pytest.junit.xml"
+        ],
+        "elapsed_seconds": 44.00316356495023,
+        "errors": 0,
+        "failures": 0,
+        "junit_xml": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/plan05/artifacts/validation_candidate30.log.full-pytest.junit.xml",
+        "name": "full-pytest",
+        "result_kind": "pytest",
+        "returncode": 0,
+        "skipped": 0,
+        "tests": 595
+      },
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.cache/node-v22.13.1-linux-arm64/bin/npm",
+          "--prefix",
+          "website",
+          "run",
+          "lint"
+        ],
+        "elapsed_seconds": 6.958999325986952,
+        "name": "website-lint",
+        "result_kind": "command",
+        "returncode": 0
+      },
+      {
+        "argv": [
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/.cache/node-v22.13.1-linux-arm64/bin/npm",
+          "--prefix",
+          "website",
+          "test"
+        ],
+        "elapsed_seconds": 6.782389255007729,
+        "name": "website-test",
+        "result_kind": "command",
+        "returncode": 0
+      }
+    ]
+  },
+  "protocol_schema_identity": null,
+  "requirements_covered": [
+    "P05-R08"
+  ],
+  "source_identity": {
+    "commit": "288f0c9d13e90ce597ddf0502e631aa509b53081",
+    "dirty": false,
+    "fingerprint": "sha256:d2e3b725d16de5c8d9768386cfabd42f94dbaf865156bb334e2c67ccf6fed3e4",
+    "scopes": [
+      "fs_diloco",
+      "configs",
+      "do_experiments",
+      "scripts/miyabi",
+      "tests",
+      "tools",
+      "torch_ddp_baselines",
+      "pyproject.toml",
+      "README.md",
+      "docs",
+      "plans/00-RESEARCH_PLAN.md",
+      "website/app",
+      "website/scripts"
+    ]
+  },
+  "status": "PASS",
+  "workload_identity": null
+}

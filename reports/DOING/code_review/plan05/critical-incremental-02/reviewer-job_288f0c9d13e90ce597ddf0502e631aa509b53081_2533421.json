@@ -1,0 +1,60 @@
+{
+  "compute_hostname": "mg0999",
+  "external_review_is_best_effort": true,
+  "opencode_models": [
+    {
+      "requested_model": "opencode-go/deepseek-v4-flash",
+      "reviewer": "opencode-deepseek-v4-flash"
+    }
+  ],
+  "pbs_job_id": "2533421.opbs",
+  "plan_id": "plan05",
+  "prompt_sha256": "ed24206a6e4c975736ec2d60cc1b7e10d7d0f1030aa65973ed24332c6330b65c",
+  "review_id": "critical-incremental-02",
+  "review_kind": "critical-incremental",
+  "review_scope": {
+    "paths": [
+      "plans/DOING/plans/plan05.md",
+      "configs/experiments/gpt2_wikitext2_8l_200x10.yaml",
+      "configs/experiments/gpt2_wikitext2_8l_200x10_fixed.yaml",
+      "do_experiments/experiment04/scenario_supervisor.py",
+      "fs_diloco/core/run_descriptor.py",
+      "fs_diloco/runtime/services/maintenance.py",
+      "fs_diloco/runtime/services/terminal.py",
+      "fs_diloco/storage/artifact_policy.py",
+      "fs_diloco/storage/audit_archive.py",
+      "fs_diloco/storage/authority.py",
+      "fs_diloco/storage/paths.py",
+      "fs_diloco/storage/schema.sql",
+      "tests/harness/test_plan04_experiment.py",
+      "tests/storage/test_audit_archive.py",
+      "tests/storage/test_authority_operational.py",
+      "tests/test_summarize_runs.py",
+      "tools/summarize_runs.py"
+    ],
+    "sha256": "9355cd7382a2858dc3a1c19ceae5af0a8c8db4e98cfb8dafc849d0806c424e8c"
+  },
+  "reviewers": [
+    {
+      "actual_model": null,
+      "cli": "opencode",
+      "ended_at": "2026-08-11T22:14:26Z",
+      "exit_code": 124,
+      "identity_verification": "pending-coordinator-validation",
+      "invocation_id": "126ec7ec-442d-41a2-b1a4-b9f1b6f65f0c",
+      "prompt_sha256": "504026571feb849ebe3e66a6a1b133808e8d209def950de19b90e179ed528b20",
+      "raw_file": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/code_review/plan05/critical-incremental-02/opencode-deepseek-v4-flash_288f0c9d13e90ce597ddf0502e631aa509b53081_2533421_raw.txt",
+      "report_file": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/code_review/plan05/critical-incremental-02/opencode-deepseek-v4-flash_288f0c9d13e90ce597ddf0502e631aa509b53081_2533421.md",
+      "requested_model": "opencode-go/deepseek-v4-flash",
+      "reviewer": "opencode-deepseek-v4-flash",
+      "snapshot_sha256_after": "9a6340b2cd9e3720d789bb669c4d722b9fa2fc35a979f28570755963a39767f4",
+      "snapshot_sha256_before": "9a6340b2cd9e3720d789bb669c4d722b9fa2fc35a979f28570755963a39767f4",
+      "started_at": "2026-08-11T20:14:26Z",
+      "status": "timed-out",
+      "stderr_file": "/work/xg24i002/x10041/fsb_decoupled_diloco/reports/DOING/code_review/plan05/critical-incremental-02/opencode-deepseek-v4-flash_288f0c9d13e90ce597ddf0502e631aa509b53081_2533421.stderr.log"
+    }
+  ],
+  "schema_version": 3,
+  "target_commit": "288f0c9d13e90ce597ddf0502e631aa509b53081",
+  "target_tree": "49b0a0bcb5568675a1f0b7259392e748ede7d3c5"
+}

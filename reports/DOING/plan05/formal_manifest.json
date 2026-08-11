@@ -1,0 +1,150 @@
+{
+  "manifest_version": 1,
+  "plan_id": "plan05",
+  "state": "completed",
+  "final_common_target": {
+    "commit": "288f0c9d13e90ce597ddf0502e631aa509b53081",
+    "dirty": false,
+    "source_fingerprint": "sha256:d2e3b725d16de5c8d9768386cfabd42f94dbaf865156bb334e2c67ccf6fed3e4",
+    "source_scopes": [
+      "fs_diloco",
+      "configs",
+      "do_experiments",
+      "scripts/miyabi",
+      "tests",
+      "tools",
+      "torch_ddp_baselines",
+      "pyproject.toml",
+      "README.md",
+      "docs",
+      "plans/00-RESEARCH_PLAN.md",
+      "website/app",
+      "website/scripts"
+    ]
+  },
+  "workflow_pin": "7288dc8086a95d2294a92fb999e8539991d86ec1",
+  "invalidated_targets": [
+    {
+      "commit": "7575461ff735fe4d097ded28d168fb23b1dc32be",
+      "reason": "fresh formal no-failure exposed an archive-checkpoint garbage-collection mismatch in the independent oracle"
+    },
+    {
+      "commit": "0a1fb0f47f6c3440397f3ea2ed1da59c30e99140",
+      "reason": "fresh formal no-failure exposed nullable source-lock identity coercion in topology attestation"
+    },
+    {
+      "commit": "ef7ac230b5221d146162a3ff86ae51a3d586fb9a",
+      "reason": "fresh failure/no-replacement exposed a valid hard crash before the first durable receipt"
+    },
+    {
+      "commit": "75fd83135646b688948152e9ff7e09a6e094ad14",
+      "reason": "the formal authority oracle passed but strict run summary rejected the valid pre-receipt hard crash"
+    }
+  ],
+  "comparison": {
+    "baseline_plan": "plan04",
+    "threshold_fraction": 0.2,
+    "loss_statistic": "mean of the final proposal loss for each terminal stream",
+    "time_statistic": "run artifact creation-to-terminal wall time",
+    "status": "incomparable",
+    "reason": "plan04 has no completed formal Dynamic Full baseline on its latest target with an exactly matching source, config, workload, seed, terminal contract, and pinned inputs",
+    "threshold_applied": false,
+    "substitutes_rejected": [
+      "plan04 diagnostic runs",
+      "DDP baseline",
+      "Periodic Average baseline"
+    ]
+  },
+  "gates": [
+    {
+      "id": "u1-one-node-validation",
+      "topology": "1 PBS compute node",
+      "pbs_job_id": "2533273.opbs",
+      "pass_formula": "Ruff format/lint, focused suite, full suite, website lint/test, and source identity all pass",
+      "artifact": "artifacts/validation_candidate30.json",
+      "status": "PASS",
+      "cleanup_owner": "validation_suite",
+      "requirements": [
+        "P05-R01",
+        "P05-R02",
+        "P05-R03",
+        "P05-R04",
+        "P05-R05",
+        "P05-R06",
+        "P05-R07",
+        "P05-R08"
+      ]
+    },
+    {
+      "id": "functional-no-failure",
+      "topology": "4 learners and 1 syncer in a 5-node co-allocation",
+      "pbs_job_id": "2533382.opbs",
+      "pass_formula": "terminal v4, exact variable-quorum accounting, immutable checkpoint objects, and ledger balance zero",
+      "artifact": "artifacts/functional_no_failure_final_288f0c9.json",
+      "status": "PASS",
+      "cleanup_owner": "full_protocol_harness",
+      "requirements": [
+        "P05-R04",
+        "P05-R05",
+        "P05-R08"
+      ]
+    },
+    {
+      "id": "functional-syncer-takeover",
+      "topology": "4 learners and 2 sequential syncer epochs in a 5-node co-allocation",
+      "pbs_job_id": "2533383.opbs",
+      "pass_formula": "primary epoch is fenced, successor completes v4, and no stale commit crosses the takeover boundary",
+      "artifact": "artifacts/functional_syncer_takeover_final_288f0c9.json",
+      "status": "PASS",
+      "cleanup_owner": "full_protocol_harness",
+      "requirements": [
+        "P05-R04",
+        "P05-R05",
+        "P05-R08"
+      ]
+    },
+    {
+      "id": "formal-no-failure",
+      "topology": "8 independent learner jobs, 1 independent syncer job, and 1 supervisor job",
+      "pbs_job_id": "2533369.opbs",
+      "run_id": "plan05_no_failure_20260812_050805",
+      "workload": "GPT-2/WikiText-2, seed 1337, 200 local steps, 10 exact four-contributor global merges",
+      "pass_formula": "terminal v10, 40 applied updates, 8 acknowledged fences, exact token ledger, 22 publication identities, and all owned actors terminal",
+      "artifact": "artifacts/20260812_050805_no_failure.json",
+      "status": "PASS",
+      "cleanup_owner": "scenario_supervisor",
+      "requirements": [
+        "P05-R10",
+        "P05-R11"
+      ]
+    },
+    {
+      "id": "formal-failure-no-replacement",
+      "topology": "8 independent bootstrap learners, 1 independent syncer, no capacity replacement, and 1 supervisor",
+      "pbs_job_id": "2533281.opbs",
+      "run_id": "plan05_failure_no_replacement_20260812_045342",
+      "workload": "GPT-2/WikiText-2, seed 1337, one admitted learner qdel, 200 local steps, 10 exact four-contributor global merges",
+      "pass_formula": "exact scheduler hard crash, no replacement, bounded crash gap, terminal v10, exact token ledger, and all owned actors terminal",
+      "artifact": "artifacts/20260812_045342_failure_no_replacement.json",
+      "status": "PASS",
+      "cleanup_owner": "scenario_supervisor",
+      "requirements": [
+        "P05-R10"
+      ]
+    },
+    {
+      "id": "formal-failure-authorized-replacement",
+      "topology": "8 independent bootstrap learners, 1 scheduler-authorized replacement, 1 independent syncer, and 1 supervisor",
+      "pbs_job_id": "2533326.opbs",
+      "run_id": "plan05_failure_authorized_replacement_20260812_050107",
+      "workload": "GPT-2/WikiText-2, seed 1337, one admitted learner qdel and replacement, 200 local steps, 10 exact four-contributor global merges",
+      "pass_formula": "capacity observation-to-qsub-to-admission chain, stream epoch advance, old-fence isolation, cursor continuity, terminal v10, exact token ledger, and all owned actors terminal",
+      "artifact": "artifacts/20260812_050107_failure_authorized_replacement.json",
+      "status": "PASS",
+      "cleanup_owner": "scenario_supervisor",
+      "requirements": [
+        "P05-R10"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,269 @@
+{
+  "cleanup": {
+    "owner": "scenario_supervisor",
+    "qdel_receipts": []
+  },
+  "config": {
+    "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/configs/experiments/gpt2_wikitext2_8l_200x10_fixed.yaml",
+    "scenario": "failure_no_replacement"
+  },
+  "environment": {
+    "actor_queue": "debug-g",
+    "actor_walltime": "00:25:00",
+    "supervisor_pbs_job_id": "2533226.opbs"
+  },
+  "errors": [
+    {
+      "message": "command failed (2): ['/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python', '/work/xg24i002/x10041/fsb_decoupled_diloco/tools/summarize_runs.py', '/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_044248', '--output', '/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_044248/run_summary.csv']\nusage: summarize_runs.py [-h] --output OUTPUT\n                         [--comparison-output COMPARISON_OUTPUT]\n                         run_inputs [run_inputs ...]\nsummarize_runs.py: error: /work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_044248/control/syncer_metadata.sqlite3: hard-crash stream has no progress row\n",
+      "traceback": "Traceback (most recent call last):\n  File \"/work/xg24i002/x10041/fsb_decoupled_diloco/do_experiments/experiment04/scenario_supervisor.py\", line 1553, in supervise\n    summary_csv = _summary_row(project_root, run_root, log_root)\n  File \"/work/xg24i002/x10041/fsb_decoupled_diloco/do_experiments/experiment04/scenario_supervisor.py\", line 1408, in _summary_row\n    _run(\n    ~~~~^\n        [\n        ^\n    ...<5 lines>...\n        ]\n        ^\n    )\n    ^\n  File \"/work/xg24i002/x10041/fsb_decoupled_diloco/do_experiments/experiment04/scenario_supervisor.py\", line 89, in _run\n    raise RuntimeError(f\"command failed ({completed.returncode}): {command!r}\\n{diagnostic}\")\nRuntimeError: command failed (2): ['/work/xg24i002/x10041/fsb_decoupled_diloco/.venv/bin/python', '/work/xg24i002/x10041/fsb_decoupled_diloco/tools/summarize_runs.py', '/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_044248', '--output', '/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_044248/run_summary.csv']\nusage: summarize_runs.py [-h] --output OUTPUT\n                         [--comparison-output COMPARISON_OUTPUT]\n                         run_inputs [run_inputs ...]\nsummarize_runs.py: error: /work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_044248/control/syncer_metadata.sqlite3: hard-crash stream has no progress row\n\n",
+      "type": "RuntimeError"
+    }
+  ],
+  "evidence_paths": {
+    "log_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_044248",
+    "run_root": "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_044248"
+  },
+  "experiment_id": "2",
+  "gate": "plan05-full-protocol-failure_no_replacement",
+  "metrics": {
+    "failed_at": 1786477796.6421547,
+    "started_at": 1786477372.7937582
+  },
+  "requirements": [
+    "P05-R06",
+    "P05-R10"
+  ],
+  "scheduler": {
+    "faults": [
+      {
+        "kind": "learner_loss",
+        "qdel": {
+          "job_id": "2533235.opbs",
+          "job_id_normalized": "2533235",
+          "reason": "inject_learner_loss",
+          "requested_at": 1786477433.3605146,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": ""
+        },
+        "victim": {
+          "admitted_at": 1786477379.191558,
+          "fault_requested_at": 1786477433.3605146,
+          "instance_id": "learner_li_93bfefc3-6caa-4d05-a7e6-47fef87f920b",
+          "pbs_job_id": "2533235.opbs",
+          "selection_seed": 2438694401183248207,
+          "status": "admitted",
+          "stream_epoch": 1,
+          "stream_id": 7
+        }
+      }
+    ],
+    "submissions": [
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_044248/syncer_000.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_044248,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=82abafba1d826ddba3ac7fde8553ac1b44aaa5e6e17e492bc391c2d50f980136,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_syncer.pbs"
+        ],
+        "job_id": "2533227.opbs",
+        "job_id_normalized": "2533227",
+        "returncode": 0,
+        "role": "syncer",
+        "slot": 0,
+        "stderr": "",
+        "stdout": "2533227.opbs",
+        "submitted_at": 1786477373.2887247
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_044248/bootstrap_000.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_044248,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=82abafba1d826ddba3ac7fde8553ac1b44aaa5e6e17e492bc391c2d50f980136,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=0",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533228.opbs",
+        "job_id_normalized": "2533228",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 0,
+        "stderr": "",
+        "stdout": "2533228.opbs",
+        "submitted_at": 1786477373.3554816
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_044248/bootstrap_001.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_044248,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=82abafba1d826ddba3ac7fde8553ac1b44aaa5e6e17e492bc391c2d50f980136,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=1",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533229.opbs",
+        "job_id_normalized": "2533229",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 1,
+        "stderr": "",
+        "stdout": "2533229.opbs",
+        "submitted_at": 1786477373.4596488
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_044248/bootstrap_002.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_044248,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=82abafba1d826ddba3ac7fde8553ac1b44aaa5e6e17e492bc391c2d50f980136,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=2",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533230.opbs",
+        "job_id_normalized": "2533230",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 2,
+        "stderr": "",
+        "stdout": "2533230.opbs",
+        "submitted_at": 1786477373.5990798
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_044248/bootstrap_003.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_044248,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=82abafba1d826ddba3ac7fde8553ac1b44aaa5e6e17e492bc391c2d50f980136,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=3",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533231.opbs",
+        "job_id_normalized": "2533231",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 3,
+        "stderr": "",
+        "stdout": "2533231.opbs",
+        "submitted_at": 1786477373.7051256
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_044248/bootstrap_004.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_044248,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=82abafba1d826ddba3ac7fde8553ac1b44aaa5e6e17e492bc391c2d50f980136,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=4",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533232.opbs",
+        "job_id_normalized": "2533232",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 4,
+        "stderr": "",
+        "stdout": "2533232.opbs",
+        "submitted_at": 1786477373.854459
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_044248/bootstrap_005.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_044248,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=82abafba1d826ddba3ac7fde8553ac1b44aaa5e6e17e492bc391c2d50f980136,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=5",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533233.opbs",
+        "job_id_normalized": "2533233",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 5,
+        "stderr": "",
+        "stdout": "2533233.opbs",
+        "submitted_at": 1786477373.9667377
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_044248/bootstrap_006.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_044248,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=82abafba1d826ddba3ac7fde8553ac1b44aaa5e6e17e492bc391c2d50f980136,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=6",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533234.opbs",
+        "job_id_normalized": "2533234",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 6,
+        "stderr": "",
+        "stdout": "2533234.opbs",
+        "submitted_at": 1786477374.1094089
+      },
+      {
+        "command": [
+          "qsub",
+          "-q",
+          "debug-g",
+          "-l",
+          "walltime=00:25:00",
+          "-o",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan05/plan05_failure_no_replacement_20260812_044248/bootstrap_007.log",
+          "-v",
+          "FS_DILOCO_SHARED_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan05_failure_no_replacement_20260812_044248,FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256=82abafba1d826ddba3ac7fde8553ac1b44aaa5e6e17e492bc391c2d50f980136,PROJECT_ROOT=/work/xg24i002/x10041/fsb_decoupled_diloco,BOOTSTRAP_SLOT=7",
+          "/work/xg24i002/x10041/fsb_decoupled_diloco/scripts/miyabi/agent/run_learner.pbs"
+        ],
+        "job_id": "2533235.opbs",
+        "job_id_normalized": "2533235",
+        "returncode": 0,
+        "role": "bootstrap_learner",
+        "slot": 7,
+        "stderr": "",
+        "stdout": "2533235.opbs",
+        "submitted_at": 1786477374.2154539
+      }
+    ]
+  },
+  "source": {
+    "commit": null,
+    "dirty": null,
+    "fingerprint": null,
+    "scopes": null
+  },
+  "status": "FAIL"
+}
