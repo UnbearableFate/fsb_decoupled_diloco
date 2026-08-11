@@ -12,6 +12,8 @@ from types import ModuleType
 
 import pytest
 
+from fs_diloco.storage.paths import RunPaths
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SUPERVISOR = ROOT / "do_experiments" / "experiment04" / "scenario_supervisor.py"
@@ -217,7 +219,16 @@ def _finalized_authority(
         );
         CREATE TABLE global_versions(
             version INTEGER,
+            predecessor_version INTEGER,
+            publication_id TEXT,
+            weight_relative_path TEXT,
+            weight_size INTEGER,
+            weight_sha256 TEXT,
+            optim_relative_path TEXT,
+            optim_size INTEGER,
+            optim_sha256 TEXT,
             committed_by_epoch INTEGER,
+            committed_by_owner_id TEXT,
             committed_at REAL,
             direct_weight_tokens_applied INTEGER
         );
@@ -344,10 +355,36 @@ def _finalized_authority(
                     (102, terminal_instance, "stopped"),
                 ),
             )
+    paths = RunPaths(path.parent)
     for version in range(11):
+        publication_id = f"00000000-0000-0000-0000-{version:012d}"
+        weight_path = paths.epoch_weight_path(1, "syncer-1", version, publication_id)
+        optim_path = paths.epoch_outer_optim_path(1, "syncer-1", version, publication_id)
+        weight_payload = f"weight-{version}".encode("utf-8")
+        optim_payload = f"outer-state-{version}".encode("utf-8")
+        for object_path, payload in (
+            (weight_path, weight_payload),
+            (optim_path, optim_payload),
+        ):
+            object_path.parent.mkdir(parents=True, exist_ok=True)
+            object_path.write_bytes(payload)
+            object_path.chmod(0o444)
         connection.execute(
-            "INSERT INTO global_versions VALUES(?, 1, ?, ?)",
-            (version, 100.0 + version, 0 if version == 0 else 13_107_200),
+            "INSERT INTO global_versions VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)",
+            (
+                version,
+                None if version == 0 else version - 1,
+                publication_id,
+                weight_path.relative_to(path.parent).as_posix(),
+                len(weight_payload),
+                hashlib.sha256(weight_payload).hexdigest(),
+                optim_path.relative_to(path.parent).as_posix(),
+                len(optim_payload),
+                hashlib.sha256(optim_payload).hexdigest(),
+                "syncer-1",
+                100.0 + version,
+                0 if version == 0 else 13_107_200,
+            ),
         )
     for version in range(1, 11):
         for contributor in range(4):
@@ -611,6 +648,7 @@ def test_no_failure_authority_oracle_requires_ten_exact_four_way_merges(tmp_path
     assert evidence["integrity_check"] == ["ok"]
     assert len(evidence["merge_counts"]) == 10
     assert len(evidence["bootstrap_launches"]) == 8
+    assert len(evidence["publication_objects"]) == 22
 
     connection = sqlite3.connect(database)
     connection.execute("UPDATE updates SET inner_steps=199 WHERE update_id='update-10-3'")
@@ -642,6 +680,34 @@ def test_authority_oracle_rejects_token_rollup_drift(tmp_path: Path) -> None:
     connection.close()
 
     with pytest.raises(RuntimeError, match="token rollup"):
+        module._final_authority_evidence(
+            database,
+            run_root=tmp_path,
+            config=module.load_config(
+                ROOT / "configs/experiments/gpt2_wikitext2_8l_200x10_fixed.yaml"
+            ),
+            scenario=module.SCENARIOS["no_failure"],
+            first_syncer_job_id="100.opbs",
+            victim=None,
+            replacement=None,
+        )
+
+
+def test_authority_oracle_rejects_checkpoint_identity_drift(tmp_path: Path) -> None:
+    """Formal success requires every committed checkpoint to match its durable identity."""
+
+    module = _module()
+    database = tmp_path / "authority.sqlite3"
+    _finalized_authority(database)
+    connection = sqlite3.connect(database)
+    connection.execute(
+        "UPDATE global_versions SET weight_sha256=? WHERE version=10",
+        ("0" * 64,),
+    )
+    connection.commit()
+    connection.close()
+
+    with pytest.raises(RuntimeError, match="publication object identity"):
         module._final_authority_evidence(
             database,
             run_root=tmp_path,

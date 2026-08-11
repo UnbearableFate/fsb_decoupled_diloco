@@ -15,7 +15,7 @@ import tempfile
 import time
 import traceback
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from fs_diloco.core.config import Config, load_config
@@ -811,6 +811,89 @@ def _token_accounting_evidence(
     }
 
 
+def _publication_object_evidence(
+    run_root: Path, versions: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Bind every committed version to its exact immutable checkpoint objects."""
+
+    paths = RunPaths(run_root)
+    evidence: list[dict[str, Any]] = []
+    for row in versions:
+        version = int(row["version"])
+        epoch = int(row["committed_by_epoch"])
+        owner_id = str(row["committed_by_owner_id"])
+        publication_id = str(row["publication_id"])
+        predecessor = row["predecessor_version"]
+        expected_predecessor = None if version == 0 else version - 1
+        if predecessor != expected_predecessor:
+            raise RuntimeError("publication history has a non-contiguous predecessor")
+        objects = (
+            (
+                "weight",
+                "weight_relative_path",
+                "weight_size",
+                "weight_sha256",
+                paths.epoch_weight_path(epoch, owner_id, version, publication_id),
+            ),
+            (
+                "outer_state",
+                "optim_relative_path",
+                "optim_size",
+                "optim_sha256",
+                paths.epoch_outer_optim_path(epoch, owner_id, version, publication_id),
+            ),
+        )
+        for kind, path_field, size_field, sha_field, expected_path in objects:
+            relative = str(row[path_field])
+            expected_relative = expected_path.relative_to(run_root).as_posix()
+            parsed = PurePosixPath(relative)
+            if (
+                relative != expected_relative
+                or parsed.is_absolute()
+                or "\\" in relative
+                or "\0" in relative
+                or any(part in {"", ".", ".."} for part in parsed.parts)
+            ):
+                raise RuntimeError(
+                    "publication object path is not canonical for its authority identity"
+                )
+            current = run_root
+            try:
+                for component in parsed.parts[:-1]:
+                    current = current / component
+                    if not stat.S_ISDIR(current.lstat().st_mode):
+                        raise RuntimeError(
+                            "publication object path parent is not a directory"
+                        )
+                metadata = expected_path.lstat()
+            except FileNotFoundError as exc:
+                raise RuntimeError(f"publication object is missing: {relative}") from exc
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
+                raise RuntimeError(
+                    f"publication object is not an immutable regular file: {relative}"
+                )
+            digest = hashlib.sha256()
+            with expected_path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            observed_sha256 = digest.hexdigest()
+            if (
+                metadata.st_size != int(row[size_field])
+                or observed_sha256 != str(row[sha_field])
+            ):
+                raise RuntimeError(f"publication object identity mismatch: {relative}")
+            evidence.append(
+                {
+                    "version": version,
+                    "kind": kind,
+                    "relative_path": relative,
+                    "size": metadata.st_size,
+                    "sha256": observed_sha256,
+                }
+            )
+    return evidence
+
+
 def _final_authority_evidence(
     database: Path,
     *,
@@ -936,6 +1019,7 @@ def _final_authority_evidence(
         aggregate["min_inner_steps"] = min(aggregate["min_inner_steps"], inner_steps)
         aggregate["max_inner_steps"] = max(aggregate["max_inner_steps"], inner_steps)
     merge_counts = [merge_totals[version] for version in sorted(merge_totals)]
+    publication_objects = _publication_object_evidence(run_root, versions)
     accounting = _token_accounting_evidence(
         receipts=receipts,
         updates=updates,
@@ -1247,6 +1331,7 @@ def _final_authority_evidence(
         "learner_instances": instances,
         "syncer_epochs": epochs,
         "global_versions": versions,
+        "publication_objects": publication_objects,
         "capacity_observations": capacity_observations,
         "replacement_boundary": replacement_boundary,
     }
