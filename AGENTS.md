@@ -12,7 +12,7 @@ This repository implements a filesystem-based Decoupled DiLoCo prototype.
 
 Before submitting any PBS script:
 
-1. Run `bash -n scripts/miyabi/*.pbs` in a safe static-validation environment.
+1. Run `bash -n scripts/miyabi/agent/*.pbs` in a safe static-validation environment.
 2. Replace every `#PBS -W group_list=<group_id>` placeholder with a valid, literal group ID.
 3. Estimate runtime from the workload and prior evidence, then request the shortest practical `walltime` that still has enough safety margin for startup variance, runtime variance, and orderly teardown. The objective is to improve scheduling while preserving a high probability that the job finishes successfully; do not shave the margin so tightly that the test is likely to time out. At least give 10 mins. When a script's default is materially longer than this evidence-based estimate, override it explicitly in `qsub -l walltime=...`.
 4. Do not submit the script until these checks are complete.

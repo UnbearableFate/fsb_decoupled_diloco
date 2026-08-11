@@ -42,7 +42,7 @@ export SYNCER_CUDA_VISIBLE_DEVICES LEARNER_CUDA_VISIBLE_DEVICES
 export FS_DILOCO_FAULT_SCENARIO="${FS_DILOCO_FAULT_SCENARIO:-none}"
 
 checker=(
-  "$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/check_full_protocol_run.py"
+  "$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/agent/check_full_protocol_run.py"
   --gate "$GATE"
   --experiment-id "$EXPERIMENT_ID"
   --requirement-id "$REQUIREMENT_ID"
@@ -72,6 +72,6 @@ publish_blocked_on_exit() {
 }
 trap publish_blocked_on_exit EXIT
 
-bash "$PROJECT_ROOT/scripts/miyabi/run_full_protocol_allocation.sh"
+bash "$PROJECT_ROOT/scripts/miyabi/agent/run_full_protocol_allocation.sh"
 "${checker[@]}"
 trap - EXIT

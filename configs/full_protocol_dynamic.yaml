@@ -48,7 +48,7 @@ scaling:
   scheduler_reconcile_interval_seconds: 5.0
   scheduler_uncertainty_timeout_seconds: 30.0
   starvation_observation_seconds: 10.0
-  learner_pbs_script: scripts/miyabi/run_learner.pbs
+  learner_pbs_script: scripts/miyabi/agent/run_learner.pbs
   learner_walltime: "00:10:00"
   learner_queue: regular-g
 terminal:

@@ -16,7 +16,7 @@ PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 
 cd "$PROJECT_ROOT"
 test -x "$PYTHON_BIN"
-exec "$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/run_validation_suite.py" \
+exec "$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/agent/run_validation_suite.py" \
   --project-root "$PROJECT_ROOT" \
   --raw-log "$VALIDATION_RAW_LOG" \
   --output "$VALIDATION_OUTPUT"

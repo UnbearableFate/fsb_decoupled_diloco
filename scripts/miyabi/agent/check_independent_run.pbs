@@ -33,7 +33,7 @@ mkdir -p "$LOG_ROOT"
   exit 2
 }
 
-"$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/capture_source_identity.py" \
+"$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/agent/capture_source_identity.py" \
   --project-root "$PROJECT_ROOT" \
   --output-json "$LOG_ROOT/source_identity.json" \
   --output-env "$LOG_ROOT/source_identity.env" \
@@ -41,7 +41,7 @@ mkdir -p "$LOG_ROOT"
 "$PYTHON_BIN" -m fs_diloco.tools.analysis "$SHARED_ROOT" > "$LOG_ROOT/summary.json"
 
 checker=(
-  "$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/check_full_protocol_run.py"
+  "$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/agent/check_full_protocol_run.py"
   --gate "$GATE"
   --experiment-id "$EXPERIMENT_ID"
   --requirement-id "$REQUIREMENT_ID"

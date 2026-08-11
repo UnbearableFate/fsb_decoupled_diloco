@@ -28,7 +28,7 @@ command -v rg >/dev/null
 
 PYTHON_BIN="$PROJECT_ROOT/.venv/bin/python"
 CONFIG="$PROJECT_ROOT/configs/full_protocol_static.yaml"
-LAUNCHER_SCRIPT="$PROJECT_ROOT/scripts/miyabi/run_independent_launcher.pbs"
+LAUNCHER_SCRIPT="$PROJECT_ROOT/scripts/miyabi/agent/run_independent_launcher.pbs"
 
 LAUNCHER_QUEUE="debug-g"
 ACTOR_QUEUE="debug-g"
@@ -53,8 +53,8 @@ if [[ -n "$SOURCE_STATUS" ]]; then
 fi
 
 # Enforce the repository's mandatory PBS pre-submit checks.
-bash -n "$PROJECT_ROOT"/scripts/miyabi/*.pbs
-for pbs_script in "$PROJECT_ROOT"/scripts/miyabi/*.pbs; do
+bash -n "$PROJECT_ROOT"/scripts/miyabi/agent/*.pbs
+for pbs_script in "$PROJECT_ROOT"/scripts/miyabi/agent/*.pbs; do
   group_directive="$(rg -N '^#PBS -W group_list=' "$pbs_script")"
   if [[ "$group_directive" != '#PBS -W group_list=xg24i002' ]]; then
     echo "Invalid PBS group directive in $pbs_script: $group_directive" >&2

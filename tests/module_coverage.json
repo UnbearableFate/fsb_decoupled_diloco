@@ -352,77 +352,77 @@
       "tests": ["tests/tools/test_resolve_scheduler_uncertainty.py::test_scheduler_resolution_is_dry_run_by_default_and_apply_is_create_no_replace"]
     },
     {
-      "surface": "scripts/miyabi/actor_identity.sh",
+      "surface": "scripts/miyabi/agent/actor_identity.sh",
       "boundary": "descriptor-bound actor source environment",
       "tests": ["tests/harness/test_full_protocol_harness.py::test_actor_identity_shell_exports_exact_descriptor_bound_source"]
     },
     {
-      "surface": "scripts/miyabi/capture_source_identity.py",
+      "surface": "scripts/miyabi/agent/capture_source_identity.py",
       "boundary": "atomic source identity JSON and environment publication",
       "tests": ["tests/test_capture_source_identity.py::test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources"]
     },
     {
-      "surface": "scripts/miyabi/check_full_protocol_run.py",
+      "surface": "scripts/miyabi/agent/check_full_protocol_run.py",
       "boundary": "structured Full Protocol acceptance Checker",
       "tests": ["tests/harness/test_full_protocol_harness.py::test_aggregate_checker_mutations_change_acceptance_to_fail"]
     },
     {
-      "surface": "scripts/miyabi/check_independent_run.pbs",
+      "surface": "scripts/miyabi/agent/check_independent_run.pbs",
       "boundary": "independent actor topology and terminal run Checker wrapper",
       "tests": ["tests/harness/test_full_protocol_harness.py::test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner"]
     },
     {
-      "surface": "scripts/miyabi/check_plan_completion.py",
+      "surface": "scripts/miyabi/agent/check_plan_completion.py",
       "boundary": "same-target formal ladder and requirement completion aggregation",
       "tests": ["tests/harness/test_plan_completion.py::test_completion_aggregate_accepts_registered_staged_inputs"]
     },
     {
-      "surface": "scripts/miyabi/run_full_protocol.pbs",
+      "surface": "scripts/miyabi/agent/run_full_protocol.pbs",
       "boundary": "single multi-node wrapper and structured early-exit evidence",
       "tests": ["tests/harness/test_full_protocol_harness.py::test_pbs_wrapper_publishes_blocked_artifact_when_allocation_exits"]
     },
     {
-      "surface": "scripts/miyabi/run_full_protocol_allocation.sh",
+      "surface": "scripts/miyabi/agent/run_full_protocol_allocation.sh",
       "boundary": "exact node-to-rank allocation composition",
       "tests": ["tests/harness/test_full_protocol_harness.py::test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner"]
     },
     {
-      "surface": "scripts/miyabi/run_full_protocol_rank.sh",
+      "surface": "scripts/miyabi/agent/run_full_protocol_rank.sh",
       "boundary": "normal, learner replacement and syncer takeover rank scenarios",
       "tests": ["tests/harness/test_full_protocol_harness.py::test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner"]
     },
     {
-      "surface": "scripts/miyabi/run_independent_launcher.pbs",
+      "surface": "scripts/miyabi/agent/run_independent_launcher.pbs",
       "boundary": "compute-side independent actor initialization and submission",
       "tests": ["tests/harness/test_full_protocol_harness.py::test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner"]
     },
     {
-      "surface": "scripts/miyabi/run_learner.pbs",
+      "surface": "scripts/miyabi/agent/run_learner.pbs",
       "boundary": "current independent learner PBS entry",
       "tests": ["tests/tools/test_launch_independent_run.py::test_launch_uses_one_syncer_and_scalar_learner_jobs"]
     },
     {
-      "surface": "scripts/miyabi/run_multi_agent_review.pbs",
+      "surface": "scripts/miyabi/agent/run_multi_agent_review.pbs",
       "boundary": "read-only isolated reviewer orchestration",
       "tests": ["tests/harness/test_full_protocol_harness.py::test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner"]
     },
     {
-      "surface": "scripts/miyabi/run_syncer.pbs",
+      "surface": "scripts/miyabi/agent/run_syncer.pbs",
       "boundary": "current independent syncer PBS entry",
       "tests": ["tests/tools/test_launch_independent_run.py::test_launch_uses_one_syncer_and_scalar_learner_jobs"]
     },
     {
-      "surface": "scripts/miyabi/run_validation_suite.pbs",
+      "surface": "scripts/miyabi/agent/run_validation_suite.pbs",
       "boundary": "one-node validation suite PBS wrapper",
       "tests": ["tests/harness/test_full_protocol_harness.py::test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner"]
     },
     {
-      "surface": "scripts/miyabi/run_validation_suite.py",
+      "surface": "scripts/miyabi/agent/run_validation_suite.py",
       "boundary": "atomic one-node validation artifact producer",
       "tests": ["tests/harness/test_validation_suite.py::test_validation_runner_publishes_create_only_schema_complete_pass"]
     },
     {
-      "surface": "scripts/miyabi/submit_independent_8l1s_50x10.sh",
+      "surface": "scripts/miyabi/agent/submit_independent_8l1s_50x10.sh",
       "boundary": "one-command login-node submission for the validated independent 8+1 shape",
       "tests": ["tests/tools/test_launch_independent_run.py::test_one_command_submission_wrapper_freezes_the_validated_actor_shape"]
     }

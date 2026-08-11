@@ -174,7 +174,7 @@ class ScalingSection(ConfigSection):
     scheduler_reconcile_interval_seconds: float = 30.0
     scheduler_uncertainty_timeout_seconds: float = 300.0
     starvation_observation_seconds: float = 120.0
-    learner_pbs_script: str = "scripts/miyabi/run_learner.pbs"
+    learner_pbs_script: str = "scripts/miyabi/agent/run_learner.pbs"
     learner_walltime: str | None = None
     learner_queue: str | None = None
 

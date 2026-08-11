@@ -1,3 +1,5 @@
+"""Verify the one-node validation runner and its evidence contract."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -10,7 +12,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-RUNNER = ROOT / "scripts/miyabi/run_validation_suite.py"
+RUNNER = ROOT / "scripts/miyabi/agent/run_validation_suite.py"
 
 
 def _module():

@@ -1,3 +1,5 @@
+"""Exercise independent Full Protocol initialization and PBS submission commands."""
+
 from __future__ import annotations
 
 import json
@@ -12,7 +14,7 @@ from fs_diloco.tools import launch_independent_run
 def test_one_command_submission_wrapper_freezes_the_validated_actor_shape() -> None:
     """The login-node wrapper must retain one 8+1 debug launch with safe walltimes."""
 
-    script = Path("scripts/miyabi/submit_independent_8l1s_50x10.sh").read_text(
+    script = Path("scripts/miyabi/agent/submit_independent_8l1s_50x10.sh").read_text(
         encoding="utf-8"
     )
 

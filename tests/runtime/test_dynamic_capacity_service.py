@@ -1,3 +1,5 @@
+"""Exercise dynamic capacity planning and PBS launch reconciliation."""
+
 from __future__ import annotations
 
 import hashlib
@@ -38,6 +40,8 @@ def _identity() -> AuthorityIdentity:
 
 
 def _runtime(tmp_path: Path, clock: Clock, *, streams: int = 2):
+    """Create a dynamic-capacity runtime fixture with a recording scheduler."""
+
     scope = DynamicMembershipScope(streams)
     database = tmp_path / "authority.sqlite3"
     initialize_authority(database, _identity(), scope, wall_clock=clock)
@@ -64,7 +68,7 @@ def _runtime(tmp_path: Path, clock: Clock, *, streams: int = 2):
         scheduler_reconcile_interval_seconds=1.0,
         scheduler_uncertainty_timeout_seconds=3.0,
         starvation_observation_seconds=1.0,
-        learner_pbs_script="scripts/miyabi/run_learner.pbs",
+        learner_pbs_script="scripts/miyabi/agent/run_learner.pbs",
         learner_walltime="00:10:00",
         learner_queue="debug-g",
     )
@@ -93,6 +97,8 @@ def _observation(job_id: str, classification: str) -> PBSJobObservation:
 
 
 def test_persistent_low_windows_plan_and_submit_exact_stream(tmp_path: Path) -> None:
+    """Persistent low capacity must submit the exact planned stream and script."""
+
     clock = Clock()
     authority, _leader, scheduler, service = _runtime(tmp_path, clock)
     try:
@@ -111,7 +117,7 @@ def test_persistent_low_windows_plan_and_submit_exact_stream(tmp_path: Path) -> 
         assert launches[0]["stream_id"] == 0
         assert scheduler.submissions == [
             {
-                "script": "scripts/miyabi/run_learner.pbs",
+                "script": "scripts/miyabi/agent/run_learner.pbs",
                 "launch_request_id": launches[0]["request_id"],
                 "stream_id": 0,
                 "replace_instance_id": None,

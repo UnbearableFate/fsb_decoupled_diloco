@@ -1,3 +1,5 @@
+"""Verify strict aggregation of the registered plan completion evidence."""
+
 from __future__ import annotations
 
 import copy
@@ -12,7 +14,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-CHECKER = ROOT / "scripts/miyabi/check_plan_completion.py"
+CHECKER = ROOT / "scripts/miyabi/agent/check_plan_completion.py"
 MANIFEST = ROOT / "reports/checked/plan03-1/formal-ladder-manifest.json"
 
 
@@ -47,6 +49,9 @@ def _source() -> dict[str, object]:
 
 
 def _registered_manifest(project_root: Path) -> dict[str, object]:
+    """Materialize a registered manifest fixture using the current producer paths."""
+
+    module = _module()
     manifest = copy.deepcopy(json.loads(MANIFEST.read_text(encoding="utf-8")))
     source = _source()
     manifest["state"] = "registered"
@@ -56,6 +61,7 @@ def _registered_manifest(project_root: Path) -> dict[str, object]:
         "fingerprint": source["fingerprint"],
     }
     for gate in manifest["gates"]:
+        gate["producer"] = module.GATE_CONTRACTS[gate["id"]]["producer"]
         supporting = project_root / f"evidence/{gate['id']}.log"
         supporting.parent.mkdir(parents=True, exist_ok=True)
         supporting.write_text(f"independent evidence for {gate['id']}\n", encoding="utf-8")
@@ -73,6 +79,7 @@ def _registered_manifest(project_root: Path) -> dict[str, object]:
             }
             for path in supporting_paths
         ]
+    manifest["aggregate"]["producer"] = "scripts/miyabi/agent/check_plan_completion.py"
     return manifest
 
 

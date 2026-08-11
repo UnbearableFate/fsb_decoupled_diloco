@@ -115,6 +115,8 @@ def launch(
     log_root: str | Path | None = None,
     actor_queue: str | None = None,
 ) -> dict[str, Any]:
+    """Initialize a run and optionally submit its independent PBS actors."""
+
     project_root = Path(project_root).resolve()
     # Validate scheduler resources before init_run creates the immutable run
     # root.  A missing walltime must not leave a bootstrapped but unsubmitted
@@ -161,7 +163,7 @@ def launch(
         *([] if resolved_log_root is None else ["-o", str(resolved_log_root / "syncer.log")]),
         "-v",
         variables,
-        str(project_root / "scripts/miyabi/run_syncer.pbs"),
+        str(project_root / "scripts/miyabi/agent/run_syncer.pbs"),
     ]
     dynamic = shared.membership.mode == "dynamic"
     if dynamic:
@@ -177,7 +179,7 @@ def launch(
                 ),
                 "-v",
                 f"{variables},BOOTSTRAP_SLOT={slot}",
-                str(project_root / "scripts/miyabi/run_learner.pbs"),
+                str(project_root / "scripts/miyabi/agent/run_learner.pbs"),
             ]
             for slot in range(shared.membership.bootstrap_instances)
         ]
@@ -198,7 +200,7 @@ def launch(
                     f"FS_DILOCO_STATIC_LAUNCH_PREFIX={descriptor['descriptor_sha256']},"
                     f"LEARNER_INDEX={index}"
                 ),
-                str(project_root / "scripts/miyabi/run_learner.pbs"),
+                str(project_root / "scripts/miyabi/agent/run_learner.pbs"),
             ]
             for index in range(int(shared.sync.num_learners))
         ]

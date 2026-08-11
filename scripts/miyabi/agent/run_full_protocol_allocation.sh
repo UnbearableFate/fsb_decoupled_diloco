@@ -36,7 +36,7 @@ fi
 mkdir -p "$LOG_ROOT"
 source_json="$LOG_ROOT/source_identity.json"
 source_env="$LOG_ROOT/source_identity.env"
-"$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/capture_source_identity.py" \
+"$PYTHON_BIN" "$PROJECT_ROOT/scripts/miyabi/agent/capture_source_identity.py" \
   --project-root "$PROJECT_ROOT" \
   --output-json "$source_json" \
   --output-env "$source_env" \
@@ -122,6 +122,6 @@ mpirun \
   --bind-to none \
   -np "$EXPECTED_NODES" \
   /usr/bin/env "${MPI_ENV_ARGS[@]}" \
-  bash "$PROJECT_ROOT/scripts/miyabi/run_full_protocol_rank.sh"
+  bash "$PROJECT_ROOT/scripts/miyabi/agent/run_full_protocol_rank.sh"
 
 "$PYTHON_BIN" -m fs_diloco.tools.analysis "$SHARED_ROOT" | tee "$LOG_ROOT/summary.json"

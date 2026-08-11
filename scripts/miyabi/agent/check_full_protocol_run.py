@@ -1120,6 +1120,8 @@ def _diagnostic_artifact(
     *,
     status: str,
 ) -> dict[str, Any]:
+    """Build a schema-complete non-PASS artifact from an unavailable or failed gate."""
+
     try:
         source: dict[str, Any] | None = _source_identity(args.project_root.resolve())
     except Exception:
@@ -1129,7 +1131,7 @@ def _diagnostic_artifact(
         args.log_root.resolve(),
         args.output.resolve(),
     )
-    source_helper = args.project_root.resolve() / "scripts/miyabi/capture_source_identity.py"
+    source_helper = args.project_root.resolve() / "scripts/miyabi/agent/capture_source_identity.py"
     if not evidence_paths and source_helper.is_file():
         evidence_paths = [str(source_helper)]
     return {

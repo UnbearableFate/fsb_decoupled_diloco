@@ -1,3 +1,5 @@
+"""Exercise safe PBS command construction and scheduler observation parsing."""
+
 from __future__ import annotations
 
 import subprocess
@@ -62,6 +64,8 @@ def test_submit_passes_exact_environment_as_one_argument_and_rejects_unsafe_valu
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Learner submission must preserve exact variables and reject unsafe values."""
+
     commands: list[list[str]] = []
 
     def run(command, **_kwargs):
@@ -71,7 +75,7 @@ def test_submit_passes_exact_environment_as_one_argument_and_rejects_unsafe_valu
     monkeypatch.setattr(subprocess, "run", run)
     scheduler = PBSScheduler(qsub_binary="qsub-safe")
     result = scheduler.submit_learner(
-        script="scripts/miyabi/run_learner.pbs",
+        script="scripts/miyabi/agent/run_learner.pbs",
         launch_request_id="launch-exact",
         stream_id=3,
         replace_instance_id="old-instance",
@@ -95,7 +99,7 @@ def test_submit_passes_exact_environment_as_one_argument_and_rejects_unsafe_valu
 
     with pytest.raises(ValueError, match="unsafe PBS variable"):
         scheduler.submit_learner(
-            script="scripts/miyabi/run_learner.pbs",
+            script="scripts/miyabi/agent/run_learner.pbs",
             launch_request_id="launch,unsafe",
             stream_id=3,
             replace_instance_id=None,

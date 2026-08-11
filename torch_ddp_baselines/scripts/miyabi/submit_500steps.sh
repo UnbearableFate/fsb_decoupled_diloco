@@ -18,7 +18,7 @@ if [[ -n "${PBS_JOBID:-}" ]]; then
   exit 2
 fi
 
-bash -n "$PROJECT_ROOT"/scripts/miyabi/*.pbs
+bash -n "$PROJECT_ROOT"/scripts/miyabi/agent/*.pbs
 bash -n "$PBS_SCRIPT"
 group_directive="$(sed -n '/^#PBS -W group_list=/p' "$PBS_SCRIPT")"
 if [[ "$group_directive" != '#PBS -W group_list=xg24i002' ]]; then

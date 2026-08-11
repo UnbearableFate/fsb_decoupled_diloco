@@ -162,7 +162,7 @@ Codex/GPT coordinator 必须在以下位置保存明确结论：
 
 外部 reviewer 是 best effort：不可用不等于 APPROVE，也不自动阻断；任何有效 finding 都必须处置。Codex/GPT 必须先保存自己的结论，再读取本轮外部报告。
 
-所有外部 reviewer 必须通过 `scripts/miyabi/run_multi_agent_review.pbs` 在 compute node 上运行。Runner 当前支持的 `REVIEW_KIND` 为：
+所有外部 reviewer 必须通过 `scripts/miyabi/agent/run_multi_agent_review.pbs` 在 compute node 上运行。Runner 当前支持的 `REVIEW_KIND` 为：
 
 ```text
 test-design | failure | phase | preformal-plan-complete |
@@ -211,7 +211,7 @@ Critical/High 必须修复或以强反证拒绝。Medium 在当前 scope 内修�
 
 提交任何 PBS script 前必须：
 
-1. 运行 `bash -n scripts/miyabi/*.pbs`；
+1. 运行 `bash -n scripts/miyabi/agent/*.pbs`；
 2. 确认每个 `#PBS -W group_list=` 是有效 literal group ID；
 3. 根据 workload 和既有证据申请最短但有安全余量的 walltime，至少 10 分钟；
 4. 明确成功证据，不能只以 PBS exit code 判定 PASS。

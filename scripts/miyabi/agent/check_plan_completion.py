@@ -43,7 +43,7 @@ REQUIREMENT_IDS = {
 }
 GATE_CONTRACTS = {
     "U1-final-one-node-validation": {
-        "producer": "scripts/miyabi/run_validation_suite.py",
+        "producer": "scripts/miyabi/agent/run_validation_suite.py",
         "requirements": ["UNIT-01", "HARNESS-01"],
         "kind": "validation",
         "artifact_gate": "U1-one-node-validation",
@@ -65,7 +65,7 @@ GATE_CONTRACTS = {
         },
     },
     "F1-final-functional-normal": {
-        "producer": "scripts/miyabi/check_full_protocol_run.py",
+        "producer": "scripts/miyabi/agent/check_full_protocol_run.py",
         "requirements": ["FUNC-4L1S-01"],
         "kind": "runtime",
         "artifact_gate": "F1-final-functional-normal",
@@ -84,7 +84,7 @@ GATE_CONTRACTS = {
         "config": "configs/full_protocol_functional.yaml",
     },
     "F1-final-learner-replacement": {
-        "producer": "scripts/miyabi/check_full_protocol_run.py",
+        "producer": "scripts/miyabi/agent/check_full_protocol_run.py",
         "requirements": ["FAULT-4L1S-01"],
         "kind": "runtime",
         "artifact_gate": "F1-final-learner-replacement",
@@ -103,7 +103,7 @@ GATE_CONTRACTS = {
         "config": "configs/full_protocol_functional.yaml",
     },
     "F1-final-syncer-takeover": {
-        "producer": "scripts/miyabi/check_full_protocol_run.py",
+        "producer": "scripts/miyabi/agent/check_full_protocol_run.py",
         "requirements": ["FAULT-4L1S-01"],
         "kind": "runtime",
         "artifact_gate": "F1-final-syncer-takeover",
@@ -123,7 +123,7 @@ GATE_CONTRACTS = {
         "config": "configs/full_protocol_functional.yaml",
     },
     "G1-final-formal-8l1s": {
-        "producer": "scripts/miyabi/check_full_protocol_run.py",
+        "producer": "scripts/miyabi/agent/check_full_protocol_run.py",
         "requirements": ["FORMAL-8L1S-01"],
         "kind": "runtime",
         "artifact_gate": "G1-final-formal-8l1s",
@@ -350,7 +350,7 @@ def _validate_registered_manifest(
         raise RuntimeError("formal ladder supporting evidence is not independent")
     aggregate = manifest["aggregate"]
     if aggregate != {
-        "producer": "scripts/miyabi/check_plan_completion.py",
+        "producer": "scripts/miyabi/agent/check_plan_completion.py",
         "matrix_path": "reports/DOING/plan03-1/requirement-matrix.csv",
         "staged_final_requirement": "FINAL-01",
     }:

@@ -1,10 +1,12 @@
+"""Verify canonical source identity capture across tracked runtime scopes."""
+
 import json
 import subprocess
 import sys
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).parents[1] / "scripts" / "miyabi" / "capture_source_identity.py"
+SCRIPT = Path(__file__).parents[1] / "scripts" / "miyabi" / "agent" / "capture_source_identity.py"
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -37,17 +39,21 @@ def _capture(repo: Path, suffix: str) -> dict:
 
 
 def test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources(tmp_path):
+    """Runtime source changes must alter identity while evidence-only changes do not."""
+
     repo = tmp_path / "repo"
     (repo / "fs_diloco").mkdir(parents=True)
     (repo / "configs").mkdir()
     (repo / "docs").mkdir()
-    (repo / "scripts" / "miyabi").mkdir(parents=True)
+    (repo / "scripts" / "miyabi" / "agent").mkdir(parents=True)
     (repo / "tests").mkdir()
     (repo / "fs_diloco" / "module.py").write_text("VALUE = 1\n", encoding="utf-8")
     (repo / "configs" / "run.yaml").write_text("run: {}\n", encoding="utf-8")
     (repo / "docs" / "contract.md").write_text("# Contract\n", encoding="utf-8")
     (repo / "tests" / "test_module.py").write_text("def test_value(): pass\n", encoding="utf-8")
-    (repo / "scripts" / "miyabi" / "run.pbs").write_text("#!/bin/bash\n", encoding="utf-8")
+    (repo / "scripts" / "miyabi" / "agent" / "run.pbs").write_text(
+        "#!/bin/bash\n", encoding="utf-8"
+    )
     (repo / "README.md").write_text("# Project\n", encoding="utf-8")
     (repo / "pyproject.toml").write_text("[project]\nname = 'test'\n", encoding="utf-8")
     (repo / ".gitignore").write_text("uv.lock\n", encoding="utf-8")
@@ -63,7 +69,7 @@ def test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources(tm
         "configs/run.yaml",
         "docs/contract.md",
         "tests/test_module.py",
-        "scripts/miyabi/run.pbs",
+        "scripts/miyabi/agent/run.pbs",
         "README.md",
         "pyproject.toml",
     )
@@ -78,7 +84,7 @@ def test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources(tm
         "fs_diloco/module.py",
         "pyproject.toml",
         "README.md",
-        "scripts/miyabi/run.pbs",
+        "scripts/miyabi/agent/run.pbs",
         "tests/test_module.py",
     }
 

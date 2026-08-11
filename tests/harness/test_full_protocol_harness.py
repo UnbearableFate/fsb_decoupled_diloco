@@ -1,3 +1,5 @@
+"""Exercise the Full Protocol harness and its durable acceptance evidence."""
+
 from __future__ import annotations
 
 import hashlib
@@ -34,7 +36,7 @@ from tests.support.protocol import (
 
 
 ROOT = Path(__file__).resolve().parents[2]
-CHECKER = ROOT / "scripts/miyabi/check_full_protocol_run.py"
+CHECKER = ROOT / "scripts/miyabi/agent/check_full_protocol_run.py"
 
 
 def _checker_module():
@@ -1093,6 +1095,8 @@ def test_checker_rejects_unregistered_fault_scenario() -> None:
 
 
 def test_actor_identity_shell_exports_exact_descriptor_bound_source(tmp_path: Path) -> None:
+    """Actor launchers must inherit the source identity bound to their descriptor."""
+
     identity = capture_source_identity(ROOT)
     descriptor = tmp_path / "run_descriptor.json"
     descriptor.write_text(
@@ -1108,7 +1112,7 @@ def test_actor_identity_shell_exports_exact_descriptor_bound_source(tmp_path: Pa
         ),
         encoding="utf-8",
     )
-    script = ROOT / "scripts/miyabi/actor_identity.sh"
+    script = ROOT / "scripts/miyabi/agent/actor_identity.sh"
     probe = """
 set -eu
 source "$1"
@@ -1142,13 +1146,15 @@ printf '%s\n' \
 
 
 def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner() -> None:
-    pbs_scripts = tuple(sorted((ROOT / "scripts/miyabi").glob("*.pbs")))
+    """Current PBS entrypoints must retain safe resources and one canonical runner graph."""
+
+    pbs_scripts = tuple(sorted((ROOT / "scripts/miyabi/agent").glob("*.pbs")))
     assert pbs_scripts
     for path in pbs_scripts:
         source = path.read_text(encoding="utf-8")
         assert "#PBS -W group_list=xg24i002" in source
         assert "group_list=<" not in source
-    wrapper = (ROOT / "scripts/miyabi/run_full_protocol.pbs").read_text(encoding="utf-8")
+    wrapper = (ROOT / "scripts/miyabi/agent/run_full_protocol.pbs").read_text(encoding="utf-8")
     assert "#PBS -l walltime=00:10:00" in wrapper
     assert all(
         f"${{{name}:?{name} is required}}" in wrapper
@@ -1160,12 +1166,14 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     assert "EXPECTED_SYNCER_EPOCHS" not in wrapper
     assert "EXPECTED_REPLACED_LEARNER" not in wrapper
     assert "readonly SYNCER_TAKEOVER_BOUNDARY_VERSION=2" in wrapper
-    allocation = (ROOT / "scripts/miyabi/run_full_protocol_allocation.sh").read_text(
+    allocation = (ROOT / "scripts/miyabi/agent/run_full_protocol_allocation.sh").read_text(
         encoding="utf-8"
     )
     assert '"RUN_ID=$RUN_ID"' in allocation
     assert "--map-by ppr:1:node" in allocation
-    rank_runner = (ROOT / "scripts/miyabi/run_full_protocol_rank.sh").read_text(encoding="utf-8")
+    rank_runner = (ROOT / "scripts/miyabi/agent/run_full_protocol_rank.sh").read_text(
+        encoding="utf-8"
+    )
     assert "request_static_replacement" in rank_runner
     assert (
         'FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION="$SYNCER_TAKEOVER_BOUNDARY_VERSION"'
@@ -1177,14 +1185,14 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     assert "trap publish_blocked_on_exit EXIT" in wrapper
     assert "--blocked-reason" in wrapper
 
-    independent_launcher = (ROOT / "scripts/miyabi/run_independent_launcher.pbs").read_text(
+    independent_launcher = (ROOT / "scripts/miyabi/agent/run_independent_launcher.pbs").read_text(
         encoding="utf-8"
     )
     assert "fs_diloco.tools.launch_independent_run" in independent_launcher
     assert '--log-root "$LOG_ROOT"' in independent_launcher
     assert '--actor-queue "$ACTOR_QUEUE"' in independent_launcher
     assert "LAUNCH_RECEIPT" not in independent_launcher
-    independent_checker = (ROOT / "scripts/miyabi/check_independent_run.pbs").read_text(
+    independent_checker = (ROOT / "scripts/miyabi/agent/check_independent_run.pbs").read_text(
         encoding="utf-8"
     )
     assert '--expected-scheduler-jobs "$EXPECTED_SCHEDULER_JOBS"' in independent_checker
@@ -1192,20 +1200,22 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     assert "capture_source_identity.py" in independent_checker
     assert "trap publish_blocked_on_exit EXIT" in independent_checker
 
-    validation_wrapper = (ROOT / "scripts/miyabi/run_validation_suite.pbs").read_text(
+    validation_wrapper = (ROOT / "scripts/miyabi/agent/run_validation_suite.pbs").read_text(
         encoding="utf-8"
     )
     assert "run_validation_suite.py" in validation_wrapper
     assert "${VALIDATION_RAW_LOG:?VALIDATION_RAW_LOG is required}" in validation_wrapper
     assert "${VALIDATION_OUTPUT:?VALIDATION_OUTPUT is required}" in validation_wrapper
 
-    review_runner = (ROOT / "scripts/miyabi/run_multi_agent_review.pbs").read_text(encoding="utf-8")
+    review_runner = (ROOT / "scripts/miyabi/agent/run_multi_agent_review.pbs").read_text(
+        encoding="utf-8"
+    )
     assert review_runner.count("run_claude &") == 1
     assert review_runner.count("run_opencode \\") == 1
     assert 'CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-5}"' in review_runner
-    assert '${OPENCODE_MODELS:?OPENCODE_MODELS is required}' in review_runner
+    assert "${OPENCODE_MODELS:?OPENCODE_MODELS is required}" in review_runner
     assert "IFS=';' read -r -a OPENCODE_MODEL_LIST" in review_runner
-    assert "for index in \"${!OPENCODE_MODEL_LIST[@]}\"" in review_runner
+    assert 'for index in "${!OPENCODE_MODEL_LIST[@]}"' in review_runner
     assert "opencode-review-%02d" in review_runner
     assert '"${OPENCODE_RESULT_FILES[@]}"' in review_runner
 
@@ -1213,8 +1223,10 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
 def test_pbs_wrapper_publishes_blocked_artifact_when_allocation_exits(
     tmp_path: Path,
 ) -> None:
+    """An early allocation exit must still publish structured BLOCKED evidence."""
+
     project_root = tmp_path / "project"
-    scripts = project_root / "scripts/miyabi"
+    scripts = project_root / "scripts/miyabi/agent"
     scripts.mkdir(parents=True)
     (scripts / "run_full_protocol_allocation.sh").write_text(
         "#!/bin/bash\nexit 23\n",
@@ -1273,7 +1285,7 @@ printf '{"status":"BLOCKED","errors":["%s"]}\n' "$blocked_reason" >"$output"
     }
 
     completed = subprocess.run(
-        ["bash", str(ROOT / "scripts/miyabi/run_full_protocol.pbs")],
+        ["bash", str(ROOT / "scripts/miyabi/agent/run_full_protocol.pbs")],
         check=False,
         capture_output=True,
         text=True,
