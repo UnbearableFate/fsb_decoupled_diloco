@@ -17,9 +17,20 @@ Before submitting any PBS script:
 3. Estimate runtime from the workload and prior evidence, then request the shortest practical `walltime` that still has enough safety margin for startup variance, runtime variance, and orderly teardown. The objective is to improve scheduling while preserving a high probability that the job finishes successfully; do not shave the margin so tightly that the test is likely to time out. At least give 10 mins. When a script's default is materially longer than this evidence-based estimate, override it explicitly in `qsub -l walltime=...`.
 4. Do not submit the script until these checks are complete.
 
-## Documentation Synchronization
+## Test Organization
 
-When a code change has been verified by a 9-node experiment whose workload exceeds the 50-local-step × 10-global-step baseline, update the relevant documentation to reflect the verified behavior and experimental result.
+- Follow the existing `tests/` organization: group test files by production module or coherent functional area.
+- Create a new test file only when adding a new production module or a genuinely new functional area that has no existing test owner.
+- When changing an existing module or existing behavior, extend or revise its corresponding existing test file. Do not create a new test file merely to isolate a bug fix, refactor, regression, edge case, or implementation phase.
+- Keep each production module or functional area with one clear test-file owner. If ownership is unclear, identify the closest existing owner before editing; consolidate overlapping test files instead of adding another one.
+- Near every added or changed test, include a concise English comment explaining the behavioral or regression reason for the test. The test function's docstring may serve as this comment. Describe the enduring reason the assertion exists, not edit history or an issue narrative, and do not repeat what the assertion already says.
+
+## Python Documentation
+
+- All new or modified handwritten Python code, including production modules, tests, and repository scripts, must use English documentation comments.
+- Every new or modified Python file must have a module docstring. Every new or modified class, method, and function, including private helpers and test functions, must have an English docstring that states its responsibility and any non-obvious invariant, side effect, or failure behavior.
+- Class and instance data members must have a concise English declaration or inline comment when introduced. For dataclass fields and annotated attributes, place the comment next to the field; for attributes initialized inside methods, document them at the initialization site.
+- Comments and docstrings must explain intent, contracts, or rationale rather than restating the code. Keep them synchronized with behavior, and delete stale comments when the associated design is removed.
 
 ## Subagent Usage
 

@@ -1201,19 +1201,13 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
 
     review_runner = (ROOT / "scripts/miyabi/run_multi_agent_review.pbs").read_text(encoding="utf-8")
     assert review_runner.count("run_claude &") == 1
-    assert review_runner.count("run_opencode \\") == 3
+    assert review_runner.count("run_opencode \\") == 1
     assert 'CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-5}"' in review_runner
-    assert 'OPENCODE_GLM_MODEL="${OPENCODE_GLM_MODEL:-opencode-go/glm-5.2}"' in review_runner
-    assert (
-        'OPENCODE_DEEPSEEK_MODEL="${OPENCODE_DEEPSEEK_MODEL:-opencode-go/deepseek-v4-flash}"'
-        in review_runner
-    )
-    assert (
-        'OPENCODE_MINIMAX_MODEL="${OPENCODE_MINIMAX_MODEL:-opencode-go/minimax-m3}"'
-        in review_runner
-    )
-    assert "OPENCODE_KIMI_MODEL" not in review_runner
-    assert '"$RUN_TMP/minimax-m3.tsv"' in review_runner
+    assert '${OPENCODE_MODELS:?OPENCODE_MODELS is required}' in review_runner
+    assert "IFS=';' read -r -a OPENCODE_MODEL_LIST" in review_runner
+    assert "for index in \"${!OPENCODE_MODEL_LIST[@]}\"" in review_runner
+    assert "opencode-review-%02d" in review_runner
+    assert '"${OPENCODE_RESULT_FILES[@]}"' in review_runner
 
 
 def test_pbs_wrapper_publishes_blocked_artifact_when_allocation_exits(

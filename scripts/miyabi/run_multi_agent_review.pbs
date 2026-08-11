@@ -36,6 +36,12 @@ require_commit() {
   git -C "$PROJECT_ROOT" cat-file -e "${value}^{commit}" || die "$label is not available: $value"
 }
 
+require_model_id() {
+  local label="$1"
+  local value="$2"
+  [[ "$value" =~ ^[A-Za-z0-9._/@:+-]+$ ]] || die "$label is not a safe model ID: $value"
+}
+
 new_uuid() {
   if command -v uuidgen >/dev/null 2>&1; then
     uuidgen | tr '[:upper:]' '[:lower:]'
@@ -51,10 +57,12 @@ PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-}}"
 : "${PLAN_ID:?PLAN_ID is required}"
 : "${REVIEW_ID:?REVIEW_ID is required}"
 : "${REVIEW_KIND:?REVIEW_KIND is required}"
-: "${BASE_COMMIT:?BASE_COMMIT is required}"
 : "${TARGET_COMMIT:?TARGET_COMMIT is required}"
 : "${REVIEW_PROMPT_FILE:?REVIEW_PROMPT_FILE is required}"
 : "${REVIEW_PROMPT_SHA256:?REVIEW_PROMPT_SHA256 is required}"
+: "${REVIEW_PATHS_FILE:?REVIEW_PATHS_FILE is required}"
+: "${REVIEW_PATHS_SHA256:?REVIEW_PATHS_SHA256 is required}"
+: "${OPENCODE_MODELS:?OPENCODE_MODELS is required}"
 
 PROJECT_ROOT="$(cd "$PROJECT_ROOT" && pwd -P)"
 [[ "$PROJECT_ROOT" != *","* ]] || die "PROJECT_ROOT must not contain a comma"
@@ -62,9 +70,6 @@ REPORT_ROOT="$PROJECT_ROOT/reports/DOING/code_review"
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 OPENCODE_BIN="${OPENCODE_BIN:-opencode}"
 CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-5}"
-OPENCODE_GLM_MODEL="${OPENCODE_GLM_MODEL:-opencode-go/glm-5.2}"
-OPENCODE_DEEPSEEK_MODEL="${OPENCODE_DEEPSEEK_MODEL:-opencode-go/deepseek-v4-flash}"
-OPENCODE_MINIMAX_MODEL="${OPENCODE_MINIMAX_MODEL:-opencode-go/minimax-m3}"
 REVIEW_TIMEOUT_SECONDS="${REVIEW_TIMEOUT_SECONDS:-7200}"
 
 HOST_NAME="$(hostname)"
@@ -77,6 +82,17 @@ HOST_NAME="$(hostname)"
 require_safe_component "PLAN_ID" "$PLAN_ID"
 require_safe_component "REVIEW_ID" "$REVIEW_ID"
 require_safe_component "REVIEW_KIND" "$REVIEW_KIND"
+require_model_id "CLAUDE_MODEL" "$CLAUDE_MODEL"
+[[ "$OPENCODE_MODELS" != \;* && "$OPENCODE_MODELS" != *\; && "$OPENCODE_MODELS" != *\;\;* ]] || \
+  die "OPENCODE_MODELS must be a semicolon-separated list without empty entries"
+IFS=';' read -r -a OPENCODE_MODEL_LIST <<<"$OPENCODE_MODELS"
+declare -A SEEN_OPENCODE_MODELS=()
+for model in "${OPENCODE_MODEL_LIST[@]}"; do
+  require_model_id "OPENCODE_MODELS entry" "$model"
+  [[ -z "${SEEN_OPENCODE_MODELS[$model]+present}" ]] || \
+    die "OPENCODE_MODELS contains a duplicate model ID: $model"
+  SEEN_OPENCODE_MODELS["$model"]=1
+done
 case "$REVIEW_KIND" in
   test-design | failure | phase | preformal-plan-complete | final-evidence | critical-incremental) ;;
   *) die "unsupported REVIEW_KIND: $REVIEW_KIND" ;;
@@ -86,10 +102,7 @@ command -v python3 >/dev/null 2>&1 || die "python3 is required"
 command -v timeout >/dev/null 2>&1 || die "GNU timeout is required"
 command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required"
 command -v tar >/dev/null 2>&1 || die "tar is required"
-require_commit "BASE_COMMIT" "$BASE_COMMIT"
 require_commit "TARGET_COMMIT" "$TARGET_COMMIT"
-git -C "$PROJECT_ROOT" merge-base --is-ancestor "$BASE_COMMIT" "$TARGET_COMMIT" || \
-  die "BASE_COMMIT is not an ancestor of TARGET_COMMIT"
 
 JOB_STEM="${PBS_JOBID%%.*}"
 REPORT_DIR="$REPORT_ROOT/$PLAN_ID/$REVIEW_ID"
@@ -98,9 +111,13 @@ mkdir -p "$REPORT_DIR"
 TASK_TMP_ROOT="${TMPDIR:-/tmp}"
 RUN_TMP="$(mktemp -d "$TASK_TMP_ROOT/fsdiloco-review.${JOB_STEM}.XXXXXX")"
 SNAPSHOT_CLAUDE="$RUN_TMP/repository-claude"
-SNAPSHOT_GLM="$RUN_TMP/repository-glm"
-SNAPSHOT_DEEPSEEK="$RUN_TMP/repository-deepseek"
-SNAPSHOT_MINIMAX="$RUN_TMP/repository-minimax"
+OPENCODE_REVIEWER_IDS=()
+OPENCODE_SNAPSHOTS=()
+for index in "${!OPENCODE_MODEL_LIST[@]}"; do
+  reviewer_id="$(printf 'opencode-review-%02d' "$((index + 1))")"
+  OPENCODE_REVIEWER_IDS+=("$reviewer_id")
+  OPENCODE_SNAPSHOTS+=("$RUN_TMP/repository-$reviewer_id")
+done
 
 cleanup() {
   if [[ -n "${RUN_TMP:-}" && -d "$RUN_TMP" && "$RUN_TMP" == "$TASK_TMP_ROOT"/fsdiloco-review.* ]]; then
@@ -130,16 +147,72 @@ if [[ "$PROMPT_SHA256" != "$REVIEW_PROMPT_SHA256" ]]; then
   die "REVIEW_PROMPT_FILE SHA-256 does not match REVIEW_PROMPT_SHA256"
 fi
 
-PACKET_SOURCE="$RUN_TMP/review-packet"
-mkdir -p "$PACKET_SOURCE"
-git -C "$PROJECT_ROOT" diff --no-ext-diff --stat "$BASE_COMMIT" "$TARGET_COMMIT" \
-  >"$PACKET_SOURCE/diff-stat.txt"
-git -C "$PROJECT_ROOT" diff --no-ext-diff --name-status "$BASE_COMMIT" "$TARGET_COMMIT" \
-  >"$PACKET_SOURCE/changed-files.txt"
-git -C "$PROJECT_ROOT" diff --no-ext-diff --find-renames --find-copies "$BASE_COMMIT" "$TARGET_COMMIT" \
-  >"$PACKET_SOURCE/target.diff"
+[[ "$REVIEW_PATHS_FILE" != *","* ]] || die "REVIEW_PATHS_FILE must not contain a comma"
+[[ -f "$REVIEW_PATHS_FILE" && ! -L "$REVIEW_PATHS_FILE" ]] || \
+  die "REVIEW_PATHS_FILE must be a regular non-symlink file"
+REVIEW_PATHS_SOURCE_REAL="$(cd "$(dirname "$REVIEW_PATHS_FILE")" && pwd -P)/$(basename "$REVIEW_PATHS_FILE")"
+case "$REVIEW_PATHS_SOURCE_REAL" in
+  "$REPORT_ROOT"/*) ;;
+  *) die "REVIEW_PATHS_FILE must be under $REPORT_ROOT" ;;
+esac
+REVIEW_PATHS_BYTES="$(wc -c <"$REVIEW_PATHS_SOURCE_REAL")"
+((REVIEW_PATHS_BYTES <= 65536)) || die "review path list exceeds 65536 bytes"
+[[ "$REVIEW_PATHS_SHA256" =~ ^[0-9a-f]{64}$ ]] || \
+  die "REVIEW_PATHS_SHA256 must be a lowercase SHA-256"
+REVIEW_PATHS_SOURCE_SHA256="$(sha256sum "$REVIEW_PATHS_SOURCE_REAL" | awk '{print $1}')"
+if [[ "$REVIEW_PATHS_SOURCE_SHA256" != "$REVIEW_PATHS_SHA256" ]]; then
+  die "REVIEW_PATHS_FILE SHA-256 does not match REVIEW_PATHS_SHA256"
+fi
+REVIEW_PATHS="$RUN_TMP/review-paths.txt"
+python3 - "$REVIEW_PATHS_SOURCE_REAL" "$REVIEW_PATHS" <<'PY'
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1])
+target = pathlib.Path(sys.argv[2])
+payload = source.read_bytes()
+if not payload.endswith(b"\n") or b"\r" in payload:
+    raise SystemExit("review path list must use LF endings and end with one newline")
+content = payload.decode("utf-8")
+paths: list[str] = []
+seen: set[str] = set()
+for line_number, raw in enumerate(content[:-1].split("\n"), start=1):
+    if not raw:
+        raise SystemExit(f"review path line {line_number} is empty")
+    if raw != raw.strip():
+        raise SystemExit(f"review path line {line_number} has surrounding whitespace")
+    path = pathlib.PurePosixPath(raw)
+    if (
+        path.is_absolute()
+        or raw.startswith("-")
+        or ":" in raw
+        or "\\" in raw
+        or "`" in raw
+        or any(character in raw for character in "*?[")
+        or any(ord(character) < 32 for character in raw)
+        or any(part in {"", ".", ".."} for part in path.parts)
+        or path.as_posix() != raw
+    ):
+        raise SystemExit(f"review path line {line_number} is not a safe repository-relative path")
+    if raw in seen:
+        raise SystemExit(f"duplicate review path at line {line_number}: {raw}")
+    seen.add(raw)
+    paths.append(raw)
+if not paths:
+    raise SystemExit("review path list is empty")
+target.write_bytes(payload)
+PY
+while IFS= read -r review_path; do
+  object_metadata="$(git -C "$PROJECT_ROOT" ls-tree "$TARGET_COMMIT" -- "$review_path")"
+  object_mode="${object_metadata%% *}"
+  object_type="${object_metadata#* }"
+  object_type="${object_type%% *}"
+  [[ "$object_type" == "blob" && "$object_mode" =~ ^100(644|755)$ ]] || \
+    die "review path must name an exact tracked regular file at TARGET_COMMIT: $review_path"
+done <"$REVIEW_PATHS"
+REVIEW_PATH_COUNT="$(wc -l <"$REVIEW_PATHS")"
+
 TARGET_TREE="$(git -C "$PROJECT_ROOT" rev-parse "${TARGET_COMMIT}^{tree}")"
-DIFF_SHA256="$(sha256sum "$PACKET_SOURCE/target.diff" | awk '{print $1}')"
 TARGET_ARCHIVE="$RUN_TMP/target.tar"
 git -C "$PROJECT_ROOT" archive --format=tar --output="$TARGET_ARCHIVE" "$TARGET_COMMIT"
 
@@ -178,21 +251,25 @@ prepare_snapshot() {
   local snapshot_dir="$1"
   mkdir -p "$snapshot_dir"
   tar -xf "$TARGET_ARCHIVE" -C "$snapshot_dir"
-  mkdir -p "$snapshot_dir/.review-packet"
-  cp "$PACKET_SOURCE/diff-stat.txt" "$snapshot_dir/.review-packet/diff-stat.txt"
-  cp "$PACKET_SOURCE/changed-files.txt" "$snapshot_dir/.review-packet/changed-files.txt"
-  cp "$PACKET_SOURCE/target.diff" "$snapshot_dir/.review-packet/target.diff"
+  mkdir -p "$snapshot_dir/.review-scope"
+  cp "$REVIEW_PATHS" "$snapshot_dir/.review-scope/paths.txt"
   chmod -R a-w -- "$snapshot_dir"
 }
 
 prepare_snapshot "$SNAPSHOT_CLAUDE"
-prepare_snapshot "$SNAPSHOT_GLM"
-prepare_snapshot "$SNAPSHOT_DEEPSEEK"
-prepare_snapshot "$SNAPSHOT_MINIMAX"
 SNAPSHOT_CLAUDE_SHA256="$(snapshot_digest "$SNAPSHOT_CLAUDE")"
-SNAPSHOT_GLM_SHA256="$(snapshot_digest "$SNAPSHOT_GLM")"
-SNAPSHOT_DEEPSEEK_SHA256="$(snapshot_digest "$SNAPSHOT_DEEPSEEK")"
-SNAPSHOT_MINIMAX_SHA256="$(snapshot_digest "$SNAPSHOT_MINIMAX")"
+OPENCODE_SNAPSHOT_SHA256=()
+for snapshot_dir in "${OPENCODE_SNAPSHOTS[@]}"; do
+  prepare_snapshot "$snapshot_dir"
+  OPENCODE_SNAPSHOT_SHA256+=("$(snapshot_digest "$snapshot_dir")")
+done
+
+OPENCODE_MODEL_RECORD="$RUN_TMP/opencode-models.tsv"
+for index in "${!OPENCODE_MODEL_LIST[@]}"; do
+  printf '%s\t%s\n' \
+    "${OPENCODE_REVIEWER_IDS[$index]}" \
+    "${OPENCODE_MODEL_LIST[$index]}"
+done >"$OPENCODE_MODEL_RECORD"
 
 REQUEST_RECORD="$REPORT_DIR/review-request_${TARGET_COMMIT}_${JOB_STEM}.md"
 REQUEST_RECORD_TMP="$RUN_TMP/review-request.md"
@@ -202,13 +279,20 @@ REQUEST_RECORD_TMP="$RUN_TMP/review-request.md"
   printf -- '- Plan ID: `%s`\n' "$PLAN_ID"
   printf -- '- Review ID: `%s`\n' "$REVIEW_ID"
   printf -- '- Review kind: `%s`\n' "$REVIEW_KIND"
-  printf -- '- Base commit: `%s`\n' "$BASE_COMMIT"
   printf -- '- Target commit: `%s`\n' "$TARGET_COMMIT"
   printf -- '- PBS job ID: `%s`\n' "$PBS_JOBID"
   printf -- '- Compute hostname: `%s`\n' "$HOST_NAME"
   printf -- '- Target tree: `%s`\n' "$TARGET_TREE"
-  printf -- '- Target diff SHA-256: `%s`\n' "$DIFF_SHA256"
+  printf -- '- Review paths SHA-256: `%s`\n' "$REVIEW_PATHS_SOURCE_SHA256"
   printf -- '- Prompt SHA-256: `%s`\n\n' "$PROMPT_SHA256"
+  printf '## OpenCode models\n\n'
+  while IFS=$'\t' read -r reviewer_id model; do
+    printf -- '- `%s`: `%s`\n' "$reviewer_id" "$model"
+  done <"$OPENCODE_MODEL_RECORD"
+  printf '\n'
+  printf '## Review paths\n\n'
+  sed 's/^/- `/' "$REVIEW_PATHS" | sed 's/$/`/'
+  printf '\n'
   printf '## Common prompt\n\n'
   cat "$PROMPT_FILE"
   printf '\n'
@@ -223,17 +307,21 @@ reviewer_suffix() {
   printf 'Reviewer identity: %s\n' "$reviewer"
   printf 'Requested model: %s\n' "$model"
   printf 'Primary review lane: %s\n' "$lane"
-  printf 'Review the read-only target snapshot at %s; base is %s.\n' "$TARGET_COMMIT" "$BASE_COMMIT"
-  printf '%s\n' 'The runner provides .review-packet/diff-stat.txt, changed-files.txt, and target.diff. This untracked packet is runner metadata outside the target and is not a product finding.'
+  printf '%s\n' 'Review the current contents of the repository-relative files listed below in the read-only snapshot.'
+  printf '%s\n' 'These paths, not a commit range or historical diff, define the primary review scope. Inspect directly coupled files only when needed to establish a contract or reachable impact.'
+  printf '%s\n' 'The snapshot intentionally contains no Git metadata. Do not run Git or infer review scope from repository history.'
+  printf '%s\n' '.review-scope/paths.txt is runner metadata outside the target and is not a product finding.'
+  printf 'Review paths:\n'
+  sed 's/^/- /' "$REVIEW_PATHS"
   case "$REVIEW_KIND" in
     preformal-plan-complete)
-      printf '%s\n' 'This is a current-state review. Inspect the complete target tree and do not limit the review to target.diff; the diff is continuity context only.'
+      printf '%s\n' 'This is a current-state review. Inspect every listed file as current source; do not reconstruct or review historical changes.'
       ;;
     final-evidence)
       printf '%s\n' 'This is a final evidence review. Validate experiment identity, durable oracles, requirement bindings, documentation, and cleanup; do not infer PASS from exit codes alone.'
       ;;
     *)
-      printf '%s\n' 'Inspect the complete in-scope change and all directly affected callers, tests, configuration, launchers, Checkers, and documentation.'
+      printf '%s\n' 'Inspect every listed file in its current state and the directly affected callers, tests, configuration, launchers, Checkers, and documentation needed to validate it.'
       ;;
   esac
   printf '%s\n' 'Form conclusions independently. Do not inspect another reviewer output.'
@@ -471,40 +559,37 @@ echo "[INFO] PBS_JOBID=$PBS_JOBID"
 echo "[INFO] HOSTNAME=$HOST_NAME"
 echo "[INFO] PROJECT_ROOT=$PROJECT_ROOT"
 echo "[INFO] REVIEW_KIND=$REVIEW_KIND"
-echo "[INFO] BASE_COMMIT=$BASE_COMMIT"
 echo "[INFO] TARGET_COMMIT=$TARGET_COMMIT"
 echo "[INFO] REPORT_DIR=$REPORT_DIR"
 echo "[INFO] PROMPT_SHA256=$PROMPT_SHA256"
+echo "[INFO] REVIEW_PATH_COUNT=$REVIEW_PATH_COUNT"
+echo "[INFO] REVIEW_PATHS_SHA256=$REVIEW_PATHS_SOURCE_SHA256"
+echo "[INFO] OPENCODE_MODEL_COUNT=${#OPENCODE_MODEL_LIST[@]}"
+while IFS=$'\t' read -r reviewer_id model; do
+  echo "[INFO] $reviewer_id=$model"
+done <"$OPENCODE_MODEL_RECORD"
 module list 2>&1 | cat || true
 
 run_claude &
 pid_claude=$!
-run_opencode \
-  "glm-5.2" \
-  "$OPENCODE_GLM_MODEL" \
-  "requirement-to-assertion traceability, test oracle correctness, coverage, and test maintainability" \
-  "$SNAPSHOT_GLM" \
-  "$SNAPSHOT_GLM_SHA256" &
-pid_glm=$!
-run_opencode \
-  "deepseek-v4-flash" \
-  "$OPENCODE_DEEPSEEK_MODEL" \
-  "error paths, races, crash/restart behavior, edge cases, and adversarial counterexamples" \
-  "$SNAPSHOT_DEEPSEEK" \
-  "$SNAPSHOT_DEEPSEEK_SHA256" &
-pid_deepseek=$!
-run_opencode \
-  "minimax-m3" \
-  "$OPENCODE_MINIMAX_MODEL" \
-  "cross-module integration, experiment validity, artifact/Checker evidence, and documentation drift" \
-  "$SNAPSHOT_MINIMAX" \
-  "$SNAPSHOT_MINIMAX_SHA256" &
-pid_minimax=$!
+OPENCODE_PIDS=()
+OPENCODE_RESULT_FILES=()
+for index in "${!OPENCODE_MODEL_LIST[@]}"; do
+  reviewer_id="${OPENCODE_REVIEWER_IDS[$index]}"
+  run_opencode \
+    "$reviewer_id" \
+    "${OPENCODE_MODEL_LIST[$index]}" \
+    "independent current-state review of correctness, failure paths, integration, tests, evidence, and documentation" \
+    "${OPENCODE_SNAPSHOTS[$index]}" \
+    "${OPENCODE_SNAPSHOT_SHA256[$index]}" &
+  OPENCODE_PIDS+=("$!")
+  OPENCODE_RESULT_FILES+=("$RUN_TMP/$reviewer_id.tsv")
+done
 
 wait "$pid_claude" || true
-wait "$pid_glm" || true
-wait "$pid_deepseek" || true
-wait "$pid_minimax" || true
+for reviewer_pid in "${OPENCODE_PIDS[@]}"; do
+  wait "$reviewer_pid" || true
+done
 
 SUMMARY_FILE="$REPORT_DIR/reviewer-job_${TARGET_COMMIT}_${JOB_STEM}.json"
 SUMMARY_TMP="$RUN_TMP/reviewer-job.json"
@@ -514,17 +599,16 @@ python3 - \
   "$PLAN_ID" \
   "$REVIEW_ID" \
   "$REVIEW_KIND" \
-  "$BASE_COMMIT" \
   "$TARGET_COMMIT" \
   "$PBS_JOBID" \
   "$HOST_NAME" \
   "$PROMPT_SHA256" \
   "$TARGET_TREE" \
-  "$DIFF_SHA256" \
+  "$REVIEW_PATHS_SOURCE_SHA256" \
+  "$REVIEW_PATHS" \
+  "$OPENCODE_MODEL_RECORD" \
   "$RUN_TMP/claude-opus-5.tsv" \
-  "$RUN_TMP/glm-5.2.tsv" \
-  "$RUN_TMP/deepseek-v4-flash.tsv" \
-  "$RUN_TMP/minimax-m3.tsv" <<'PY'
+  "${OPENCODE_RESULT_FILES[@]}" <<'PY'
 import json
 import pathlib
 import sys
@@ -534,15 +618,22 @@ import sys
     plan_id,
     review_id,
     review_kind,
-    base_commit,
     target_commit,
     pbs_job_id,
     hostname,
     prompt_sha256,
     target_tree,
-    diff_sha256,
+    review_paths_sha256,
+    review_paths_file,
+    opencode_model_file,
     *result_paths,
 ) = sys.argv[1:]
+
+review_paths = pathlib.Path(review_paths_file).read_text(encoding="utf-8").splitlines()
+opencode_models = []
+for line in pathlib.Path(opencode_model_file).read_text(encoding="utf-8").splitlines():
+    reviewer, requested_model = line.split("\t", 1)
+    opencode_models.append({"reviewer": reviewer, "requested_model": requested_model})
 
 reviewers = []
 for result_path in result_paths:
@@ -606,16 +697,19 @@ for result_path in result_paths:
     )
 
 summary = {
-    "schema_version": 2,
+    "schema_version": 3,
     "plan_id": plan_id,
     "review_id": review_id,
     "review_kind": review_kind,
-    "base_commit": base_commit,
     "target_commit": target_commit,
     "pbs_job_id": pbs_job_id,
     "compute_hostname": hostname,
     "target_tree": target_tree,
-    "target_diff_sha256": diff_sha256,
+    "review_scope": {
+        "paths": review_paths,
+        "sha256": review_paths_sha256,
+    },
+    "opencode_models": opencode_models,
     "prompt_sha256": prompt_sha256,
     "external_review_is_best_effort": True,
     "reviewers": reviewers,
@@ -629,5 +723,5 @@ mv -- "$SUMMARY_TMP" "$SUMMARY_FILE"
 echo "[INFO] external reviewer job reached terminal orchestration state"
 echo "[INFO] summary=$SUMMARY_FILE"
 echo "[INFO] target_tree=$TARGET_TREE"
-echo "[INFO] target_diff_sha256=$DIFF_SHA256"
+echo "[INFO] review_paths_sha256=$REVIEW_PATHS_SOURCE_SHA256"
 exit 0
