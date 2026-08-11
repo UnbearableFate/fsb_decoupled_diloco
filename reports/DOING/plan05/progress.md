@@ -39,3 +39,10 @@
 - 最终 U1：clean commit `af1eb61ed678d7c30017da4eebe78a3a00335a74`、fingerprint `sha256:e37b8ce55e85ab2a9270d9f5fbe5ab79a675f3b8eee4b5dec4c1c2931f3ac24d` 在 PBS `2531812.opbs`、compute node `mg0865` 上通过 Ruff、focused `260 passed`、full `591 passed`、website lint 和 14 项 rendered-site test。证据为 `validation_candidate19.json` 及同名前缀 raw/JUnit。
 - Coordinator 修缮后 current-state review 为 `APPROVE`，见 `reports/DOING/code_review/plan05/preformal-plan-complete-01/coordinator_remediation_af1eb61ed678d7c30017da4eebe78a3a00335a74.md`。Plan04 最新 target 没有完成正式 Dynamic Full baseline，因此 plan05 比较结论预先确定为 `incomparable`；不执行 20% threshold，不用 DDP/Periodic Average 或 diagnostic run 替代。
 - 下一动作：读取仍在运行的唯一外部 reviewer `opencode-go/deepseek-v4-flash` 初审结果，处置有效 finding；随后对当前关键 delta 只用同一模型执行 `critical-incremental` 复审。通过后冻结唯一 `FINAL_COMMON_TARGET` 并启动三组 fresh-root 正式场景。
+
+## 2026-08-12 PREFORMAL：checkpoint object identity 门禁闭合
+
+- Coordinator 补查发现 independent formal oracle 只验证 durable version row，尚未验证对应 checkpoint object。当前 oracle 对 v0 至 v10 的 22 个 weight/outer-state object 验证 canonical epoch/owner/publication path、immutable regular file、byte size 和 SHA-256，并把逐对象证据写入正式 artifact；checkpoint identity mutation 会 fail closed。
+- 最终 U1：clean commit `18f26ae428deb02e063dd4d06665d0231717fb8b`、fingerprint `sha256:fc61dbdb13d8ecbdb855c41f01487bd4ad058da319b9d258a0620daaaa4c5974` 在 PBS `2531884.opbs`、compute node `mg0856` 上通过 Ruff、focused `261 passed`、full `592 passed`、website lint 和 14 项 rendered-site test。证据为 `validation_candidate22.json` 及同名前缀 raw/JUnit。
+- Coordinator 补充审查为 `APPROVE`，见 `reports/DOING/code_review/plan05/preformal-plan-complete-01/coordinator_checkpoint_remediation_18f26ae428deb02e063dd4d06665d0231717fb8b.md`。
+- 下一动作：读取并处置旧 target 的唯一外部 reviewer 结果，再对全部关键修缮 delta 执行当前 target 的固定 DeepSeek `critical-incremental` 复审；其通过前不冻结 `FINAL_COMMON_TARGET`。
