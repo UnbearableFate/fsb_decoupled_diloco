@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 import sqlite3
 from types import SimpleNamespace
@@ -233,7 +234,13 @@ def test_proposal_ingest_propagates_integrity_failures(
     proposal_path = paths.shared_root / "updates/proposals/learner-0/proposal.json"
     proposal_path.parent.mkdir(parents=True, exist_ok=True)
     proposal_path.write_bytes(candidate.canonical_bytes())
-    authority = SimpleNamespace(read=SimpleNamespace(current_contributor_fences=lambda: ()))
+    authority = SimpleNamespace(
+        read=SimpleNamespace(
+            current_contributor_fences=lambda: (candidate.contributor_fence,),
+            contributor_progress=lambda _key: None,
+            controller_status=lambda: {"state": "open"},
+        )
+    )
     leader = SimpleNamespace(
         ingest_proposal=lambda **_kwargs: (_ for _ in ()).throw(
             error_type("proposal integrity failure")
@@ -276,7 +283,13 @@ def test_proposal_ingest_reconsiders_merge_after_each_new_payload(tmp_path: Path
         ingested.append(candidate.update_id)
         return ProposalDisposition.ACCEPTED
 
-    authority = SimpleNamespace(read=SimpleNamespace(current_contributor_fences=lambda: ()))
+    authority = SimpleNamespace(
+        read=SimpleNamespace(
+            current_contributor_fences=lambda: (candidates[0].contributor_fence,),
+            contributor_progress=lambda _key: None,
+            controller_status=lambda: {"state": "open"},
+        )
+    )
     leader = SimpleNamespace(ingest_proposal=ingest_proposal)
 
     _ingest_proposals(
@@ -320,7 +333,13 @@ def test_proposal_ingest_scans_past_exact_command_replays(tmp_path: Path) -> Non
         accepted.add(candidate.update_id)
         return ProposalDisposition.ACCEPTED
 
-    authority = SimpleNamespace(read=SimpleNamespace(current_contributor_fences=lambda: ()))
+    authority = SimpleNamespace(
+        read=SimpleNamespace(
+            current_contributor_fences=lambda: (candidates[0].contributor_fence,),
+            contributor_progress=lambda _key: None,
+            controller_status=lambda: {"state": "open"},
+        )
+    )
     leader = SimpleNamespace(ingest_proposal=ingest_proposal)
     loaded = _loaded(paths, config_sha256=hashlib.sha256(b"config").hexdigest())
 
@@ -331,6 +350,59 @@ def test_proposal_ingest_scans_past_exact_command_replays(tmp_path: Path) -> Non
         candidates[0].update_id,
         candidates[0].update_id,
         candidates[1].update_id,
+    ]
+
+
+def test_proposal_ingest_skips_stale_fence_before_payload_verification(tmp_path: Path) -> None:
+    """A terminalized fence must not trigger repeated reads of its large payloads."""
+
+    paths = RunPaths(tmp_path)
+    prepare_authority_dirs(paths)
+    candidate = proposal()
+    proposal_path = (
+        paths.shared_root
+        / "updates"
+        / "proposals"
+        / candidate.stable_contributor_key
+        / f"{candidate.update_id}.json"
+    )
+    proposal_path.parent.mkdir(parents=True, exist_ok=True)
+    proposal_path.write_bytes(candidate.canonical_bytes())
+    telemetry = _Telemetry()
+    authority = SimpleNamespace(
+        read=SimpleNamespace(
+            current_contributor_fences=lambda: (candidate.contributor_fence,),
+            contributor_progress=lambda _key: None,
+            controller_status=lambda: {"state": "draining"},
+            terminal_contributor_fences=lambda: (
+                {
+                    "stable_contributor_key": candidate.stable_contributor_key,
+                    "fence_json": json.dumps(candidate.contributor_fence.as_dict()),
+                    "state": "acked",
+                    "final_update_id": "different-update",
+                },
+            ),
+        )
+    )
+    leader = SimpleNamespace(
+        ingest_proposal=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("stale proposal reached payload verification")
+        )
+    )
+
+    _ingest_proposals(
+        _loaded(paths, config_sha256=hashlib.sha256(b"config").hexdigest()),
+        authority,
+        leader,
+        SimpleNamespace(),
+        telemetry,
+    )
+
+    assert telemetry.events == [
+        (
+            "proposal_disposition",
+            {"update_id": candidate.update_id, "disposition": "stale_fence"},
+        )
     ]
 
 

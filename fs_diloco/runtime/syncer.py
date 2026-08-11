@@ -826,6 +826,35 @@ def _is_retryable_sqlite_contention(exc: sqlite3.OperationalError) -> bool:
     }
 
 
+def _terminal_snapshot_allows_proposal(
+    proposal: FullUpdateProposalV2,
+    *,
+    controller: dict[str, Any],
+    terminal_fences: tuple[dict[str, Any], ...],
+) -> bool:
+    """Apply the terminal fence snapshot before any proposal payload read."""
+
+    state = controller.get("state")
+    if state in {"open", "preclosing"}:
+        return True
+    if state not in {"closing", "draining"}:
+        return False
+    for row in terminal_fences:
+        if row.get("stable_contributor_key") != proposal.stable_contributor_key:
+            continue
+        try:
+            fence = decode_contributor_fence(json.loads(str(row["fence_json"])))
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise AuthoritySchemaError("terminal contributor fence is malformed") from exc
+        if fence != proposal.contributor_fence:
+            return False
+        terminal_state = row.get("state")
+        return terminal_state == "awaiting_ack" or (
+            terminal_state == "acked" and row.get("final_update_id") == proposal.update_id
+        )
+    return False
+
+
 def _ingest_proposals(
     loaded: LoadedRunDescriptor,
     authority: LeaderAuthority,
@@ -835,7 +864,8 @@ def _ingest_proposals(
 ) -> None:
     """Ingest receipts, then at most one new payload before reconsidering a merge."""
 
-    for fence in authority.read.current_contributor_fences():
+    current_fences = authority.read.current_contributor_fences()
+    for fence in current_fences:
         progress = authority.read.contributor_progress(fence.stable_contributor_key)
         sequences = (
             (1,) if progress is None else (progress.last_cycle_seq, progress.last_cycle_seq + 1)
@@ -878,9 +908,28 @@ def _ingest_proposals(
                 )
     proposals_root = loaded.paths.shared_root / "updates" / "proposals"
     if proposals_root.is_dir():
+        controller = authority.read.controller_status()
+        terminal_fences = (
+            authority.read.terminal_contributor_fences()
+            if controller.get("state") not in {"open", "preclosing"}
+            else ()
+        )
         for path in sorted(proposals_root.glob("*/*.json")):
             try:
                 proposal = FullUpdateProposalV2.from_json(path.read_bytes())
+                if proposal.contributor_fence not in current_fences or not (
+                    _terminal_snapshot_allows_proposal(
+                        proposal,
+                        controller=controller,
+                        terminal_fences=terminal_fences,
+                    )
+                ):
+                    telemetry.event(
+                        "proposal_disposition",
+                        update_id=proposal.update_id,
+                        disposition="stale_fence",
+                    )
+                    continue
                 disposition = leader.ingest_proposal(
                     command_id=f"proposal-{proposal.immutable_sha256()}", proposal=proposal
                 )
