@@ -19,6 +19,8 @@ cd "$PROJECT_ROOT"
 test -x "$PYTHON_BIN"
 if [[ "$NPM_BIN" == */* ]]; then
   test -x "$NPM_BIN"
+  NPM_BIN="$(cd "$(dirname "$NPM_BIN")" && pwd -P)/$(basename "$NPM_BIN")"
+  export PATH="$(dirname "$NPM_BIN"):$PATH"
 else
   command -v "$NPM_BIN" >/dev/null
 fi

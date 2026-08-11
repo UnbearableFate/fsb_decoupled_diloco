@@ -39,3 +39,13 @@
 - 最小症状：Miyabi compute PATH 中没有 `npm`，runner 在启动 `website-lint` 前以 `FileNotFoundError` 发布 `BLOCKED`。
 - 处置：validation CLI/PBS 显式接收并验证唯一 `NPM_BIN`；在 compute job 中安装满足 `website/package.json` 的固定 Node.js 22 工具链和 lockfile dependencies，不删除或跳过网站门禁。
 - 下一验证：使用显式 Node/npm 路径提交 fresh U1 job；Python 与网站步骤必须在同一 clean target 上全部通过。
+
+## U1 candidate 5：npm 的 Node 解释器未进入 PATH
+
+- 分类：`harness-failure`；这是 failure review 后的新验证序列第 1 次有效失败。
+- Source：commit `195fab9ed37c800e0dd4c48f3b7b73f8bb883cf5`，clean source。
+- 环境：PBS job `2531033.opbs`，compute node `mg0357`；focused suite 251 项、full suite 580 项全部通过。
+- 证据：`reports/DOING/plan05/artifacts/validation_candidate6.json`、`validation_candidate6.log` 与 focused/full JUnit。
+- 最小症状：runner 已执行显式绝对 `NPM_BIN`，但 npm 的 `#!/usr/bin/env node` 无法在继承 PATH 中定位同目录的 `node`，`website-lint` 以 127 退出。
+- 处置：PBS wrapper 解析并验证 npm 的规范绝对路径，把其 `bin` 目录加入 PATH 后再启动 validation CLI；仍使用同一固定 Node/npm 工具链。
+- 下一验证：fresh U1 job 必须实际进入并通过 website lint/test，而不是只通过 npm 路径存在性检查。
