@@ -164,10 +164,9 @@ Runner 仍使用唯一 `TARGET_COMMIT` 和 tree hash 创建不可变 snapshot，
 TARGET_COMMIT
 REVIEW_PROMPT_FILE + REVIEW_PROMPT_SHA256
 REVIEW_PATHS_FILE + REVIEW_PATHS_SHA256
-OPENCODE_MODELS
 ```
 
-`OPENCODE_MODELS` 是通过 `qsub -v` 传入的、以分号分隔的一个或多个唯一 model ID，例如 `opencode-go/glm-5.2;opencode-go/minimax-m3`。Runner 为列表中的每个 model 创建独立只读 snapshot，并以同一 prompt 和 review-path list 分别执行完整审查；不按 model 预设 test/fault/evidence 职责。Reviewer 使用按列表顺序生成的稳定 ID `opencode-review-01`、`opencode-review-02` 等，request/job summary 同时记录 reviewer ID 与完整 requested model ID。
+Runner 只通过 OpenCode 调用固定模型 `opencode-go/deepseek-v4-flash`，不接受模型选择参数，也不调用 Claude Code 或其他 OpenCode 模型。Reviewer 使用固定 ID `opencode-deepseek-v4-flash`；request/job summary 同时记录 reviewer ID 与完整 requested model ID。
 
 `REVIEW_PATHS_FILE` 每行必须是 `TARGET_COMMIT` 中一个精确、tracked、repository-relative 文件路径；不接受目录、glob、重复项、绝对路径或 `..`。PREFORMAL 应列出全部 current source，并按需要列出测试、配置、PBS、Checker 和文档；FINAL 只列 evidence review 实际需要的文件。Runner 将这份列表复制为 snapshot 内的 `.review-scope/paths.txt`，reviewer 可以读取直接耦合文件来确认契约和影响，但 finding 的主范围必须由路径列表定义。
 

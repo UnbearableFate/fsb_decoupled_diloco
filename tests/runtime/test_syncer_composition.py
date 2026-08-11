@@ -200,15 +200,17 @@ def test_replacement_request_consumes_exact_launch_authorization(
 
         _admit_requests(loaded, authority, leader, telemetry)
 
-        current = authority.read.current_contributor_fences()[0]
+        current_fences = authority.read.current_contributor_fences()
         disposition = read_json(paths.registration_disposition_path(request_sha256))
         if matching_authorization:
+            current = current_fences[0]
             assert current.instance_id == "instance-2"
             assert current.stream_epoch == first.stream_epoch + 1
             assert disposition["outcome"] == "admitted"
             assert telemetry.events[-1][0] == "learner_admitted"
         else:
-            assert current == first
+            assert current_fences == ()
+            assert authority.read.instances()[0]["status"] == "expired"
             assert disposition["outcome"] == "rejected"
             assert disposition["error_type"] == "MembershipFenceError"
             assert telemetry.events[-1][0] == "admission_rejected"

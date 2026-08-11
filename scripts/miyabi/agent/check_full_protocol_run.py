@@ -557,25 +557,40 @@ def validate_run(
         errors.append("terminal contributor acknowledgements are incomplete")
     if {str(row["stream_id"]) for row in streams} != expected_contributor_ids:
         errors.append("authority streams do not cover the registered pool")
-    if any(row["current_instance_id"] is None for row in streams):
-        errors.append("a terminal stream has no final instance incarnation")
-    if launches:
+    if any(
+        row["current_instance_id"] is not None or row["state"] != "available" for row in streams
+    ):
+        errors.append("terminal stream ownership was not released")
+    capacity_launches = [row for row in launches if row["role"] != "bootstrap"]
+    if capacity_launches:
         errors.append("co-allocated harness contains unexpected scheduler launch requests")
-    current_instances = {
-        str(row["current_instance_id"]) for row in streams if row["current_instance_id"] is not None
-    }
+    terminal_instance_ids: set[str] = set()
+    try:
+        for row in terminal_fences:
+            fence = ContributorFence.from_dict(json.loads(str(row["fence_json"])))
+            terminal_instance_ids.add(fence.instance_id)
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        errors.append(f"terminal contributor fence is invalid: {exc}")
+    bootstrap_launches = [row for row in launches if row["role"] == "bootstrap"]
+    bootstrap_launches_are_exact = all(
+        row["request_id"] == f"bootstrap-{row['stream_id']}"
+        and row["bootstrap_slot"] == row["stream_id"]
+        and row["reason"] == "initial_bootstrap"
+        and row["state"] == "admitted"
+        and row["admitted_instance_id"] in terminal_instance_ids
+        for row in bootstrap_launches
+    )
     if (
         len(instances) != expected_contributors
-        or {str(row["instance_id"]) for row in instances} != current_instances
+        or {str(row["instance_id"]) for row in instances} != terminal_instance_ids
+        or {str(row["stream_id"]) for row in instances} != expected_contributor_ids
+        or len(bootstrap_launches) != expected_contributors
+        or {str(row["stream_id"]) for row in bootstrap_launches} != expected_contributor_ids
+        or not bootstrap_launches_are_exact
     ):
         errors.append("co-allocated harness instance history is not one bootstrap per stream")
     if {str(row["status"]) for row in instances} != {"stopped"}:
         errors.append("terminal learner instances are not all stopped")
-    try:
-        for row in terminal_fences:
-            ContributorFence.from_dict(json.loads(str(row["fence_json"])))
-    except (TypeError, ValueError, json.JSONDecodeError) as exc:
-        errors.append(f"terminal contributor fence is invalid: {exc}")
     if len(epochs) != syncer_epoch_count:
         errors.append("syncer epoch history does not match the registered scenario")
     elif tuple(str(row["final_state"]) for row in epochs) != expected_epoch_states:

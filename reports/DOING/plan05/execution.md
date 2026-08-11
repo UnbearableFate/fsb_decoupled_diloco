@@ -55,8 +55,8 @@
 
 | 场景 | 唯一变量 | Durable PASS oracle |
 |---|---|---|
-| no-failure | `scaling.enabled=false`，无故障 | 8 个 bootstrap instance 完成；v10 merge/terminal/token ledger/checkpoint 均成立；无 launch request/replacement |
-| failure/no-replacement | `scaling.enabled=false`，删除一个 learner | 被删除 instance 不再产生 effect；无 replacement/launch request；剩余 contributor 在 quorum 允许范围内完成 v10，ledger 与 terminal fence 一致 |
+| no-failure | `scaling.enabled=false`，无故障 | 8 个 bootstrap instance 完成；v10 merge/terminal/token ledger/checkpoint 均成立；无非 bootstrap launch request 或 replacement |
+| failure/no-replacement | `scaling.enabled=false`，删除一个 learner | 被删除 instance 不再产生 effect；无 replacement 或非 bootstrap launch request；剩余 contributor 在 quorum 允许范围内完成 v10，ledger 与 terminal fence 一致 |
 | failure/authorized-replacement | `scaling.enabled=true`，删除一个 learner | scheduler qdel history、capacity observation、launch request、qsub receipt、replacement admission、stream epoch 前进、旧 fence 拒绝和 cursor continuity 全部关联到同一 stream，最终完成 v10 |
 
 与 plan04 冻结 dynamic baseline 比较的预注册指标：terminal stream 最后 proposal loss 的均值、artifact-to-terminal wall time、global versions、accepted proposal/merge 数、每 stream local steps、token ledger totals、replacement count 和 duplicate/stale rejection。正确性计数必须满足 config/Checker 的精确不变量；loss 相对 baseline 绝对差异不超过 20%；no-failure wall time 相对同 workload baseline 增幅不超过 20%。故障场景 wall time 仅报告，不用于训练质量等价结论。若 baseline source/config/workload/seed、terminal workload 或输入 revision 无法严格匹配，则结论为 incomparable，不用替代数据放宽阈值。

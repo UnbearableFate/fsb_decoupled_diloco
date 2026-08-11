@@ -64,7 +64,16 @@ def _finalized_authority(path: Path, *, hard_crash_stream: int | None = None) ->
             fence_json TEXT,
             created_at REAL
         );
-        CREATE TABLE launch_requests(request_id TEXT, role TEXT, created_at REAL);
+        CREATE TABLE launch_requests(
+            request_id TEXT,
+            bootstrap_slot INTEGER,
+            role TEXT,
+            reason TEXT,
+            stream_id INTEGER,
+            state TEXT,
+            admitted_instance_id TEXT,
+            created_at REAL
+        );
         CREATE TABLE learner_instances(
             instance_id TEXT,
             registered_at REAL,
@@ -112,6 +121,11 @@ def _finalized_authority(path: Path, *, hard_crash_stream: int | None = None) ->
                 stream,
                 f"{stream:x}" * 64,
             ),
+        )
+        connection.execute(
+            "INSERT INTO launch_requests VALUES(?, ?, 'bootstrap', 'initial_bootstrap', "
+            "?, 'admitted', ?, ?)",
+            (f"bootstrap-{stream}", stream, stream, f"instance-{stream}", float(stream)),
         )
     for version in range(11):
         connection.execute(
@@ -211,6 +225,7 @@ def test_no_failure_authority_oracle_requires_ten_exact_four_way_merges(tmp_path
     )
     assert evidence["integrity_check"] == ["ok"]
     assert len(evidence["merge_counts"]) == 10
+    assert len(evidence["bootstrap_launches"]) == 8
 
     connection = sqlite3.connect(database)
     connection.execute("DELETE FROM updates WHERE update_id='update-10-3'")

@@ -364,6 +364,8 @@ def _build_valid_checker_fixture(
 
 
 def _run_checker(command: list[str], environment: dict[str, str], output: Path):
+    """Run the checker and include its structured errors in assertion diagnostics."""
+
     completed = subprocess.run(
         command,
         check=False,
@@ -371,7 +373,10 @@ def _run_checker(command: list[str], environment: dict[str, str], output: Path):
         text=True,
         env=environment,
     )
-    return completed, json.loads(output.read_text(encoding="utf-8"))
+    artifact = json.loads(output.read_text(encoding="utf-8"))
+    if completed.returncode != 0:
+        completed.stderr += f"\nchecker errors: {artifact.get('errors')!r}"
+    return completed, artifact
 
 
 def test_aggregate_checker_accepts_adjudicated_terminal_overshoot(tmp_path: Path) -> None:
@@ -1144,11 +1149,10 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
         encoding="utf-8"
     )
     assert review_runner.count("run_opencode \\") == 1
-    assert "${OPENCODE_MODELS:?OPENCODE_MODELS is required}" in review_runner
-    assert "IFS=';' read -r -a OPENCODE_MODEL_LIST" in review_runner
-    assert 'for index in "${!OPENCODE_MODEL_LIST[@]}"' in review_runner
-    assert "opencode-review-%02d" in review_runner
-    assert '"${OPENCODE_RESULT_FILES[@]}"' in review_runner
+    assert 'readonly OPENCODE_MODEL="opencode-go/deepseek-v4-flash"' in review_runner
+    assert 'readonly OPENCODE_REVIEWER_ID="opencode-deepseek-v4-flash"' in review_runner
+    assert "OPENCODE_MODELS" not in review_runner
+    assert "OPENCODE_MODEL_LIST" not in review_runner
     assert "run_claude" not in review_runner
     assert "CLAUDE_MODEL" not in review_runner
 

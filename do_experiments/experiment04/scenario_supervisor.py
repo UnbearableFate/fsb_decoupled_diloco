@@ -447,6 +447,19 @@ def _final_authority_evidence(
     ]
     if merge_counts != expected_merges:
         raise RuntimeError("global versions are not ten exact 4-contributor/200-step merges")
+    by_instance_id = {str(row["instance_id"]): row for row in instances}
+    bootstrap = [row for row in launches if row["role"] == "bootstrap"]
+    if len(bootstrap) != 8 or any(
+        row["request_id"] != f"bootstrap-{row['stream_id']}"
+        or row["bootstrap_slot"] != row["stream_id"]
+        or row["reason"] != "initial_bootstrap"
+        or row["state"] != "admitted"
+        or str(row["admitted_instance_id"]) not in by_instance_id
+        or int(by_instance_id[str(row["admitted_instance_id"])]["stream_id"])
+        != int(row["stream_id"])
+        for row in bootstrap
+    ):
+        raise RuntimeError("authority does not retain one exact bootstrap admission per stream")
     nonbootstrap = [row for row in launches if row["role"] != "bootstrap"]
 
     replacement_boundary: dict[str, Any] | None = None
@@ -462,9 +475,8 @@ def _final_authority_evidence(
             or launch_row["admitted_instance_id"] != replacement["admitted_instance_id"]
         ):
             raise RuntimeError("replacement launch identity or durable state is incorrect")
-        by_id = {str(row["instance_id"]): row for row in instances}
-        old = by_id[str(victim["instance_id"])]
-        new = by_id[str(replacement["admitted_instance_id"])]
+        old = by_instance_id[str(victim["instance_id"])]
+        new = by_instance_id[str(replacement["admitted_instance_id"])]
         if (
             old["status"] != "expired"
             or new["status"] != "stopped"
@@ -508,8 +520,7 @@ def _final_authority_evidence(
     elif scenario.inject_learner_failure:
         if victim is None or replacement is not None or nonbootstrap:
             raise RuntimeError("fixed-capacity learner failure produced a launch or replacement")
-        by_id = {str(row["instance_id"]): row for row in instances}
-        old = by_id[str(victim["instance_id"])]
+        old = by_instance_id[str(victim["instance_id"])]
         if old["status"] != "expired":
             raise RuntimeError("terminal close did not retire the failed fixed-capacity instance")
         old_fence = json.dumps(
@@ -554,7 +565,8 @@ def _final_authority_evidence(
         "terminal": terminal,
         "terminal_contributor_fences": fences,
         "merge_counts": merge_counts,
-        "launch_requests": launches,
+        "bootstrap_launches": bootstrap,
+        "launch_requests": nonbootstrap,
         "learner_instances": instances,
         "syncer_epochs": epochs,
         "global_versions": versions,

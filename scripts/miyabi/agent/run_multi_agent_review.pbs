@@ -36,12 +36,6 @@ require_commit() {
   git -C "$PROJECT_ROOT" cat-file -e "${value}^{commit}" || die "$label is not available: $value"
 }
 
-require_model_id() {
-  local label="$1"
-  local value="$2"
-  [[ "$value" =~ ^[A-Za-z0-9._/@:+-]+$ ]] || die "$label is not a safe model ID: $value"
-}
-
 new_uuid() {
   if command -v uuidgen >/dev/null 2>&1; then
     uuidgen | tr '[:upper:]' '[:lower:]'
@@ -62,12 +56,13 @@ PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-}}"
 : "${REVIEW_PROMPT_SHA256:?REVIEW_PROMPT_SHA256 is required}"
 : "${REVIEW_PATHS_FILE:?REVIEW_PATHS_FILE is required}"
 : "${REVIEW_PATHS_SHA256:?REVIEW_PATHS_SHA256 is required}"
-: "${OPENCODE_MODELS:?OPENCODE_MODELS is required}"
 
 PROJECT_ROOT="$(cd "$PROJECT_ROOT" && pwd -P)"
 [[ "$PROJECT_ROOT" != *","* ]] || die "PROJECT_ROOT must not contain a comma"
 REPORT_ROOT="$PROJECT_ROOT/reports/DOING/code_review"
 OPENCODE_BIN="${OPENCODE_BIN:-opencode}"
+readonly OPENCODE_MODEL="opencode-go/deepseek-v4-flash"
+readonly OPENCODE_REVIEWER_ID="opencode-deepseek-v4-flash"
 REVIEW_TIMEOUT_SECONDS="${REVIEW_TIMEOUT_SECONDS:-7200}"
 
 HOST_NAME="$(hostname)"
@@ -80,16 +75,6 @@ HOST_NAME="$(hostname)"
 require_safe_component "PLAN_ID" "$PLAN_ID"
 require_safe_component "REVIEW_ID" "$REVIEW_ID"
 require_safe_component "REVIEW_KIND" "$REVIEW_KIND"
-[[ "$OPENCODE_MODELS" != \;* && "$OPENCODE_MODELS" != *\; && "$OPENCODE_MODELS" != *\;\;* ]] || \
-  die "OPENCODE_MODELS must be a semicolon-separated list without empty entries"
-IFS=';' read -r -a OPENCODE_MODEL_LIST <<<"$OPENCODE_MODELS"
-declare -A SEEN_OPENCODE_MODELS=()
-for model in "${OPENCODE_MODEL_LIST[@]}"; do
-  require_model_id "OPENCODE_MODELS entry" "$model"
-  [[ -z "${SEEN_OPENCODE_MODELS[$model]+present}" ]] || \
-    die "OPENCODE_MODELS contains a duplicate model ID: $model"
-  SEEN_OPENCODE_MODELS["$model"]=1
-done
 case "$REVIEW_KIND" in
   test-design | failure | phase | preformal-plan-complete | final-evidence | critical-incremental) ;;
   *) die "unsupported REVIEW_KIND: $REVIEW_KIND" ;;
@@ -107,13 +92,7 @@ mkdir -p "$REPORT_DIR"
 
 TASK_TMP_ROOT="${TMPDIR:-/tmp}"
 RUN_TMP="$(mktemp -d "$TASK_TMP_ROOT/fsdiloco-review.${JOB_STEM}.XXXXXX")"
-OPENCODE_REVIEWER_IDS=()
-OPENCODE_SNAPSHOTS=()
-for index in "${!OPENCODE_MODEL_LIST[@]}"; do
-  reviewer_id="$(printf 'opencode-review-%02d' "$((index + 1))")"
-  OPENCODE_REVIEWER_IDS+=("$reviewer_id")
-  OPENCODE_SNAPSHOTS+=("$RUN_TMP/repository-$reviewer_id")
-done
+OPENCODE_SNAPSHOT="$RUN_TMP/repository-$OPENCODE_REVIEWER_ID"
 
 cleanup() {
   if [[ -n "${RUN_TMP:-}" && -d "$RUN_TMP" && "$RUN_TMP" == "$TASK_TMP_ROOT"/fsdiloco-review.* ]]; then
@@ -252,18 +231,11 @@ prepare_snapshot() {
   chmod -R a-w -- "$snapshot_dir"
 }
 
-OPENCODE_SNAPSHOT_SHA256=()
-for snapshot_dir in "${OPENCODE_SNAPSHOTS[@]}"; do
-  prepare_snapshot "$snapshot_dir"
-  OPENCODE_SNAPSHOT_SHA256+=("$(snapshot_digest "$snapshot_dir")")
-done
+prepare_snapshot "$OPENCODE_SNAPSHOT"
+OPENCODE_SNAPSHOT_SHA256="$(snapshot_digest "$OPENCODE_SNAPSHOT")"
 
 OPENCODE_MODEL_RECORD="$RUN_TMP/opencode-models.tsv"
-for index in "${!OPENCODE_MODEL_LIST[@]}"; do
-  printf '%s\t%s\n' \
-    "${OPENCODE_REVIEWER_IDS[$index]}" \
-    "${OPENCODE_MODEL_LIST[$index]}"
-done >"$OPENCODE_MODEL_RECORD"
+printf '%s\t%s\n' "$OPENCODE_REVIEWER_ID" "$OPENCODE_MODEL" >"$OPENCODE_MODEL_RECORD"
 
 REQUEST_RECORD="$REPORT_DIR/review-request_${TARGET_COMMIT}_${JOB_STEM}.md"
 REQUEST_RECORD_TMP="$RUN_TMP/review-request.md"
@@ -462,29 +434,16 @@ echo "[INFO] REPORT_DIR=$REPORT_DIR"
 echo "[INFO] PROMPT_SHA256=$PROMPT_SHA256"
 echo "[INFO] REVIEW_PATH_COUNT=$REVIEW_PATH_COUNT"
 echo "[INFO] REVIEW_PATHS_SHA256=$REVIEW_PATHS_SOURCE_SHA256"
-echo "[INFO] OPENCODE_MODEL_COUNT=${#OPENCODE_MODEL_LIST[@]}"
-while IFS=$'\t' read -r reviewer_id model; do
-  echo "[INFO] $reviewer_id=$model"
-done <"$OPENCODE_MODEL_RECORD"
+echo "[INFO] OPENCODE_MODEL=$OPENCODE_MODEL"
 module list 2>&1 | cat || true
 
-OPENCODE_PIDS=()
-OPENCODE_RESULT_FILES=()
-for index in "${!OPENCODE_MODEL_LIST[@]}"; do
-  reviewer_id="${OPENCODE_REVIEWER_IDS[$index]}"
-  run_opencode \
-    "$reviewer_id" \
-    "${OPENCODE_MODEL_LIST[$index]}" \
-    "independent current-state review of correctness, failure paths, integration, tests, evidence, and documentation" \
-    "${OPENCODE_SNAPSHOTS[$index]}" \
-    "${OPENCODE_SNAPSHOT_SHA256[$index]}" &
-  OPENCODE_PIDS+=("$!")
-  OPENCODE_RESULT_FILES+=("$RUN_TMP/$reviewer_id.tsv")
-done
-
-for reviewer_pid in "${OPENCODE_PIDS[@]}"; do
-  wait "$reviewer_pid" || true
-done
+OPENCODE_RESULT_FILE="$RUN_TMP/$OPENCODE_REVIEWER_ID.tsv"
+run_opencode \
+  "$OPENCODE_REVIEWER_ID" \
+  "$OPENCODE_MODEL" \
+  "independent current-state review of correctness, failure paths, integration, tests, evidence, and documentation" \
+  "$OPENCODE_SNAPSHOT" \
+  "$OPENCODE_SNAPSHOT_SHA256"
 
 SUMMARY_FILE="$REPORT_DIR/reviewer-job_${TARGET_COMMIT}_${JOB_STEM}.json"
 SUMMARY_TMP="$RUN_TMP/reviewer-job.json"
@@ -502,7 +461,7 @@ python3 - \
   "$REVIEW_PATHS_SOURCE_SHA256" \
   "$REVIEW_PATHS" \
   "$OPENCODE_MODEL_RECORD" \
-  "${OPENCODE_RESULT_FILES[@]}" <<'PY'
+  "$OPENCODE_RESULT_FILE" <<'PY'
 import json
 import pathlib
 import sys
