@@ -184,7 +184,9 @@ def _build_valid_checker_fixture(
                     "created_at": 100.0 + sequence,
                 }
             )
-            leader.ingest_cycle_receipt(command_id=f"receipt-{sequence}", receipt=receipt)
+            leader.ingest_cycle_receipt(
+                command_id=f"receipt-{stable_key}-{sequence}", receipt=receipt
+            )
             proposal = FullUpdateProposalV2.from_dict(
                 {
                     "proposal_format_version": PROPOSAL_FORMAT_VERSION,
@@ -216,10 +218,14 @@ def _build_valid_checker_fixture(
                 }
             )
             publish_proposal_payload(run_root, proposal)
-            leader.ingest_proposal(command_id=f"proposal-{sequence}", proposal=proposal)
+            leader.ingest_proposal(
+                command_id=f"proposal-{stable_key}-{sequence}", proposal=proposal
+            )
             if commit:
                 selected = leader.try_select_batch(
-                    command_id=f"select-{sequence}", quorum_min=1, quorum_max=1
+                    command_id=f"select-{stable_key}-{sequence}",
+                    quorum_min=1,
+                    quorum_max=1,
                 )
                 assert selected.batch is not None
                 leader.prepare_publication(

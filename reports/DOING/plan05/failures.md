@@ -91,3 +91,13 @@
 - 最小症状：run 按配置在 version 4 正常 terminal；15 个 receipt 与 15 个 proposal 一一对应，token ledger balance 为 0，拓扑和 ownership oracle 均通过。每个 normal merge 在 3 个 eligible contributor 达到 `quorum_min=3` 时提交，共应用 12 个 proposal、3840 direct token。Checker 错误要求每版固定使用 `quorum_max=4`，因此期望 16 个 proposal 和 5120 token。
 - 全面审查：见 `reports/DOING/code_review/plan05/failure-functional-harness-round1/codex-gpt_15159829d9e196b70fb19e30af136474073773ea_2531299.md`。审查确认 selection transaction 的契约是 `[quorum_min, quorum_max]`，commit/selection credit/global-version/token ledger 均与实际 3-way batch 一致；不能通过改 merge 时序、把 functional quorum 改成 4/4 或放宽 token balance 解决。
 - 下一验证：按审查结论改写 Checker 的 variable-quorum 公式和 regression fixture；随后运行 fresh U1，再从 fresh 5-node roots重跑两种 functional 场景。
+
+## U1 candidate 11：variable-quorum fixture 复用了跨 stream command ID
+
+- 分类：`harness-failure`；这是 functional failure review 后 U1 回归验证的第一次有效失败。
+- Source：commit `e144ac8bb1aa610743136677e5ec3063b0f5e854`，clean source。
+- 环境：PBS job `2531357.opbs`，compute node `mg0854`；focused suite 共 256 项，其中 1 项失败。
+- 证据：`reports/DOING/plan05/artifacts/validation_candidate11.json`、`validation_candidate11.log` 与 focused JUnit。
+- 最小症状：新增 variable-quorum fixture 为 stream 0 和 stream 1 的第一个 receipt 都使用 `receipt-1` command ID。authority 正确把第二个不同 request 识别为 command replay conflict，因此测试在调用 Checker 前失败。
+- 处置：fixture 的 receipt、proposal 和 selection command ID 全部包含 stable stream key；不修改 authority replay contract 或 Checker acceptance contract。
+- 下一验证：提交 fixture 修复后，在 fresh one-node PBS job 上重新运行完整 U1 ladder。
