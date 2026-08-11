@@ -25,9 +25,5 @@ python -m fs_diloco.tools.launch_independent_run \
 
 运行根目录中的权威状态是 `control/syncer_metadata.sqlite3`。配置、descriptor、source manifest、artifact policy 和 bootstrap marker 都在初始化时不可变发布；weights、outer optimizer state、receipt、proposal、control publication 和 audit history 都通过内容哈希或 authority row 绑定。
 
-详细文档：
-
-- [设计与数据流](docs/design.md)
-- [配置](docs/configuration.md)
-- [Miyabi 运维](docs/operations.md)
-- [测试与证据](docs/testing.md)
+网页文档源文件位于 [website](website/README.md)，包含 Overview、Getting Started、
+Concepts、User Guide、Architecture、Reference，并为 Experiments 预留独立章节。
