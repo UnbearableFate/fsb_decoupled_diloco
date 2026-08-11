@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceRevision": "2c7bb467ecf70ee9f6fbb581e5e167617b074ad6",
+  "sourceRevision": "c96108c8be6b84ea240c0e7343d9342fffcd6015",
   "stats": {
     "modules": 63,
     "packages": 9,
@@ -18885,7 +18885,7 @@
       "module": "fs_diloco.storage.authority",
       "route": "/reference/fs_diloco/storage/authority",
       "sourcePath": "fs_diloco/storage/authority.py",
-      "sourceSha256": "7cb0ecfcd8522d2298f86918a0b5510602df425710e90520f41e1de1913b68f3",
+      "sourceSha256": "b8841aa97845c6024115bab690ea079b49156f0885076661686bc6fe35366b30",
       "isPackage": false,
       "visibility": "public",
       "summary": "初始化 SQLite authority，并提供类型化读取与显式 fenced command。",
@@ -21200,7 +21200,7 @@
               ],
               "decorators": [],
               "line": 1792,
-              "endLine": 1880
+              "endLine": 1884
             },
             {
               "name": "plan_launch_request",
@@ -21290,8 +21290,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 1882,
-              "endLine": 2037
+              "line": 1886,
+              "endLine": 2041
             },
             {
               "name": "transition_launch_request",
@@ -21381,8 +21381,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 2039,
-              "endLine": 2175
+              "line": 2043,
+              "endLine": 2179
             },
             {
               "name": "apply_scheduler_operator_request",
@@ -21414,8 +21414,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 2177,
-              "endLine": 2310
+              "line": 2181,
+              "endLine": 2314
             },
             {
               "name": "record_scheduler_operator_file_disposition",
@@ -21470,8 +21470,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 2312,
-              "endLine": 2376
+              "line": 2316,
+              "endLine": 2380
             },
             {
               "name": "admit_incarnation",
@@ -21582,8 +21582,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 2378,
-              "endLine": 2734
+              "line": 2382,
+              "endLine": 2743
             },
             {
               "name": "retire_incarnation",
@@ -21638,8 +21638,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 2736,
-              "endLine": 2775
+              "line": 2745,
+              "endLine": 2784
             },
             {
               "name": "try_select_batch",
@@ -21680,8 +21680,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 2777,
-              "endLine": 2893
+              "line": 2786,
+              "endLine": 2902
             },
             {
               "name": "prepare_publication",
@@ -21785,8 +21785,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 2895,
-              "endLine": 3021
+              "line": 2904,
+              "endLine": 3030
             },
             {
               "name": "commit_merge",
@@ -21834,8 +21834,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 3023,
-              "endLine": 3258
+              "line": 3032,
+              "endLine": 3267
             },
             {
               "name": "abandon_publication",
@@ -21874,8 +21874,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 3260,
-              "endLine": 3291
+              "line": 3269,
+              "endLine": 3300
             },
             {
               "name": "reconcile_publications",
@@ -21900,8 +21900,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 3293,
-              "endLine": 3328
+              "line": 3302,
+              "endLine": 3337
             },
             {
               "name": "claim_orphan_gc",
@@ -21935,8 +21935,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 3330,
-              "endLine": 3376
+              "line": 3339,
+              "endLine": 3385
             },
             {
               "name": "complete_artifact_gc",
@@ -21971,8 +21971,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 3378,
-              "endLine": 3413
+              "line": 3387,
+              "endLine": 3422
             },
             {
               "name": "archive_audit_batch",
@@ -22029,8 +22029,8 @@
                 "当前异常"
               ],
               "decorators": [],
-              "line": 3415,
-              "endLine": 3655
+              "line": 3424,
+              "endLine": 3664
             },
             {
               "name": "_immutable_audit_object",
@@ -22071,8 +22071,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 3657,
-              "endLine": 3672
+              "line": 3666,
+              "endLine": 3681
             },
             {
               "name": "_find_compacted_audit_source",
@@ -22097,8 +22097,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 3674,
-              "endLine": 3702
+              "line": 3683,
+              "endLine": 3711
             },
             {
               "name": "compact_audit_batches",
@@ -22175,8 +22175,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 3704,
-              "endLine": 3896
+              "line": 3713,
+              "endLine": 3905
             },
             {
               "name": "claim_audit_gc",
@@ -22210,8 +22210,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 3898,
-              "endLine": 3930
+              "line": 3907,
+              "endLine": 3939
             },
             {
               "name": "complete_audit_gc",
@@ -22246,8 +22246,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 3932,
-              "endLine": 3972
+              "line": 3941,
+              "endLine": 3981
             },
             {
               "name": "begin_terminal_preclose",
@@ -22295,8 +22295,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 3974,
-              "endLine": 4034
+              "line": 3983,
+              "endLine": 4043
             },
             {
               "name": "begin_terminal_close",
@@ -22344,8 +22344,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 4036,
-              "endLine": 4147
+              "line": 4045,
+              "endLine": 4156
             },
             {
               "name": "begin_terminal_proposal_visibility",
@@ -22386,8 +22386,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 4149,
-              "endLine": 4198
+              "line": 4158,
+              "endLine": 4207
             },
             {
               "name": "acknowledge_terminal_contributor",
@@ -22442,8 +22442,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 4200,
-              "endLine": 4372
+              "line": 4209,
+              "endLine": 4381
             },
             {
               "name": "finalize_terminal",
@@ -22482,8 +22482,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4374,
-              "endLine": 4476
+              "line": 4383,
+              "endLine": 4485
             },
             {
               "name": "_require_proposal_receipt",
@@ -22517,8 +22517,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 4478,
-              "endLine": 4507
+              "line": 4487,
+              "endLine": 4516
             },
             {
               "name": "_require_visibility_receipt",
@@ -22566,8 +22566,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 4509,
-              "endLine": 4532
+              "line": 4518,
+              "endLine": 4541
             },
             {
               "name": "_record_observation",
@@ -22606,8 +22606,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4534,
-              "endLine": 4558
+              "line": 4543,
+              "endLine": 4567
             },
             {
               "name": "_record_visibility_terminal",
@@ -22688,8 +22688,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4560,
-              "endLine": 4631
+              "line": 4569,
+              "endLine": 4640
             },
             {
               "name": "_record_quarantine",
@@ -22749,8 +22749,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4633,
-              "endLine": 4664
+              "line": 4642,
+              "endLine": 4673
             },
             {
               "name": "_prune_quarantine",
@@ -22782,8 +22782,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4666,
-              "endLine": 4684
+              "line": 4675,
+              "endLine": 4693
             },
             {
               "name": "_advance_proposal_frontier",
@@ -22822,8 +22822,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4686,
-              "endLine": 4697
+              "line": 4695,
+              "endLine": 4706
             },
             {
               "name": "_advance_frontier_values",
@@ -22871,8 +22871,8 @@
                 "AuthoritySchemaError"
               ],
               "decorators": [],
-              "line": 4699,
-              "endLine": 4735
+              "line": 4708,
+              "endLine": 4744
             },
             {
               "name": "_terminalize_fenced_updates",
@@ -22918,8 +22918,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4737,
-              "endLine": 4801
+              "line": 4746,
+              "endLine": 4810
             },
             {
               "name": "_drop_active_update",
@@ -22958,8 +22958,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4803,
-              "endLine": 4824
+              "line": 4812,
+              "endLine": 4833
             },
             {
               "name": "_token_rollup_column",
@@ -22988,8 +22988,8 @@
               "decorators": [
                 "staticmethod"
               ],
-              "line": 4827,
-              "endLine": 4839
+              "line": 4836,
+              "endLine": 4848
             },
             {
               "name": "_ensure_token_rollup",
@@ -23021,8 +23021,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4841,
-              "endLine": 4853
+              "line": 4850,
+              "endLine": 4862
             },
             {
               "name": "_record_token_receipt",
@@ -23061,8 +23061,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4855,
-              "endLine": 4884
+              "line": 4864,
+              "endLine": 4893
             },
             {
               "name": "_transition_token_fate",
@@ -23124,8 +23124,8 @@
                 "AuthoritySchemaError"
               ],
               "decorators": [],
-              "line": 4886,
-              "endLine": 4929
+              "line": 4895,
+              "endLine": 4938
             },
             {
               "name": "_reconcile_invalid_batch",
@@ -23171,8 +23171,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4931,
-              "endLine": 4999
+              "line": 4940,
+              "endLine": 5008
             },
             {
               "name": "_abandon_publication_artifacts",
@@ -23218,8 +23218,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 5001,
-              "endLine": 5050
+              "line": 5010,
+              "endLine": 5059
             },
             {
               "name": "_retire_in_transaction",
@@ -23272,8 +23272,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 5052,
-              "endLine": 5130
+              "line": 5061,
+              "endLine": 5139
             },
             {
               "name": "_fence_from_instance",
@@ -23300,8 +23300,8 @@
               "decorators": [
                 "staticmethod"
               ],
-              "line": 5133,
-              "endLine": 5144
+              "line": 5142,
+              "endLine": 5153
             },
             {
               "name": "_admission_result",
@@ -23335,8 +23335,8 @@
               "decorators": [
                 "staticmethod"
               ],
-              "line": 5147,
-              "endLine": 5165
+              "line": 5156,
+              "endLine": 5174
             },
             {
               "name": "_require_current_fence",
@@ -23384,8 +23384,8 @@
                 "MembershipFenceError"
               ],
               "decorators": [],
-              "line": 5167,
-              "endLine": 5206
+              "line": 5176,
+              "endLine": 5215
             },
             {
               "name": "_require_terminal_input_allowed",
@@ -23434,8 +23434,8 @@
                 "AuthoritySchemaError"
               ],
               "decorators": [],
-              "line": 5208,
-              "endLine": 5246
+              "line": 5217,
+              "endLine": 5255
             },
             {
               "name": "_require_current_fence_json",
@@ -23481,8 +23481,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 5248,
-              "endLine": 5261
+              "line": 5257,
+              "endLine": 5270
             },
             {
               "name": "_fence_is_current_json",
@@ -23521,8 +23521,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 5263,
-              "endLine": 5274
+              "line": 5272,
+              "endLine": 5283
             },
             {
               "name": "_verify_prepared_publication_artifacts",
@@ -23549,8 +23549,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 5276,
-              "endLine": 5297
+              "line": 5285,
+              "endLine": 5306
             },
             {
               "name": "_command_replay",
@@ -23591,8 +23591,8 @@
                 "CommandConflictError"
               ],
               "decorators": [],
-              "line": 5299,
-              "endLine": 5323
+              "line": 5308,
+              "endLine": 5332
             },
             {
               "name": "_command",
@@ -23641,8 +23641,8 @@
                 "CommandConflictError"
               ],
               "decorators": [],
-              "line": 5325,
-              "endLine": 5378
+              "line": 5334,
+              "endLine": 5387
             },
             {
               "name": "_load_selection_batch",
@@ -23669,12 +23669,12 @@
                 "AuthoritySchemaError"
               ],
               "decorators": [],
-              "line": 5380,
-              "endLine": 5411
+              "line": 5389,
+              "endLine": 5420
             }
           ],
           "line": 1024,
-          "endLine": 5411
+          "endLine": 5420
         }
       ],
       "functions": [
@@ -24135,8 +24135,8 @@
           },
           "raises": [],
           "decorators": [],
-          "line": 5414,
-          "endLine": 5602
+          "line": 5423,
+          "endLine": 5611
         },
         {
           "name": "_canonical_json",
@@ -24161,8 +24161,8 @@
           },
           "raises": [],
           "decorators": [],
-          "line": 5605,
-          "endLine": 5606
+          "line": 5614,
+          "endLine": 5615
         },
         {
           "name": "_decode_committed_leader_lease",
@@ -24194,8 +24194,8 @@
           },
           "raises": [],
           "decorators": [],
-          "line": 5609,
-          "endLine": 5617
+          "line": 5618,
+          "endLine": 5626
         },
         {
           "name": "_decode_progress",
@@ -24220,8 +24220,8 @@
           },
           "raises": [],
           "decorators": [],
-          "line": 5620,
-          "endLine": 5631
+          "line": 5629,
+          "endLine": 5640
         },
         {
           "name": "_decode_publication_intent",
@@ -24246,8 +24246,8 @@
           },
           "raises": [],
           "decorators": [],
-          "line": 5634,
-          "endLine": 5654
+          "line": 5643,
+          "endLine": 5663
         },
         {
           "name": "_decode_committed_version",
@@ -24272,8 +24272,8 @@
           },
           "raises": [],
           "decorators": [],
-          "line": 5657,
-          "endLine": 5675
+          "line": 5666,
+          "endLine": 5684
         },
         {
           "name": "_decode_proposal",
@@ -24298,8 +24298,8 @@
           },
           "raises": [],
           "decorators": [],
-          "line": 5678,
-          "endLine": 5710
+          "line": 5687,
+          "endLine": 5719
         }
       ],
       "dependencies": [
@@ -24329,7 +24329,7 @@
         "fs_diloco.tools.analysis",
         "fs_diloco.tools.init_run"
       ],
-      "lineCount": 5710
+      "lineCount": 5719
     },
     {
       "module": "fs_diloco.storage.control",
