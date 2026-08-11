@@ -273,6 +273,8 @@ def _write_full_protocol_run(
     for version in range(1, 11):
         for offset in range(4):
             stream = (version * 4 + offset) % 8
+            if stream == hard_crash_stream and local_steps[stream] >= 600:
+                stream = (stream + 1) % 8
             local_steps[stream] += 200
             connection.execute(
                 "INSERT INTO updates VALUES(?, ?, ?, 200, 'applied', ?)",

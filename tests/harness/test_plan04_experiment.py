@@ -200,6 +200,7 @@ def _finalized_authority(
             terminal_fence["placement_epoch"] = 2
             terminal_fence["stream_epoch"] = 2
             terminal_fence["admission_generation"] = 2
+            terminal_fence["admission_token_sha256"] = f"{stream + 1:x}" * 64
         connection.execute(
             "INSERT INTO terminal_contributor_fences VALUES(1, ?, ?, ?, ?, ?)",
             (
@@ -301,6 +302,7 @@ def _finalized_authority(
                 fence["placement_epoch"] = 2
                 fence["stream_epoch"] = 2
                 fence["admission_generation"] = 2
+                fence["admission_token_sha256"] = f"{stream + 1:x}" * 64
             fence_json = json.dumps(fence, sort_keys=True, separators=(",", ":"))
             receipt_id = f"receipt-{stream}-{cycle_seq}"
             digest = f"{stream:x}{cycle_seq:x}".ljust(64, "0")
@@ -480,7 +482,7 @@ def test_no_failure_authority_oracle_requires_ten_exact_four_way_merges(tmp_path
     assert len(evidence["bootstrap_launches"]) == 8
 
     connection = sqlite3.connect(database)
-    connection.execute("DELETE FROM updates WHERE update_id='update-10-3'")
+    connection.execute("UPDATE updates SET inner_steps=199 WHERE update_id='update-10-3'")
     connection.commit()
     connection.close()
     with pytest.raises(RuntimeError, match="ten exact"):
