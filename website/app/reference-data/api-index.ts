@@ -685,7 +685,7 @@ export const apiModuleIndex = [
     "package": "fs_diloco.storage",
     "counts": {
       "classes": 0,
-      "functions": 28,
+      "functions": 29,
       "methods": 0
     }
   },
@@ -825,9 +825,9 @@ export const apiReferenceStats = {
   "modules": 63,
   "packages": 9,
   "classes": 105,
-  "functions": 295,
+  "functions": 296,
   "methods": 328,
   "fields": 560,
-  "variables": 49,
-  "symbols": 1337
+  "variables": 51,
+  "symbols": 1340
 } as const;

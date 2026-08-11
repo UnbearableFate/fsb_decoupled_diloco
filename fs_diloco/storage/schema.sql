@@ -11,7 +11,8 @@ CREATE TABLE run_identity (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     run_id TEXT NOT NULL UNIQUE,
     source_fingerprint TEXT NOT NULL,
-    config_sha256 TEXT NOT NULL CHECK (length(config_sha256) = 64)
+    config_sha256 TEXT NOT NULL CHECK (length(config_sha256) = 64),
+    stream_pool_size INTEGER NOT NULL CHECK (stream_pool_size > 0)
 );
 
 CREATE TABLE command_records (

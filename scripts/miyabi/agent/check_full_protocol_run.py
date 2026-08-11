@@ -486,13 +486,17 @@ def validate_run(
         or schema_meta[0]["ddl_sha256"] != ddl_bundle_sha256()
     ):
         errors.append("authority schema identity differs from the run descriptor")
-    if len(run_identity) != 1 or any(
-        run_identity[0].get(name) != descriptor.get(descriptor_name)
-        for name, descriptor_name in (
-            ("run_id", "run_id"),
-            ("source_fingerprint", "source_fingerprint"),
-            ("config_sha256", "resolved_config_sha256"),
+    if (
+        len(run_identity) != 1
+        or any(
+            run_identity[0].get(name) != descriptor.get(descriptor_name)
+            for name, descriptor_name in (
+                ("run_id", "run_id"),
+                ("source_fingerprint", "source_fingerprint"),
+                ("config_sha256", "resolved_config_sha256"),
+            )
         )
+        or int(run_identity[0].get("stream_pool_size", -1)) != expected_contributors
     ):
         errors.append("SQLite run identity differs from the run descriptor")
     if len(terminal) != 1 or terminal[0].get("state") != "finalized":

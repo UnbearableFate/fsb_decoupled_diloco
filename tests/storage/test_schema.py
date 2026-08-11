@@ -79,6 +79,7 @@ def test_fresh_schema_initializes_reopens_and_is_integral(tmp_path: Path) -> Non
     marker = database.with_name("bootstrap_complete.json")
     marker_payload = json.loads(marker.read_text(encoding="utf-8"))
     assert {"mode", "features"}.isdisjoint(marker_payload)
+    assert marker_payload["stream_pool_size"] == 2
     assert marker.stat().st_mode & 0o222 == 0
 
     with AuthorityReader(database, identity(), scope) as reader:
@@ -115,6 +116,8 @@ def test_open_rejects_membership_and_run_identity_mismatch(tmp_path: Path) -> No
 
     with pytest.raises(AuthoritySchemaError, match="membership scope"):
         LeaderAuthority(database, identity(), MembershipScope(2))
+    with pytest.raises(AuthoritySchemaError, match="membership scope"):
+        AuthorityReader(database, identity(), MembershipScope(2))
 
     other = AuthorityIdentity("other-run", "source-fingerprint", identity().config_sha256)
     with pytest.raises(AuthoritySchemaError, match="identity"):

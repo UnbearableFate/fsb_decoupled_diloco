@@ -294,10 +294,15 @@ def initialize_authority(
             connection.execute(
                 """
                 INSERT INTO run_identity(
-                    singleton, run_id, source_fingerprint, config_sha256
-                ) VALUES (1, ?, ?, ?)
+                    singleton, run_id, source_fingerprint, config_sha256, stream_pool_size
+                ) VALUES (1, ?, ?, ?, ?)
                 """,
-                (identity.run_id, identity.source_fingerprint, identity.config_sha256),
+                (
+                    identity.run_id,
+                    identity.source_fingerprint,
+                    identity.config_sha256,
+                    membership_scope.stream_pool_size,
+                ),
             )
             connection.execute(
                 "INSERT INTO controller_state(singleton, state, generation) VALUES (1, 'open', 0)"
@@ -316,6 +321,7 @@ def initialize_authority(
             "ddl_sha256": ddl_sha,
             "schema_fingerprint": fingerprint,
             "identity": identity.as_dict(),
+            "stream_pool_size": membership_scope.stream_pool_size,
             "database_name": path.name,
             "created_at": now,
         }
@@ -344,6 +350,7 @@ def _validate_open(
     path: Path,
     marker: Path,
     identity: AuthorityIdentity,
+    membership_scope: MembershipScope,
     busy_timeout_ms: int,
 ) -> AuthorityMetadata:
     """Validate the sole current DDL, bootstrap marker, and run identity on open."""
@@ -377,12 +384,15 @@ def _validate_open(
     for key, value in identity.as_dict().items():
         if identity_row[key] != value:
             raise AuthoritySchemaError(f"authority identity mismatch for {key}")
+    if int(identity_row["stream_pool_size"]) != membership_scope.stream_pool_size:
+        raise AuthoritySchemaError("authority membership scope mismatch")
     marker_expectations: dict[str, Any] = {
         "authority_schema_version": AUTHORITY_SCHEMA_VERSION,
         "protocol_version": PROTOCOL_VERSION,
         "ddl_sha256": expected_ddl,
         "schema_fingerprint": actual_fingerprint,
         "identity": identity.as_dict(),
+        "stream_pool_size": membership_scope.stream_pool_size,
         "database_name": path.name,
     }
     for key, value in marker_expectations.items():
@@ -682,6 +692,7 @@ class AuthorityReader:
                 path=path,
                 marker=_marker_path(path, marker_path),
                 identity=identity,
+                membership_scope=membership_scope,
                 busy_timeout_ms=busy_timeout_ms,
             )
         except Exception:
@@ -746,6 +757,7 @@ class LeaderAuthority:
                 path=path,
                 marker=_marker_path(path, marker_path),
                 identity=identity,
+                membership_scope=membership_scope,
                 busy_timeout_ms=busy_timeout_ms,
             )
         except Exception:

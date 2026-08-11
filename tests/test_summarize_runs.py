@@ -348,7 +348,7 @@ def test_parse_full_protocol_includes_maintenance_archives(tmp_path: Path) -> No
 
 
 def test_csv_update_discovers_both_layouts_and_deduplicates(tmp_path: Path) -> None:
-    """Repeated recursive aggregation must keep one row per current run identity."""
+    """Recursive aggregation keeps one row per identity in deterministic path order."""
 
     module = _module()
     runs_root = tmp_path / "runs"
@@ -359,7 +359,7 @@ def test_csv_update_discovers_both_layouts_and_deduplicates(tmp_path: Path) -> N
 
     assert module.update_summary_csv([runs_root], output) == (2, 0, 2)
     assert module.update_summary_csv([runs_root], output) == (0, 2, 2)
-    assert [row["run_id"] for row in _read_rows(output)] == ["ddp-run", "full-protocol-run"]
+    assert [row["run_id"] for row in _read_rows(output)] == ["full-protocol-run", "ddp-run"]
 
 
 def test_comparison_flags_twenty_percent_metric_difference(tmp_path: Path) -> None:

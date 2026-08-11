@@ -220,6 +220,37 @@ def test_completed_descriptor_rejects_legacy_identity_field(tmp_path: Path) -> N
         load_run_descriptor(config.run.shared_root)
 
 
+def test_staged_retry_rejects_legacy_identity_field(tmp_path: Path) -> None:
+    """Recovery must not publish a reserved staging root with a legacy identity shape."""
+
+    config = _config(tmp_path, "staged-identity-legacy-field")
+
+    def crash_after_reservation(point: str) -> None:
+        """Leave one current staging root reserved before final publication."""
+
+        if point == "after_identity_reservation":
+            raise InjectedCrash(point)
+
+    with pytest.raises(InjectedCrash, match="after_identity_reservation"):
+        initialize_run(config, project_root=tmp_path, fault_hook=crash_after_reservation)
+    staging_root = find_reserved_staging(Path(config.run.shared_root).resolve())
+    assert staging_root is not None
+    identity_path = staging_root / ".identity"
+    identity = read_json(identity_path)
+    identity["mode"] = "dynamic"
+    content = {key: value for key, value in identity.items() if key != "identity_sha256"}
+    identity["identity_sha256"] = hashlib.sha256(
+        initializer_module.canonical_json_bytes(content)
+    ).hexdigest()
+    identity_path.chmod(0o644)
+    identity_path.write_text(json.dumps(identity, sort_keys=True) + "\n", encoding="utf-8")
+    identity_path.chmod(0o444)
+
+    with pytest.raises(RuntimeError, match="run identity schema is invalid"):
+        initialize_run(config, project_root=tmp_path)
+    assert not Path(config.run.shared_root).exists()
+
+
 def test_every_manifest_object_link_fault_is_invisible_and_retryable(tmp_path: Path) -> None:
     """Each manifest object-link crash remains invisible and retryable."""
 

@@ -37,6 +37,7 @@ from ..storage.run_initializer import (
     publish_staged_run,
     remove_completed_staging,
     validate_completed_run,
+    validate_identity_file,
     write_complete_source,
     write_run_identity,
 )
@@ -116,11 +117,12 @@ def initialize_run(
             fault_hook=fault_hook,
         )
     else:
-        identity = json.loads((staging_root / ".identity").read_text(encoding="utf-8"))
+        identity = validate_identity_file(staging_root / ".identity")
         expected_identity = {
             "run_id": shared.run.run_id,
             "source_fingerprint": shared.run.source_fingerprint,
             "config_sha256": expected_config_sha256,
+            "logical_root": str(final_root),
         }
         mismatches = {
             key: (identity.get(key), value)
@@ -225,13 +227,10 @@ def _populate_staging(
     atomic_write_json(paths.artifact_policy_json, artifact_policy)
     write_run_identity(
         staging_root,
-        {
-            "format_version": 2,
-            "run_id": shared.run.run_id,
-            "source_fingerprint": shared.run.source_fingerprint,
-            "config_sha256": config_sha256,
-            "logical_root": str(logical_root),
-        },
+        run_id=shared.run.run_id,
+        source_fingerprint=shared.run.source_fingerprint,
+        config_sha256=config_sha256,
+        logical_root=logical_root,
     )
     for path in staging_root.rglob("*"):
         if path.is_file() and path != paths.sqlite_db:

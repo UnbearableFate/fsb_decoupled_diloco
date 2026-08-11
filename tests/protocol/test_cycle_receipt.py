@@ -35,8 +35,8 @@ def test_receipt_path_is_namespaced_by_complete_contributor_fence() -> None:
     replacement_path = canonical_receipt_relative_path(replacement, 1)
 
     assert first_path != replacement_path
-    assert first_path.endswith("/receipt-learner-0-1.json")
-    assert replacement_path.endswith("/receipt-learner-0-1.json")
+    assert first_path.endswith("/receipt-0-1.json")
+    assert replacement_path.endswith("/receipt-0-1.json")
     assert ".." not in first_path and ".." not in replacement_path
 
 

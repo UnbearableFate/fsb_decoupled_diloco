@@ -11,6 +11,7 @@ from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from ..core.versions import RUN_IDENTITY_FORMAT_VERSION
 from .atomic_io import (
     atomic_write_json,
     fsync_directory,
@@ -46,6 +47,14 @@ _MUTABLE_FILES = (
 
 
 FaultHook = Callable[[str], None]
+_RUN_IDENTITY_FIELDS = {
+    "format_version",
+    "run_id",
+    "source_fingerprint",
+    "config_sha256",
+    "logical_root",
+    "identity_sha256",
+}
 
 
 def canonical_json_bytes(value: dict[str, Any]) -> bytes:
@@ -67,25 +76,68 @@ def create_staging_root(final_root: Path) -> Path:
     return staging
 
 
-def write_run_identity(staging_root: Path, identity: dict[str, Any]) -> Path:
-    payload = dict(identity)
+def write_run_identity(
+    staging_root: Path,
+    *,
+    run_id: str,
+    source_fingerprint: str,
+    config_sha256: str,
+    logical_root: Path,
+) -> Path:
+    """Write the sole exact immutable run identity into an unpublished root."""
+
+    payload = {
+        "format_version": RUN_IDENTITY_FORMAT_VERSION,
+        "run_id": run_id,
+        "source_fingerprint": source_fingerprint,
+        "config_sha256": config_sha256,
+        "logical_root": str(logical_root),
+    }
     payload["identity_sha256"] = hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
+    _validate_run_identity_payload(payload)
     target = staging_root / ".identity"
     atomic_write_json(target, payload, mode=0o444)
+    validate_identity_file(target)
     return target
 
 
 def validate_identity_file(path: Path) -> dict[str, Any]:
+    """Validate the exact current run-identity shape, checksum, and immutable file type."""
+
     metadata = path.lstat()
     if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
         raise RuntimeError("run identity must be a non-writable regular file")
     payload = read_json(path)
-    recorded = payload.get("identity_sha256")
+    _validate_run_identity_payload(payload)
+    recorded = payload["identity_sha256"]
     content = {key: value for key, value in payload.items() if key != "identity_sha256"}
     actual = hashlib.sha256(canonical_json_bytes(content)).hexdigest()
     if recorded != actual:
         raise RuntimeError("run identity checksum mismatch")
     return payload
+
+
+def _validate_run_identity_payload(payload: Any) -> None:
+    """Reject every payload outside the sole current immutable identity schema."""
+
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != _RUN_IDENTITY_FIELDS
+        or payload.get("format_version") != RUN_IDENTITY_FORMAT_VERSION
+        or not isinstance(payload.get("run_id"), str)
+        or not payload["run_id"]
+        or not isinstance(payload.get("source_fingerprint"), str)
+        or not payload["source_fingerprint"]
+        or not isinstance(payload.get("logical_root"), str)
+        or not Path(payload["logical_root"]).is_absolute()
+        or not isinstance(payload.get("config_sha256"), str)
+        or len(payload["config_sha256"]) != 64
+        or any(character not in "0123456789abcdef" for character in payload["config_sha256"])
+        or not isinstance(payload.get("identity_sha256"), str)
+        or len(payload["identity_sha256"]) != 64
+        or any(character not in "0123456789abcdef" for character in payload["identity_sha256"])
+    ):
+        raise RuntimeError("run identity schema is invalid")
 
 
 def build_complete_manifest(staging_root: Path, *, logical_root: Path) -> dict[str, Any]:
@@ -548,7 +600,7 @@ def _validate_completed_protocol_identity(final_root: Path, *, validate_authorit
             raise RuntimeError(f"source manifest {field} mismatch")
     identity = validate_identity_file(paths.run_identity_file)
     identity_checks = {
-        "format_version": 2,
+        "format_version": RUN_IDENTITY_FORMAT_VERSION,
         "run_id": descriptor.get("run_id"),
         "source_fingerprint": descriptor.get("source_fingerprint"),
         "config_sha256": descriptor.get("resolved_config_sha256"),
