@@ -352,6 +352,8 @@ def run_validation(
             errors.append("validation source scopes are dirty")
         else:
             status = "PASS"
+            step_environment = os.environ.copy()
+            step_environment["PYTHON_BIN"] = sys.executable
             for step in selected_steps:
                 junit_path = junit_paths.get(step.name)
                 argv = step.argv if junit_path is None else (*step.argv, f"--junitxml={junit_path}")
@@ -363,6 +365,7 @@ def run_validation(
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
+                    env=step_environment,
                 )
                 elapsed = time.monotonic() - started
                 metric: dict[str, Any] = {

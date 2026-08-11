@@ -58,7 +58,11 @@ def test_validation_runner_publishes_create_only_schema_complete_pass(
     steps = (
         module.ValidationStep(
             "probe",
-            (sys.executable, "-c", "print('validation-probe-pass')"),
+            (
+                sys.executable,
+                "-c",
+                "import os; print('validation-probe-pass', os.environ['PYTHON_BIN'])",
+            ),
             "command",
         ),
     )
@@ -77,7 +81,7 @@ def test_validation_runner_publishes_create_only_schema_complete_pass(
     assert artifact["metrics"]["steps"][0]["argv"] == list(steps[0].argv)
     assert artifact["metrics"]["steps"][0]["result_kind"] == "command"
     assert artifact["metrics"]["steps"][0]["returncode"] == 0
-    assert "validation-probe-pass" in raw_log.read_text(encoding="utf-8")
+    assert f"validation-probe-pass {sys.executable}" in raw_log.read_text(encoding="utf-8")
     with pytest.raises(FileExistsError, match="create-only"):
         module.run_validation(
             project_root=ROOT,
