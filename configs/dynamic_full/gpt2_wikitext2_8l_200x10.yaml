@@ -88,6 +88,8 @@ learner:
   poll_latest_during_inner_steps: false
   adopt_global_after_upload: true
   global_adoption_strategy: replace
+  post_publish_latest_wait_seconds: 120.0
+  post_publish_latest_poll_seconds: 0.5
 leader:
   lease_duration_seconds: 30.0
   renew_interval_seconds: 5.0

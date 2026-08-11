@@ -1,3 +1,5 @@
+"""Exercise syncer admission and proposal-ingestion composition boundaries."""
+
 from __future__ import annotations
 
 import hashlib
@@ -9,6 +11,7 @@ import pytest
 
 from fs_diloco.core.config import Config
 from fs_diloco.core.run_descriptor import DescriptorAuthorityIdentity, LoadedRunDescriptor
+from fs_diloco.protocol.authority import ProposalDisposition
 from fs_diloco.protocol.contributor import StaticContributorFence, StaticMembershipScope
 from fs_diloco.protocol.cycle_receipt import CycleReceiptV1, canonical_receipt_relative_path
 from fs_diloco.runtime.syncer import _admit_requests, _ingest_proposals
@@ -245,6 +248,46 @@ def test_proposal_ingest_propagates_integrity_failures(
             SimpleNamespace(),
             _Telemetry(),
         )
+
+
+def test_proposal_ingest_reconsiders_merge_after_each_new_payload(tmp_path: Path) -> None:
+    """Expensive payload verification must not run past the next quorum opportunity."""
+
+    paths = RunPaths(tmp_path)
+    prepare_authority_dirs(paths)
+    candidates = [proposal(cycle_seq=sequence) for sequence in (1, 2)]
+    for candidate in candidates:
+        proposal_path = (
+            paths.shared_root
+            / "updates"
+            / "proposals"
+            / candidate.stable_contributor_key
+            / f"{candidate.update_id}.json"
+        )
+        proposal_path.parent.mkdir(parents=True, exist_ok=True)
+        proposal_path.write_bytes(candidate.canonical_bytes())
+    ingested: list[str] = []
+
+    def ingest_proposal(**kwargs: object) -> ProposalDisposition:
+        """Record the proposal that reached the expensive authority boundary."""
+
+        candidate = kwargs["proposal"]
+        assert hasattr(candidate, "update_id")
+        ingested.append(candidate.update_id)
+        return ProposalDisposition.ACCEPTED
+
+    authority = SimpleNamespace(read=SimpleNamespace(current_contributor_fences=lambda: ()))
+    leader = SimpleNamespace(ingest_proposal=ingest_proposal)
+
+    _ingest_proposals(
+        _loaded(paths, config_sha256=hashlib.sha256(b"config").hexdigest()),
+        authority,
+        leader,
+        SimpleNamespace(),
+        _Telemetry(),
+    )
+
+    assert ingested == [candidates[0].update_id]
 
 
 @pytest.mark.parametrize(

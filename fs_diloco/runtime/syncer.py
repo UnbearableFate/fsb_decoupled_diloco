@@ -833,6 +833,8 @@ def _ingest_proposals(
     control: ControlPublisher,
     telemetry: ActorTelemetryWriter,
 ) -> None:
+    """Ingest receipts, then at most one new payload before reconsidering a merge."""
+
     for fence in authority.read.current_contributor_fences():
         progress = authority.read.contributor_progress(fence.stable_contributor_key)
         sequences = (
@@ -882,6 +884,8 @@ def _ingest_proposals(
                 disposition = leader.ingest_proposal(
                     command_id=f"proposal-{proposal.immutable_sha256()}", proposal=proposal
                 )
+                if disposition.value == "accepted":
+                    return
                 if disposition.value not in {"accepted", "exact_replay"}:
                     telemetry.event(
                         "proposal_disposition",
