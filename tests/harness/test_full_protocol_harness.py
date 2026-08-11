@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from fs_diloco.core.config import resolve_config
+from fs_diloco.core.config import load_config, resolve_config
 from fs_diloco.core.run_descriptor import load_run_descriptor, write_actor_attestation
 from fs_diloco.core.source_identity import bind_source_identity, capture_source_identity
 from fs_diloco.core.versions import CYCLE_RECEIPT_FORMAT_VERSION, PROPOSAL_FORMAT_VERSION
@@ -415,6 +415,30 @@ def test_aggregate_checker_accepts_adjudicated_terminal_overshoot(tmp_path: Path
         "eligible": True,
         "targets": [str(run_root)],
     }
+
+
+def test_scheduler_host_oracle_distinguishes_coallocated_and_independent_jobs() -> None:
+    """One co-allocated PBS job spans hosts while each independent scalar job does not."""
+
+    module = _checker_module()
+    job_hosts = {"coallocated.opbs": ["node-a", "node-b"]}
+
+    assert not module._scheduler_job_spans_multiple_hosts(
+        job_hosts,
+        expected_scheduler_jobs=1,
+    )
+    assert module._scheduler_job_spans_multiple_hosts(
+        job_hosts,
+        expected_scheduler_jobs=2,
+    )
+
+
+def test_functional_config_closes_at_the_registered_global_target() -> None:
+    """The functional checker requires terminal final_version to equal its stop target."""
+
+    config = load_config(ROOT / "configs/full_protocol_functional.yaml")
+
+    assert config.terminal.max_terminal_merges == 0
 
 
 def test_aggregate_checker_accepts_independent_actor_jobs(tmp_path: Path) -> None:

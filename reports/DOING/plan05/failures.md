@@ -70,3 +70,14 @@
 - 根因：`_ingest_proposals` 的“每次只验证一个新 payload”成本边界缺少跨 stream 的 durable fairness。目录顺序与单次 early return 组合后，merge quorum 无法形成；单元测试只覆盖同一 stream 的 early return/replay，未覆盖已有 pending stream 与未服务 stream 竞争。
 - 处置：authority read model 暴露当前 pending update 的 stream key；proposal scan 优先处理 current 且尚未进入 pending quorum 的 stream，再处理已有 pending 和 stale stream。新增回归测试证明 fast stream 已有 pending proposal 时，下一个 ingest slot 必须服务缺失 stream。
 - 下一验证：在 1-node compute 上先运行新增 focused owner，再从 fresh 5-node roots 重跑 no-failure 与 syncer-takeover functional harness；两者必须由 Checker 发布 create-only PASS artifact。
+
+## Functional harness candidate 2：receipt ack 缺少 proposal backpressure，且 co-allocated oracle 不一致
+
+- 分类：1 个 `product-failure` 与 2 个 harness/config failure；计入 unique-protocol functional harness 验证域第二次有效失败。
+- Source：commit `f622710d6fac3d7acc622c0e6f4dd4ced1d6a4e1`，clean source fingerprint `sha256:df2b91be373b1b2a3b7a72370c002a0fdbc9ad617324d3d46fc4272c32143a5a`。
+- 环境：PBS job `2531221.opbs`，compute nodes `mg0864`、`mg0866`、`mg0968`、`mg0969`、`mg0970`；4-stream synthetic functional config，no-failure 场景。
+- 证据：`reports/DOING/plan05/artifacts/functional_no_failure_candidate2.json`、对应 PBS log、`runs/full_protocol/plan05_functional_none_c2_20260812/` 与 `logs/qsub_plan05_functional_none_c2_20260812/`。
+- 最小症状：fair ingestion 已使训练和 terminal 正常结束，但 authority 仅 ingest 17 个 proposal，而 receipt 有 50 个；learner 在 receipt 写入 authority 后立即收到 ack，因而可在对应 proposal 尚未 ingest 时继续产生下一周期。配置允许 1 次 terminal merge，使 final version 从注册的 4 变为 5；Checker 同时把一个跨 5 个节点的 co-allocated PBS job 错当成必须单 host 的 independent scalar job。
+- 根因：receipt ack 表达了 receipt durable，却被 learner 当作完整 cycle ingestion barrier；proposal backlog 因此只能在 terminal 时按 receipt token fate adjudicate，无法满足无故障场景的 receipt/proposal 一一对应。另有 functional config 与 exact final-version oracle 冲突，以及 scheduler host oracle 没有先按 co-allocated/independent topology 分支。
+- 处置：含 proposal 的 receipt 只在匹配 proposal 已被 authority accepted 或 exact-replay 后发布 ack；receipt-only cycle 仍在 receipt durable 后 ack。functional config 禁止 terminal extra merge；多 host 约束只应用于 independent scalar actor jobs。新增 ack 顺序、co-allocated topology 与 functional terminal 配置回归测试。
+- 下一验证：提交并完成一轮 fresh U1 后，从 fresh 5-node roots 重跑 no-failure 和 syncer-takeover；若同一 functional 域再次出现有效失败，必须在下一次提交前完成全面 failure review。

@@ -750,9 +750,10 @@ def _ingest_proposals(
     control: ControlPublisher,
     telemetry: ActorTelemetryWriter,
 ) -> None:
-    """Ingest receipts, then at most one new payload before reconsidering a merge."""
+    """Ingest receipts, then acknowledge at most one proposal before reconsidering a merge."""
 
     current_fences = authority.read.current_contributor_fences()
+    observed_receipts: dict[str, CycleReceiptV1] = {}
     for fence in current_fences:
         progress = authority.read.contributor_progress(fence.stable_contributor_key)
         sequences = (
@@ -772,10 +773,12 @@ def _ingest_proposals(
                 leader.ingest_cycle_receipt(
                     command_id=f"receipt-{receipt.immutable_sha256()}", receipt=receipt
                 )
-                control.publish_receipt_ack(
-                    receipt,
-                    descriptor_sha256=str(loaded.descriptor["descriptor_sha256"]),
-                )
+                observed_receipts[receipt.receipt_id] = receipt
+                if not receipt.proposal_expected:
+                    control.publish_receipt_ack(
+                        receipt,
+                        descriptor_sha256=str(loaded.descriptor["descriptor_sha256"]),
+                    )
             except (AuthoritySchemaError, CommandConflictError, StaleLeaderTokenError):
                 raise
             except sqlite3.OperationalError as exc:
@@ -832,6 +835,15 @@ def _ingest_proposals(
                 disposition = leader.ingest_proposal(
                     command_id=f"proposal-{proposal.immutable_sha256()}", proposal=proposal
                 )
+                if disposition.value in {"accepted", "exact_replay"}:
+                    receipt = observed_receipts.get(proposal.cycle_receipt_id)
+                    if receipt is not None:
+                        if receipt.immutable_sha256() != proposal.cycle_receipt_sha256:
+                            raise ValueError("proposal receipt acknowledgement identity mismatched")
+                        control.publish_receipt_ack(
+                            receipt,
+                            descriptor_sha256=str(loaded.descriptor["descriptor_sha256"]),
+                        )
                 if disposition.value == "accepted":
                     return
                 if disposition.value not in {"accepted", "exact_replay"}:

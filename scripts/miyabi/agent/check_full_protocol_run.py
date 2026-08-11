@@ -268,6 +268,16 @@ def _scenario_expectations(fault_scenario: str) -> tuple[str, ...]:
     raise ValueError(f"unregistered Full Protocol fault scenario: {fault_scenario}")
 
 
+def _scheduler_job_spans_multiple_hosts(
+    scheduler_job_hosts: dict[str, list[str]], *, expected_scheduler_jobs: int
+) -> bool:
+    """Reject multi-host identity only for independent scalar actor jobs."""
+
+    return expected_scheduler_jobs > 1 and any(
+        len(job_hosts) != 1 for job_hosts in scheduler_job_hosts.values()
+    )
+
+
 def _evidence_paths(
     *,
     run_root: Path,
@@ -766,7 +776,10 @@ def validate_run(
             f"actor attestations used {len(scheduler_job_ids)} scheduler jobs, "
             f"expected {expected_scheduler_jobs}"
         )
-    if any(len(job_hosts) != 1 for job_hosts in scheduler_job_hosts.values()):
+    if _scheduler_job_spans_multiple_hosts(
+        scheduler_job_hosts,
+        expected_scheduler_jobs=expected_scheduler_jobs,
+    ):
         errors.append("an actor scheduler job is attested on more than one host")
     if expected_scheduler_jobs == 1:
         if len(nodes) != expected_hosts or set(nodes) != hosts:

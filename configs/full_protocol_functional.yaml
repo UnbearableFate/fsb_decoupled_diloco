@@ -54,7 +54,7 @@ terminal:
   drain_ack_timeout_seconds: 30.0
   registration_visibility_grace_seconds: 1.0
   proposal_visibility_grace_seconds: 2.0
-  max_terminal_merges: 1
+  max_terminal_merges: 0
 training:
   inner_steps: 20
   micro_batch_size: 1

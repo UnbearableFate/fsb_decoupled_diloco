@@ -342,6 +342,71 @@ def test_proposal_ingest_reconsiders_merge_after_each_new_payload(tmp_path: Path
     assert ingested == [candidates[0].update_id]
 
 
+def test_proposal_receipt_ack_waits_for_proposal_ingestion(tmp_path: Path) -> None:
+    """Proposal backpressure requires authority ingestion before releasing the learner."""
+
+    paths = RunPaths(tmp_path)
+    prepare_authority_dirs(paths)
+    fence = ContributorFence.from_dict(contributor_fence())
+    receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence.as_dict()))
+    receipt_path = paths.shared_root / canonical_receipt_relative_path(fence, receipt.cycle_seq)
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.write_bytes(receipt.canonical_bytes())
+    candidate = proposal(
+        receipt_sha256=receipt.immutable_sha256(),
+        fence=fence.as_dict(),
+        update_id=receipt.planned_update_id,
+    )
+    proposal_path = (
+        paths.shared_root
+        / "updates"
+        / "proposals"
+        / candidate.stable_contributor_key
+        / f"{candidate.update_id}.json"
+    )
+    proposal_path.parent.mkdir(parents=True, exist_ok=True)
+    proposal_path.write_bytes(candidate.canonical_bytes())
+    operations: list[str] = []
+
+    def ingest_receipt(**_kwargs: object) -> None:
+        """Record successful durable receipt ingestion."""
+
+        operations.append("receipt")
+
+    def ingest_proposal(**_kwargs: object) -> ProposalDisposition:
+        """Record successful durable proposal ingestion."""
+
+        operations.append("proposal")
+        return ProposalDisposition.ACCEPTED
+
+    def publish_ack(*_args: object, **_kwargs: object) -> None:
+        """Record the learner release point after both durable ingestions."""
+
+        operations.append("ack")
+
+    authority = SimpleNamespace(
+        read=SimpleNamespace(
+            current_contributor_fences=lambda: (fence,),
+            contributor_progress=lambda _key: None,
+            controller_status=lambda: {"state": "open"},
+            pending_update_contributor_keys=lambda: (),
+        )
+    )
+
+    _ingest_proposals(
+        _loaded(paths, config_sha256=hashlib.sha256(b"config").hexdigest()),
+        authority,
+        SimpleNamespace(
+            ingest_cycle_receipt=ingest_receipt,
+            ingest_proposal=ingest_proposal,
+        ),
+        SimpleNamespace(publish_receipt_ack=publish_ack),
+        _Telemetry(),
+    )
+
+    assert operations == ["receipt", "proposal", "ack"]
+
+
 def test_proposal_ingest_scans_past_exact_command_replays(tmp_path: Path) -> None:
     """A persistent accepted proposal must not hide later proposal objects forever."""
 
