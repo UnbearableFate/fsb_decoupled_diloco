@@ -31,7 +31,7 @@ from tests.support.protocol import (
 class Clock:
     """Provide a mutable deterministic wall clock for authority transactions."""
 
-    now: float = 100.0
+    now: float = 100.0  # Timestamp returned until a test advances the clock.
 
     def __call__(self) -> float:
         """Return the current deterministic timestamp."""
