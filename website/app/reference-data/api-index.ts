@@ -621,7 +621,7 @@ export const apiModuleIndex = [
     "counts": {
       "classes": 11,
       "functions": 20,
-      "methods": 107
+      "methods": 108
     }
   },
   {
@@ -826,8 +826,8 @@ export const apiReferenceStats = {
   "packages": 9,
   "classes": 105,
   "functions": 296,
-  "methods": 328,
+  "methods": 329,
   "fields": 560,
   "variables": 51,
-  "symbols": 1340
+  "symbols": 1341
 } as const;

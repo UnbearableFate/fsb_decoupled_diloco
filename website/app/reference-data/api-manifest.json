@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
-  "sourceRevision": "6495c2d04f2f0b0c393d8f86ee8b99c68384ff14",
+  "sourceRevision": "9b91304dde67b82a1af862c43fa3d1ab15ccba19",
   "stats": {
     "modules": 63,
     "packages": 9,
     "classes": 105,
     "functions": 296,
-    "methods": 328,
+    "methods": 329,
     "fields": 560,
     "variables": 51,
-    "symbols": 1340
+    "symbols": 1341
   },
   "modules": [
     {
@@ -14360,7 +14360,7 @@
       "module": "fs_diloco.runtime.syncer",
       "route": "/reference/fs_diloco/runtime/syncer",
       "sourcePath": "fs_diloco/runtime/syncer.py",
-      "sourceSha256": "eba0fd2c3400a1a2dc115678f5b125c752122bd71f633208d5d8ef5999926631",
+      "sourceSha256": "ac9529af8edfb6d38d3211e2bce4e137c5b2a64805092f9e4b2e8a9cd390da7d",
       "isPackage": false,
       "visibility": "public",
       "summary": "组合 fenced Syncer 的服务、合并循环和终态流程。",
@@ -14911,7 +14911,7 @@
           ],
           "decorators": [],
           "line": 746,
-          "endLine": 849
+          "endLine": 860
         }
       ],
       "dependencies": [
@@ -14937,7 +14937,7 @@
       "usedBy": [
         "fs_diloco.runtime.syncer_entrypoint"
       ],
-      "lineCount": 849
+      "lineCount": 860
     },
     {
       "module": "fs_diloco.runtime.syncer_entrypoint",
@@ -18885,7 +18885,7 @@
       "module": "fs_diloco.storage.authority",
       "route": "/reference/fs_diloco/storage/authority",
       "sourcePath": "fs_diloco/storage/authority.py",
-      "sourceSha256": "cd1d4651246875892c48b14a30c84660f868fb16e84340e79b5ca5e2dfc0bcd7",
+      "sourceSha256": "7cb0ecfcd8522d2298f86918a0b5510602df425710e90520f41e1de1913b68f3",
       "isPackage": false,
       "visibility": "public",
       "summary": "初始化 SQLite authority，并提供类型化读取与显式 fenced command。",
@@ -19561,6 +19561,24 @@
               "endLine": 501
             },
             {
+              "name": "pending_update_contributor_keys",
+              "qualifiedName": "AuthorityReadModel.pending_update_contributor_keys",
+              "kind": "method",
+              "visibility": "public",
+              "signature": "pending_update_contributor_keys(self) -> tuple[str, ...]",
+              "summary": "实现 `pending_update_contributor_keys` 对应的模块内操作。",
+              "docstring": "Return streams already represented in the next merge candidate set.",
+              "parameters": [],
+              "returns": {
+                "type": "tuple[str, ...]",
+                "description": "返回 `tuple[str, ...]` 类型的结果。"
+              },
+              "raises": [],
+              "decorators": [],
+              "line": 503,
+              "endLine": 512
+            },
+            {
               "name": "token_ledger_summary",
               "qualifiedName": "AuthorityReadModel.token_ledger_summary",
               "kind": "method",
@@ -19575,8 +19593,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 503,
-              "endLine": 534
+              "line": 514,
+              "endLine": 545
             },
             {
               "name": "integrity_check",
@@ -19593,8 +19611,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 536,
-              "endLine": 537
+              "line": 547,
+              "endLine": 548
             },
             {
               "name": "table_names",
@@ -19611,8 +19629,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 539,
-              "endLine": 543
+              "line": 550,
+              "endLine": 554
             },
             {
               "name": "syncer_epochs",
@@ -19629,8 +19647,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 545,
-              "endLine": 547
+              "line": 556,
+              "endLine": 558
             },
             {
               "name": "streams",
@@ -19647,8 +19665,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 549,
-              "endLine": 555
+              "line": 560,
+              "endLine": 566
             },
             {
               "name": "instances",
@@ -19665,8 +19683,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 557,
-              "endLine": 565
+              "line": 568,
+              "endLine": 576
             },
             {
               "name": "launch_requests",
@@ -19683,8 +19701,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 567,
-              "endLine": 575
+              "line": 578,
+              "endLine": 586
             },
             {
               "name": "capacity_observations",
@@ -19701,8 +19719,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 577,
-              "endLine": 585
+              "line": 588,
+              "endLine": 596
             },
             {
               "name": "scheduler_operator_file_disposition",
@@ -19734,8 +19752,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 587,
-              "endLine": 599
+              "line": 598,
+              "endLine": 610
             },
             {
               "name": "genesis_committed_at",
@@ -19752,8 +19770,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 601,
-              "endLine": 603
+              "line": 612,
+              "endLine": 614
             },
             {
               "name": "audit_history_records",
@@ -19780,8 +19798,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 605,
-              "endLine": 610
+              "line": 616,
+              "endLine": 621
             },
             {
               "name": "audit_archive_summary",
@@ -19798,8 +19816,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 612,
-              "endLine": 626
+              "line": 623,
+              "endLine": 637
             },
             {
               "name": "audit_hot_batches",
@@ -19816,8 +19834,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 628,
-              "endLine": 633
+              "line": 639,
+              "endLine": 644
             },
             {
               "name": "artifact_gc_ready",
@@ -19842,8 +19860,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 635,
-              "endLine": 645
+              "line": 646,
+              "endLine": 656
             },
             {
               "name": "audit_gc_ready",
@@ -19868,12 +19886,12 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 647,
-              "endLine": 655
+              "line": 658,
+              "endLine": 666
             }
           ],
           "line": 424,
-          "endLine": 655
+          "endLine": 666
         },
         {
           "name": "AuthorityReader",
@@ -19892,7 +19910,7 @@
               "type": "Any",
               "default": "AuthorityReadModel(self)",
               "summary": "保存`read` 对应的数据。默认值为 `AuthorityReadModel(self)`。",
-              "line": 708
+              "line": 719
             },
             {
               "name": "metadata",
@@ -19901,7 +19919,7 @@
               "type": "Any",
               "default": "metadata",
               "summary": "保存`metadata` 对应的数据。默认值为 `metadata`。",
-              "line": 707
+              "line": 718
             },
             {
               "name": "_wall_clock",
@@ -19910,7 +19928,7 @@
               "type": "Any",
               "default": "wall_clock",
               "summary": "保存`wall_clock` 对应的数据。默认值为 `wall_clock`。",
-              "line": 706
+              "line": 717
             },
             {
               "name": "_scope",
@@ -19919,7 +19937,7 @@
               "type": "Any",
               "default": "membership_scope",
               "summary": "保存`scope` 对应的数据。默认值为 `membership_scope`。",
-              "line": 705
+              "line": 716
             },
             {
               "name": "_connection",
@@ -19928,7 +19946,7 @@
               "type": "Any",
               "default": "connection",
               "summary": "保存`connection` 对应的数据。默认值为 `connection`。",
-              "line": 704
+              "line": 715
             }
           ],
           "methods": [
@@ -19994,8 +20012,8 @@
                 "TypeError"
               ],
               "decorators": [],
-              "line": 661,
-              "endLine": 708
+              "line": 672,
+              "endLine": 719
             },
             {
               "name": "close",
@@ -20012,8 +20030,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 710,
-              "endLine": 711
+              "line": 721,
+              "endLine": 722
             },
             {
               "name": "__enter__",
@@ -20030,8 +20048,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 713,
-              "endLine": 714
+              "line": 724,
+              "endLine": 725
             },
             {
               "name": "__exit__",
@@ -20056,8 +20074,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 716,
-              "endLine": 717
+              "line": 727,
+              "endLine": 728
             },
             {
               "name": "_fetchone",
@@ -20089,8 +20107,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 719,
-              "endLine": 720
+              "line": 730,
+              "endLine": 731
             },
             {
               "name": "_fetchall",
@@ -20122,12 +20140,12 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 722,
-              "endLine": 723
+              "line": 733,
+              "endLine": 734
             }
           ],
-          "line": 658,
-          "endLine": 723
+          "line": 669,
+          "endLine": 734
         },
         {
           "name": "LeaderAuthority",
@@ -20146,7 +20164,7 @@
               "type": "Any",
               "default": "AuthorityReadModel(self)",
               "summary": "保存`read` 对应的数据。默认值为 `AuthorityReadModel(self)`。",
-              "line": 795
+              "line": 806
             },
             {
               "name": "metadata",
@@ -20155,7 +20173,7 @@
               "type": "Any",
               "default": "metadata",
               "summary": "保存`metadata` 对应的数据。默认值为 `metadata`。",
-              "line": 794
+              "line": 805
             },
             {
               "name": "_lease_safety_check",
@@ -20164,7 +20182,7 @@
               "type": "Any",
               "default": "lease_safety_check",
               "summary": "保存Lease。默认值为 `lease_safety_check`。",
-              "line": 793
+              "line": 804
             },
             {
               "name": "_max_quarantine_records_per_contributor",
@@ -20173,7 +20191,7 @@
               "type": "Any",
               "default": "max_quarantine_records_per_contributor",
               "summary": "保存Contributor。默认值为 `max_quarantine_records_per_contributor`。",
-              "line": 792
+              "line": 803
             },
             {
               "name": "_orphan_grace_seconds",
@@ -20182,7 +20200,7 @@
               "type": "Any",
               "default": "minimum_orphan_grace if orphan_grace_seconds is None else float(orphan_grace_seconds)",
               "summary": "保存`orphan_grace_seconds` 对应的数据的时间边界，单位为秒。",
-              "line": 779
+              "line": 790
             },
             {
               "name": "_max_clock_skew_seconds",
@@ -20191,7 +20209,7 @@
               "type": "Any",
               "default": "float(max_clock_skew_seconds)",
               "summary": "保存`max_clock_skew_seconds` 对应的数据的时间边界，单位为秒。",
-              "line": 777
+              "line": 788
             },
             {
               "name": "_lease_duration_seconds",
@@ -20200,7 +20218,7 @@
               "type": "Any",
               "default": "float(lease_duration_seconds)",
               "summary": "保存Lease的时间边界，单位为秒。",
-              "line": 776
+              "line": 787
             },
             {
               "name": "_wall_clock",
@@ -20209,7 +20227,7 @@
               "type": "Any",
               "default": "wall_clock",
               "summary": "保存`wall_clock` 对应的数据。默认值为 `wall_clock`。",
-              "line": 775
+              "line": 786
             },
             {
               "name": "_connection",
@@ -20218,7 +20236,7 @@
               "type": "Any",
               "default": "connection",
               "summary": "保存`connection` 对应的数据。默认值为 `connection`。",
-              "line": 774
+              "line": 785
             },
             {
               "name": "_scope",
@@ -20227,7 +20245,7 @@
               "type": "Any",
               "default": "membership_scope",
               "summary": "保存`scope` 对应的数据。默认值为 `membership_scope`。",
-              "line": 773
+              "line": 784
             },
             {
               "name": "_identity",
@@ -20236,7 +20254,7 @@
               "type": "Any",
               "default": "identity",
               "summary": "保存身份。默认值为 `identity`。",
-              "line": 772
+              "line": 783
             },
             {
               "name": "_run_root",
@@ -20245,7 +20263,7 @@
               "type": "Any",
               "default": "(Path(run_root) if run_root is not None else path.parent.parent if path.parent.name == 'control' else path.parent).resolve()",
               "summary": "保存运行的路径。",
-              "line": 767
+              "line": 778
             },
             {
               "name": "_path",
@@ -20254,7 +20272,7 @@
               "type": "Any",
               "default": "path",
               "summary": "保存路径。默认值为 `path`。",
-              "line": 766
+              "line": 777
             }
           ],
           "methods": [
@@ -20362,8 +20380,8 @@
                 "TypeError"
               ],
               "decorators": [],
-              "line": 729,
-              "endLine": 795
+              "line": 740,
+              "endLine": 806
             },
             {
               "name": "close",
@@ -20380,8 +20398,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 797,
-              "endLine": 798
+              "line": 808,
+              "endLine": 809
             },
             {
               "name": "assert_outside_transaction",
@@ -20400,8 +20418,8 @@
                 "RuntimeError"
               ],
               "decorators": [],
-              "line": 800,
-              "endLine": 804
+              "line": 811,
+              "endLine": 815
             },
             {
               "name": "__enter__",
@@ -20418,8 +20436,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 806,
-              "endLine": 807
+              "line": 817,
+              "endLine": 818
             },
             {
               "name": "__exit__",
@@ -20444,8 +20462,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 809,
-              "endLine": 810
+              "line": 820,
+              "endLine": 821
             },
             {
               "name": "acquire_leader",
@@ -20495,8 +20513,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 812,
-              "endLine": 889
+              "line": 823,
+              "endLine": 900
             },
             {
               "name": "committed_leader_lease",
@@ -20521,8 +20539,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 891,
-              "endLine": 895
+              "line": 902,
+              "endLine": 906
             },
             {
               "name": "renew_leader",
@@ -20550,8 +20568,8 @@
                 "StaleLeaderTokenError"
               ],
               "decorators": [],
-              "line": 897,
-              "endLine": 930
+              "line": 908,
+              "endLine": 941
             },
             {
               "name": "release_leader",
@@ -20578,8 +20596,8 @@
                 "当前异常"
               ],
               "decorators": [],
-              "line": 932,
-              "endLine": 954
+              "line": 943,
+              "endLine": 965
             },
             {
               "name": "fail_leader",
@@ -20606,8 +20624,8 @@
                 "当前异常"
               ],
               "decorators": [],
-              "line": 956,
-              "endLine": 980
+              "line": 967,
+              "endLine": 991
             },
             {
               "name": "open_leader",
@@ -20632,8 +20650,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 982,
-              "endLine": 984
+              "line": 993,
+              "endLine": 995
             },
             {
               "name": "_verify_token",
@@ -20667,8 +20685,8 @@
                 "StaleLeaderTokenError"
               ],
               "decorators": [],
-              "line": 986,
-              "endLine": 1004
+              "line": 997,
+              "endLine": 1015
             },
             {
               "name": "_fetchone",
@@ -20700,8 +20718,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 1006,
-              "endLine": 1007
+              "line": 1017,
+              "endLine": 1018
             },
             {
               "name": "_fetchall",
@@ -20733,12 +20751,12 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 1009,
-              "endLine": 1010
+              "line": 1020,
+              "endLine": 1021
             }
           ],
-          "line": 726,
-          "endLine": 1010
+          "line": 737,
+          "endLine": 1021
         },
         {
           "name": "LeaderSession",
@@ -20757,7 +20775,7 @@
               "type": "Any",
               "default": "token",
               "summary": "保存Token。默认值为 `token`。",
-              "line": 1018
+              "line": 1029
             },
             {
               "name": "_authority",
@@ -20766,7 +20784,7 @@
               "type": "Any",
               "default": "authority",
               "summary": "保存权威状态。默认值为 `authority`。",
-              "line": 1017
+              "line": 1028
             }
           ],
           "methods": [
@@ -20800,8 +20818,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 1016,
-              "endLine": 1018
+              "line": 1027,
+              "endLine": 1029
             },
             {
               "name": "ingest_cycle_receipt",
@@ -20833,8 +20851,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 1020,
-              "endLine": 1150
+              "line": 1031,
+              "endLine": 1161
             },
             {
               "name": "ingest_proposal",
@@ -20868,8 +20886,8 @@
                 "ProposalPayloadError"
               ],
               "decorators": [],
-              "line": 1152,
-              "endLine": 1385
+              "line": 1163,
+              "endLine": 1396
             },
             {
               "name": "observe_proposal_visibility",
@@ -20973,8 +20991,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 1387,
-              "endLine": 1713
+              "line": 1398,
+              "endLine": 1724
             },
             {
               "name": "initialize_genesis",
@@ -21064,8 +21082,8 @@
                 "RuntimeError"
               ],
               "decorators": [],
-              "line": 1715,
-              "endLine": 1750
+              "line": 1726,
+              "endLine": 1761
             },
             {
               "name": "initialize_membership",
@@ -21090,8 +21108,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 1752,
-              "endLine": 1779
+              "line": 1763,
+              "endLine": 1790
             },
             {
               "name": "record_capacity_observation",
@@ -21181,8 +21199,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 1781,
-              "endLine": 1869
+              "line": 1792,
+              "endLine": 1880
             },
             {
               "name": "plan_launch_request",
@@ -21272,8 +21290,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 1871,
-              "endLine": 2026
+              "line": 1882,
+              "endLine": 2037
             },
             {
               "name": "transition_launch_request",
@@ -21363,8 +21381,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 2028,
-              "endLine": 2164
+              "line": 2039,
+              "endLine": 2175
             },
             {
               "name": "apply_scheduler_operator_request",
@@ -21396,8 +21414,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 2166,
-              "endLine": 2299
+              "line": 2177,
+              "endLine": 2310
             },
             {
               "name": "record_scheduler_operator_file_disposition",
@@ -21452,8 +21470,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 2301,
-              "endLine": 2365
+              "line": 2312,
+              "endLine": 2376
             },
             {
               "name": "admit_incarnation",
@@ -21564,8 +21582,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 2367,
-              "endLine": 2723
+              "line": 2378,
+              "endLine": 2734
             },
             {
               "name": "retire_incarnation",
@@ -21620,8 +21638,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 2725,
-              "endLine": 2764
+              "line": 2736,
+              "endLine": 2775
             },
             {
               "name": "try_select_batch",
@@ -21662,8 +21680,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 2766,
-              "endLine": 2882
+              "line": 2777,
+              "endLine": 2893
             },
             {
               "name": "prepare_publication",
@@ -21767,8 +21785,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 2884,
-              "endLine": 3010
+              "line": 2895,
+              "endLine": 3021
             },
             {
               "name": "commit_merge",
@@ -21816,8 +21834,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 3012,
-              "endLine": 3247
+              "line": 3023,
+              "endLine": 3258
             },
             {
               "name": "abandon_publication",
@@ -21856,8 +21874,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 3249,
-              "endLine": 3280
+              "line": 3260,
+              "endLine": 3291
             },
             {
               "name": "reconcile_publications",
@@ -21882,8 +21900,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 3282,
-              "endLine": 3317
+              "line": 3293,
+              "endLine": 3328
             },
             {
               "name": "claim_orphan_gc",
@@ -21917,8 +21935,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 3319,
-              "endLine": 3365
+              "line": 3330,
+              "endLine": 3376
             },
             {
               "name": "complete_artifact_gc",
@@ -21953,8 +21971,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 3367,
-              "endLine": 3402
+              "line": 3378,
+              "endLine": 3413
             },
             {
               "name": "archive_audit_batch",
@@ -22011,8 +22029,8 @@
                 "当前异常"
               ],
               "decorators": [],
-              "line": 3404,
-              "endLine": 3644
+              "line": 3415,
+              "endLine": 3655
             },
             {
               "name": "_immutable_audit_object",
@@ -22053,8 +22071,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 3646,
-              "endLine": 3661
+              "line": 3657,
+              "endLine": 3672
             },
             {
               "name": "_find_compacted_audit_source",
@@ -22079,8 +22097,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 3663,
-              "endLine": 3691
+              "line": 3674,
+              "endLine": 3702
             },
             {
               "name": "compact_audit_batches",
@@ -22157,8 +22175,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 3693,
-              "endLine": 3885
+              "line": 3704,
+              "endLine": 3896
             },
             {
               "name": "claim_audit_gc",
@@ -22192,8 +22210,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 3887,
-              "endLine": 3919
+              "line": 3898,
+              "endLine": 3930
             },
             {
               "name": "complete_audit_gc",
@@ -22228,8 +22246,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 3921,
-              "endLine": 3961
+              "line": 3932,
+              "endLine": 3972
             },
             {
               "name": "begin_terminal_preclose",
@@ -22277,8 +22295,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 3963,
-              "endLine": 4023
+              "line": 3974,
+              "endLine": 4034
             },
             {
               "name": "begin_terminal_close",
@@ -22326,8 +22344,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 4025,
-              "endLine": 4136
+              "line": 4036,
+              "endLine": 4147
             },
             {
               "name": "begin_terminal_proposal_visibility",
@@ -22368,8 +22386,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 4138,
-              "endLine": 4187
+              "line": 4149,
+              "endLine": 4198
             },
             {
               "name": "acknowledge_terminal_contributor",
@@ -22424,8 +22442,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 4189,
-              "endLine": 4361
+              "line": 4200,
+              "endLine": 4372
             },
             {
               "name": "finalize_terminal",
@@ -22464,8 +22482,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4363,
-              "endLine": 4465
+              "line": 4374,
+              "endLine": 4476
             },
             {
               "name": "_require_proposal_receipt",
@@ -22499,8 +22517,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 4467,
-              "endLine": 4496
+              "line": 4478,
+              "endLine": 4507
             },
             {
               "name": "_require_visibility_receipt",
@@ -22548,8 +22566,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 4498,
-              "endLine": 4521
+              "line": 4509,
+              "endLine": 4532
             },
             {
               "name": "_record_observation",
@@ -22588,8 +22606,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4523,
-              "endLine": 4547
+              "line": 4534,
+              "endLine": 4558
             },
             {
               "name": "_record_visibility_terminal",
@@ -22670,8 +22688,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4549,
-              "endLine": 4620
+              "line": 4560,
+              "endLine": 4631
             },
             {
               "name": "_record_quarantine",
@@ -22731,8 +22749,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4622,
-              "endLine": 4653
+              "line": 4633,
+              "endLine": 4664
             },
             {
               "name": "_prune_quarantine",
@@ -22764,8 +22782,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4655,
-              "endLine": 4673
+              "line": 4666,
+              "endLine": 4684
             },
             {
               "name": "_advance_proposal_frontier",
@@ -22804,8 +22822,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4675,
-              "endLine": 4686
+              "line": 4686,
+              "endLine": 4697
             },
             {
               "name": "_advance_frontier_values",
@@ -22853,8 +22871,8 @@
                 "AuthoritySchemaError"
               ],
               "decorators": [],
-              "line": 4688,
-              "endLine": 4724
+              "line": 4699,
+              "endLine": 4735
             },
             {
               "name": "_terminalize_fenced_updates",
@@ -22900,8 +22918,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4726,
-              "endLine": 4790
+              "line": 4737,
+              "endLine": 4801
             },
             {
               "name": "_drop_active_update",
@@ -22940,8 +22958,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4792,
-              "endLine": 4813
+              "line": 4803,
+              "endLine": 4824
             },
             {
               "name": "_token_rollup_column",
@@ -22970,8 +22988,8 @@
               "decorators": [
                 "staticmethod"
               ],
-              "line": 4816,
-              "endLine": 4828
+              "line": 4827,
+              "endLine": 4839
             },
             {
               "name": "_ensure_token_rollup",
@@ -23003,8 +23021,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4830,
-              "endLine": 4842
+              "line": 4841,
+              "endLine": 4853
             },
             {
               "name": "_record_token_receipt",
@@ -23043,8 +23061,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4844,
-              "endLine": 4873
+              "line": 4855,
+              "endLine": 4884
             },
             {
               "name": "_transition_token_fate",
@@ -23106,8 +23124,8 @@
                 "AuthoritySchemaError"
               ],
               "decorators": [],
-              "line": 4875,
-              "endLine": 4918
+              "line": 4886,
+              "endLine": 4929
             },
             {
               "name": "_reconcile_invalid_batch",
@@ -23153,8 +23171,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4920,
-              "endLine": 4988
+              "line": 4931,
+              "endLine": 4999
             },
             {
               "name": "_abandon_publication_artifacts",
@@ -23200,8 +23218,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 4990,
-              "endLine": 5039
+              "line": 5001,
+              "endLine": 5050
             },
             {
               "name": "_retire_in_transaction",
@@ -23254,8 +23272,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 5041,
-              "endLine": 5119
+              "line": 5052,
+              "endLine": 5130
             },
             {
               "name": "_fence_from_instance",
@@ -23282,8 +23300,8 @@
               "decorators": [
                 "staticmethod"
               ],
-              "line": 5122,
-              "endLine": 5133
+              "line": 5133,
+              "endLine": 5144
             },
             {
               "name": "_admission_result",
@@ -23317,8 +23335,8 @@
               "decorators": [
                 "staticmethod"
               ],
-              "line": 5136,
-              "endLine": 5154
+              "line": 5147,
+              "endLine": 5165
             },
             {
               "name": "_require_current_fence",
@@ -23366,8 +23384,8 @@
                 "MembershipFenceError"
               ],
               "decorators": [],
-              "line": 5156,
-              "endLine": 5195
+              "line": 5167,
+              "endLine": 5206
             },
             {
               "name": "_require_terminal_input_allowed",
@@ -23416,8 +23434,8 @@
                 "AuthoritySchemaError"
               ],
               "decorators": [],
-              "line": 5197,
-              "endLine": 5235
+              "line": 5208,
+              "endLine": 5246
             },
             {
               "name": "_require_current_fence_json",
@@ -23463,8 +23481,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 5237,
-              "endLine": 5250
+              "line": 5248,
+              "endLine": 5261
             },
             {
               "name": "_fence_is_current_json",
@@ -23503,8 +23521,8 @@
               },
               "raises": [],
               "decorators": [],
-              "line": 5252,
-              "endLine": 5263
+              "line": 5263,
+              "endLine": 5274
             },
             {
               "name": "_verify_prepared_publication_artifacts",
@@ -23531,8 +23549,8 @@
                 "ValueError"
               ],
               "decorators": [],
-              "line": 5265,
-              "endLine": 5286
+              "line": 5276,
+              "endLine": 5297
             },
             {
               "name": "_command_replay",
@@ -23573,8 +23591,8 @@
                 "CommandConflictError"
               ],
               "decorators": [],
-              "line": 5288,
-              "endLine": 5312
+              "line": 5299,
+              "endLine": 5323
             },
             {
               "name": "_command",
@@ -23623,8 +23641,8 @@
                 "CommandConflictError"
               ],
               "decorators": [],
-              "line": 5314,
-              "endLine": 5367
+              "line": 5325,
+              "endLine": 5378
             },
             {
               "name": "_load_selection_batch",
@@ -23651,12 +23669,12 @@
                 "AuthoritySchemaError"
               ],
               "decorators": [],
-              "line": 5369,
-              "endLine": 5400
+              "line": 5380,
+              "endLine": 5411
             }
           ],
-          "line": 1013,
-          "endLine": 5400
+          "line": 1024,
+          "endLine": 5411
         }
       ],
       "functions": [
@@ -24117,8 +24135,8 @@
           },
           "raises": [],
           "decorators": [],
-          "line": 5403,
-          "endLine": 5591
+          "line": 5414,
+          "endLine": 5602
         },
         {
           "name": "_canonical_json",
@@ -24143,8 +24161,8 @@
           },
           "raises": [],
           "decorators": [],
-          "line": 5594,
-          "endLine": 5595
+          "line": 5605,
+          "endLine": 5606
         },
         {
           "name": "_decode_committed_leader_lease",
@@ -24176,8 +24194,8 @@
           },
           "raises": [],
           "decorators": [],
-          "line": 5598,
-          "endLine": 5606
+          "line": 5609,
+          "endLine": 5617
         },
         {
           "name": "_decode_progress",
@@ -24202,8 +24220,8 @@
           },
           "raises": [],
           "decorators": [],
-          "line": 5609,
-          "endLine": 5620
+          "line": 5620,
+          "endLine": 5631
         },
         {
           "name": "_decode_publication_intent",
@@ -24228,8 +24246,8 @@
           },
           "raises": [],
           "decorators": [],
-          "line": 5623,
-          "endLine": 5643
+          "line": 5634,
+          "endLine": 5654
         },
         {
           "name": "_decode_committed_version",
@@ -24254,8 +24272,8 @@
           },
           "raises": [],
           "decorators": [],
-          "line": 5646,
-          "endLine": 5664
+          "line": 5657,
+          "endLine": 5675
         },
         {
           "name": "_decode_proposal",
@@ -24280,8 +24298,8 @@
           },
           "raises": [],
           "decorators": [],
-          "line": 5667,
-          "endLine": 5699
+          "line": 5678,
+          "endLine": 5710
         }
       ],
       "dependencies": [
@@ -24311,7 +24329,7 @@
         "fs_diloco.tools.analysis",
         "fs_diloco.tools.init_run"
       ],
-      "lineCount": 5699
+      "lineCount": 5710
     },
     {
       "module": "fs_diloco.storage.control",
