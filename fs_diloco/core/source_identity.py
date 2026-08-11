@@ -14,8 +14,10 @@ from typing import Any
 SOURCE_SCOPES = (
     "fs_diloco",
     "configs",
+    "do_experiments",
     "scripts/miyabi",
     "tests",
+    "tools",
     "pyproject.toml",
     "README.md",
     "docs",

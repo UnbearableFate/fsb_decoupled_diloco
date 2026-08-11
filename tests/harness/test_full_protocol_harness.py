@@ -54,6 +54,8 @@ def _build_valid_checker_fixture(
     syncer_takeover_boundary_version: int = 2,
     independent_scheduler_jobs: bool = False,
 ) -> tuple[Path, Path, list[str], dict[str, str]]:
+    """Build a synthetic run without requiring the development tree to be clean."""
+
     if independent_scheduler_jobs and fault_scenario != "none":
         raise ValueError("independent scheduler fixture only covers the fault-free scenario")
     global_steps_by_scenario = {
@@ -81,7 +83,7 @@ def _build_valid_checker_fixture(
     config.training.inner_steps = 1
     bind_source_identity(config, ROOT)
     config.validate()
-    initialize_run(config, project_root=ROOT)
+    initialize_run(config, project_root=ROOT, allow_dirty_snapshot=True)
 
     loaded = load_run_descriptor(run_root)
     descriptor = loaded.descriptor

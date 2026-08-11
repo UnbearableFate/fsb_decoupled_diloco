@@ -121,9 +121,7 @@ class BaselineConfig:
             if value < 1:
                 raise ValueError(f"{name} must be >= 1")
         if self.training.max_steps % self.distributed.periodic_average_interval != 0:
-            raise ValueError(
-                "training.max_steps must end on a periodic averaging boundary"
-            )
+            raise ValueError("training.max_steps must end on a periodic averaging boundary")
         if self.training.grad_clip <= 0.0:
             raise ValueError("training.grad_clip must be > 0")
         if self.optimizer.lr <= 0.0 or self.optimizer.eps <= 0.0:

@@ -1,3 +1,5 @@
+"""Verify that every retained production surface has one boundary-test owner."""
+
 from __future__ import annotations
 
 import ast
@@ -11,6 +13,8 @@ MANIFEST = ROOT / "tests/module_coverage.json"
 
 
 def _retained_surfaces() -> set[str]:
+    """Return current package, configuration, and Miyabi script surfaces."""
+
     listed = subprocess.check_output(
         [
             "git",
@@ -31,6 +35,8 @@ def _retained_surfaces() -> set[str]:
 
 
 def _assert_test_selector(selector: str) -> None:
+    """Require a selector to name an existing top-level test function."""
+
     components = selector.split("::")
     assert len(components) == 2, selector
     relative, function_name = components
@@ -45,6 +51,8 @@ def _assert_test_selector(selector: str) -> None:
 
 
 def test_every_retained_surface_has_one_current_boundary_test_mapping() -> None:
+    """Keep the boundary-test manifest exact as production surfaces change."""
+
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     assert set(manifest) == {"schema_version", "surfaces"}
     assert manifest["schema_version"] == 2

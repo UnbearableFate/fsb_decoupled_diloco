@@ -114,9 +114,7 @@ def evaluate_health(run_root: str | Path, *, mode: str) -> dict[str, Any]:
     if fatal_logs:
         failures.append(f"fatal worker log evidence found in {len(fatal_logs)} locations")
 
-    losses_by_step: dict[int, list[float]] = {
-        step: [] for step in range(1, max_steps + 1)
-    }
+    losses_by_step: dict[int, list[float]] = {step: [] for step in range(1, max_steps + 1)}
     rank_max_steps: dict[int, int] = {}
     for rank in range(expected_world_size):
         parsed: dict[int, dict[str, str]] = {}
@@ -143,22 +141,19 @@ def evaluate_health(run_root: str | Path, *, mode: str) -> dict[str, Any]:
     checks["rank_max_steps"] = rank_max_steps
     if not failures:
         incomplete = [
-            step
-            for step, losses in losses_by_step.items()
-            if len(losses) != expected_world_size
+            step for step, losses in losses_by_step.items() if len(losses) != expected_world_size
         ]
         if incomplete:
             failures.append(f"loss matrix is incomplete at steps: {incomplete[:8]}")
         else:
             means = {
-                step: sum(losses) / expected_world_size
-                for step, losses in losses_by_step.items()
+                step: sum(losses) / expected_world_size for step, losses in losses_by_step.items()
             }
             window = min(50, max_steps)
             first_mean = sum(means[step] for step in range(1, window + 1)) / window
-            tail_mean = sum(
-                means[step] for step in range(max_steps - window + 1, max_steps + 1)
-            ) / window
+            tail_mean = (
+                sum(means[step] for step in range(max_steps - window + 1, max_steps + 1)) / window
+            )
             checks["loss_first_window_mean"] = first_mean
             checks["loss_tail_window_mean"] = tail_mean
             if tail_mean >= first_mean:
@@ -169,8 +164,7 @@ def evaluate_health(run_root: str | Path, *, mode: str) -> dict[str, Any]:
     observed_sync_steps = {
         int(row["step"])
         for row in _read_csv(paths.sync_metrics)
-        if row.get("sync_kind")
-        == ("gradient_all_reduce" if mode == "ddp" else "parameter_average")
+        if row.get("sync_kind") == ("gradient_all_reduce" if mode == "ddp" else "parameter_average")
         and row.get("step", "").isdigit()
     }
     expected_sync_steps = (

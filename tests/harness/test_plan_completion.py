@@ -12,6 +12,8 @@ import sys
 
 import pytest
 
+from fs_diloco.core.source_identity import SOURCE_SCOPES
+
 
 ROOT = Path(__file__).resolve().parents[2]
 CHECKER = ROOT / "scripts/miyabi/agent/check_plan_completion.py"
@@ -32,18 +34,12 @@ def _sha256(path: Path) -> str:
 
 
 def _source() -> dict[str, object]:
+    """Return a formal source fixture using the current canonical scope set."""
+
     return {
         "commit": "1" * 40,
         "dirty": False,
-        "scopes": [
-            "fs_diloco",
-            "configs",
-            "scripts/miyabi",
-            "tests",
-            "pyproject.toml",
-            "README.md",
-            "docs",
-        ],
+        "scopes": list(SOURCE_SCOPES),
         "fingerprint": "sha256:" + "2" * 64,
     }
 
@@ -60,6 +56,7 @@ def _registered_manifest(project_root: Path) -> dict[str, object]:
         "dirty": False,
         "fingerprint": source["fingerprint"],
     }
+    manifest["source_scopes"] = list(SOURCE_SCOPES)
     for gate in manifest["gates"]:
         gate["producer"] = module.GATE_CONTRACTS[gate["id"]]["producer"]
         supporting = project_root / f"evidence/{gate['id']}.log"

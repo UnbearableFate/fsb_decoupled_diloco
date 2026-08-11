@@ -461,9 +461,7 @@ def _callable_doc(
     }
 
 
-def _assignment_records(
-    node: ast.Assign | ast.AnnAssign, *, kind: str
-) -> list[dict[str, Any]]:
+def _assignment_records(node: ast.Assign | ast.AnnAssign, *, kind: str) -> list[dict[str, Any]]:
     """Convert simple name assignments into module or class member records."""
 
     targets: list[ast.expr]
@@ -507,8 +505,7 @@ def _instance_fields(node: ast.ClassDef) -> list[dict[str, Any]]:
         (
             item
             for item in node.body
-            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and item.name == "__init__"
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == "__init__"
         ),
         None,
     )
@@ -612,9 +609,7 @@ def _resolve_import(module_name: str, is_package: bool, node: ast.ImportFrom) ->
     return ".".join(parts)
 
 
-def _raw_dependencies(
-    tree: ast.Module, *, module_name: str, is_package: bool
-) -> list[str]:
+def _raw_dependencies(tree: ast.Module, *, module_name: str, is_package: bool) -> list[str]:
     """Collect fs_diloco import targets from module-level and deferred imports."""
 
     values: set[str] = set()
@@ -652,7 +647,9 @@ def _module_record(repo_root: Path, path: Path) -> dict[str, Any]:
                 parsed = ast.literal_eval(item["default"])
             except (SyntaxError, ValueError):
                 parsed = []
-            if isinstance(parsed, (list, tuple)) and all(isinstance(value, str) for value in parsed):
+            if isinstance(parsed, (list, tuple)) and all(
+                isinstance(value, str) for value in parsed
+            ):
                 exports = list(parsed)
     relative_path = path.relative_to(repo_root).as_posix()
     return {
@@ -661,7 +658,9 @@ def _module_record(repo_root: Path, path: Path) -> dict[str, Any]:
         "sourcePath": relative_path,
         "sourceSha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
         "isPackage": is_package,
-        "visibility": "internal" if any(part.startswith("_") for part in module_name.split(".")) else "public",
+        "visibility": "internal"
+        if any(part.startswith("_") for part in module_name.split("."))
+        else "public",
         "summary": MODULE_SUMMARIES.get(module_name, f"提供 `{module_name}` 的当前实现。"),
         "docstring": ast.get_docstring(tree, clean=True),
         "exports": exports,
@@ -714,16 +713,8 @@ def _statistics(modules: list[dict[str, Any]]) -> dict[str, int]:
 
     classes = sum(len(item["classes"]) for item in modules)
     functions = sum(len(item["functions"]) for item in modules)
-    methods = sum(
-        len(class_item["methods"])
-        for item in modules
-        for class_item in item["classes"]
-    )
-    fields = sum(
-        len(class_item["fields"])
-        for item in modules
-        for class_item in item["classes"]
-    )
+    methods = sum(len(class_item["methods"]) for item in modules for class_item in item["classes"])
+    fields = sum(len(class_item["fields"]) for item in modules for class_item in item["classes"])
     variables = sum(len(item["variables"]) for item in modules)
     return {
         "modules": len(modules),

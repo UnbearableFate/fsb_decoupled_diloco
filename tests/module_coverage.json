@@ -2,6 +2,11 @@
   "schema_version": 2,
   "surfaces": [
     {
+      "surface": "configs/dynamic_full/gpt2_wikitext2_8l_200x10.yaml",
+      "boundary": "plan04 dynamic 8-learner exact-four merge workload",
+      "tests": ["tests/test_config.py::test_repository_configs_use_the_one_strict_schema"]
+    },
+    {
       "surface": "configs/full_protocol_dynamic.yaml",
       "boundary": "strict current dynamic configuration",
       "tests": ["tests/test_config.py::test_repository_configs_use_the_one_strict_schema"]
@@ -320,11 +325,6 @@
       "surface": "fs_diloco/tools/analysis.py",
       "boundary": "read-only current authority inspection",
       "tests": ["tests/tools/test_analysis.py::test_summarize_run_projects_current_read_only_authority"]
-    },
-    {
-      "surface": "fs_diloco/tools/clean_run.py",
-      "boundary": "evidence-bound dry-run and exact cleanup",
-      "tests": ["tests/test_clean_run.py::test_execute_rechecks_plan_and_publishes_exact_manifest"]
     },
     {
       "surface": "fs_diloco/tools/init_run.py",

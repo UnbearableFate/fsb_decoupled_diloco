@@ -61,8 +61,7 @@ def tokenize_blocks(dataset: Any, tokenizer: Any, *, block_size: int) -> list[li
             token_stream.append(int(eos_token_id))
     usable_tokens = len(token_stream) // block_size * block_size
     return [
-        token_stream[offset : offset + block_size]
-        for offset in range(0, usable_tokens, block_size)
+        token_stream[offset : offset + block_size] for offset in range(0, usable_tokens, block_size)
     ]
 
 

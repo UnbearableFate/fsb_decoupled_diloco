@@ -157,11 +157,7 @@ def _ddp_worker(rank: int, init_file: str, output_dir: str) -> None:
     )
     model = DistributedDataParallel(RegressionModel())
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-    rank_batches = (
-        [_batch(1, 2), _batch(2, 4)]
-        if rank == 0
-        else [_batch(3, 6), _batch(4, 8)]
-    )
+    rank_batches = [_batch(1, 2), _batch(2, 4)] if rank == 0 else [_batch(3, 6), _batch(4, 8)]
     train_optimizer_step(
         model,
         iter(rank_batches),
@@ -199,9 +195,7 @@ def test_two_rank_ddp_matches_the_combined_clipped_gradient(tmp_path: Path) -> N
     optimizer.step()
     expected = float(reference.weight.item())
     observed = [
-        json.loads((output_dir / f"rank-{rank}.json").read_text(encoding="utf-8"))[
-            "weight"
-        ]
+        json.loads((output_dir / f"rank-{rank}.json").read_text(encoding="utf-8"))["weight"]
         for rank in range(2)
     ]
     assert observed == pytest.approx([expected, expected])

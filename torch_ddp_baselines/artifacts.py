@@ -316,9 +316,7 @@ def save_final_checkpoint(
 
     if paths.final_checkpoint.exists():
         raise FileExistsError(f"final checkpoint already exists: {paths.final_checkpoint}")
-    staging = Path(
-        tempfile.mkdtemp(prefix=".final.", dir=paths.final_checkpoint.parent)
-    )
+    staging = Path(tempfile.mkdtemp(prefix=".final.", dir=paths.final_checkpoint.parent))
     unwrapped = model.module if hasattr(model, "module") else model
     try:
         if not hasattr(unwrapped, "save_pretrained"):

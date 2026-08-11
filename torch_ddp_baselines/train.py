@@ -70,8 +70,7 @@ def runtime_device(backend: str, local_rank: int) -> torch.device:
             raise RuntimeError("NCCL baseline requires CUDA")
         if not 0 <= local_rank < torch.cuda.device_count():
             raise RuntimeError(
-                f"LOCAL_RANK={local_rank} is outside "
-                f"{torch.cuda.device_count()} visible GPUs"
+                f"LOCAL_RANK={local_rank} is outside {torch.cuda.device_count()} visible GPUs"
             )
         torch.cuda.set_device(local_rank)
         return torch.device("cuda", local_rank)
@@ -327,9 +326,7 @@ def run(args: argparse.Namespace) -> None:
                         "flattened_numel": flattened_numel,
                         "world_size": world_size,
                         "cumulative_sync_count": (
-                            gradient_sync_count
-                            if args.mode == "ddp"
-                            else parameter_average_count
+                            gradient_sync_count if args.mode == "ddp" else parameter_average_count
                         ),
                     },
                     SYNC_METRIC_FIELDS,
@@ -390,12 +387,9 @@ def run(args: argparse.Namespace) -> None:
                     "world_size": world_size,
                     "max_steps": config.training.max_steps,
                     "final_step": completed_step,
-                    "gradient_sync_count": (
-                        config.training.max_steps if args.mode == "ddp" else 0
-                    ),
+                    "gradient_sync_count": (config.training.max_steps if args.mode == "ddp" else 0),
                     "parameter_average_count": (
-                        config.training.max_steps
-                        // config.distributed.periodic_average_interval
+                        config.training.max_steps // config.distributed.periodic_average_interval
                         if args.mode == "periodic_average"
                         else 0
                     ),

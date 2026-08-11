@@ -1,3 +1,5 @@
+"""Verify the repository's sole strict Full Protocol configuration schema."""
+
 from __future__ import annotations
 
 import dataclasses
@@ -18,7 +20,7 @@ from fs_diloco.core.config import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIGS = tuple(sorted((ROOT / "configs").glob("full_protocol_*.yaml")))
+CONFIGS = tuple(sorted((ROOT / "configs").rglob("*.yaml")))
 assert CONFIGS, "no repository configs discovered"
 HUB_COMMIT = "a" * 40
 

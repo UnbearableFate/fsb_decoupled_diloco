@@ -76,9 +76,7 @@ def train_optimizer_step(
                 raise RuntimeError("model did not return a loss")
             unscaled_loss = output.loss
             if not torch.isfinite(unscaled_loss.detach()):
-                raise FloatingPointError(
-                    f"non-finite loss: {float(unscaled_loss.detach().cpu())}"
-                )
+                raise FloatingPointError(f"non-finite loss: {float(unscaled_loss.detach().cpu())}")
             if ddp_gradient_sync and final_microbatch:
                 if device.type == "cuda":
                     torch.cuda.synchronize(device)

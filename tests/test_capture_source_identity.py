@@ -10,10 +10,14 @@ SCRIPT = Path(__file__).parents[1] / "scripts" / "miyabi" / "agent" / "capture_s
 
 
 def _git(repo: Path, *args: str) -> None:
+    """Run one successful Git command inside the fixture repository."""
+
     subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
 
 
 def _capture(repo: Path, suffix: str) -> dict:
+    """Capture source identity and verify that its shell projection is consistent."""
+
     output_json = repo / f"identity-{suffix}.json"
     output_env = repo / f"identity-{suffix}.env"
     subprocess.run(
@@ -44,13 +48,17 @@ def test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources(tm
     repo = tmp_path / "repo"
     (repo / "fs_diloco").mkdir(parents=True)
     (repo / "configs").mkdir()
+    (repo / "do_experiments").mkdir()
     (repo / "docs").mkdir()
     (repo / "scripts" / "miyabi" / "agent").mkdir(parents=True)
     (repo / "tests").mkdir()
+    (repo / "tools").mkdir()
     (repo / "fs_diloco" / "module.py").write_text("VALUE = 1\n", encoding="utf-8")
     (repo / "configs" / "run.yaml").write_text("run: {}\n", encoding="utf-8")
     (repo / "docs" / "contract.md").write_text("# Contract\n", encoding="utf-8")
+    (repo / "do_experiments" / "submit.sh").write_text("#!/bin/bash\n", encoding="utf-8")
     (repo / "tests" / "test_module.py").write_text("def test_value(): pass\n", encoding="utf-8")
+    (repo / "tools" / "summarize.py").write_text("VALUE = 1\n", encoding="utf-8")
     (repo / "scripts" / "miyabi" / "agent" / "run.pbs").write_text(
         "#!/bin/bash\n", encoding="utf-8"
     )
@@ -68,7 +76,9 @@ def test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources(tm
         "fs_diloco/module.py",
         "configs/run.yaml",
         "docs/contract.md",
+        "do_experiments/submit.sh",
         "tests/test_module.py",
+        "tools/summarize.py",
         "scripts/miyabi/agent/run.pbs",
         "README.md",
         "pyproject.toml",
@@ -81,11 +91,13 @@ def test_capture_source_identity_hashes_tracked_and_untracked_runtime_sources(tm
     assert {entry["path"] for entry in clean["source_files"]} == {
         "configs/run.yaml",
         "docs/contract.md",
+        "do_experiments/submit.sh",
         "fs_diloco/module.py",
         "pyproject.toml",
         "README.md",
         "scripts/miyabi/agent/run.pbs",
         "tests/test_module.py",
+        "tools/summarize.py",
     }
 
     (repo / "reports").mkdir()
