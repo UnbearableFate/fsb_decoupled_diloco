@@ -23,3 +23,11 @@
 - 最终 U1：clean commit `08f10085b8894186f271b2942efdc6ca7df72469`、fingerprint `sha256:8bd50e63c3fda0b31c0c7eb8a55e307fe7c6602d6ce54ff4e4aa86a0c660e8cd` 在 PBS job `2531067.opbs`、compute node `mg0850` 上通过 Ruff format/lint、focused `251 passed`、full `580 passed`、website lint 和 14 项 rendered-site test。
 - 证据：`reports/DOING/plan05/artifacts/validation_candidate8.json` 状态为 `PASS`，无 errors；raw log 与两份 JUnit 均由同一 job create-only 发布。生成的 API reference 在 validation 前后无差异。
 - 下一动作：对全部 formal source scopes 完成 coordinator current-state 审查，并通过固定 OpenCode `opencode-go/deepseek-v4-flash` 运行唯一外部 PREFORMAL reviewer；处置所有有效 finding 后再冻结 `FINAL_COMMON_TARGET`。
+
+## 2026-08-12 VERIFY：唯一协议 functional harness 稳定通过
+
+- Runtime 修复：三次有效 functional 失败依次定位出 proposal ingestion 的跨 stream 饥饿、receipt ack 未等待 proposal ingestion，以及 Checker 把 `quorum_max` 误作固定 batch size。实现现在优先服务尚未进入 pending quorum 的 current stream；含 proposal 的 cycle 只在 proposal durable accepted/exact replay 后 ack；Checker 按每版 `[quorum_min, quorum_max]` 和 durable applied proposal 推导 selection credit 与 direct token。全面 failure review 见 `reports/DOING/code_review/plan05/failure-functional-harness-round1/`。
+- 最终 U1：clean commit `b44cb01bc4f4e22042aea614e349b1849bd0d16a`、fingerprint `sha256:2b5364a6d61f7cad546cbf5ace795d3b6149623abbce88a3976bdef7c2cb8a25` 在 PBS job `2531385.opbs`、compute node `mg0840` 上通过 Ruff、focused `256 passed`、full `585 passed`、website lint 和 14 项 rendered-site test。证据为 `reports/DOING/plan05/artifacts/validation_candidate12.json` 及同名前缀日志/JUnit。
+- No-failure：同一 clean target 在 PBS job `2531398.opbs` 的 5-node co-allocated harness 上完成 4-stream、20 inner step、4 global version；12 个 proposal applied、4 个 dropped，direct applied/dropped 为 3840/1280，ledger balance 为 0，4 个 terminal fence 全部 ack。`functional_no_failure_candidate4.json` 为 create-only `PASS`。
+- Syncer takeover：PBS job `2531406.opbs` 在相同 5-node workload 的 version 2 边界终止 primary；durable evidence 证明 transaction inactive、renewer quiesced、epoch 1 expired/superseded、epoch 2 完成 v4 且无 stale commit。15 个 receipt/proposal 一一对应，direct applied/dropped 为 3840/960，ledger balance 为 0；`functional_syncer_takeover_candidate1.json` 为 create-only `PASS`。
+- 下一动作：对全部 formal source scopes 完成 coordinator current-state 审查，再只用固定 OpenCode `opencode-go/deepseek-v4-flash` 执行唯一外部 PREFORMAL review；关闭 blocking finding 后冻结 `FINAL_COMMON_TARGET`。
