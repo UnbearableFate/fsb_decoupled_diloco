@@ -101,3 +101,23 @@
 - 最小症状：新增 variable-quorum fixture 为 stream 0 和 stream 1 的第一个 receipt 都使用 `receipt-1` command ID。authority 正确把第二个不同 request 识别为 command replay conflict，因此测试在调用 Checker 前失败。
 - 处置：fixture 的 receipt、proposal 和 selection command ID 全部包含 stable stream key；不修改 authority replay contract 或 Checker acceptance contract。
 - 下一验证：提交 fixture 修复后，在 fresh one-node PBS job 上重新运行完整 U1 ladder。
+
+## U1 candidate 14：通用 membership fixture 未声明 bootstrap authorization
+
+- 分类：`harness-failure`；PREFORMAL 修缮后的 U1 回归验证第一次有效失败。
+- Source：commit `69c56bdfb6fa802282edfea0fe10260c35c21fe4`，clean fingerprint `sha256:77c9c6bfb02efe4f528fe61e52aa8d24558ce5650f930abf8d0be512eaba0329`。
+- 环境：PBS job `2531597.opbs`，compute node `mg1023`；focused `260 passed`，full suite 共 591 项，其中 5 项失败。
+- 证据：`reports/DOING/plan05/artifacts/validation_candidate14.json`、raw log 与 focused/full JUnit。
+- 最小症状：`tests/storage/test_authority_membership.py` 的公共 admission helper 在没有 launch request 时仍省略 `bootstrap_slot`。最终 authority writer 已按 PREFORMAL finding 正确拒绝无 authorization admission；失败均在 fixture setup 发生，未暴露产品回归。
+- 处置：helper 根据测试 instance index 显式传入唯一 bootstrap slot；使用 launch request 的 fixture 不传 bootstrap slot。未恢复 `stream_id` 隐式 fallback。
+- 下一验证：在 fresh clean candidate 上重跑完整 U1，并继续执行 formal oracle mutation 覆盖。
+
+## U1 candidate 17：网站生成器继承了节点系统 Python
+
+- 分类：`harness-failure`；Python 产品和测试门禁全部通过，网站 reference gate 的解释器绑定不确定。
+- Source：commit `732c4bb00f74293546c71342b2a75e61cf10e06b`，clean fingerprint `sha256:78ca3abca57e6e4dfb8956816ee4cf7eff5ded71e661feadde30fb8986e8a1a4`。
+- 环境：PBS job `2531713.opbs`，compute node `mg0865`；focused `260 passed`、full `591 passed`、website lint 均通过。
+- 证据：`reports/DOING/plan05/artifacts/validation_candidate17.json`、raw log 与两份 JUnit。
+- 最小症状：`website-test` 中 `${PYTHON_BIN:-python3}` 选择了该节点的旧系统 Python；reference generator 在 `zip(..., strict=True)` 处以 `TypeError` 退出。PBS wrapper 只设置 shell-local `PYTHON_BIN`，没有把它传递给 validation runner 的子进程。
+- 处置：validation runner 对每个 step 显式设置 `PYTHON_BIN=sys.executable`，使 Python tests 与 npm 间接调用的 reference generator 使用同一已记录解释器；现有 harness owner 验证该环境绑定。
+- 下一验证：fresh candidate `961e564` 的 PBS `2531753.opbs` 已通过同一完整 ladder；后续 formal-oracle 修缮后的最终 U1 仍需再次通过。

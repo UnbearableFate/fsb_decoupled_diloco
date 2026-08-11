@@ -31,3 +31,11 @@
 - No-failure：同一 clean target 在 PBS job `2531398.opbs` 的 5-node co-allocated harness 上完成 4-stream、20 inner step、4 global version；12 个 proposal applied、4 个 dropped，direct applied/dropped 为 3840/1280，ledger balance 为 0，4 个 terminal fence 全部 ack。`functional_no_failure_candidate4.json` 为 create-only `PASS`。
 - Syncer takeover：PBS job `2531406.opbs` 在相同 5-node workload 的 version 2 边界终止 primary；durable evidence 证明 transaction inactive、renewer quiesced、epoch 1 expired/superseded、epoch 2 完成 v4 且无 stale commit。15 个 receipt/proposal 一一对应，direct applied/dropped 为 3840/960，ledger balance 为 0；`functional_syncer_takeover_candidate1.json` 为 create-only `PASS`。
 - 下一动作：对全部 formal source scopes 完成 coordinator current-state 审查，再只用固定 OpenCode `opencode-go/deepseek-v4-flash` 执行唯一外部 PREFORMAL review；关闭 blocking finding 后冻结 `FINAL_COMMON_TARGET`。
+
+## 2026-08-12 PREFORMAL：正式 oracle 修缮与最终 U1 通过
+
+- Coordinator 初审在 independent formal evidence consumer 中发现 1 项 Critical、3 项 High、2 项 Medium：bounded hard crash 被 summary 误拒绝、token ledger 证明不足、replacement 证据链不完整、authority 仍有隐式 bootstrap authorization、缺少 mutation coverage，以及 plan04 baseline 不满足严格可比条件。
+- 修缮：formal supervisor 现在使用 archive-aware receipt/update/fate/version 视图，证明 exact token ledger、receipt/cursor chain、capacity→qsub→replacement→fence/cursor 边界和不可变 actor topology；authority 强制 bootstrap slot/launch request exact-one；summary 接受一个有精确一周期 gap bound 的 hard crash。正式 config identity 同时冻结 seed、model/data、optimizer、dtype 和 completion contract。
+- 最终 U1：clean commit `af1eb61ed678d7c30017da4eebe78a3a00335a74`、fingerprint `sha256:e37b8ce55e85ab2a9270d9f5fbe5ab79a675f3b8eee4b5dec4c1c2931f3ac24d` 在 PBS `2531812.opbs`、compute node `mg0865` 上通过 Ruff、focused `260 passed`、full `591 passed`、website lint 和 14 项 rendered-site test。证据为 `validation_candidate19.json` 及同名前缀 raw/JUnit。
+- Coordinator 修缮后 current-state review 为 `APPROVE`，见 `reports/DOING/code_review/plan05/preformal-plan-complete-01/coordinator_remediation_af1eb61ed678d7c30017da4eebe78a3a00335a74.md`。Plan04 最新 target 没有完成正式 Dynamic Full baseline，因此 plan05 比较结论预先确定为 `incomparable`；不执行 20% threshold，不用 DDP/Periodic Average 或 diagnostic run 替代。
+- 下一动作：读取仍在运行的唯一外部 reviewer `opencode-go/deepseek-v4-flash` 初审结果，处置有效 finding；随后对当前关键 delta 只用同一模型执行 `critical-incremental` 复审。通过后冻结唯一 `FINAL_COMMON_TARGET` 并启动三组 fresh-root 正式场景。
