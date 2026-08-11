@@ -350,10 +350,45 @@ def _finalized_authority(
                 "INSERT INTO token_fates VALUES(?, 0, 3276800, 'applied')",
                 (receipt_id,),
             )
-    for stream in range(8):
+    if hard_crash_stream is not None:
+        stream = hard_crash_stream
+        receipt_id = f"receipt-{stream}-6"
+        digest = f"{stream:x}6".ljust(64, "0")
+        fence_json = json.dumps(
+            _fence(f"instance-{stream}", stream), sort_keys=True, separators=(",", ":")
+        )
+        receipt_sha256[(stream, 6)] = digest
         connection.execute(
-            "INSERT INTO contributor_progress VALUES(?, 5, ?, ?, 8000)",
-            (str(stream), f"receipt-{stream}-5", receipt_sha256[(stream, 5)]),
+            "INSERT INTO cycle_receipts VALUES(?, ?, ?, 6, ?, ?, 3276800, 3276800, "
+            "0, 3276800, 8000, 9600, 1, ?, ?, 111.0)",
+            (
+                receipt_id,
+                digest,
+                str(stream),
+                f"receipt-{stream}-5",
+                receipt_sha256[(stream, 5)],
+                f"orphan-update-{stream}",
+                fence_json,
+            ),
+        )
+        connection.execute(
+            "INSERT INTO token_fates VALUES(?, 0, 3276800, 'dropped')", (receipt_id,)
+        )
+        connection.execute(
+            "UPDATE token_rollups SET adjudicated_processed=adjudicated_processed+3276800, "
+            "direct_dropped=direct_dropped+3276800"
+        )
+    for stream in range(8):
+        final_cycle = 6 if stream == hard_crash_stream else 5
+        connection.execute(
+            "INSERT INTO contributor_progress VALUES(?, ?, ?, ?, ?)",
+            (
+                str(stream),
+                final_cycle,
+                f"receipt-{stream}-{final_cycle}",
+                receipt_sha256[(stream, final_cycle)],
+                final_cycle * 1600,
+            ),
         )
     connection.commit()
     connection.close()
@@ -547,6 +582,9 @@ def test_fixed_failure_oracle_requires_one_hard_crash_and_no_launch(tmp_path: Pa
 
     assert evidence["launch_requests"] == []
     assert evidence["replacement_boundary"]["late_created_update_ids"] == []
+    assert evidence["token_accounting"]["receipt_count"] == 41
+    assert evidence["token_accounting"]["update_count"] == 40
+    assert evidence["token_accounting"]["rollup"]["direct_dropped"] == 3_276_800
 
 
 def test_authorized_replacement_oracle_requires_capacity_qsub_and_cursor_continuity(

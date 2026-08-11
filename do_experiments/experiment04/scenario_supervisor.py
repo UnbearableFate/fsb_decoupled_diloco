@@ -433,6 +433,7 @@ def _token_accounting_evidence(
     versions: list[dict[str, Any]],
     terminal: dict[str, Any],
     workload: dict[str, int],
+    hard_crash_fences: set[str],
 ) -> dict[str, Any]:
     """Cross-check receipt chains, proposal payloads, token fates, and version totals."""
 
@@ -482,11 +483,17 @@ def _token_accounting_evidence(
         proposal_expected = bool(int(receipt["proposal_expected"]))
         update = update_by_receipt.get(receipt_id)
         if proposal_expected:
-            if (
-                update is None
-                or direct_fate not in {"applied", "dropped"}
-                or effective != processed
-            ):
+            if update is None:
+                if (
+                    direct_fate != "dropped"
+                    or effective != processed
+                    or receipt["fence_json"] not in hard_crash_fences
+                ):
+                    raise RuntimeError(
+                        "only a hard-crashed fence may terminalize a promised proposal as absent"
+                    )
+                continue
+            if direct_fate not in {"applied", "dropped"} or effective != processed:
                 raise RuntimeError("proposal-bearing receipt lacks one terminal update fate")
             matching_fields = (
                 str(update["update_id"]) == str(receipt["planned_update_id"]),
@@ -509,6 +516,11 @@ def _token_accounting_evidence(
         receipt_id
         for receipt_id, row in receipt_by_id.items()
         if int(row["proposal_expected"]) == 1
+        and not (
+            receipt_id not in update_by_receipt
+            and row["fence_json"] in hard_crash_fences
+            and fate_by_id[receipt_id]["direct_fate"] == "dropped"
+        )
     }:
         raise RuntimeError("updates are not a one-to-one projection of proposal-bearing receipts")
 
@@ -779,6 +791,9 @@ def _final_authority_evidence(
         versions=versions,
         terminal=terminal,
         workload=workload,
+        hard_crash_fences={
+            str(row["fence_json"]) for row in fences if row["state"] == "hard_crash"
+        },
     )
 
     if (
