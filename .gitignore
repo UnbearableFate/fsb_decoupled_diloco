@@ -18,6 +18,11 @@ logs/
 *.pbs.o*
 *.pbs.e*
 **.o**
+# Website source files that intentionally live under otherwise ignored paths.
+!website/build/
+!website/build/sites-vite-plugin.ts
+!website/.openai/
+!website/.openai/hosting.json
 .cache
 .ruff_cache
 **/artifacts
