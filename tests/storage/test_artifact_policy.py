@@ -1,3 +1,5 @@
+"""Exercise protocol artifact classification and policy integrity."""
+
 from __future__ import annotations
 
 from fs_diloco.storage.artifact_policy import (
@@ -8,6 +10,8 @@ from fs_diloco.storage.artifact_policy import (
 
 
 def test_artifact_policy_classifies_protocol_domains_and_fails_unknown_closed() -> None:
+    """Generic cleanup must preserve current authority objects and unknown paths."""
+
     policy = ArtifactPolicy.from_dict(build_artifact_policy())
 
     assert policy.classify("control/syncer_metadata.sqlite3") is ArtifactClass.AUTHORITY
@@ -16,7 +20,7 @@ def test_artifact_policy_classifies_protocol_domains_and_fails_unknown_closed() 
     assert policy.classify("heartbeats/learner-0.json") is ArtifactClass.CACHE
     assert policy.classify("updates/payloads/learner-0/update.bin") is ArtifactClass.PAYLOAD
     assert (
-        policy.classify("updates/receipts/learner-0/static-fence/receipt-learner-0-1.json")
+        policy.classify("updates/receipts/stream-0/incarnation-fence/receipt-stream-0-1.json")
         is ArtifactClass.AUTHORITY
     )
     assert policy.classify("updates/proposals/learner-0/update.json") is ArtifactClass.AUTHORITY
@@ -29,6 +33,8 @@ def test_artifact_policy_classifies_protocol_domains_and_fails_unknown_closed() 
 
 
 def test_artifact_policy_checksum_tamper_fails_closed() -> None:
+    """A policy checksum mismatch must reject a mutated artifact classification."""
+
     payload = build_artifact_policy()
     payload["classes"]["audit"].append("foreign/**")
 
