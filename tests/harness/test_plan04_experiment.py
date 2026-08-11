@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import sqlite3
@@ -39,6 +40,64 @@ def _fence(instance_id: str, stream_id: int) -> dict[str, object]:
         "admission_generation": 1,
         "admission_token_sha256": f"{stream_id:x}" * 64,
     }
+
+
+def _write_attestation(
+    run_root: Path,
+    *,
+    actor_kind: str,
+    actor_id: str,
+    attempt_id: str,
+    job_id: str,
+    hostname: str,
+) -> None:
+    """Publish one immutable actor attestation with exact formal-run identity."""
+
+    payload: dict[str, object] = {
+        "format_version": 1,
+        "run_id": "run-current",
+        "descriptor_sha256": "d" * 64,
+        "source_fingerprint": f"sha256:{'f' * 64}",
+        "source_lock_sha256": "l" * 64,
+        "model_identity": {
+            "name_or_path": "gpt2",
+            "revision": "607a30d783dfa663caf39e06633721c8d4cfcd7e",
+        },
+        "tokenizer_identity": {
+            "name_or_path": "gpt2",
+            "revision": "607a30d783dfa663caf39e06633721c8d4cfcd7e",
+        },
+        "dataset_identity": {
+            "name": "Salesforce/wikitext",
+            "config_name": "wikitext-2-raw-v1",
+            "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+            "train_split": "train",
+            "block_size": 1024,
+        },
+        "actor_kind": actor_kind,
+        "actor_id": actor_id,
+        "attempt_id": attempt_id,
+        "hostname": hostname,
+        "pid": 1,
+        "python_version": "3.13",
+        "runtime_evidence": {
+            "torch_version": "2.7.0",
+            "cuda_runtime_version": "12.8",
+            "gpu_driver_version": "570.86.15",
+            "module_environment": [],
+            "resource_allocation": {"pbs_job_id": f"{job_id}.opbs"},
+        },
+        "scheduler_job_id": f"{job_id}.opbs",
+        "accelerator_identity": "0",
+        "observed_at": 1.0,
+    }
+    payload["attestation_sha256"] = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    ).hexdigest()
+    path = run_root / "metrics" / "attestations" / actor_kind / actor_id / f"{attempt_id}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    path.chmod(0o444)
 
 
 def _finalized_authority(
@@ -457,43 +516,75 @@ def test_replacement_topology_binds_the_admitted_instance_attestation(tmp_path: 
 
     module = _module()
     jobs = [str(index) for index in range(8)]
+    config = module.load_config(ROOT / "configs/experiments/gpt2_wikitext2_8l_200x10_fixed.yaml")
     attestations = [
-        ("learner", f"instance-{index}", str(index), f"host-{index}") for index in range(8)
+        ("learner", f"instance-{index}", f"instance-{index}", str(index), f"host-{index}")
+        for index in range(8)
     ]
     attestations.extend(
         (
-            ("syncer", "syncer-1", "100", "host-8"),
-            ("learner", "instance-7-replacement", "200", "host-7"),
+            ("syncer", "syncer-1", "syncer-attempt", "100", "host-8"),
+            (
+                "learner",
+                "instance-7-replacement",
+                "instance-7-replacement",
+                "200",
+                "host-7",
+            ),
         )
     )
-    for actor_kind, actor_id, job_id, hostname in attestations:
-        path = (
-            tmp_path / "metrics" / "attestations" / actor_kind / actor_id / f"attempt-{job_id}.json"
-        )
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(
-                {
-                    "actor_kind": actor_kind,
-                    "actor_id": actor_id,
-                    "attempt_id": f"attempt-{job_id}",
-                    "hostname": hostname,
-                    "scheduler_job_id": f"{job_id}.opbs",
-                }
-            ),
-            encoding="utf-8",
+    for actor_kind, actor_id, attempt_id, job_id, hostname in attestations:
+        _write_attestation(
+            tmp_path,
+            actor_kind=actor_kind,
+            actor_id=actor_id,
+            attempt_id=attempt_id,
+            job_id=job_id,
+            hostname=hostname,
         )
 
     topology = module._attestation_topology(
         tmp_path,
         jobs,
         "100.opbs",
+        config=config,
+        run_id="run-current",
+        descriptor_sha256="d" * 64,
+        source_fingerprint=f"sha256:{'f' * 64}",
+        source_lock_sha256="l" * 64,
+        initial_instance_by_job={str(index): f"instance-{index}" for index in range(8)},
+        syncer_owner_id="syncer-1",
         replacement_job_id="200.opbs",
         replacement_instance_id="instance-7-replacement",
     )
 
     assert len(topology["initial_distinct_hosts"]) == 9
     assert topology["replacement_actor"]["actor_id"] == "instance-7-replacement"
+
+    # One scheduler allocation cannot attest two independent actor identities.
+    _write_attestation(
+        tmp_path,
+        actor_kind="learner",
+        actor_id="duplicate-replacement",
+        attempt_id="duplicate-replacement",
+        job_id="200",
+        hostname="host-7",
+    )
+    with pytest.raises(RuntimeError, match="multiple actor attestations"):
+        module._attestation_topology(
+            tmp_path,
+            jobs,
+            "100.opbs",
+            config=config,
+            run_id="run-current",
+            descriptor_sha256="d" * 64,
+            source_fingerprint=f"sha256:{'f' * 64}",
+            source_lock_sha256="l" * 64,
+            initial_instance_by_job={str(index): f"instance-{index}" for index in range(8)},
+            syncer_owner_id="syncer-1",
+            replacement_job_id="200.opbs",
+            replacement_instance_id="instance-7-replacement",
+        )
 
 
 def test_no_failure_authority_oracle_requires_ten_exact_four_way_merges(tmp_path: Path) -> None:

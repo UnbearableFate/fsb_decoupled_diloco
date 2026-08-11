@@ -9,6 +9,7 @@ import json
 import os
 import random
 import sqlite3
+import stat
 import subprocess
 import tempfile
 import time
@@ -19,6 +20,7 @@ from typing import Any
 
 from fs_diloco.core.config import Config, load_config
 from fs_diloco.core.source_identity import SOURCE_SCOPES
+from fs_diloco.core.versions import ACTOR_ATTESTATION_FORMAT_VERSION
 from fs_diloco.runtime.pbs_scheduler import PBSScheduler
 from fs_diloco.storage.audit_archive import read_logical_authority_rows
 from fs_diloco.storage.paths import RunPaths
@@ -308,27 +310,112 @@ def _attestation_topology(
     initial_job_ids: list[str],
     syncer_job_id: str,
     *,
+    config: Config,
+    run_id: str,
+    descriptor_sha256: str,
+    source_fingerprint: str,
+    source_lock_sha256: str,
+    initial_instance_by_job: dict[str, str],
+    syncer_owner_id: str,
     replacement_job_id: str | None,
     replacement_instance_id: str | None,
 ) -> dict[str, Any]:
     """Prove initial independent placement and any replacement actor allocation."""
 
-    initial_expected = {_normalize_job_id(item) for item in [*initial_job_ids, syncer_job_id]}
+    learner_expected = {_normalize_job_id(item) for item in initial_job_ids}
+    syncer_expected = _normalize_job_id(syncer_job_id)
+    initial_expected = {*learner_expected, syncer_expected}
+    if set(initial_instance_by_job) != learner_expected:
+        raise RuntimeError("bootstrap authority does not match submitted learner jobs")
     expected = set(initial_expected)
     if (replacement_job_id is None) != (replacement_instance_id is None):
         raise RuntimeError("replacement topology requires both scheduler and instance identity")
     if replacement_job_id is not None:
         expected.add(_normalize_job_id(replacement_job_id))
     matched: dict[str, dict[str, Any]] = {}
+    required_fields = {
+        "format_version",
+        "run_id",
+        "descriptor_sha256",
+        "source_fingerprint",
+        "source_lock_sha256",
+        "model_identity",
+        "tokenizer_identity",
+        "dataset_identity",
+        "actor_kind",
+        "actor_id",
+        "attempt_id",
+        "hostname",
+        "pid",
+        "python_version",
+        "runtime_evidence",
+        "scheduler_job_id",
+        "accelerator_identity",
+        "observed_at",
+        "attestation_sha256",
+    }
+    expected_model = {"name_or_path": config.model.name_or_path, "revision": config.model.revision}
+    expected_tokenizer = {
+        "name_or_path": config.model.name_or_path,
+        "revision": config.model.tokenizer_revision,
+    }
+    expected_dataset = {
+        "name": config.data.dataset_name,
+        "config_name": config.data.dataset_config_name,
+        "revision": config.data.revision,
+        "train_split": config.data.train_split,
+        "block_size": config.data.block_size,
+    }
     for path in sorted((run_root / "metrics" / "attestations").glob("*/*/*.json")):
+        metadata = path.lstat()
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
+            raise RuntimeError("actor attestation is not one immutable regular file")
         payload = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(payload, dict):
-            continue
+        if not isinstance(payload, dict) or set(payload) != required_fields:
+            raise RuntimeError("actor attestation schema is not exact")
+        attestation_sha256 = hashlib.sha256(
+            json.dumps(
+                {key: value for key, value in payload.items() if key != "attestation_sha256"},
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        if (
+            payload["format_version"] != ACTOR_ATTESTATION_FORMAT_VERSION
+            or payload["run_id"] != run_id
+            or payload["descriptor_sha256"] != descriptor_sha256
+            or payload["source_fingerprint"] != source_fingerprint
+            or payload["source_lock_sha256"] != source_lock_sha256
+            or payload["model_identity"] != expected_model
+            or payload["tokenizer_identity"] != expected_tokenizer
+            or payload["dataset_identity"] != expected_dataset
+            or payload["attestation_sha256"] != attestation_sha256
+        ):
+            raise RuntimeError("actor attestation identity differs from the formal run")
         raw_job_id = payload.get("scheduler_job_id")
         if not isinstance(raw_job_id, str):
             continue
         normalized = _normalize_job_id(raw_job_id)
         if normalized in expected:
+            expected_path = (
+                run_root
+                / "metrics"
+                / "attestations"
+                / str(payload["actor_kind"])
+                / str(payload["actor_id"])
+                / f"{payload['attempt_id']}.json"
+            )
+            runtime = payload["runtime_evidence"]
+            allocation = runtime.get("resource_allocation") if isinstance(runtime, dict) else None
+            if (
+                path != expected_path
+                or not isinstance(allocation, dict)
+                or _normalize_job_id(str(allocation.get("pbs_job_id", ""))) != normalized
+            ):
+                raise RuntimeError("actor attestation path or runtime allocation is not exact")
+            if normalized in matched:
+                raise RuntimeError("one scheduler job published multiple actor attestations")
             matched[normalized] = {
                 "actor_kind": payload.get("actor_kind"),
                 "actor_id": payload.get("actor_id"),
@@ -339,6 +426,22 @@ def _attestation_topology(
             }
     if set(matched) != expected:
         raise RuntimeError("actor attestations do not cover all submitted jobs")
+    if any(
+        matched[job_id]["actor_kind"] != "learner"
+        or matched[job_id]["actor_id"] != initial_instance_by_job[job_id]
+        or matched[job_id]["attempt_id"] != initial_instance_by_job[job_id]
+        for job_id in learner_expected
+    ):
+        raise RuntimeError("bootstrap learner attestations differ from authority admissions")
+    if (
+        matched[syncer_expected]["actor_kind"] != "syncer"
+        or matched[syncer_expected]["actor_id"] != syncer_owner_id
+    ):
+        raise RuntimeError("syncer attestation differs from its authority epoch")
+    if any(
+        not isinstance(item["hostname"], str) or not item["hostname"] for item in matched.values()
+    ):
+        raise RuntimeError("actor attestation has no concrete hostname")
     hosts = {str(matched[job_id]["hostname"]) for job_id in initial_expected}
     if len(hosts) != 9:
         raise RuntimeError(f"initial independent topology used {len(hosts)} hosts, expected 9")
@@ -348,6 +451,7 @@ def _attestation_topology(
     if replacement_actor is not None and (
         replacement_actor["actor_kind"] != "learner"
         or replacement_actor["actor_id"] != replacement_instance_id
+        or replacement_actor["attempt_id"] != replacement_instance_id
     ):
         raise RuntimeError("replacement scheduler job lacks a learner attestation")
     return {
@@ -1216,6 +1320,16 @@ def supervise(
             run_root,
             initial_job_ids,
             first_syncer_job_id,
+            config=resolved_experiment_config,
+            run_id=str(descriptor["run_id"]),
+            descriptor_sha256=str(descriptor["descriptor_sha256"]),
+            source_fingerprint=str(descriptor["source_fingerprint"]),
+            source_lock_sha256=str(descriptor["source_lock_sha256"]),
+            initial_instance_by_job={
+                _normalize_job_id(str(row["pbs_job_id"])): str(row["admitted_instance_id"])
+                for row in authority["bootstrap_launches"]
+            },
+            syncer_owner_id=str(authority["syncer_epochs"][0]["owner_id"]),
             replacement_job_id=(None if replacement is None else str(replacement["pbs_job_id"])),
             replacement_instance_id=(
                 None if replacement is None else str(replacement["admitted_instance_id"])
