@@ -557,12 +557,6 @@ def validate_run(
             errors.append(str(exc))
     if pending or prepared:
         errors.append("authority retained pending updates or prepared publications")
-    if {str(row["stable_contributor_key"]) for row in selected_credit} != (
-        expected_contributor_ids
-    ) or sum(int(row["committed_credit"]) for row in selected_credit) != (
-        expected_global_steps * quorum_max
-    ):
-        errors.append("selection credit total is not exact for the configured quorum")
     if {str(row["stable_contributor_key"]) for row in progress} != expected_contributor_ids:
         errors.append("contributor progress does not cover the registered topology")
     if {
@@ -639,9 +633,6 @@ def validate_run(
         * int(config["training"]["micro_batch_size"])
         * int(config["data"]["block_size"])
     )
-    expected_direct = expected_global_steps * quorum_max * per_update_tokens
-    if len(terminal) == 1 and int(terminal[0]["direct_weight_tokens_applied"]) != expected_direct:
-        errors.append("terminal direct applied tokens are not exact")
     if any(int(row["processed_tokens_this_cycle"]) != per_update_tokens for row in receipts):
         errors.append("at least one durable receipt has the wrong cycle workload")
     expected_cursor_advance = expected_inner_steps * int(
@@ -667,10 +658,33 @@ def validate_run(
         version: sum(int(row["applied_version"]) == version for row in applied_updates)
         for version in range(1, expected_global_steps + 1)
     }
-    if len(applied_updates) != expected_global_steps * quorum_max or any(
-        count != quorum_max for count in applied_by_version.values()
+    expected_direct = sum(int(row["effective_tokens_this_update"]) for row in applied_updates)
+    credit_by_contributor = {
+        str(row["stable_contributor_key"]): int(row["committed_credit"]) for row in selected_credit
+    }
+    if (
+        not set(credit_by_contributor) <= expected_contributor_ids
+        or sum(credit_by_contributor.values()) != len(applied_updates)
+        or any(
+            credit_by_contributor.get(contributor_id, 0) != applied_count
+            for contributor_id, applied_count in applied_by_contributor.items()
+        )
     ):
-        errors.append("applied proposal count is not exact for every committed quorum")
+        errors.append("selection credit does not match durable applied proposals")
+    if len(applied_updates) != sum(applied_by_version.values()) or any(
+        not quorum_min <= count <= quorum_max for count in applied_by_version.values()
+    ):
+        errors.append("applied proposal count is outside the configured quorum per version")
+    if len(terminal) == 1 and int(terminal[0]["direct_weight_tokens_applied"]) != expected_direct:
+        errors.append("terminal direct applied tokens do not match applied proposals")
+    version_direct_tokens = {
+        int(row["version"]): int(row["direct_weight_tokens_applied"]) for row in versions
+    }
+    if any(
+        version_direct_tokens.get(version) != applied_by_version[version] * per_update_tokens
+        for version in applied_by_version
+    ):
+        errors.append("publication direct tokens do not match each selected quorum")
     direct_by_versions = sum(int(row["direct_weight_tokens_applied"]) for row in versions)
     rollup = rollups[0] if len(rollups) == 1 else None
     balance = _token_balance(rollup)

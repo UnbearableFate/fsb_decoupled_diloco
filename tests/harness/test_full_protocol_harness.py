@@ -56,11 +56,14 @@ def _build_valid_checker_fixture(
     fault_scenario: str = "none",
     syncer_takeover_boundary_version: int = 2,
     independent_scheduler_jobs: bool = False,
+    variable_quorum: bool = False,
 ) -> tuple[Path, Path, list[str], dict[str, str]]:
     """Build a synthetic run without requiring the development tree to be clean."""
 
-    if independent_scheduler_jobs and fault_scenario != "none":
-        raise ValueError("independent scheduler fixture only covers the fault-free scenario")
+    if independent_scheduler_jobs and (fault_scenario != "none" or variable_quorum):
+        raise ValueError(
+            "independent scheduler fixture only covers the one-stream fault-free scenario"
+        )
     global_steps_by_scenario = {
         "none": 1,
         "syncer_takeover": 3,
@@ -75,11 +78,12 @@ def _build_valid_checker_fixture(
         project_root=ROOT,
     )
     config.sync.quorum_min = 1
-    config.sync.quorum_max = 1
+    config.sync.quorum_max = 2 if variable_quorum else 1
     config.sync.stop_after_outer_steps = expected_global_steps
-    config.membership.stream_pool_size = 1
-    config.membership.bootstrap_instances = 1
-    config.scaling.desired_contributors = 1
+    contributor_count = 2 if variable_quorum else 1
+    config.membership.stream_pool_size = contributor_count
+    config.membership.bootstrap_instances = contributor_count
+    config.scaling.desired_contributors = contributor_count
     config.scaling.low_contributor_threshold = 0
     config.training.inner_steps = 1
     bind_source_identity(config, ROOT)
@@ -93,14 +97,18 @@ def _build_valid_checker_fixture(
         source_fingerprint=str(descriptor["source_fingerprint"]),
         config_sha256=str(descriptor["resolved_config_sha256"]),
     )
-    scope = MembershipScope(1)
+    scope = MembershipScope(contributor_count)
     scheduler_job_id = "fixture-syncer.opbs" if independent_scheduler_jobs else "fixture.opbs"
-    learner_scheduler_job_id = (
-        "fixture-learner.opbs" if independent_scheduler_jobs else scheduler_job_id
+    learner_scheduler_job_ids = (
+        ["fixture-learner.opbs"]
+        if independent_scheduler_jobs
+        else [scheduler_job_id] * contributor_count
     )
     clock_value = [100.0]
     syncer_attempts = [("checker-syncer", "syncer-attempt", 101)]
-    learner_instance_id = "fixture-instance"
+    learner_instance_ids = [
+        f"fixture-instance-{stream_id}" for stream_id in range(contributor_count)
+    ]
     takeover_evidence = None
     with LeaderAuthority(
         loaded.paths.sqlite_db,
@@ -119,17 +127,20 @@ def _build_valid_checker_fixture(
         )
         leader = authority.open_leader(token)
         leader.initialize_membership(command_id="initialize-membership")
-        fence = leader.admit_incarnation(
-            command_id="admit-learner",
-            instance_id=learner_instance_id,
-            placement_id="fixture-placement",
-            stream_id=0,
-            bootstrap_slot=0,
-            admission_token_sha256="a" * 64,
-            hostname=socket.gethostname(),
-            pid=103,
-            pbs_job_id=learner_scheduler_job_id,
-        ).fence
+        fences = [
+            leader.admit_incarnation(
+                command_id=f"admit-learner-{stream_id}",
+                instance_id=learner_instance_ids[stream_id],
+                placement_id=f"fixture-placement-{stream_id}",
+                stream_id=stream_id,
+                bootstrap_slot=stream_id,
+                admission_token_sha256=f"{stream_id + 1:x}" * 64,
+                hostname=socket.gethostname(),
+                pid=103 + stream_id,
+                pbs_job_id=learner_scheduler_job_ids[stream_id],
+            ).fence
+            for stream_id in range(contributor_count)
+        ]
         leader.initialize_genesis(
             command_id="genesis",
             publication_id="publication-0",
@@ -145,15 +156,17 @@ def _build_valid_checker_fixture(
         ) -> tuple[CycleReceiptV1, FullUpdateProposalV2]:
             """Publish, ingest, and optionally commit one contiguous stream cycle."""
 
-            update_id = f"00000000-0000-4000-8000-{sequence:012d}"
+            stable_key = current_fence.stable_contributor_key
+            stream_id = int(stable_key)
+            update_id = f"{stream_id:08d}-0000-4000-8000-{sequence:012d}"
             receipt = CycleReceiptV1.from_dict(
                 {
                     "cycle_receipt_format_version": CYCLE_RECEIPT_FORMAT_VERSION,
                     "run_id": descriptor["run_id"],
-                    "stable_contributor_key": "0",
+                    "stable_contributor_key": stable_key,
                     "cycle_seq": sequence,
-                    "cycle_id": f"10000000-0000-4000-8000-{sequence:012d}",
-                    "receipt_id": f"receipt-0-{sequence}",
+                    "cycle_id": f"{stream_id + 1:08d}-0000-4000-8000-{sequence:012d}",
+                    "receipt_id": f"receipt-{stable_key}-{sequence}",
                     "previous_receipt_id": None if previous is None else previous.receipt_id,
                     "previous_receipt_sha256": (
                         None if previous is None else previous.immutable_sha256()
@@ -176,7 +189,7 @@ def _build_valid_checker_fixture(
                 {
                     "proposal_format_version": PROPOSAL_FORMAT_VERSION,
                     "run_id": descriptor["run_id"],
-                    "stable_contributor_key": "0",
+                    "stable_contributor_key": stable_key,
                     "cycle_seq": sequence,
                     "cycle_id": receipt.cycle_id,
                     "update_id": update_id,
@@ -193,7 +206,7 @@ def _build_valid_checker_fixture(
                     "data_cursor_start": sequence - 1,
                     "data_cursor_end": sequence,
                     "contributor_fence": current_fence.as_dict(),
-                    "payload_relative_path": canonical_update_relative_path("0", update_id),
+                    "payload_relative_path": canonical_update_relative_path(stable_key, update_id),
                     "payload_size": len(DEFAULT_PAYLOAD),
                     "payload_sha256": PAYLOAD_DIGEST,
                     "tensor_schema_sha256": SCHEMA_DIGEST,
@@ -225,7 +238,7 @@ def _build_valid_checker_fixture(
         previous_receipt = None
         for sequence in range(1, expected_global_steps + 1):
             previous_receipt, _proposal = publish_cycle(
-                sequence, fence, previous_receipt, commit=True
+                sequence, fences[0], previous_receipt, commit=True
             )
             if fault_scenario == "syncer_takeover" and sequence == 2:
                 takeover_evidence = {
@@ -251,19 +264,30 @@ def _build_valid_checker_fixture(
                     ("checker-syncer-successor", "syncer-successor-attempt", 102)
                 )
 
+        extra_receipts: list[tuple[ContributorFence, CycleReceiptV1, FullUpdateProposalV2]] = []
         extra_receipt, extra_proposal = publish_cycle(
             expected_global_steps + 1,
-            fence,
+            fences[0],
             previous_receipt,
             commit=False,
         )
+        extra_receipts.append((fences[0], extra_receipt, extra_proposal))
+        if variable_quorum:
+            second_receipt, second_proposal = publish_cycle(
+                1,
+                fences[1],
+                None,
+                commit=False,
+            )
+            extra_receipts.append((fences[1], second_receipt, second_proposal))
         leader.begin_terminal_close(command_id="close", reason="fixture complete")
-        leader.acknowledge_terminal_contributor(
-            command_id="ack-learner",
-            fence=fence,
-            final_cycle_seq=extra_receipt.cycle_seq,
-            final_update_id=extra_proposal.update_id,
-        )
+        for current_fence, final_receipt, final_proposal in extra_receipts:
+            leader.acknowledge_terminal_contributor(
+                command_id=f"ack-learner-{current_fence.stable_contributor_key}",
+                fence=current_fence,
+                final_cycle_seq=final_receipt.cycle_seq,
+                final_update_id=final_proposal.update_id,
+            )
         leader.finalize_terminal(command_id="finalize", reason="fixture complete")
         terminal = authority.read.terminal_record()
         assert terminal is not None
@@ -280,7 +304,7 @@ def _build_valid_checker_fixture(
                 "submission_status": "submitted",
                 "actor_queue": "debug-g",
                 "syncer_job_id": scheduler_job_id,
-                "learner_job_ids": [learner_scheduler_job_id],
+                "learner_job_ids": learner_scheduler_job_ids,
             },
         )
     atomic_write_json(log_root / "summary.json", {"final_version": expected_global_steps})
@@ -302,14 +326,17 @@ def _build_valid_checker_fixture(
         "module_environment": [],
         "resource_allocation": {"nodes": 1},
     }
-    write_actor_attestation(
-        loaded,
-        actor_kind="learner",
-        actor_id=learner_instance_id,
-        attempt_id=learner_instance_id,
-        runtime_evidence=runtime_evidence,
-        scheduler_job_id=learner_scheduler_job_id,
-    )
+    for learner_instance_id, learner_scheduler_job_id in zip(
+        learner_instance_ids, learner_scheduler_job_ids, strict=True
+    ):
+        write_actor_attestation(
+            loaded,
+            actor_kind="learner",
+            actor_id=learner_instance_id,
+            attempt_id=learner_instance_id,
+            runtime_evidence=runtime_evidence,
+            scheduler_job_id=learner_scheduler_job_id,
+        )
     for actor_id, attempt_id, _pid in syncer_attempts:
         write_actor_attestation(
             loaded,
@@ -342,7 +369,7 @@ def _build_valid_checker_fixture(
         "--expected-inner-steps",
         "1",
         "--expected-contributors",
-        "1",
+        str(contributor_count),
         "--expected-hosts",
         "1",
         "--expected-scheduler-jobs",
@@ -431,6 +458,23 @@ def test_scheduler_host_oracle_distinguishes_coallocated_and_independent_jobs() 
         job_hosts,
         expected_scheduler_jobs=2,
     )
+
+
+def test_aggregate_checker_accepts_minimum_variable_quorum(tmp_path: Path) -> None:
+    """A committed batch may contain quorum_min contributors without reaching quorum_max."""
+
+    _run_root, output, command, environment = _build_valid_checker_fixture(
+        tmp_path,
+        variable_quorum=True,
+    )
+
+    completed, artifact = _run_checker(command, environment, output)
+
+    assert completed.returncode == 0, completed.stderr
+    assert artifact["status"] == "PASS"
+    assert artifact["metrics"]["contributors"] == 2
+    assert artifact["metrics"]["applied_proposal_count"] == 1
+    assert artifact["metrics"]["expected_direct_tokens"] == 16
 
 
 def test_functional_config_closes_at_the_registered_global_target() -> None:
@@ -723,7 +767,7 @@ def test_aggregate_checker_mutations_change_acceptance_to_fail(
             in artifact["errors"]
         )
     if mutation == "terminal_applied_total":
-        assert "terminal direct applied tokens are not exact" in artifact["errors"]
+        assert "terminal direct applied tokens do not match applied proposals" in artifact["errors"]
 
 
 def test_checker_parser_freezes_topology_workload_and_fault_oracles(tmp_path: Path) -> None:

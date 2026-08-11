@@ -81,3 +81,13 @@
 - 根因：receipt ack 表达了 receipt durable，却被 learner 当作完整 cycle ingestion barrier；proposal backlog 因此只能在 terminal 时按 receipt token fate adjudicate，无法满足无故障场景的 receipt/proposal 一一对应。另有 functional config 与 exact final-version oracle 冲突，以及 scheduler host oracle 没有先按 co-allocated/independent topology 分支。
 - 处置：含 proposal 的 receipt 只在匹配 proposal 已被 authority accepted 或 exact-replay 后发布 ack；receipt-only cycle 仍在 receipt durable 后 ack。functional config 禁止 terminal extra merge；多 host 约束只应用于 independent scalar actor jobs。新增 ack 顺序、co-allocated topology 与 functional terminal 配置回归测试。
 - 下一验证：提交并完成一轮 fresh U1 后，从 fresh 5-node roots 重跑 no-failure 和 syncer-takeover；若同一 functional 域再次出现有效失败，必须在下一次提交前完成全面 failure review。
+
+## Functional harness candidate 3：Checker 把 quorum_max 误作每版固定贡献者数
+
+- 分类：`harness-failure`；计入 unique-protocol functional harness 验证域第三次有效失败，并在第四次提交前触发全面 failure review。
+- Source：commit `15159829d9e196b70fb19e30af136474073773ea`，clean source fingerprint `sha256:07041f03098e6a33ffc359c4a1f99a7918de88b4e7b54b12fe62b30679c68cfd`。
+- 环境：PBS job `2531299.opbs`，compute nodes `mg0846`、`mg0653`、`mg0654`、`mg0657`、`mg0660`；4-stream synthetic functional config，no-failure 场景。
+- 证据：`reports/DOING/plan05/artifacts/functional_no_failure_candidate3.json`、对应 PBS log、`runs/full_protocol/plan05_functional_none_c3_20260812/` 与 `logs/qsub_plan05_functional_none_c3_20260812/`。
+- 最小症状：run 按配置在 version 4 正常 terminal；15 个 receipt 与 15 个 proposal 一一对应，token ledger balance 为 0，拓扑和 ownership oracle 均通过。每个 normal merge 在 3 个 eligible contributor 达到 `quorum_min=3` 时提交，共应用 12 个 proposal、3840 direct token。Checker 错误要求每版固定使用 `quorum_max=4`，因此期望 16 个 proposal 和 5120 token。
+- 全面审查：见 `reports/DOING/code_review/plan05/failure-functional-harness-round1/codex-gpt_15159829d9e196b70fb19e30af136474073773ea_2531299.md`。审查确认 selection transaction 的契约是 `[quorum_min, quorum_max]`，commit/selection credit/global-version/token ledger 均与实际 3-way batch 一致；不能通过改 merge 时序、把 functional quorum 改成 4/4 或放宽 token balance 解决。
+- 下一验证：按审查结论改写 Checker 的 variable-quorum 公式和 regression fixture；随后运行 fresh U1，再从 fresh 5-node roots重跑两种 functional 场景。
