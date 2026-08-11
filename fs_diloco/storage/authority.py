@@ -1431,7 +1431,12 @@ class LeaderSession:
         request = proposal.as_dict()
         replay = self._command_replay(command_id, "ingest_proposal", request)
         if replay is not None:
-            return ProposalDisposition(replay["disposition"])
+            disposition = ProposalDisposition(replay["disposition"])
+            return (
+                ProposalDisposition.EXACT_REPLAY
+                if disposition is ProposalDisposition.ACCEPTED
+                else disposition
+            )
         from .object_store import verify_proposal_payload
 
         verification = verify_proposal_payload(self._authority._run_root, proposal)

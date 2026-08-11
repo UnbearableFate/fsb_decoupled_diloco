@@ -152,6 +152,8 @@ def test_replay_collision_and_logical_conflict_are_explicit_and_audited(
 def test_conflict_cannot_cross_receipt_gap_and_command_replay_needs_no_object(
     tmp_path: Path,
 ) -> None:
+    """An accepted command replay is identified without rereading its payload."""
+
     authority, leader, fence = open_static(tmp_path)
     database = tmp_path / "authority.sqlite3"
     try:
@@ -163,7 +165,7 @@ def test_conflict_cannot_cross_receipt_gap_and_command_replay_needs_no_object(
         (tmp_path / proposal.payload_relative_path).unlink()
         assert (
             leader.ingest_proposal(command_id="accept", proposal=proposal)
-            is ProposalDisposition.ACCEPTED
+            is ProposalDisposition.EXACT_REPLAY
         )
         publish_proposal_payload(tmp_path, proposal)
 
