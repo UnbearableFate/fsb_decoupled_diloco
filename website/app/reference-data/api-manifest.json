@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceRevision": "9b91304dde67b82a1af862c43fa3d1ab15ccba19",
+  "sourceRevision": "2c7bb467ecf70ee9f6fbb581e5e167617b074ad6",
   "stats": {
     "modules": 63,
     "packages": 9,
@@ -14360,7 +14360,7 @@
       "module": "fs_diloco.runtime.syncer",
       "route": "/reference/fs_diloco/runtime/syncer",
       "sourcePath": "fs_diloco/runtime/syncer.py",
-      "sourceSha256": "ac9529af8edfb6d38d3211e2bce4e137c5b2a64805092f9e4b2e8a9cd390da7d",
+      "sourceSha256": "bba50d49c8f998f04dc82bc358d71c1cdb4f414e4d72116e5e89a85066e3d5b7",
       "isPackage": false,
       "visibility": "public",
       "summary": "组合 fenced Syncer 的服务、合并循环和终态流程。",
@@ -14863,7 +14863,7 @@
           "visibility": "internal",
           "signature": "_ingest_proposals(loaded: LoadedRunDescriptor, authority: LeaderAuthority, leader: LeaderSession, control: ControlPublisher, telemetry: ActorTelemetryWriter) -> None",
           "summary": "摄取并校验`ingest_proposals` 对应的数据。",
-          "docstring": "Ingest receipts, then at most one new payload before reconsidering a merge.",
+          "docstring": "Ingest receipts, then acknowledge at most one proposal before reconsidering a merge.",
           "parameters": [
             {
               "name": "loaded",
@@ -14911,7 +14911,7 @@
           ],
           "decorators": [],
           "line": 746,
-          "endLine": 860
+          "endLine": 872
         }
       ],
       "dependencies": [
@@ -14937,7 +14937,7 @@
       "usedBy": [
         "fs_diloco.runtime.syncer_entrypoint"
       ],
-      "lineCount": 860
+      "lineCount": 872
     },
     {
       "module": "fs_diloco.runtime.syncer_entrypoint",
