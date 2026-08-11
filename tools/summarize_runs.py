@@ -512,8 +512,16 @@ def _parse_full_protocol_run(run_dir: Path) -> dict[str, Any]:
             else:
                 key = str(fence["stable_contributor_key"])
                 if key not in progress:
-                    raise RunParseError(f"{authority_path}: hard-crash stream has no progress row")
-                cycle_seq = progress[key]
+                    if any(
+                        str(row["fence_json"]) == str(fence["canonical_json"])
+                        for row in logical_updates
+                    ):
+                        raise RunParseError(
+                            f"{authority_path}: hard-crash updates have no progress row"
+                        )
+                    cycle_seq = 0
+                else:
+                    cycle_seq = progress[key]
             steps.append(cycle_seq * inner_steps)
         job_rows = connection.execute(
             "SELECT pbs_job_id FROM learner_instances WHERE pbs_job_id IS NOT NULL "

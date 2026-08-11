@@ -142,6 +142,7 @@ def _write_full_protocol_run(
     *,
     archive_through_version: int | None = None,
     hard_crash_stream: int | None = None,
+    crash_before_first_receipt: bool = False,
 ) -> Path:
     """Create a finalized eight-stream Full Protocol authority and telemetry fixture."""
 
@@ -249,10 +250,11 @@ def _write_full_protocol_run(
                 3_276_800 if crashed else 0,
             ),
         )
-        connection.execute(
-            "INSERT INTO contributor_progress VALUES(?, ?)",
-            (str(stream), 3 if crashed else 10),
-        )
+        if not (crashed and crash_before_first_receipt):
+            connection.execute(
+                "INSERT INTO contributor_progress VALUES(?, ?)",
+                (str(stream), 3 if crashed else 10),
+            )
         connection.execute("INSERT INTO learner_instances VALUES(?)", (f"{stream}.opbs",))
         if crashed:
             continue
@@ -273,7 +275,9 @@ def _write_full_protocol_run(
     for version in range(1, 11):
         for offset in range(4):
             stream = (version * 4 + offset) % 8
-            if stream == hard_crash_stream and local_steps[stream] >= 600:
+            if stream == hard_crash_stream and (
+                crash_before_first_receipt or local_steps[stream] >= 600
+            ):
                 stream = (stream + 1) % 8
             local_steps[stream] += 200
             connection.execute(
@@ -382,6 +386,38 @@ def test_parse_full_protocol_accepts_one_bounded_hard_crash(tmp_path: Path) -> N
     assert row["optimizer_steps_min"] == 600
     assert row["final_report_count"] == 7
     assert "7" not in row["final_report_coordinate"].split(";")
+
+
+def test_parse_full_protocol_accepts_hard_crash_without_progress(tmp_path: Path) -> None:
+    """A pre-receipt hard crash contributes zero durable optimizer steps to the summary."""
+
+    module = _module()
+    run = _write_full_protocol_run(
+        tmp_path / "runs",
+        "pre-receipt-hard-crash-run",
+        hard_crash_stream=7,
+        crash_before_first_receipt=True,
+    )
+
+    row = module.parse_completed_run(run)
+
+    assert row["terminal_contributors"] == 8
+    assert row["optimizer_steps_min"] == 0
+    assert row["final_report_count"] == 7
+
+    database = run / "control" / "syncer_metadata.sqlite3"
+    connection = sqlite3.connect(database)
+    fence_json = connection.execute(
+        "SELECT fence_json FROM terminal_contributor_fences WHERE stable_contributor_key='7'"
+    ).fetchone()[0]
+    connection.execute(
+        "INSERT INTO updates VALUES('crash-update', ?, 200, 200, 'dropped', NULL)",
+        (fence_json,),
+    )
+    connection.commit()
+    connection.close()
+    with pytest.raises(module.RunParseError, match="updates have no progress row"):
+        module.parse_completed_run(run)
 
 
 def test_csv_update_discovers_both_layouts_and_deduplicates(tmp_path: Path) -> None:
