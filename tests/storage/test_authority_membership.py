@@ -110,6 +110,7 @@ def admit(leader, *, index: int, replace: str | None = None) -> ContributorFence
         hostname="host",
         pid=index + 1,
         pbs_job_id=f"{index}.opbs",
+        bootstrap_slot=index % 2 if launch_request_id is None else None,
         launch_request_id=launch_request_id,
         replace_instance_id=replace,
         replacement_reason="authorized_replacement" if replace is not None else None,
