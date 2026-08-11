@@ -123,10 +123,10 @@ def test_replacement_request_consumes_exact_launch_authorization(
     config_sha256 = hashlib.sha256(b"config").hexdigest()
     identity = AuthorityIdentity("run-current", "source", config_sha256)
     scope = MembershipScope(1)
-    initialize_authority(paths.sqlite_db, identity, scope)
+    initialize_authority(paths.sqlite_db, identity, scope, wall_clock=lambda: 100.0)
     telemetry = _Telemetry()
 
-    with LeaderAuthority(paths.sqlite_db, identity, scope) as authority:
+    with LeaderAuthority(paths.sqlite_db, identity, scope, wall_clock=lambda: 100.0) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
         )

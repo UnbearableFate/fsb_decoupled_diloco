@@ -67,9 +67,7 @@ PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-}}"
 PROJECT_ROOT="$(cd "$PROJECT_ROOT" && pwd -P)"
 [[ "$PROJECT_ROOT" != *","* ]] || die "PROJECT_ROOT must not contain a comma"
 REPORT_ROOT="$PROJECT_ROOT/reports/DOING/code_review"
-CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 OPENCODE_BIN="${OPENCODE_BIN:-opencode}"
-CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-5}"
 REVIEW_TIMEOUT_SECONDS="${REVIEW_TIMEOUT_SECONDS:-7200}"
 
 HOST_NAME="$(hostname)"
@@ -82,7 +80,6 @@ HOST_NAME="$(hostname)"
 require_safe_component "PLAN_ID" "$PLAN_ID"
 require_safe_component "REVIEW_ID" "$REVIEW_ID"
 require_safe_component "REVIEW_KIND" "$REVIEW_KIND"
-require_model_id "CLAUDE_MODEL" "$CLAUDE_MODEL"
 [[ "$OPENCODE_MODELS" != \;* && "$OPENCODE_MODELS" != *\; && "$OPENCODE_MODELS" != *\;\;* ]] || \
   die "OPENCODE_MODELS must be a semicolon-separated list without empty entries"
 IFS=';' read -r -a OPENCODE_MODEL_LIST <<<"$OPENCODE_MODELS"
@@ -110,7 +107,6 @@ mkdir -p "$REPORT_DIR"
 
 TASK_TMP_ROOT="${TMPDIR:-/tmp}"
 RUN_TMP="$(mktemp -d "$TASK_TMP_ROOT/fsdiloco-review.${JOB_STEM}.XXXXXX")"
-SNAPSHOT_CLAUDE="$RUN_TMP/repository-claude"
 OPENCODE_REVIEWER_IDS=()
 OPENCODE_SNAPSHOTS=()
 for index in "${!OPENCODE_MODEL_LIST[@]}"; do
@@ -256,8 +252,6 @@ prepare_snapshot() {
   chmod -R a-w -- "$snapshot_dir"
 }
 
-prepare_snapshot "$SNAPSHOT_CLAUDE"
-SNAPSHOT_CLAUDE_SHA256="$(snapshot_digest "$SNAPSHOT_CLAUDE")"
 OPENCODE_SNAPSHOT_SHA256=()
 for snapshot_dir in "${OPENCODE_SNAPSHOTS[@]}"; do
   prepare_snapshot "$snapshot_dir"
@@ -380,102 +374,6 @@ write_result_tsv() {
     "$report_file" "$raw_file" "$stderr_file" >"$file"
 }
 
-run_claude() {
-  local reviewer="claude-opus-5"
-  local lane="protocol correctness, architecture, and concurrency/persistence invariants"
-  local report_file="$REPORT_DIR/${reviewer}_${TARGET_COMMIT}_${JOB_STEM}.md"
-  local raw_file="$REPORT_DIR/${reviewer}_${TARGET_COMMIT}_${JOB_STEM}_raw.json"
-  local stderr_file="$REPORT_DIR/${reviewer}_${TARGET_COMMIT}_${JOB_STEM}.stderr.log"
-  local result_file="$RUN_TMP/${reviewer}.tsv"
-  local parsed_report="$RUN_TMP/${reviewer}.md"
-  local prompt
-  local started_at
-  local ended_at
-  local exit_code=0
-  local status
-  local session_id
-  local reviewer_prompt_sha256
-  local snapshot_before="$SNAPSHOT_CLAUDE_SHA256"
-  local snapshot_after="$SNAPSHOT_CLAUDE_SHA256"
-
-  started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  session_id="$(new_uuid)"
-  prompt="$(cat "$PROMPT_FILE")$(reviewer_suffix "$reviewer" "$CLAUDE_MODEL" "$lane")"
-  reviewer_prompt_sha256="$(printf '%s' "$prompt" | sha256sum | awk '{print $1}')"
-  if ! command -v "$CLAUDE_BIN" >/dev/null 2>&1; then
-    ended_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    : >"$raw_file"
-    printf 'Claude CLI not found: %s\n' "$CLAUDE_BIN" >"$stderr_file"
-    write_result_tsv "$result_file" "$reviewer" "$CLAUDE_BIN" "$CLAUDE_MODEL" "$session_id" \
-      "$reviewer_prompt_sha256" \
-      "$snapshot_before" "$snapshot_after" \
-      "skipped-tool-unavailable" 127 \
-      "$started_at" "$ended_at" "$report_file" "$raw_file" "$stderr_file"
-    return 0
-  fi
-
-  if (
-    cd "$SNAPSHOT_CLAUDE"
-    unset PROJECT_ROOT REVIEW_PROMPT_FILE REVIEW_PROMPT_SHA256 PBS_O_WORKDIR
-    timeout --signal=TERM --kill-after=30s "${REVIEW_TIMEOUT_SECONDS}s" \
-      "$CLAUDE_BIN" -p \
-      --model "$CLAUDE_MODEL" \
-      --session-id "$session_id" \
-      --permission-mode plan \
-      --output-format json \
-      "$prompt"
-  ) >"$raw_file" 2>"$stderr_file"; then
-    exit_code=0
-  else
-    exit_code=$?
-  fi
-
-  if [[ "$exit_code" -eq 0 ]]; then
-    if python3 - "$raw_file" "$parsed_report" <<'PY'
-import json
-import pathlib
-import sys
-
-raw_path = pathlib.Path(sys.argv[1])
-report_path = pathlib.Path(sys.argv[2])
-data = json.loads(raw_path.read_text(encoding="utf-8"))
-result = data.get("result")
-if not isinstance(result, str) or not result.strip():
-    raise SystemExit("Claude JSON does not contain a non-empty result")
-report_path.write_text(result.rstrip() + "\n", encoding="utf-8")
-PY
-    then
-      parse_exit=0
-    else
-      parse_exit=$?
-    fi
-    if [[ "$parse_exit" -eq 0 ]] && validate_report "$parsed_report"; then
-      mv -- "$parsed_report" "$report_file"
-      status="completed"
-    else
-      status="invalid-output"
-      exit_code=65
-    fi
-  else
-    status="$(classify_failure "$exit_code" "$stderr_file" "$raw_file")"
-  fi
-
-  snapshot_after="$(snapshot_digest "$SNAPSHOT_CLAUDE")"
-  if [[ "$snapshot_after" != "$snapshot_before" ]]; then
-    printf 'Reviewer mutated the read-only target snapshot.\n' >>"$stderr_file"
-    status="invalid-snapshot-mutation"
-    exit_code=66
-  fi
-
-  ended_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  write_result_tsv "$result_file" "$reviewer" "$CLAUDE_BIN" "$CLAUDE_MODEL" "$session_id" \
-    "$reviewer_prompt_sha256" \
-    "$snapshot_before" "$snapshot_after" \
-    "$status" "$exit_code" \
-    "$started_at" "$ended_at" "$report_file" "$raw_file" "$stderr_file"
-  return 0
-}
-
 run_opencode() {
   local reviewer="$1"
   local model="$2"
@@ -570,8 +468,6 @@ while IFS=$'\t' read -r reviewer_id model; do
 done <"$OPENCODE_MODEL_RECORD"
 module list 2>&1 | cat || true
 
-run_claude &
-pid_claude=$!
 OPENCODE_PIDS=()
 OPENCODE_RESULT_FILES=()
 for index in "${!OPENCODE_MODEL_LIST[@]}"; do
@@ -586,7 +482,6 @@ for index in "${!OPENCODE_MODEL_LIST[@]}"; do
   OPENCODE_RESULT_FILES+=("$RUN_TMP/$reviewer_id.tsv")
 done
 
-wait "$pid_claude" || true
 for reviewer_pid in "${OPENCODE_PIDS[@]}"; do
   wait "$reviewer_pid" || true
 done
@@ -607,7 +502,6 @@ python3 - \
   "$REVIEW_PATHS_SOURCE_SHA256" \
   "$REVIEW_PATHS" \
   "$OPENCODE_MODEL_RECORD" \
-  "$RUN_TMP/claude-opus-5.tsv" \
   "${OPENCODE_RESULT_FILES[@]}" <<'PY'
 import json
 import pathlib

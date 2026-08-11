@@ -43,7 +43,7 @@
 1. Login node 静态检查：CodeGraph、repository-wide dead-surface search、`bash -n scripts/miyabi/agent/*.pbs`、配置/JSON/TypeScript 生成物一致性与 Python compile/format/lint 的无 runtime 部分。
 2. 1-node interactive compute allocation：focused tests，随后完整 test suite；复用同一 allocation，初始预算 60 分钟。
 3. 1-node/必要的多进程 functional harness：唯一协议 no-failure、syncer takeover 与 independent authorized-replacement oracle。资源按既有实测缩到能完整结束且至少 10 分钟安全余量。
-4. PREFORMAL：clean candidate commit 的 current-state 全量审查；authority、持久化、replacement fault oracle 和正式多节点成本使外部 reviewer materially beneficial，按 workflow 使用只读 PBS review runner。
+4. PREFORMAL：clean candidate commit 的 current-state 全量审查；authority、持久化、replacement fault oracle 和正式多节点成本使外部 reviewer materially beneficial，按 workflow 使用只读 PBS review runner。外部 reviewer 仅运行 OpenCode 的 `opencode-go/deepseek-v4-flash`，不运行 Claude Code 或其他 OpenCode 模型。
 5. FORMAL：同一 `FINAL_COMMON_TARGET` 上运行 fresh-root 的 no-failure、failure/no-replacement、failure/authorized-replacement，并完成独立 8 learner + 1 syncer 的 GPT-2/WikiText-2、200 local × 10 global 正常运行。
 6. FINAL：逐 requirement evidence 审查、active/queued job 与 cleanup ownership 审查，然后独立 archive/move commit。
 

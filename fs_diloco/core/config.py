@@ -616,6 +616,37 @@ def _normalize_and_validate(config: Config) -> Config:
         ):
             if float(getattr(scaling, field_name)) <= 0.0:
                 raise ValueError(f"scaling.{field_name} must be > 0")
+    for name, value in (
+        ("training.inner_steps", config.training.inner_steps),
+        ("training.micro_batch_size", config.training.micro_batch_size),
+        (
+            "training.gradient_accumulation_steps",
+            config.training.gradient_accumulation_steps,
+        ),
+    ):
+        if value <= 0:
+            raise ValueError(f"{name} must be > 0")
+    direct_token_target = config.sync.stop_after_direct_weight_tokens_applied
+    if direct_token_target is not None and direct_token_target <= 0:
+        raise ValueError("sync.stop_after_direct_weight_tokens_applied must be > 0")
+    if config.sync.stop_after_outer_steps is not None and config.sync.stop_after_outer_steps <= 0:
+        raise ValueError("sync.stop_after_outer_steps must be > 0 when set")
+    if config.training.completion_mode == "local_and_global":
+        local_target = config.training.max_local_steps
+        if local_target is None:
+            raise ValueError("local_and_global completion requires training.max_local_steps")
+        if local_target % config.training.inner_steps != 0:
+            raise ValueError(
+                "local_and_global training.max_local_steps must contain whole inner cycles"
+            )
+        if config.sync.stop_after_outer_steps is None:
+            raise ValueError("local_and_global completion requires a global step target")
+    if (
+        config.training.completion_mode == "global_only"
+        and config.sync.stop_after_outer_steps is None
+        and direct_token_target is None
+    ):
+        raise ValueError("global_only completion requires a global stop target")
     if terminal.admission_close_policy not in {
         "global_target_or_launch_budget",
         "global_target",
@@ -627,7 +658,9 @@ def _normalize_and_validate(config: Config) -> Config:
         raise ValueError("terminal.deadline_seconds must be > 0 when set")
     if terminal.admission_close_policy == "deadline" and terminal.deadline_seconds is None:
         raise ValueError("terminal.deadline_seconds is required for deadline close policy")
-    has_global_target = config.sync.stop_after_outer_steps is not None
+    has_global_target = (
+        config.sync.stop_after_outer_steps is not None or direct_token_target is not None
+    )
     if terminal.admission_close_policy == "global_target" and not has_global_target:
         raise ValueError("global_target close policy requires a configured global target")
     if terminal.admission_close_policy == "global_target_or_launch_budget" and not (
@@ -650,37 +683,6 @@ def _normalize_and_validate(config: Config) -> Config:
         raise ValueError("learner.post_publish_latest_wait_seconds must be >= 0")
     if config.learner.post_publish_latest_poll_seconds <= 0.0:
         raise ValueError("learner.post_publish_latest_poll_seconds must be > 0")
-    for name, value in (
-        ("training.inner_steps", config.training.inner_steps),
-        ("training.micro_batch_size", config.training.micro_batch_size),
-        (
-            "training.gradient_accumulation_steps",
-            config.training.gradient_accumulation_steps,
-        ),
-    ):
-        if value <= 0:
-            raise ValueError(f"{name} must be > 0")
-    if config.training.completion_mode == "local_and_global":
-        local_target = config.training.max_local_steps
-        if local_target is None:
-            raise ValueError("local_and_global completion requires training.max_local_steps")
-        if local_target % config.training.inner_steps != 0:
-            raise ValueError(
-                "local_and_global training.max_local_steps must contain whole inner cycles"
-            )
-        if config.sync.stop_after_outer_steps is None:
-            raise ValueError("local_and_global completion requires a global step target")
-    direct_token_target = config.sync.stop_after_direct_weight_tokens_applied
-    if direct_token_target is not None and direct_token_target <= 0:
-        raise ValueError("sync.stop_after_direct_weight_tokens_applied must be > 0")
-    if (
-        config.training.completion_mode == "global_only"
-        and config.sync.stop_after_outer_steps is None
-        and direct_token_target is None
-    ):
-        raise ValueError("global_only completion requires a global stop target")
-    if config.sync.stop_after_outer_steps is not None and config.sync.stop_after_outer_steps <= 0:
-        raise ValueError("sync.stop_after_outer_steps must be > 0 when set")
     outer = config.outer_optimizer
     if outer.name not in {"sgd", "momentum", "nesterov", "adamw"}:
         raise ValueError(f"unsupported outer_optimizer.name: {outer.name}")

@@ -20,7 +20,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from ..core.versions import AUTHORITY_SCHEMA_VERSION, PROTOCOL_VERSION
+from ..core.versions import AUTHORITY_SCHEMA_VERSION, PROPOSAL_FORMAT_VERSION, PROTOCOL_VERSION
 from ..protocol._validation import identity as validate_identity
 from ..protocol.authority import (
     Admission,
@@ -5653,9 +5653,11 @@ def _decode_committed_version(row: Mapping[str, Any]) -> CommittedVersion:
 
 
 def _decode_proposal(row: Mapping[str, Any]) -> FullUpdateProposalV2:
+    """Reconstruct a current proposal from its normalized authority row."""
+
     return FullUpdateProposalV2.from_dict(
         {
-            "proposal_format_version": 2,
+            "proposal_format_version": PROPOSAL_FORMAT_VERSION,
             "run_id": row["run_id"],
             "stable_contributor_key": row["stable_contributor_key"],
             "cycle_seq": row["cycle_seq"],

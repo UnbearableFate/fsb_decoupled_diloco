@@ -12,14 +12,14 @@
       "tests": ["tests/test_config.py::test_repository_configs_use_the_one_strict_schema"]
     },
     {
-      "surface": "configs/full_protocol_functional.yaml",
-      "boundary": "registered 4+1 functional configuration",
-      "tests": ["tests/harness/test_full_protocol_harness.py::test_checker_parser_freezes_topology_workload_and_fault_oracles"]
-    },
-    {
       "surface": "configs/full_protocol.yaml",
       "boundary": "registered 8+1 formal configuration",
       "tests": ["tests/test_config.py::test_repository_configs_use_the_one_strict_schema"]
+    },
+    {
+      "surface": "configs/full_protocol_functional.yaml",
+      "boundary": "registered 4+1 functional configuration",
+      "tests": ["tests/harness/test_full_protocol_harness.py::test_checker_parser_freezes_topology_workload_and_fault_oracles"]
     },
     {
       "surface": "fs_diloco/__init__.py",

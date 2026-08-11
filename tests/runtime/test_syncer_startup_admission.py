@@ -187,7 +187,7 @@ def test_candidate_cleanup_preserves_primary_failure_and_surfaces_release_failur
         def open_leader(self, _token):
             """Return one inert leader session."""
 
-            return SimpleNamespace()
+            return SimpleNamespace(initialize_membership=lambda **_kwargs: None)
 
         def committed_leader_lease(self, _token):
             """Return one inert committed lease."""

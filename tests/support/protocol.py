@@ -91,7 +91,7 @@ def receipt_payload(
     cursor_start: int = 0,
     cursor_end: int = 8,
     fence: dict[str, Any] | None = None,
-    stable_contributor_key: str = "learner-0",
+    stable_contributor_key: str = "0",
     update_id: str | None = None,
     run_id: str = "run-current",
 ) -> dict[str, Any]:
@@ -128,7 +128,7 @@ def proposal_payload(
     payload_sha256: str = PAYLOAD_DIGEST,
     payload_size: int = len(DEFAULT_PAYLOAD),
     fence: dict[str, Any] | None = None,
-    stable_contributor_key: str = "learner-0",
+    stable_contributor_key: str = "0",
     update_id: str | None = None,
     run_id: str = "run-current",
 ) -> dict[str, Any]:

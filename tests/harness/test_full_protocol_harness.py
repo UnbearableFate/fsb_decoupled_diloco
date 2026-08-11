@@ -1143,14 +1143,14 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     review_runner = (ROOT / "scripts/miyabi/agent/run_multi_agent_review.pbs").read_text(
         encoding="utf-8"
     )
-    assert review_runner.count("run_claude &") == 1
     assert review_runner.count("run_opencode \\") == 1
-    assert 'CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-5}"' in review_runner
     assert "${OPENCODE_MODELS:?OPENCODE_MODELS is required}" in review_runner
     assert "IFS=';' read -r -a OPENCODE_MODEL_LIST" in review_runner
     assert 'for index in "${!OPENCODE_MODEL_LIST[@]}"' in review_runner
     assert "opencode-review-%02d" in review_runner
     assert '"${OPENCODE_RESULT_FILES[@]}"' in review_runner
+    assert "run_claude" not in review_runner
+    assert "CLAUDE_MODEL" not in review_runner
 
 
 def test_pbs_wrapper_publishes_blocked_artifact_when_allocation_exits(

@@ -231,8 +231,8 @@ def test_terminal_ack_telemetry_does_not_override_writer_identity(tmp_path: Path
             run_id="run-current",
             descriptor_sha256="d" * 64,
             generation=int(controller["generation"]),
-            actor_id="learner-0",
-            attempt_id="attempt-0",
+            actor_id=fence.instance_id,
+            attempt_id=fence.instance_id,
             fence=fence,
             final_cycle_seq=0,
             final_update_id=None,
@@ -256,7 +256,7 @@ def test_terminal_ack_telemetry_does_not_override_writer_identity(tmp_path: Path
         events = [json.loads(line) for line in telemetry_path.read_text().splitlines()]
         assert [event["event_type"] for event in events] == ["terminal_ack_ingested"]
         assert events[0]["actor_id"] == "syncer-owner"
-        assert events[0]["contributor_actor_id"] == "learner-0"
+        assert events[0]["contributor_actor_id"] == fence.instance_id
     finally:
         authority.close()
 
