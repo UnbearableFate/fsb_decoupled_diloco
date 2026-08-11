@@ -236,6 +236,7 @@ def test_receipt_ingest_propagates_integrity_failures(
         read=SimpleNamespace(
             current_contributor_fences=lambda: (fence,),
             contributor_progress=lambda _key: None,
+            pending_update_contributor_keys=lambda: (),
         )
     )
     leader = SimpleNamespace(
@@ -275,6 +276,7 @@ def test_proposal_ingest_propagates_integrity_failures(
             current_contributor_fences=lambda: (candidate.contributor_fence,),
             contributor_progress=lambda _key: None,
             controller_status=lambda: {"state": "open"},
+            pending_update_contributor_keys=lambda: (),
         )
     )
     leader = SimpleNamespace(
@@ -324,6 +326,7 @@ def test_proposal_ingest_reconsiders_merge_after_each_new_payload(tmp_path: Path
             current_contributor_fences=lambda: (candidates[0].contributor_fence,),
             contributor_progress=lambda _key: None,
             controller_status=lambda: {"state": "open"},
+            pending_update_contributor_keys=lambda: (),
         )
     )
     leader = SimpleNamespace(ingest_proposal=ingest_proposal)
@@ -374,6 +377,7 @@ def test_proposal_ingest_scans_past_exact_command_replays(tmp_path: Path) -> Non
             current_contributor_fences=lambda: (candidates[0].contributor_fence,),
             contributor_progress=lambda _key: None,
             controller_status=lambda: {"state": "open"},
+            pending_update_contributor_keys=lambda: (),
         )
     )
     leader = SimpleNamespace(ingest_proposal=ingest_proposal)
@@ -387,6 +391,67 @@ def test_proposal_ingest_scans_past_exact_command_replays(tmp_path: Path) -> Non
         candidates[0].update_id,
         candidates[1].update_id,
     ]
+
+
+def test_proposal_ingest_prioritizes_streams_missing_from_pending_quorum(
+    tmp_path: Path,
+) -> None:
+    """A fast stream cannot starve a slower stream from the pending quorum."""
+
+    paths = RunPaths(tmp_path)
+    prepare_authority_dirs(paths)
+    fences = tuple(
+        ContributorFence.from_dict(
+            contributor_fence(stream_id=stream_id, instance_id=f"instance-{stream_id}")
+        )
+        for stream_id in range(2)
+    )
+    candidates = (
+        proposal(fence=fences[0].as_dict()),
+        proposal(
+            fence=fences[1].as_dict(),
+            stable_contributor_key="1",
+            update_id="10000000-0000-4000-8000-000000000001",
+        ),
+    )
+    for candidate in candidates:
+        proposal_path = (
+            paths.shared_root
+            / "updates"
+            / "proposals"
+            / candidate.stable_contributor_key
+            / f"{candidate.update_id}.json"
+        )
+        proposal_path.parent.mkdir(parents=True, exist_ok=True)
+        proposal_path.write_bytes(candidate.canonical_bytes())
+    ingested: list[str] = []
+
+    def ingest_proposal(**kwargs: object) -> ProposalDisposition:
+        """Record the only proposal allowed to reach the authority boundary."""
+
+        candidate = kwargs["proposal"]
+        assert hasattr(candidate, "stable_contributor_key")
+        ingested.append(candidate.stable_contributor_key)
+        return ProposalDisposition.ACCEPTED
+
+    authority = SimpleNamespace(
+        read=SimpleNamespace(
+            current_contributor_fences=lambda: fences,
+            contributor_progress=lambda _key: None,
+            controller_status=lambda: {"state": "open"},
+            pending_update_contributor_keys=lambda: ("0",),
+        )
+    )
+
+    _ingest_proposals(
+        _loaded(paths, config_sha256=hashlib.sha256(b"config").hexdigest()),
+        authority,
+        SimpleNamespace(ingest_proposal=ingest_proposal),
+        SimpleNamespace(),
+        _Telemetry(),
+    )
+
+    assert ingested == ["1"]
 
 
 def test_proposal_ingest_skips_stale_fence_before_payload_verification(tmp_path: Path) -> None:
@@ -410,6 +475,7 @@ def test_proposal_ingest_skips_stale_fence_before_payload_verification(tmp_path:
             current_contributor_fences=lambda: (candidate.contributor_fence,),
             contributor_progress=lambda _key: None,
             controller_status=lambda: {"state": "draining"},
+            pending_update_contributor_keys=lambda: (),
             terminal_contributor_fences=lambda: (
                 {
                     "stable_contributor_key": candidate.stable_contributor_key,
@@ -464,6 +530,7 @@ def test_receipt_ingest_retries_only_sqlite_contention(
         read=SimpleNamespace(
             current_contributor_fences=lambda: (fence,),
             contributor_progress=lambda _key: None,
+            pending_update_contributor_keys=lambda: (),
         )
     )
     leader = SimpleNamespace(ingest_cycle_receipt=lambda **_kwargs: (_ for _ in ()).throw(error))

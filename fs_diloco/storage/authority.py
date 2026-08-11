@@ -500,6 +500,17 @@ class AuthorityReadModel:
         )
         return tuple(LeaderSession._fence_from_instance(row) for row in rows)
 
+    def pending_update_contributor_keys(self) -> tuple[str, ...]:
+        """Return streams already represented in the next merge candidate set."""
+
+        rows = self._authority._fetchall(
+            """
+            SELECT DISTINCT stable_contributor_key FROM updates
+            WHERE status='pending' ORDER BY stable_contributor_key
+            """
+        )
+        return tuple(str(row["stable_contributor_key"]) for row in rows)
+
     def token_ledger_summary(self) -> TokenLedgerSummary:
         row = self._authority._fetchone("SELECT * FROM token_rollups WHERE singleton=1")
         gap = self._authority._fetchone(

@@ -797,12 +797,23 @@ def _ingest_proposals(
     proposals_root = loaded.paths.shared_root / "updates" / "proposals"
     if proposals_root.is_dir():
         controller = authority.read.controller_status()
+        pending_keys = set(authority.read.pending_update_contributor_keys())
+        current_keys = {fence.stable_contributor_key for fence in current_fences}
         terminal_fences = (
             authority.read.terminal_contributor_fences()
             if controller.get("state") not in {"open", "preclosing"}
             else ()
         )
-        for path in sorted(proposals_root.glob("*/*.json")):
+        proposal_paths = sorted(
+            proposals_root.glob("*/*.json"),
+            key=lambda path: (
+                path.parent.name not in current_keys,
+                path.parent.name in pending_keys,
+                path.parent.name,
+                path.name,
+            ),
+        )
+        for path in proposal_paths:
             try:
                 proposal = FullUpdateProposalV2.from_json(path.read_bytes())
                 if proposal.contributor_fence not in current_fences or not (

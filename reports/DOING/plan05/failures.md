@@ -59,3 +59,14 @@
 - 最小症状：`api-manifest.json.sourceRevision` 在包含 identity 修复的 commit 创建前生成，仍指向更早的 `fc7e41f…`；website test 按设计重新生成到 `6495c2d…`，导致 validation 的 source-before/source-after identity 不一致。
 - 处置：在 fs_diloco 修改已提交后重新生成并提交 API reference；不关闭 source mutation 检查，也不忽略生成物差异。
 - 下一验证：fresh clean U1 job 必须证明 reference generation 是无差异操作，并再次通过全部门禁。
+
+## Functional harness candidate 1：高吞吐 stream 饿死其他 proposal ingestion
+
+- 分类：`product-failure`；计入 unique-protocol functional harness 验证域第一次有效失败。
+- Source：commit `f8509c71baefcbc509fb4a41c074fc0f8a423126`，clean source fingerprint `sha256:8bd50e63c3fda0b31c0c7eb8a55e307fe7c6602d6ce54ff4e4aa86a0c660e8cd`。
+- 环境：PBS job `2531131.opbs`，compute nodes `mg0201`、`mg0993`、`mg0994`、`mg0996`、`mg0997`；4-stream synthetic functional config，no-failure 场景。
+- 证据：`runs/full_protocol/plan05_functional_none_20260812/`、`logs/qsub_plan05_functional_none_20260812/` 与 `reports/DOING/plan05/artifacts/functional_no_failure.pbs.log`。job 在确认 durable non-progress 后以 exact owned ID `2531131.opbs` 取消，未产生 PASS artifact。
+- 最小症状：4 个 learner 均持续发布并收到 receipt ack，但约 2 分 29 秒后 global version 仍为 0。authority 中 stream 0 已 ingest 273 个 update，stream 1 仅 1 个，stream 2/3 为 0；syncer 每轮按路径重新从 stream 0 开始扫描，并在首个新 payload 后返回，快 stream 因而永久占用唯一 ingest slot。
+- 根因：`_ingest_proposals` 的“每次只验证一个新 payload”成本边界缺少跨 stream 的 durable fairness。目录顺序与单次 early return 组合后，merge quorum 无法形成；单元测试只覆盖同一 stream 的 early return/replay，未覆盖已有 pending stream 与未服务 stream 竞争。
+- 处置：authority read model 暴露当前 pending update 的 stream key；proposal scan 优先处理 current 且尚未进入 pending quorum 的 stream，再处理已有 pending 和 stale stream。新增回归测试证明 fast stream 已有 pending proposal 时，下一个 ingest slot 必须服务缺失 stream。
+- 下一验证：在 1-node compute 上先运行新增 focused owner，再从 fresh 5-node roots 重跑 no-failure 与 syncer-takeover functional harness；两者必须由 Checker 发布 create-only PASS artifact。
