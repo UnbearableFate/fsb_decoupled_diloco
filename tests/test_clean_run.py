@@ -1,3 +1,5 @@
+"""Exercise conservative cleanup for one identity-bound completed run."""
+
 from __future__ import annotations
 
 import json

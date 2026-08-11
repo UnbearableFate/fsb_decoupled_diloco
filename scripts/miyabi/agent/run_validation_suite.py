@@ -462,6 +462,8 @@ def run_validation(
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Run the registered validation steps and exit nonzero unless the artifact passes."""
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--raw-log", type=Path, required=True)

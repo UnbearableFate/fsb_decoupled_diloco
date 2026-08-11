@@ -247,7 +247,9 @@ def reconcile_prediction(
 
 
 class GlobalAdoptionStrategy(ABC):
-    name: ClassVar[str]
+    """Define lifecycle hooks for one configured global-adoption strategy."""
+
+    name: ClassVar[str]  # Stable configuration name used for strategy selection.
 
     @classmethod
     def validate(cls, config: Any) -> None:
@@ -364,6 +366,8 @@ class GlobalAdoptionStrategy(ABC):
 
 
 class ReplaceGlobalAdoptionStrategy(GlobalAdoptionStrategy):
+    """Adopt each visible global checkpoint without retaining a local delta."""
+
     name = "replace"
 
     @classmethod
@@ -395,6 +399,8 @@ class ReplaceGlobalAdoptionStrategy(GlobalAdoptionStrategy):
 
 
 class RebaseGlobalAdoptionStrategy(GlobalAdoptionStrategy):
+    """Carry local work by rebasing its delta onto a newer global checkpoint."""
+
     name = "rebase_post_publish_delta"
 
     def __init__(self) -> None:
@@ -498,6 +504,8 @@ class RebaseGlobalAdoptionStrategy(GlobalAdoptionStrategy):
 
 
 class PredictGlobalAdoptionStrategy(GlobalAdoptionStrategy):
+    """Predict the next global state and reconcile it when publication becomes visible."""
+
     name = "predict_post_publish_global"
 
     def __init__(self) -> None:

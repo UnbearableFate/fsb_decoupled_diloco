@@ -1,3 +1,5 @@
+"""Exercise learner completion decisions without importing the training runtime."""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -32,6 +34,8 @@ def _config(
 def test_configured_target_latest_enters_await_close_without_requiring_drain(
     version: int,
 ) -> None:
+    """A visible configured global target is sufficient for global-only completion."""
+
     current = SimpleNamespace(latest={"version": version}, drain=None, terminal=None)
 
     assert (
@@ -41,6 +45,8 @@ def test_configured_target_latest_enters_await_close_without_requiring_drain(
 
 @pytest.mark.parametrize("policy", ("manual", "deadline"))
 def test_non_global_close_policy_does_not_stop_training_from_latest_alone(policy: str) -> None:
+    """Manual and deadline policies must ignore a global target without their own trigger."""
+
     current = SimpleNamespace(latest={"version": 100}, drain=None, terminal=None)
 
     assert (
@@ -52,6 +58,8 @@ def test_non_global_close_policy_does_not_stop_training_from_latest_alone(policy
 
 
 def test_missing_or_pre_target_latest_does_not_enter_await_close() -> None:
+    """Missing, disabled, or pre-target global state must keep the learner active."""
+
     assert configured_global_close_target_visible(_config(), None, completed_local_steps=0) is False
     assert (
         configured_global_close_target_visible(

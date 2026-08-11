@@ -31,15 +31,19 @@ class CleanupRefusedError(RuntimeError):
 
 @dataclass(frozen=True)
 class CleanupCandidate:
-    path: Path
-    relative_path: str
-    size_bytes: int
-    mtime_ns: int
-    device: int
-    inode: int
-    reason: str
+    """Record an identity-stable regular file approved for generic cleanup."""
+
+    path: Path  # Resolved object path captured during inventory.
+    relative_path: str  # Canonical run-relative deletion path.
+    size_bytes: int  # Captured size used for identity revalidation.
+    mtime_ns: int  # Captured nanosecond mtime used for race detection.
+    device: int  # Captured device number used for identity revalidation.
+    inode: int  # Captured inode number used for identity revalidation.
+    reason: str  # Policy-backed reason the object is redundant.
 
     def as_dict(self) -> dict[str, Any]:
+        """Return the stable report projection without exposing the absolute path."""
+
         return {
             "relative_path": self.relative_path,
             "size_bytes": self.size_bytes,
@@ -52,22 +56,28 @@ class CleanupCandidate:
 
 @dataclass(frozen=True)
 class CleanupPlan:
-    project_root: Path
-    run_root: Path
-    evidence_path: Path
-    run_id: str
-    evidence_sha256: str
-    artifact_policy_sha256: str
-    candidates: tuple[CleanupCandidate, ...]
-    retained_representative_learner_log: str | None
-    retained_authority_owned_gc_paths: tuple[str, ...]
+    """Freeze cleanup candidates together with their run and evidence identities."""
+
+    project_root: Path  # Exact repository root owning runs and reports.
+    run_root: Path  # Exact completed run directory being considered.
+    evidence_path: Path  # PASS artifact authorizing this run identity.
+    run_id: str  # Run identifier shared by directory and terminal controls.
+    evidence_sha256: str  # Digest used to detect evidence replacement.
+    artifact_policy_sha256: str  # Digest of the policy used for classification.
+    candidates: tuple[CleanupCandidate, ...]  # Immutable deletion inventory.
+    retained_representative_learner_log: str | None  # Kept diagnostic learner log.
+    retained_authority_owned_gc_paths: tuple[str, ...]  # Files reserved for fenced GC.
 
     @property
     def total_bytes(self) -> int:
+        """Return the total byte count covered by the frozen inventory."""
+
         return sum(candidate.size_bytes for candidate in self.candidates)
 
 
 def _load_json(path: Path, *, label: str) -> dict[str, Any]:
+    """Read one required JSON object or raise a cleanup-specific refusal."""
+
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -78,6 +88,8 @@ def _load_json(path: Path, *, label: str) -> dict[str, Any]:
 
 
 def _sha256(path: Path) -> str:
+    """Hash one evidence file without loading it wholly into memory."""
+
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
@@ -86,6 +98,8 @@ def _sha256(path: Path) -> str:
 
 
 def _resolve_existing_directory(path: Path, *, label: str) -> Path:
+    """Resolve one existing non-symlink directory or refuse ambiguous ownership."""
+
     if path.is_symlink():
         raise CleanupRefusedError(f"{label} must not be a symlink: {path}")
     try:
@@ -98,6 +112,8 @@ def _resolve_existing_directory(path: Path, *, label: str) -> Path:
 
 
 def _resolve_existing_file(path: Path, *, label: str) -> Path:
+    """Resolve one existing non-symlink file or refuse ambiguous ownership."""
+
     if path.is_symlink():
         raise CleanupRefusedError(f"{label} must not be a symlink: {path}")
     try:
@@ -110,6 +126,8 @@ def _resolve_existing_file(path: Path, *, label: str) -> Path:
 
 
 def _files_below(directory: Path, *, run_root: Path) -> tuple[Path, ...]:
+    """List regular files below an owned real directory without following links."""
+
     try:
         relative_root = directory.relative_to(run_root)
         metadata = directory.lstat()
@@ -146,6 +164,8 @@ def _files_below(directory: Path, *, run_root: Path) -> tuple[Path, ...]:
 
 
 def _validate_owned_parents(run_root: Path, relative: Path) -> None:
+    """Require every existing parent component to remain a real directory."""
+
     current = run_root
     for component in relative.parts[:-1] if relative.parts else ():
         current = current / component
@@ -158,6 +178,8 @@ def _validate_owned_parents(run_root: Path, relative: Path) -> None:
 
 
 def _terminal_identity(run_root: Path) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    """Bind terminal controls to finalized authority and return their shared run ID."""
+
     summary = _load_json(run_root / "control" / "summary.json", label="terminal summary")
     stop = _load_json(run_root / "control" / "stop.json", label="terminal stop")
     run_id = str(summary.get("run_id") or "")
@@ -227,6 +249,8 @@ def _matching_pass_evidence(
     run_id: str,
     summary: dict[str, Any],
 ) -> dict[str, Any]:
+    """Require a PASS artifact whose source, run, terminal, and cleanup targets match."""
+
     evidence = _load_json(evidence_path, label="completion evidence")
     if (
         evidence.get("artifact_version") != 1
@@ -288,6 +312,8 @@ def _candidate(
     run_root: Path,
     reason: str,
 ) -> CleanupCandidate:
+    """Capture one owned regular file identity for later race-safe deletion."""
+
     try:
         relative = path.relative_to(run_root).as_posix()
         _validate_owned_parents(run_root, Path(relative))
@@ -308,6 +334,8 @@ def _candidate(
 
 
 def _load_artifact_policy(run_root: Path) -> ArtifactPolicy:
+    """Load the run's immutable artifact policy or refuse generic cleanup."""
+
     path = run_root / "control" / "artifact_policy.json"
     try:
         metadata = path.lstat()
@@ -322,6 +350,8 @@ def _load_artifact_policy(run_root: Path) -> ArtifactPolicy:
 
 
 def _authority_live_paths(run_root: Path) -> tuple[set[str], set[str]]:
+    """Return live authority references and files owned by fenced authority GC."""
+
     database = run_root / "control" / "syncer_metadata.sqlite3"
     try:
         metadata = database.lstat()
@@ -366,6 +396,8 @@ def _validate_policy_candidates(
     policy: ArtifactPolicy,
     candidates: tuple[CleanupCandidate, ...],
 ) -> None:
+    """Require every candidate to be redundant, policy-owned, and unreferenced."""
+
     blocking, authority_owned_gc = _authority_live_paths(run_root)
     for candidate in candidates:
         if candidate.relative_path in blocking or candidate.relative_path in authority_owned_gc:
@@ -424,6 +456,8 @@ def build_cleanup_plan(
     selected: dict[Path, str] = {}
 
     def select(paths: Iterable[Path], reason: str) -> None:
+        """Add paths to the local inventory with one policy reason."""
+
         for path in paths:
             selected[path] = reason
 
@@ -486,6 +520,8 @@ def build_cleanup_plan(
 
 
 def _manifest(plan: CleanupPlan, *, status: str) -> dict[str, Any]:
+    """Build the durable report projection for one cleanup lifecycle state."""
+
     return {
         "tool": "fs_diloco.tools.clean_run",
         "format_version": 1,
@@ -505,6 +541,8 @@ def _manifest(plan: CleanupPlan, *, status: str) -> dict[str, Any]:
 
 
 def _write_json_atomic(path: Path, payload: dict[str, Any], *, require_new: bool) -> None:
+    """Publish or replace one fsynced report JSON without following symlinks."""
+
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp-{os.getpid()}")
     try:
@@ -580,6 +618,8 @@ def execute_cleanup(plan: CleanupPlan, manifest_path: str | Path) -> dict[str, A
 
 
 def _unlink_owned_candidate(run_root: Path, candidate: CleanupCandidate) -> None:
+    """Revalidate and unlink one candidate through directory file descriptors."""
+
     relative = Path(candidate.relative_path)
     flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(run_root, flags)
@@ -610,6 +650,8 @@ def _unlink_owned_candidate(run_root: Path, candidate: CleanupCandidate) -> None
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the sole dry-run/execute command-line interface."""
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--evidence", type=Path, required=True, help="matching PASS evidence JSON")
@@ -629,6 +671,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run cleanup inventory or execution and translate refusal into exit status 2."""
+
     args = build_parser().parse_args(argv)
     try:
         plan = build_cleanup_plan(
