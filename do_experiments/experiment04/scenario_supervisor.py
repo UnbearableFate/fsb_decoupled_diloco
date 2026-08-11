@@ -971,9 +971,12 @@ def _final_authority_evidence(
         if (
             launch_row["role"] != "replacement"
             or launch_row["reason"] != "confirmed_scheduler_terminal_after_progress_stall"
+            or launch_row["request_id"] != replacement["request_id"]
             or launch_row["replace_instance_id"] != victim["instance_id"]
             or launch_row["state"] != "admitted"
             or launch_row["admitted_instance_id"] != replacement["admitted_instance_id"]
+            or _normalize_job_id(str(launch_row["pbs_job_id"]))
+            != _normalize_job_id(str(replacement["pbs_job_id"]))
         ):
             raise RuntimeError("replacement launch identity or durable state is incorrect")
         observation = next(
@@ -984,15 +987,28 @@ def _final_authority_evidence(
             ),
             None,
         )
+        productive_instances = (
+            -1 if observation is None else int(observation["productive_instances"])
+        )
+        reserved_capacity = (
+            -1 if observation is None else int(observation["reserved_launch_capacity"])
+        )
+        expected_capacity_action = (
+            "low"
+            if productive_instances + reserved_capacity
+            <= int(config.scaling.low_contributor_threshold)
+            else "sufficient"
+        )
         if observation is None or (
             observation["kind"] != "scheduler_window"
-            or observation["action"] != "low"
+            or observation["action"] != expected_capacity_action
             or int(observation["desired_contributors"]) != int(config.scaling.desired_contributors)
-            or int(observation["productive_instances"])
-            + int(observation["reserved_launch_capacity"])
-            > int(config.scaling.low_contributor_threshold)
+            or not 0 <= productive_instances <= workload["stream_pool_size"]
+            or reserved_capacity != 0
         ):
-            raise RuntimeError("replacement lacks its exact durable low-capacity observation")
+            raise RuntimeError(
+                "replacement lacks its exact scheduler-confirmed capacity observation"
+            )
         launch_transitions = []
         for record in command_records:
             if record["command_kind"] != "transition_launch_request":

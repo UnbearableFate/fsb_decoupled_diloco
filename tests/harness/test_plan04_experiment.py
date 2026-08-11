@@ -311,7 +311,7 @@ def _finalized_authority(
             )
             connection.execute(
                 "INSERT INTO capacity_observations VALUES("
-                "'capacity-replacement', 1, 'scheduler_window', 'low', 8, 6, 0)"
+                "'capacity-replacement', 1, 'scheduler_window', 'sufficient', 8, 8, 0)"
             )
             connection.execute(
                 "INSERT INTO launch_requests VALUES("
@@ -689,6 +689,7 @@ def test_authorized_replacement_oracle_requires_capacity_qsub_and_cursor_continu
     config = module.load_config(ROOT / "configs/experiments/gpt2_wikitext2_8l_200x10.yaml")
     victim = {"instance_id": "instance-7", "fault_requested_at": 103.0}
     replacement = {
+        "request_id": "launch-replacement",
         "admitted_instance_id": "instance-7-replacement",
         "pbs_job_id": "200.opbs",
     }
@@ -716,6 +717,25 @@ def test_authorized_replacement_oracle_requires_capacity_qsub_and_cursor_continu
     connection.commit()
     connection.close()
     with pytest.raises(RuntimeError, match="later old-fence effect"):
+        module._final_authority_evidence(
+            database,
+            run_root=tmp_path,
+            config=config,
+            scenario=module.SCENARIOS["failure_authorized_replacement"],
+            first_syncer_job_id="100.opbs",
+            victim=victim,
+            replacement=replacement,
+        )
+
+    # The capacity classification must agree with the exact durable counter snapshot.
+    connection = sqlite3.connect(database)
+    connection.execute("UPDATE cycle_receipts SET ingested_at=103.0 WHERE receipt_id='receipt-7-2'")
+    connection.execute(
+        "UPDATE capacity_observations SET action='low' WHERE observation_key='capacity-replacement'"
+    )
+    connection.commit()
+    connection.close()
+    with pytest.raises(RuntimeError, match="scheduler-confirmed capacity observation"):
         module._final_authority_evidence(
             database,
             run_root=tmp_path,
