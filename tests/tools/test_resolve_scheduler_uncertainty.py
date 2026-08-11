@@ -1,3 +1,5 @@
+"""Verify the file-only scheduler uncertainty operator tool."""
+
 from __future__ import annotations
 
 import json
@@ -11,6 +13,8 @@ from fs_diloco.tools.resolve_scheduler_uncertainty import main
 def test_scheduler_resolution_is_dry_run_by_default_and_apply_is_create_no_replace(
     tmp_path: Path, capsys
 ) -> None:
+    """Dry-run is default and apply publishes one create-once operator request."""
+
     arguments = [
         "--shared-root",
         str(tmp_path),
@@ -39,16 +43,20 @@ def test_scheduler_resolution_is_dry_run_by_default_and_apply_is_create_no_repla
 
 
 def test_scheduler_resolution_module_has_no_db_pbs_or_cancel_capability() -> None:
+    """The operator tool cannot mutate authority state or invoke the scheduler."""
+
     source = (
         Path(__file__).resolve().parents[2] / "fs_diloco/tools/resolve_scheduler_uncertainty.py"
     ).read_text(encoding="utf-8")
-    for forbidden in ("sqlite3", "qstat", "qsub", "qdel", "admit_dynamic"):
+    for forbidden in ("sqlite3", "qstat", "qsub", "qdel", "admit_incarnation"):
         assert forbidden not in source
 
 
 def test_scheduler_resolution_refuses_broken_symlink_request_collision(
     tmp_path: Path, capsys
 ) -> None:
+    """Apply refuses a broken symlink collision at its create-once target."""
+
     arguments = [
         "--shared-root",
         str(tmp_path),

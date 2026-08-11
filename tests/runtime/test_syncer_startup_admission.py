@@ -1,3 +1,5 @@
+"""Verify syncer pre-import admission readiness and candidate cleanup."""
+
 from __future__ import annotations
 
 import subprocess
@@ -17,41 +19,58 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class _Clock:
+    """Provide deterministic startup polling time."""
+
     def __init__(self) -> None:
+        """Start the monotonic clock at zero."""
+
         self.now = 0.0
 
     def monotonic(self) -> float:
+        """Return the current monotonic timestamp."""
+
         return self.now
 
     def sleep(self, seconds: float) -> None:
+        """Advance deterministic time instead of blocking."""
+
         self.now += seconds
 
 
 class _Telemetry:
+    """Record startup telemetry events in call order."""
+
     def __init__(self) -> None:
+        """Start with no recorded events."""
+
         self.events: list[tuple[str, dict[str, object]]] = []
 
     def event(self, name: str, **fields: object) -> None:
+        """Append one structured startup event."""
+
         self.events.append((name, fields))
 
 
-def _loaded(mode: str = "static"):
+def _loaded():
+    """Build the minimal unique-protocol startup descriptor fixture."""
+
     return SimpleNamespace(
         config=SimpleNamespace(
             membership=SimpleNamespace(
-                mode=mode,
                 registration_scan_interval_seconds=2.0,
             ),
             sync=SimpleNamespace(scan_interval_seconds=0.2),
         ),
         descriptor={
-            "static_learner_ids": ["learner_000", "learner_001"],
+            "stream_pool_size": 2,
             "bootstrap_slots": 2,
         },
     )
 
 
-def test_initial_static_requests_are_admitted_before_runtime_import() -> None:
+def test_initial_requests_are_admitted_before_runtime_import() -> None:
+    """Bootstrap readiness is reached before importing the training runtime."""
+
     fences: list[SimpleNamespace] = []
     authority = SimpleNamespace(
         read=SimpleNamespace(current_contributor_fences=lambda: tuple(fences))
@@ -87,6 +106,8 @@ def test_initial_static_requests_are_admitted_before_runtime_import() -> None:
 
 
 def test_bounded_startup_window_leaves_late_requests_for_main_loop() -> None:
+    """A bounded startup window leaves late admission requests to the main loop."""
+
     authority = SimpleNamespace(read=SimpleNamespace(current_contributor_fences=lambda: ()))
     clock = _Clock()
     telemetry = _Telemetry()
@@ -115,6 +136,8 @@ def test_bounded_startup_window_leaves_late_requests_for_main_loop() -> None:
 
 
 def test_syncer_admission_modules_load_without_torch() -> None:
+    """Authority and admission startup modules remain Torch-free."""
+
     probe = subprocess.run(
         [
             sys.executable,
@@ -139,55 +162,89 @@ def test_syncer_admission_modules_load_without_torch() -> None:
 def test_candidate_cleanup_preserves_primary_failure_and_surfaces_release_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body_failure: bool
 ) -> None:
+    """Candidate cleanup preserves a primary failure and otherwise surfaces release loss."""
+
     config_path = tmp_path / "resolved.yaml"
-    config_path.write_text("config_schema_version: 1\n", encoding="utf-8")
+    config_path.write_text("config_schema_version: 2\n", encoding="utf-8")
     token = SimpleNamespace(epoch=1, owner_id="owner-1")
     closed: list[bool] = []
     release_calls: list[bool] = []
     failure_calls: list[bool] = []
 
     class FakeAuthority:
+        """Model authority lifecycle and injected cleanup failures."""
+
         def __init__(self, *_args, **_kwargs) -> None:
+            """Accept the production constructor without side effects."""
+
             pass
 
         def acquire_leader(self, **_kwargs):
+            """Return the stable fake leader token."""
+
             return token
 
         def open_leader(self, _token):
+            """Return one inert leader session."""
+
             return SimpleNamespace()
 
         def committed_leader_lease(self, _token):
+            """Return one inert committed lease."""
+
             return SimpleNamespace()
 
         def release_leader(self, _token) -> None:
+            """Record release and inject a stale-token failure."""
+
             release_calls.append(True)
             raise StaleLeaderTokenError("release crossed the safety boundary")
 
         def fail_leader(self, _token) -> None:
+            """Record error fencing and inject its secondary failure."""
+
             failure_calls.append(True)
             raise RuntimeError("error fencing failed")
 
         def close(self) -> None:
+            """Record authority closure."""
+
             closed.append(True)
 
     class FakeControl:
+        """Provide inert control publication methods for candidate startup."""
+
         def __init__(self, *_args, **_kwargs) -> None:
+            """Accept the production constructor without side effects."""
+
             pass
 
         def publish_heartbeat(self, _lease) -> None:
+            """Accept a heartbeat publication."""
+
             pass
 
         def publish_error(self, **_kwargs) -> None:
+            """Accept an error publication."""
+
             pass
 
     class FakeRenewer:
+        """Provide an inert lease-renewer lifecycle."""
+
         def __init__(self, **_kwargs) -> None:
+            """Accept the production constructor without side effects."""
+
             pass
 
         def start(self) -> None:
+            """Accept renewer startup."""
+
             pass
 
         def stop(self) -> None:
+            """Accept renewer shutdown."""
+
             pass
 
     loaded = SimpleNamespace(
@@ -199,7 +256,7 @@ def test_candidate_cleanup_preserves_primary_failure_and_surfaces_release_failur
             actor_metrics_path=lambda *_args: tmp_path / "syncer.jsonl",
         ),
         config=SimpleNamespace(
-            membership=SimpleNamespace(mode="static"),
+            membership=SimpleNamespace(),
             leader=SimpleNamespace(
                 lease_duration_seconds=30.0,
                 max_clock_skew_seconds=1.0,
@@ -213,7 +270,7 @@ def test_candidate_cleanup_preserves_primary_failure_and_surfaces_release_failur
                 quarantine_records_per_contributor=64,
             ),
         ),
-        descriptor={"static_learner_ids": ["learner_000"], "bootstrap_slots": 1},
+        descriptor={"stream_pool_size": 1, "bootstrap_slots": 1},
         identity=SimpleNamespace(
             as_dict=lambda: {
                 "run_id": "run-current",
@@ -237,6 +294,8 @@ def test_candidate_cleanup_preserves_primary_failure_and_surfaces_release_failur
     monkeypatch.setattr("fs_diloco.runtime.syncer._admit_requests", lambda *_args, **_kwargs: None)
 
     def run_candidate(*_args, **_kwargs) -> None:
+        """Optionally inject the primary candidate-body failure."""
+
         if body_failure:
             raise AuthoritySchemaError("primary candidate failure")
 

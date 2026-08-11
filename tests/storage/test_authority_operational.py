@@ -1,3 +1,5 @@
+"""Verify operational authority transactions, terminal accounting, and audit cleanup."""
+
 from __future__ import annotations
 
 import hashlib
@@ -7,11 +9,7 @@ from pathlib import Path
 import pytest
 
 from fs_diloco.core.config import MaintenanceSection
-from fs_diloco.protocol.contributor import (
-    DynamicMembershipScope,
-    StaticContributorFence,
-    StaticMembershipScope,
-)
+from fs_diloco.protocol.contributor import ContributorFence, MembershipScope
 from fs_diloco.protocol.cycle_receipt import CycleReceiptV1
 from fs_diloco.protocol.proposal import FullUpdateProposalV2
 from fs_diloco.protocol.scheduler import (
@@ -46,6 +44,7 @@ from fs_diloco.storage.leader_lease import (
 )
 from fs_diloco.storage.paths import RunPaths
 from tests.support.protocol import (
+    admit_contributor,
     proposal_payload,
     publish_checkpoint_pair,
     publish_proposal_payload,
@@ -54,14 +53,22 @@ from tests.support.protocol import (
 
 
 class Clock:
+    """Provide mutable deterministic wall time for operational tests."""
+
     def __init__(self) -> None:
+        """Start the clock at a stable nonzero timestamp."""
+
         self.now = 100.0
 
     def __call__(self) -> float:
+        """Return the current deterministic timestamp."""
+
         return self.now
 
 
 def _identity() -> AuthorityIdentity:
+    """Return the stable authority identity used by operational fixtures."""
+
     return AuthorityIdentity(
         "run-current",
         "source-fingerprint",
@@ -69,22 +76,19 @@ def _identity() -> AuthorityIdentity:
     )
 
 
-def _open_static(tmp_path: Path, clock: Clock) -> LeaderAuthority:
+def _open_authority(tmp_path: Path, clock: Clock, *, pool_size: int = 1) -> LeaderAuthority:
+    """Open the sole authority schema with a fixed logical stream pool."""
+
     database = tmp_path / "authority.sqlite3"
-    scope = StaticMembershipScope(("learner-0",))
+    scope = MembershipScope(pool_size)
     initialize_authority(database, _identity(), scope, wall_clock=clock)
     return LeaderAuthority(database, _identity(), scope, wall_clock=clock)
 
 
-def _open_dynamic(tmp_path: Path, clock: Clock, *, pool_size: int = 1) -> LeaderAuthority:
-    database = tmp_path / "authority.sqlite3"
-    scope = DynamicMembershipScope(pool_size)
-    initialize_authority(database, _identity(), scope, wall_clock=clock)
-    return LeaderAuthority(database, _identity(), scope, wall_clock=clock)
+def _plan_launch(leader, *, request_id: str = "learner-request-1"):
+    """Create one launch reservation from a durable capacity observation."""
 
-
-def _plan_dynamic_launch(leader, *, request_id: str = "learner-request-1"):
-    leader.initialize_dynamic_membership(command_id="initialize-dynamic-membership")
+    leader.initialize_membership(command_id="initialize-membership")
     observation = leader.record_capacity_observation(
         command_id="capacity-observation",
         observation_key="capacity-window-1",
@@ -97,7 +101,7 @@ def _plan_dynamic_launch(leader, *, request_id: str = "learner-request-1"):
         action="low",
         retention_count=4,
     )
-    return leader.plan_dynamic_launch_request(
+    return leader.plan_launch_request(
         command_id="record-launch",
         request_id=request_id,
         observation_key=str(observation["observation_key"]),
@@ -110,32 +114,84 @@ def _plan_dynamic_launch(leader, *, request_id: str = "learner-request-1"):
     )
 
 
-def _static_fence(leader) -> dict[str, object]:
-    binding = leader.bind_or_replace_static_attempt(
-        command_id="bind-static",
-        learner_id="learner-0",
-        logical_launch_id="launch-0",
-        attempt_id="attempt-0",
+def _current_fence(leader) -> dict[str, object]:
+    """Admit and return the first stream's current contributor fence payload."""
+
+    return admit_contributor(leader).as_dict()
+
+
+def _replace_fence(leader, old_fence: ContributorFence) -> ContributorFence:
+    """Authorize and admit one replacement for an existing stream incarnation."""
+
+    observation = leader.record_capacity_observation(
+        command_id="observe-replacement",
+        observation_key="capacity-replacement",
+        global_version=0,
+        eligible_contributors=0,
+        selected_contributors=0,
+        productive_instances=0,
+        reserved_launch_capacity=0,
+        desired_contributors=1,
+        action="replace",
+        retention_count=4,
     )
-    return {
-        "kind": "static",
-        "learner_id": binding.learner_id,
-        "logical_launch_id": binding.logical_launch_id,
-        "attempt_id": binding.attempt_id,
-        "binding_generation": binding.binding_generation,
-    }
+    planned = leader.plan_launch_request(
+        command_id="plan-replacement",
+        request_id="replacement-launch",
+        observation_key=str(observation["observation_key"]),
+        stream_id=old_fence.stream_id,
+        replace_instance_id=old_fence.instance_id,
+        reason="scheduler_terminal",
+        expires_at=1000.0,
+        max_pending_requests=1,
+        max_total_requests=1,
+        expected_scheduler_job_id="bootstrap-0.opbs",
+    )
+    submitting = leader.transition_launch_request(
+        command_id="replacement-submitting",
+        request_id=planned["request_id"],
+        expected_state="planned",
+        state="submitting",
+        pbs_job_id=None,
+        scheduler_state="qsub_started",
+        evidence_source="qsub_started",
+    )
+    leader.transition_launch_request(
+        command_id="replacement-submitted",
+        request_id=planned["request_id"],
+        expected_state=submitting["state"],
+        state="submitted",
+        pbs_job_id="replacement.opbs",
+        scheduler_state="queued",
+        evidence_source="qsub_receipt",
+    )
+    return leader.admit_incarnation(
+        command_id="admit-replacement",
+        instance_id="instance-replacement",
+        placement_id="placement-replacement",
+        stream_id=old_fence.stream_id,
+        launch_request_id=planned["request_id"],
+        replace_instance_id=old_fence.instance_id,
+        replacement_reason="authorized replacement",
+        admission_token_sha256="b" * 64,
+        hostname="host",
+        pid=2,
+        pbs_job_id="replacement.opbs",
+    ).fence
 
 
-def _ingest_static_cycle(
+def _ingest_cycle(
     leader,
     run_root: Path,
     fence: dict[str, object],
     *,
     sequence: int,
     previous: CycleReceiptV1 | None,
-    stable_contributor_key: str = "learner-0",
+    stable_contributor_key: str = "0",
     update_ordinal: int | None = None,
 ) -> tuple[CycleReceiptV1, FullUpdateProposalV2]:
+    """Ingest one contiguous receipt and its published proposal."""
+
     update_id = (
         f"00000000-0000-4000-8000-{(sequence if update_ordinal is None else update_ordinal):012d}"
     )
@@ -171,6 +227,8 @@ def _ingest_static_cycle(
 
 
 def _commit_next(leader, run_root: Path, *, version: int, terminal: bool = False) -> None:
+    """Select one pending proposal and commit the next checkpoint version."""
+
     attempt = leader.try_select_batch(command_id=f"select-{version}", quorum_min=1, quorum_max=1)
     assert attempt.batch is not None
     leader.prepare_publication(
@@ -189,13 +247,15 @@ def _commit_next(leader, run_root: Path, *, version: int, terminal: bool = False
 
 
 def test_authority_token_rollup_balances_receipt_only_and_applied_fates(tmp_path: Path) -> None:
+    """Token rollup balances unpublished receipt tokens and applied proposal tokens."""
+
     clock = Clock()
-    with _open_static(tmp_path, clock) as authority:
+    with _open_authority(tmp_path, clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        fence = _static_fence(leader)
-        receipt, _ = _ingest_static_cycle(leader, tmp_path, fence, sequence=1, previous=None)
+        fence = _current_fence(leader)
+        receipt, _ = _ingest_cycle(leader, tmp_path, fence, sequence=1, previous=None)
         leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
@@ -239,13 +299,15 @@ def test_authority_token_rollup_balances_receipt_only_and_applied_fates(tmp_path
 def test_abandoned_selection_does_not_consume_persistent_service_credit(
     tmp_path: Path,
 ) -> None:
+    """Abandoning a selected publication restores its contributor service credit."""
+
     clock = Clock()
-    with _open_static(tmp_path, clock) as authority:
+    with _open_authority(tmp_path, clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        fence = _static_fence(leader)
-        _ingest_static_cycle(leader, tmp_path, fence, sequence=1, previous=None)
+        fence = _current_fence(leader)
+        _ingest_cycle(leader, tmp_path, fence, sequence=1, previous=None)
         leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
@@ -269,15 +331,17 @@ def test_abandoned_selection_does_not_consume_persistent_service_credit(
 
         retry = leader.try_select_batch(command_id="select-retry", quorum_min=1, quorum_max=1)
         assert retry.batch is not None
-        assert retry.batch.candidates[0].stable_key == "learner-0"
+        assert retry.batch.candidates[0].stable_key == "0"
         assert retry.batch.candidates[0].selection_credit == 0
 
 
 def test_sql_fair_selection_uses_committed_count_before_version_ties(tmp_path: Path) -> None:
+    """Selection fairness orders streams by committed count before version ties."""
+
     clock = Clock()
-    keys = tuple(f"learner-{index}" for index in range(8))
+    keys = tuple(str(index) for index in range(8))
     database = tmp_path / "authority.sqlite3"
-    scope = StaticMembershipScope(keys)
+    scope = MembershipScope(len(keys))
     initialize_authority(database, _identity(), scope, wall_clock=clock)
     with LeaderAuthority(database, _identity(), scope, wall_clock=clock) as authority:
         leader = authority.open_leader(
@@ -287,21 +351,13 @@ def test_sql_fair_selection_uses_committed_count_before_version_ties(tmp_path: P
         receipts: dict[str, CycleReceiptV1] = {}
         sequences = {key: 1 for key in keys}
         for index, key in enumerate(keys):
-            binding = leader.bind_or_replace_static_attempt(
-                command_id=f"bind-{index}",
-                learner_id=key,
-                logical_launch_id=f"launch-{index}",
-                attempt_id=f"attempt-{index}",
-            )
-            fence = StaticContributorFence(
-                "static",
-                binding.learner_id,
-                binding.logical_launch_id,
-                binding.attempt_id,
-                binding.binding_generation,
+            fence = admit_contributor(
+                leader,
+                stream_id=index,
+                instance_id=f"instance-{index}",
             )
             fences[key] = fence.as_dict()
-            receipt, _ = _ingest_static_cycle(
+            receipt, _ = _ingest_cycle(
                 leader,
                 tmp_path,
                 fences[key],
@@ -337,9 +393,9 @@ def test_sql_fair_selection_uses_committed_count_before_version_ties(tmp_path: P
             if version == 8:
                 continue
             for key in selected:
-                index = int(key.rsplit("-", 1)[1])
+                index = int(key)
                 sequences[key] += 1
-                receipt, _ = _ingest_static_cycle(
+                receipt, _ = _ingest_cycle(
                     leader,
                     tmp_path,
                     fences[key],
@@ -351,18 +407,20 @@ def test_sql_fair_selection_uses_committed_count_before_version_ties(tmp_path: P
                 receipts[key] = receipt
 
         assert lineage == [
-            ("learner-0", "learner-1", "learner-2"),
-            ("learner-3", "learner-4", "learner-5"),
-            ("learner-0", "learner-6", "learner-7"),
-            ("learner-1", "learner-2", "learner-3"),
-            ("learner-4", "learner-5", "learner-6"),
-            ("learner-0", "learner-1", "learner-7"),
-            ("learner-2", "learner-3", "learner-4"),
-            ("learner-5", "learner-6", "learner-7"),
+            ("0", "1", "2"),
+            ("3", "4", "5"),
+            ("0", "6", "7"),
+            ("1", "2", "3"),
+            ("4", "5", "6"),
+            ("0", "1", "7"),
+            ("2", "3", "4"),
+            ("5", "6", "7"),
         ]
 
 
 def test_process_elapsed_safety_is_monotonic_despite_wall_clock_jumps() -> None:
+    """Lease safety elapsed time depends on monotonic time, not wall-clock jumps."""
+
     wall_clock = Clock()
     monotonic_now = [100.0]
     token = LeaderToken(run_id="run-current", epoch=1, owner_id="owner")
@@ -383,17 +441,19 @@ def test_process_elapsed_safety_is_monotonic_despite_wall_clock_jumps() -> None:
         tracker.assert_safe(token)
 
 
-def test_dynamic_replacement_returns_full_contiguous_resume_state(tmp_path: Path) -> None:
+def test_replacement_returns_full_contiguous_resume_state(tmp_path: Path) -> None:
+    """Replacement admission returns the complete authoritative stream resume state."""
+
     clock = Clock()
     database = tmp_path / "authority.sqlite3"
-    scope = DynamicMembershipScope(1)
+    scope = MembershipScope(1)
     initialize_authority(database, _identity(), scope, wall_clock=clock)
     with LeaderAuthority(database, _identity(), scope, wall_clock=clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        leader.initialize_dynamic_membership(command_id="init-membership")
-        first = leader.admit_dynamic_incarnation(
+        leader.initialize_membership(command_id="init-membership")
+        first = leader.admit_incarnation(
             command_id="admit-1",
             instance_id="instance-1",
             placement_id="placement-0",
@@ -433,7 +493,7 @@ def test_dynamic_replacement_returns_full_contiguous_resume_state(tmp_path: Path
             action="replace",
             retention_count=4,
         )
-        planned = leader.plan_dynamic_launch_request(
+        planned = leader.plan_launch_request(
             command_id="plan-replacement-2",
             request_id="replacement-launch-2",
             observation_key="capacity-replacement-2",
@@ -445,7 +505,7 @@ def test_dynamic_replacement_returns_full_contiguous_resume_state(tmp_path: Path
             max_total_requests=2,
             expected_scheduler_job_id="1.opbs",
         )
-        submitting = leader.transition_dynamic_launch_request(
+        submitting = leader.transition_launch_request(
             command_id="submit-replacement-2",
             request_id="replacement-launch-2",
             expected_state=planned["state"],
@@ -454,7 +514,7 @@ def test_dynamic_replacement_returns_full_contiguous_resume_state(tmp_path: Path
             scheduler_state="qsub_started",
             evidence_source="qsub_started",
         )
-        leader.transition_dynamic_launch_request(
+        leader.transition_launch_request(
             command_id="submitted-replacement-2",
             request_id="replacement-launch-2",
             expected_state=submitting["state"],
@@ -463,7 +523,7 @@ def test_dynamic_replacement_returns_full_contiguous_resume_state(tmp_path: Path
             scheduler_state="queued",
             evidence_source="qsub_receipt",
         )
-        second = leader.admit_dynamic_incarnation(
+        second = leader.admit_incarnation(
             command_id="admit-2",
             instance_id="instance-2",
             placement_id="placement-0",
@@ -522,16 +582,18 @@ def test_dynamic_replacement_returns_full_contiguous_resume_state(tmp_path: Path
 def test_terminal_close_freezes_fence_blocks_admission_and_accounts_hard_crash(
     tmp_path: Path,
 ) -> None:
+    """Terminal close freezes membership and bounds a declared hard-crash token gap."""
+
     clock = Clock()
     database = tmp_path / "authority.sqlite3"
-    scope = DynamicMembershipScope(1)
+    scope = MembershipScope(1)
     initialize_authority(database, _identity(), scope, wall_clock=clock)
     with LeaderAuthority(database, _identity(), scope, wall_clock=clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        leader.initialize_dynamic_membership(command_id="init-membership")
-        admission = leader.admit_dynamic_incarnation(
+        leader.initialize_membership(command_id="init-membership")
+        admission = leader.admit_incarnation(
             command_id="admit-1",
             instance_id="instance-1",
             placement_id="placement-0",
@@ -551,7 +613,7 @@ def test_terminal_close_freezes_fence_blocks_admission_and_accounts_hard_crash(
             hard_crash_cycle_token_budget=64,
         )
         with pytest.raises(MembershipFenceError, match="closed"):
-            leader.admit_dynamic_incarnation(
+            leader.admit_incarnation(
                 command_id="late-admit",
                 instance_id="instance-2",
                 placement_id="placement-1",
@@ -580,54 +642,23 @@ def test_terminal_close_freezes_fence_blocks_admission_and_accounts_hard_crash(
         assert leader.finalize_terminal(command_id="finalize", reason="done").value == "finalized"
 
 
-def test_terminal_preclose_admits_only_static_requests_before_durable_cutoff(
+def test_terminal_preclose_admits_only_requests_before_durable_cutoff(
     tmp_path: Path,
 ) -> None:
+    """Terminal preclose admits only requests created before its durable cutoff."""
+
     clock = Clock()
-    with _open_static(tmp_path, clock) as authority:
+    with _open_authority(tmp_path, clock, pool_size=2) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
+        leader.initialize_membership(command_id="init-membership")
         leader.begin_terminal_preclose(
             command_id="preclose",
             reason="target reached",
             registration_visibility_grace_seconds=10.0,
         )
-        binding = leader.bind_or_replace_static_attempt(
-            command_id="admit-before-cutoff",
-            learner_id="learner-0",
-            logical_launch_id="launch-0",
-            attempt_id="attempt-before-cutoff",
-            registration_created_at=99.0,
-        )
-        assert binding.binding_generation == 1
-        with pytest.raises(MembershipFenceError, match="after the preclose cutoff"):
-            leader.bind_or_replace_static_attempt(
-                command_id="admit-after-cutoff",
-                learner_id="learner-0",
-                logical_launch_id="launch-0",
-                attempt_id="attempt-after-cutoff",
-                expected_generation=1,
-                replacement_reason="late replacement",
-                registration_created_at=100.1,
-            )
-
-
-def test_terminal_preclose_admits_only_dynamic_requests_before_durable_cutoff(
-    tmp_path: Path,
-) -> None:
-    clock = Clock()
-    with _open_dynamic(tmp_path, clock, pool_size=2) as authority:
-        leader = authority.open_leader(
-            authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
-        )
-        leader.initialize_dynamic_membership(command_id="init-membership")
-        leader.begin_terminal_preclose(
-            command_id="preclose",
-            reason="target reached",
-            registration_visibility_grace_seconds=10.0,
-        )
-        admitted = leader.admit_dynamic_incarnation(
+        admitted = leader.admit_incarnation(
             command_id="admit-before-cutoff",
             instance_id="instance-before-cutoff",
             placement_id="placement-before-cutoff",
@@ -635,11 +666,12 @@ def test_terminal_preclose_admits_only_dynamic_requests_before_durable_cutoff(
             admission_token_sha256="1" * 64,
             hostname="host",
             pid=1,
+            bootstrap_slot=0,
             registration_created_at=99.0,
         )
         assert admitted.fence.stream_id == 0
         with pytest.raises(MembershipFenceError, match="after the preclose cutoff"):
-            leader.admit_dynamic_incarnation(
+            leader.admit_incarnation(
                 command_id="admit-after-cutoff",
                 instance_id="instance-after-cutoff",
                 placement_id="placement-after-cutoff",
@@ -647,22 +679,25 @@ def test_terminal_preclose_admits_only_dynamic_requests_before_durable_cutoff(
                 admission_token_sha256="2" * 64,
                 hostname="host",
                 pid=2,
+                bootstrap_slot=1,
                 registration_created_at=100.1,
             )
 
 
 def test_terminal_hard_crash_gap_is_summed_per_lost_incarnation(tmp_path: Path) -> None:
+    """Terminal accounting sums independent hard-crash gaps across lost instances."""
+
     clock = Clock()
     database = tmp_path / "authority.sqlite3"
-    scope = DynamicMembershipScope(2)
+    scope = MembershipScope(2)
     initialize_authority(database, _identity(), scope, wall_clock=clock)
     with LeaderAuthority(database, _identity(), scope, wall_clock=clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        leader.initialize_dynamic_membership(command_id="init-membership")
+        leader.initialize_membership(command_id="init-membership")
         admissions = tuple(
-            leader.admit_dynamic_incarnation(
+            leader.admit_incarnation(
                 command_id=f"admit-{index}",
                 instance_id=f"instance-{index}",
                 placement_id=f"placement-{index}",
@@ -670,6 +705,7 @@ def test_terminal_hard_crash_gap_is_summed_per_lost_incarnation(tmp_path: Path) 
                 admission_token_sha256=str(index + 1) * 64,
                 hostname="host",
                 pid=index + 1,
+                bootstrap_slot=index,
             )
             for index in range(2)
         )
@@ -698,34 +734,29 @@ def test_terminal_hard_crash_gap_is_summed_per_lost_incarnation(tmp_path: Path) 
         assert leader.finalize_terminal(command_id="finalize", reason="done").value == "finalized"
 
 
-def test_static_restart_recovers_authoritative_cursor_and_receipt_chain(tmp_path: Path) -> None:
+def test_replacement_recovers_authoritative_cursor_and_receipt_chain(tmp_path: Path) -> None:
+    """An authorized replacement resumes the stream cursor and receipt chain exactly."""
+
     clock = Clock()
-    with _open_static(tmp_path, clock) as authority:
+    with _open_authority(tmp_path, clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        fence_payload = _static_fence(leader)
-        receipt, proposal = _ingest_static_cycle(
+        fence_payload = _current_fence(leader)
+        receipt, proposal = _ingest_cycle(
             leader,
             tmp_path,
             fence_payload,
             sequence=1,
             previous=None,
         )
-        progress = authority.read.contributor_progress("learner-0")
+        progress = authority.read.contributor_progress("0")
         assert progress is not None
-        fence = StaticContributorFence.from_dict(fence_payload)
-        leader.mark_static_attempt_terminal(command_id="terminal-1", fence=fence)
-        replacement = leader.bind_or_replace_static_attempt(
-            command_id="restart",
-            learner_id="learner-0",
-            logical_launch_id="launch-0",
-            attempt_id="attempt-1-restart",
-            expected_generation=1,
-        )
+        fence = ContributorFence.from_dict(fence_payload)
+        replacement_fence = _replace_fence(leader, fence)
 
-        assert replacement.binding_generation == 2
-        recovered = authority.read.contributor_progress("learner-0")
+        assert replacement_fence.stream_epoch == fence.stream_epoch + 1
+        recovered = authority.read.contributor_progress("0")
         assert recovered == progress
         assert recovered.data_cursor == 8
         assert recovered.last_receipt_id == receipt.receipt_id
@@ -733,13 +764,6 @@ def test_static_restart_recovers_authoritative_cursor_and_receipt_chain(tmp_path
         assert recovered.last_update_id == receipt.planned_update_id
         assert authority.read.update_status(proposal.update_id) == "dropped"
 
-        replacement_fence = StaticContributorFence(
-            kind="static",
-            learner_id=replacement.learner_id,
-            logical_launch_id=replacement.logical_launch_id,
-            attempt_id=replacement.attempt_id,
-            binding_generation=replacement.binding_generation,
-        )
         leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
@@ -758,15 +782,17 @@ def test_static_restart_recovers_authoritative_cursor_and_receipt_chain(tmp_path
 
 
 def test_telemetry_deletion_cannot_change_authoritative_token_summary(tmp_path: Path) -> None:
+    """Deleting non-authoritative telemetry cannot alter durable token accounting."""
+
     clock = Clock()
-    with _open_static(tmp_path, clock) as authority:
+    with _open_authority(tmp_path, clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        fence = _static_fence(leader)
-        _ingest_static_cycle(leader, tmp_path, fence, sequence=1, previous=None)
+        fence = _current_fence(leader)
+        _ingest_cycle(leader, tmp_path, fence, sequence=1, previous=None)
         before = authority.read.token_ledger_summary()
-        telemetry = tmp_path / "metrics/learner/learner-0/attempt.jsonl"
+        telemetry = tmp_path / "metrics/learner/instance-0/attempt.jsonl"
         telemetry.parent.mkdir(parents=True)
         telemetry.write_text('{"processed_tokens": 999999}\n', encoding="utf-8")
         telemetry.unlink()
@@ -777,16 +803,18 @@ def test_telemetry_deletion_cannot_change_authoritative_token_summary(tmp_path: 
 def test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens(
     tmp_path: Path,
 ) -> None:
+    """A final receipt ack preserves zero crash gap and exact token balance."""
+
     clock = Clock()
     database = tmp_path / "authority.sqlite3"
-    scope = DynamicMembershipScope(1)
+    scope = MembershipScope(1)
     initialize_authority(database, _identity(), scope, wall_clock=clock)
     with LeaderAuthority(database, _identity(), scope, wall_clock=clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        leader.initialize_dynamic_membership(command_id="init-membership")
-        admission = leader.admit_dynamic_incarnation(
+        leader.initialize_membership(command_id="init-membership")
+        admission = leader.admit_incarnation(
             command_id="admit-1",
             instance_id="instance-1",
             placement_id="placement-0",
@@ -837,12 +865,14 @@ def test_terminal_final_receipt_ack_preserves_zero_gap_and_balanced_tokens(
 def test_terminal_zero_cycle_ack_requires_no_receipt_and_preserves_zero_gap(
     tmp_path: Path,
 ) -> None:
+    """A zero-cycle contributor may ack without a receipt and adds no token gap."""
+
     clock = Clock()
-    with _open_static(tmp_path, clock) as authority:
+    with _open_authority(tmp_path, clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        fence = StaticContributorFence.from_dict(_static_fence(leader))
+        fence = ContributorFence.from_dict(_current_fence(leader))
         leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
@@ -870,12 +900,14 @@ def test_terminal_zero_cycle_ack_requires_no_receipt_and_preserves_zero_gap(
 def test_terminal_close_snapshot_cannot_be_rewritten_by_a_second_command(
     tmp_path: Path,
 ) -> None:
+    """A terminal snapshot is immutable under a different close command identity."""
+
     clock = Clock()
-    with _open_static(tmp_path, clock) as authority:
+    with _open_authority(tmp_path, clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        fence = StaticContributorFence.from_dict(_static_fence(leader))
+        fence = ContributorFence.from_dict(_current_fence(leader))
         leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
@@ -913,13 +945,15 @@ def test_terminal_close_snapshot_cannot_be_rewritten_by_a_second_command(
 def test_terminal_ack_rejects_a_missing_proposal_promised_by_final_receipt(
     tmp_path: Path,
 ) -> None:
+    """Terminal ack rejects a final receipt whose promised proposal never appeared."""
+
     clock = Clock()
-    with _open_static(tmp_path, clock) as authority:
+    with _open_authority(tmp_path, clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        fence_payload = _static_fence(leader)
-        fence = StaticContributorFence.from_dict(fence_payload)
+        fence_payload = _current_fence(leader)
+        fence = ContributorFence.from_dict(fence_payload)
         receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence_payload))
         leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
         leader.initialize_genesis(
@@ -953,16 +987,18 @@ def test_terminal_ack_rejects_a_missing_proposal_promised_by_final_receipt(
 def test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_update(
     tmp_path: Path,
 ) -> None:
+    """Closing accepts only the bounded current cycle and its matching final update."""
+
     clock = Clock()
     database = tmp_path / "authority.sqlite3"
-    scope = DynamicMembershipScope(1)
+    scope = MembershipScope(1)
     initialize_authority(database, _identity(), scope, wall_clock=clock)
     with LeaderAuthority(database, _identity(), scope, wall_clock=clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        leader.initialize_dynamic_membership(command_id="init-membership")
-        admission = leader.admit_dynamic_incarnation(
+        leader.initialize_membership(command_id="init-membership")
+        admission = leader.admit_incarnation(
             command_id="admit-1",
             instance_id="instance-1",
             placement_id="placement-0",
@@ -977,7 +1013,7 @@ def test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_u
             **publish_checkpoint_pair(tmp_path, version=0),
         )
         leader.begin_terminal_close(command_id="close", reason="target reached")
-        receipt, proposal = _ingest_static_cycle(
+        receipt, proposal = _ingest_cycle(
             leader,
             tmp_path,
             admission.fence.as_dict(),
@@ -1020,14 +1056,16 @@ def test_terminal_close_accepts_only_one_contiguous_current_cycle_and_matching_u
 
 
 def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: Path) -> None:
+    """Operator resolution uses expected-state CAS and leaves durable audit evidence."""
+
     clock = Clock()
-    with _open_dynamic(tmp_path, clock) as authority:
+    with _open_authority(tmp_path, clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        row = _plan_dynamic_launch(leader)
+        row = _plan_launch(leader)
         with pytest.raises(ValueError, match="invalid scheduler transition"):
-            leader.transition_dynamic_launch_request(
+            leader.transition_launch_request(
                 command_id="invalid-direct-admit",
                 request_id=row["request_id"],
                 expected_state="planned",
@@ -1036,7 +1074,7 @@ def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: 
                 scheduler_state=None,
                 evidence_source="invalid",
             )
-        submitting = leader.transition_dynamic_launch_request(
+        submitting = leader.transition_launch_request(
             command_id="submitting",
             request_id=row["request_id"],
             expected_state="planned",
@@ -1046,7 +1084,7 @@ def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: 
             evidence_source="qsub_started",
         )
         with pytest.raises(ValueError, match="persistent timeout"):
-            leader.transition_dynamic_launch_request(
+            leader.transition_launch_request(
                 command_id="missing-deadline",
                 request_id=submitting["request_id"],
                 expected_state="submitting",
@@ -1055,7 +1093,7 @@ def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: 
                 scheduler_state="no_record",
                 evidence_source="qsub_receipt_missing",
             )
-        unknown = leader.transition_dynamic_launch_request(
+        unknown = leader.transition_launch_request(
             command_id="submission-unknown",
             request_id=submitting["request_id"],
             expected_state="submitting",
@@ -1065,7 +1103,7 @@ def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: 
             evidence_source="qsub_receipt_missing",
             uncertainty_timeout_seconds=30.0,
         )
-        uncertain = leader.transition_dynamic_launch_request(
+        uncertain = leader.transition_launch_request(
             command_id="uncertain",
             request_id=unknown["request_id"],
             expected_state="submission_unknown",
@@ -1120,7 +1158,7 @@ def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: 
         assert rejected["launch_state"] == "submitted"
 
         clock.now = 110.0
-        second_uncertain = leader.transition_dynamic_launch_request(
+        second_uncertain = leader.transition_launch_request(
             command_id="second-uncertain",
             request_id=row["request_id"],
             expected_state="submitted",
@@ -1131,7 +1169,7 @@ def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: 
             uncertainty_timeout_seconds=30.0,
         )
         clock.now = 141.0
-        reviewed = leader.transition_dynamic_launch_request(
+        reviewed = leader.transition_launch_request(
             command_id="manual-review",
             request_id=row["request_id"],
             expected_state="terminal_uncertain",
@@ -1164,13 +1202,15 @@ def test_scheduler_operator_request_is_expected_state_cas_and_audited(tmp_path: 
 
 
 def test_terminal_ack_can_precede_final_proposal_visibility_and_merge(tmp_path: Path) -> None:
+    """A terminal ack may precede final proposal visibility and the bounded merge."""
+
     clock = Clock()
-    with _open_static(tmp_path, clock) as authority:
+    with _open_authority(tmp_path, clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        fence_payload = _static_fence(leader)
-        fence = StaticContributorFence.from_dict(fence_payload)
+        fence_payload = _current_fence(leader)
+        fence = ContributorFence.from_dict(fence_payload)
         leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
@@ -1181,7 +1221,7 @@ def test_terminal_ack_can_precede_final_proposal_visibility_and_merge(tmp_path: 
         receipt = CycleReceiptV1.from_dict(
             receipt_payload(
                 fence=fence_payload,
-                stable_contributor_key="learner-0",
+                stable_contributor_key="0",
                 update_id=update_id,
             )
         )
@@ -1201,7 +1241,7 @@ def test_terminal_ack_can_precede_final_proposal_visibility_and_merge(tmp_path: 
         proposal = FullUpdateProposalV2.from_dict(
             proposal_payload(
                 fence=fence_payload,
-                stable_contributor_key="learner-0",
+                stable_contributor_key="0",
                 update_id=update_id,
                 receipt_sha256=receipt.immutable_sha256(),
             )
@@ -1217,12 +1257,14 @@ def test_terminal_ack_can_precede_final_proposal_visibility_and_merge(tmp_path: 
 def test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolution(
     tmp_path: Path,
 ) -> None:
+    """Scheduler uncertainty retains one deadline across takeover until review."""
+
     clock = Clock()
-    with _open_dynamic(tmp_path, clock) as authority:
+    with _open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
         leader = authority.open_leader(token)
-        row = _plan_dynamic_launch(leader)
-        submitting = leader.transition_dynamic_launch_request(
+        row = _plan_launch(leader)
+        submitting = leader.transition_launch_request(
             command_id="submitting",
             request_id=row["request_id"],
             expected_state="planned",
@@ -1231,7 +1273,7 @@ def test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolu
             scheduler_state="qsub_started",
             evidence_source="qsub_started",
         )
-        unknown = leader.transition_dynamic_launch_request(
+        unknown = leader.transition_launch_request(
             command_id="unknown",
             request_id=submitting["request_id"],
             expected_state="submitting",
@@ -1248,7 +1290,7 @@ def test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolu
             authority.acquire_leader(owner_id="owner-2", hostname="host", pid=2)
         )
         clock.now = 129.0
-        uncertain = successor.transition_dynamic_launch_request(
+        uncertain = successor.transition_launch_request(
             command_id="terminal-uncertain",
             request_id=unknown["request_id"],
             expected_state="submission_unknown",
@@ -1261,7 +1303,7 @@ def test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolu
         assert uncertain["first_uncertain_at"] == 100.0
         assert uncertain["uncertainty_deadline"] == 130.0
         with pytest.raises(RuntimeError, match="deadline has not elapsed"):
-            successor.transition_dynamic_launch_request(
+            successor.transition_launch_request(
                 command_id="too-early-review",
                 request_id=unknown["request_id"],
                 expected_state="terminal_uncertain",
@@ -1271,7 +1313,7 @@ def test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolu
                 evidence_source="deadline",
             )
         clock.now = 131.0
-        reviewed = successor.transition_dynamic_launch_request(
+        reviewed = successor.transition_launch_request(
             command_id="manual-review",
             request_id=unknown["request_id"],
             expected_state="terminal_uncertain",
@@ -1287,21 +1329,23 @@ def test_scheduler_uncertainty_deadline_survives_leader_change_and_bounds_resolu
 def test_immutable_audit_batch_precedes_exact_history_prune_and_preserves_rollup(
     tmp_path: Path,
 ) -> None:
+    """Immutable audit publication precedes exact pruning without changing rollups."""
+
     clock = Clock()
-    with _open_static(tmp_path, clock) as authority:
+    with _open_authority(tmp_path, clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        fence = _static_fence(leader)
+        fence = _current_fence(leader)
         version_zero = publish_checkpoint_pair(tmp_path, version=0)
         leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **version_zero,
         )
-        first, _ = _ingest_static_cycle(leader, tmp_path, fence, sequence=1, previous=None)
+        first, _ = _ingest_cycle(leader, tmp_path, fence, sequence=1, previous=None)
         _commit_next(leader, tmp_path, version=1)
-        _ingest_static_cycle(leader, tmp_path, fence, sequence=2, previous=first)
+        _ingest_cycle(leader, tmp_path, fence, sequence=2, previous=first)
         _commit_next(leader, tmp_path, version=2)
         before = authority.read.token_ledger_summary()
         records = authority.read.audit_history_records(cutoff_version=1)
@@ -1322,7 +1366,7 @@ def test_immutable_audit_batch_precedes_exact_history_prune_and_preserves_rollup
 
         assert archived["row_count"] == len(records) > 0
         assert authority.read.latest_committed_version().version == 2
-        assert authority.read.contributor_progress("learner-0").last_cycle_seq == 2
+        assert authority.read.contributor_progress("0").last_cycle_seq == 2
         assert authority.read.token_ledger_summary() == before
         assert path.stat().st_mode & 0o222 == 0
         connection = sqlite3.connect(tmp_path / "authority.sqlite3")
@@ -1353,28 +1397,22 @@ def test_immutable_audit_batch_precedes_exact_history_prune_and_preserves_rollup
 def test_online_archive_retains_each_current_receipt_until_terminal_ack(
     tmp_path: Path,
 ) -> None:
+    """Online archiving retains each current receipt until its terminal ack."""
+
     clock = Clock()
     database = tmp_path / "authority.sqlite3"
-    scope = StaticMembershipScope(("learner-0", "learner-1"))
+    scope = MembershipScope(2)
     initialize_authority(database, _identity(), scope, wall_clock=clock)
     with LeaderAuthority(database, _identity(), scope, wall_clock=clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        fences: dict[str, StaticContributorFence] = {}
+        fences: dict[str, ContributorFence] = {}
         for index in range(2):
-            binding = leader.bind_or_replace_static_attempt(
-                command_id=f"bind-{index}",
-                learner_id=f"learner-{index}",
-                logical_launch_id=f"launch-{index}",
-                attempt_id=f"attempt-{index}",
-            )
-            fences[f"learner-{index}"] = StaticContributorFence(
-                kind="static",
-                learner_id=binding.learner_id,
-                logical_launch_id=binding.logical_launch_id,
-                attempt_id=binding.attempt_id,
-                binding_generation=binding.binding_generation,
+            fences[str(index)] = admit_contributor(
+                leader,
+                stream_id=index,
+                instance_id=f"instance-{index}",
             )
         leader.initialize_genesis(
             command_id="v0",
@@ -1384,8 +1422,8 @@ def test_online_archive_retains_each_current_receipt_until_terminal_ack(
         receipts: dict[str, CycleReceiptV1] = {}
         proposals: dict[str, FullUpdateProposalV2] = {}
         for index in range(2):
-            key = f"learner-{index}"
-            receipts[key], proposals[key] = _ingest_static_cycle(
+            key = str(index)
+            receipts[key], proposals[key] = _ingest_cycle(
                 leader,
                 tmp_path,
                 fences[key].as_dict(),
@@ -1416,14 +1454,14 @@ def test_online_archive_retains_each_current_receipt_until_terminal_ack(
             assert (
                 connection.execute(
                     "SELECT COUNT(*) FROM cycle_receipts WHERE receipt_id=?",
-                    (receipts["learner-0"].receipt_id,),
+                    (receipts["0"].receipt_id,),
                 ).fetchone()[0]
                 == 1
             )
 
         leader.begin_terminal_close(command_id="close", reason="target reached")
         for index in range(2):
-            key = f"learner-{index}"
+            key = str(index)
             assert (
                 leader.acknowledge_terminal_contributor(
                     command_id=f"ack-{index}",
@@ -1442,24 +1480,26 @@ def test_online_archive_retains_each_current_receipt_until_terminal_ack(
         terminal_records = authority.read.audit_history_records(cutoff_version=1)
         assert any(
             record["table"] == "cycle_receipts"
-            and record["primary_key"] == receipts["learner-0"].receipt_id
+            and record["primary_key"] == receipts["0"].receipt_id
             for record in terminal_records
         )
 
 
 def test_audit_archive_never_prunes_latest_version_or_blocks_next_commit(tmp_path: Path) -> None:
+    """Audit pruning retains the latest version and permits the next merge commit."""
+
     clock = Clock()
-    with _open_static(tmp_path, clock) as authority:
+    with _open_authority(tmp_path, clock) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        fence = _static_fence(leader)
+        fence = _current_fence(leader)
         leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **publish_checkpoint_pair(tmp_path, version=0),
         )
-        first, _ = _ingest_static_cycle(leader, tmp_path, fence, sequence=1, previous=None)
+        first, _ = _ingest_cycle(leader, tmp_path, fence, sequence=1, previous=None)
         _commit_next(leader, tmp_path, version=1)
         records = authority.read.audit_history_records(cutoff_version=1)
         payload = build_audit_batch(
@@ -1478,24 +1518,26 @@ def test_audit_archive_never_prunes_latest_version_or_blocks_next_commit(tmp_pat
         )
 
         assert authority.read.latest_committed_version().version == 1
-        _ingest_static_cycle(leader, tmp_path, fence, sequence=2, previous=first)
+        _ingest_cycle(leader, tmp_path, fence, sequence=2, previous=first)
         _commit_next(leader, tmp_path, version=2)
         assert authority.read.latest_committed_version().version == 2
 
 
 def test_active_leader_compacts_audit_batches_before_exact_source_gc(tmp_path: Path) -> None:
+    """Audit compaction publishes a partition before claiming exact source batches."""
+
     clock = Clock()
     paths = RunPaths(tmp_path)
-    with _open_static(tmp_path, clock) as authority:
+    with _open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         leader = authority.open_leader(token)
-        fence = _static_fence(leader)
+        fence = _current_fence(leader)
         leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **publish_checkpoint_pair(tmp_path, version=0),
         )
-        _ingest_static_cycle(leader, tmp_path, fence, sequence=1, previous=None)
+        _ingest_cycle(leader, tmp_path, fence, sequence=1, previous=None)
         _commit_next(leader, tmp_path, version=1)
 
         first_payload = build_audit_batch(
@@ -1602,31 +1644,39 @@ def test_active_leader_compacts_audit_batches_before_exact_source_gc(tmp_path: P
 
 
 class _MaintenanceTelemetry:
+    """Record maintenance service events for ownership assertions."""
+
     def __init__(self) -> None:
+        """Start with no recorded maintenance events."""
+
         self.events: list[tuple[str, dict[str, object]]] = []
 
     def event(self, name: str, **fields: object) -> None:
+        """Append one named maintenance event and its structured fields."""
+
         self.events.append((name, fields))
 
 
 def test_fenced_maintenance_archives_history_and_successor_reclaims_artifact_gc(
     tmp_path: Path,
 ) -> None:
+    """Fenced maintenance archives history before a successor reclaims artifact GC."""
+
     clock = Clock()
     paths = RunPaths(tmp_path)
     telemetry = _MaintenanceTelemetry()
     config = MaintenanceSection(archive_batch_rows=1, recent_batch_dedup_count=2)
-    with _open_static(tmp_path, clock) as authority:
+    with _open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         leader = authority.open_leader(token)
-        fence = _static_fence(leader)
+        fence = _current_fence(leader)
         version_zero = publish_checkpoint_pair(tmp_path, version=0)
         leader.initialize_genesis(
             command_id="v0",
             publication_id="publication-v0",
             **version_zero,
         )
-        _ingest_static_cycle(leader, tmp_path, fence, sequence=1, previous=None)
+        _ingest_cycle(leader, tmp_path, fence, sequence=1, previous=None)
         version_one = publish_checkpoint_pair(tmp_path, version=1)
         attempt = leader.try_select_batch(command_id="select-1", quorum_min=1, quorum_max=1)
         assert attempt.batch is not None
@@ -1688,6 +1738,8 @@ def test_fenced_maintenance_archives_history_and_successor_reclaims_artifact_gc(
 
 
 def test_artifact_gc_refuses_symlinked_or_identity_changed_objects(tmp_path: Path) -> None:
+    """Artifact GC refuses symlinks and objects that changed after their claim."""
+
     paths = RunPaths(tmp_path)
     target = tmp_path / "weights" / "epochs" / "e1" / "payload.safetensors"
     target.parent.mkdir(parents=True)

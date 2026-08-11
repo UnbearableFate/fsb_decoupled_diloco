@@ -165,12 +165,10 @@ export default function ReferencePage() {
             <dl>
               <div><dt><code>--config PATH</code></dt><dd>必填，且必须等于 immutable resolved config。</dd></div>
               <div><dt><code>--shared-root PATH</code></dt><dd>必填。已完成 bootstrap 的运行根目录。</dd></div>
-              <div><dt><code>--learner-id ID</code></dt><dd>Static 模式必填。</dd></div>
-              <div><dt><code>--logical-launch-id ID</code></dt><dd>Static launch identity；PBS wrapper 通常生成。</dd></div>
-              <div><dt><code>--bootstrap-slot N</code></dt><dd>Dynamic 初始实例使用，与 launch request 互斥。</dd></div>
-              <div><dt><code>--launch-request-id ID</code></dt><dd>Dynamic replacement 使用。</dd></div>
-              <div><dt><code>--stream-id N</code></dt><dd>Dynamic replacement 的目标 stream。</dd></div>
-              <div><dt><code>--replace-instance-id ID</code></dt><dd>可选。被替换的 dynamic instance。</dd></div>
+              <div><dt><code>--bootstrap-slot N</code></dt><dd>初始实例使用，与 launch request 互斥。</dd></div>
+              <div><dt><code>--launch-request-id ID</code></dt><dd>授权 replacement 或 scale-out 时使用。</dd></div>
+              <div><dt><code>--stream-id N</code></dt><dd>Launch request 授权的目标 stream。</dd></div>
+              <div><dt><code>--replace-instance-id ID</code></dt><dd>可选。被替换的 current instance。</dd></div>
             </dl>
           </article>
 
@@ -185,16 +183,12 @@ export default function ReferencePage() {
           </article>
 
           <article>
-            <header><code>python -m fs_diloco.tools.request_static_replacement</code><span>MUTATING</span></header>
-            <p>发布一份不可变 static replacement authorization。旧 fence 与新 attempt 参数全部必填。</p>
-          </article>
-          <article>
             <header><code>python -m fs_diloco.tools.request_terminal_close</code><span>MUTATING</span></header>
             <p>为 <code>manual</code> close policy 发布唯一不可变 close request。</p>
           </article>
           <article>
             <header><code>python -m fs_diloco.tools.resolve_scheduler_uncertainty</code><span>DRY-RUN FIRST</span></header>
-            <p>预览或发布 dynamic scheduler operator request。只有附加 <code>--apply</code> 才写文件。</p>
+            <p>预览或发布 scheduler operator request。只有附加 <code>--apply</code> 才写文件。</p>
           </article>
           <article>
             <header><code>python -m fs_diloco.tools.clean_run</code><span>DESTRUCTIVE WITH --execute</span></header>
@@ -207,7 +201,7 @@ export default function ReferencePage() {
         <h2>Configuration Reference</h2>
         <p>
           下表的默认值来自 <code>fs_diloco.core.config.Config</code> dataclass，
-          不等同于三个仓库示例配置的具体值。所有浮点值必须有限。
+          不等同于仓库示例配置的具体值。所有浮点值必须有限。
         </p>
         <div className="table-wrap config-table">
           <table>
@@ -232,8 +226,8 @@ export default function ReferencePage() {
               </tr>
               <tr>
                 <td><code>sync</code></td>
-                <td><code>num_learners=8</code>、<code>quorum_min=4</code>、<code>quorum_max=8</code>、<code>staleness_lambda=0.25</code>、停止目标。</td>
-                <td><code>1 ≤ min ≤ max ≤ num_learners</code>；至少存在一个可达停止条件。</td>
+                <td><code>quorum_min=4</code>、<code>quorum_max=8</code>、<code>staleness_lambda=0.25</code>、停止目标。</td>
+                <td><code>1 ≤ min ≤ max ≤ membership.stream_pool_size</code>；至少存在一个可达停止条件。</td>
               </tr>
               <tr>
                 <td><code>syncer</code></td>
@@ -242,13 +236,13 @@ export default function ReferencePage() {
               </tr>
               <tr>
                 <td><code>membership</code></td>
-                <td><code>mode=static</code>、stream pool、bootstrap instances、admission/heartbeat timeout。</td>
-                <td>Dynamic 中 <code>num_learners = stream_pool_size</code>；initial deadline 必须覆盖 request TTL。</td>
+                <td><code>stream_pool_size=8</code>、<code>bootstrap_instances=8</code>、admission 和 heartbeat timeout。</td>
+                <td>Bootstrap 数量不得超过 stream pool；initial deadline 必须覆盖 request TTL。</td>
               </tr>
               <tr>
                 <td><code>scaling</code></td>
                 <td>开关、目标 contributor、低容量窗口、launch budget、reconcile timeout、PBS script/queue/walltime。</td>
-                <td>只允许 dynamic；启用时 walltime 必填且至少 10 分钟，launch 与窗口关系受约束。</td>
+                <td>启用时 walltime 必填且至少 10 分钟，launch budget 与观测窗口关系受约束。</td>
               </tr>
               <tr>
                 <td><code>terminal</code></td>
@@ -379,14 +373,14 @@ export default function ReferencePage() {
         <ApiEntry
           id="api-load-descriptor"
           signature="load_run_descriptor(shared_root, *, expected_run_id=None, expected_git_commit=None, expected_git_dirty=None, expected_source_fingerprint=None, expected_descriptor_sha256=None) -> LoadedRunDescriptor"
-          summary="验证 descriptor 自哈希、协议/schema/mode、运行路径、resolved config、source manifest 与可选期望身份。"
+          summary="验证 descriptor 自哈希、协议/schema、运行路径、resolved config、source manifest 与可选期望身份。"
           parameters={[
             { name: "shared_root", type: "str | pathlib.Path", description: "已完成 bootstrap 的运行根目录。" },
             { name: "expected_*", type: "optional identity fields", description: "提交命令携带的期望运行身份；提供后必须精确匹配。" },
           ]}
           returns={<>包含 <code>descriptor</code>、<code>config</code>、<code>RunPaths</code> 与 authority identity 的冻结对象。</>}
           raises={[
-            { name: "RuntimeError", description: "任一 checksum、路径、版本、mode 或身份不匹配。" },
+            { name: "RuntimeError", description: "任一 checksum、路径、版本或身份不匹配。" },
           ]}
           source={sourceUrl("fs_diloco/core/run_descriptor.py", 63)}
         />

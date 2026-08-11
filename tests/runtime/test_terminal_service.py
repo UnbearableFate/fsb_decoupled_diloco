@@ -1,3 +1,5 @@
+"""Verify terminal-service close, drain, merge, and completion policy."""
+
 from __future__ import annotations
 
 import hashlib
@@ -13,7 +15,7 @@ from fs_diloco.core.run_descriptor import (
     LoadedRunDescriptor,
 )
 from fs_diloco.observability.logging_utils import ActorTelemetryWriter
-from fs_diloco.protocol.contributor import StaticMembershipScope
+from fs_diloco.protocol.contributor import MembershipScope
 from fs_diloco.runtime.services.merge import MergeAttemptStatus
 from fs_diloco.runtime.services.terminal import (
     TerminalService,
@@ -29,23 +31,35 @@ from fs_diloco.storage.control import ControlPublisher, publish_terminal_ack
 from fs_diloco.storage.paths import RunPaths
 from fs_diloco.storage.terminal_request import publish_manual_terminal_request
 from tests.support import VirtualClock
-from tests.support.protocol import publish_checkpoint_pair
+from tests.support.protocol import admit_contributor, publish_checkpoint_pair
 
 
 class Telemetry:
+    """Record terminal telemetry events without external I/O."""
+
     def __init__(self) -> None:
+        """Start with an empty event sequence."""
+
         self.events: list[tuple[str, dict[str, object]]] = []
 
     def event(self, name: str, **fields: object) -> None:
+        """Append one structured terminal event."""
+
         self.events.append((name, fields))
 
 
 class MergeProbe:
+    """Record terminal merge requests and return configured outcomes."""
+
     def __init__(self, result=MergeAttemptStatus.NO_BATCH) -> None:
+        """Configure the default or queued merge outcomes."""
+
         self.calls: list[dict[str, object]] = []
         self.result = result
 
     def merge_once(self, **kwargs):
+        """Record one merge call and return the next configured outcome."""
+
         self.calls.append(dict(kwargs))
         if isinstance(self.result, list):
             return self.result.pop(0)
@@ -53,8 +67,10 @@ class MergeProbe:
 
 
 def _runtime(tmp_path: Path, clock: VirtualClock, *, max_terminal_merges: int):
+    """Create one initialized terminal runtime with an admitted stream."""
+
     identity = AuthorityIdentity("run-current", "source", hashlib.sha256(b"config").hexdigest())
-    scope = StaticMembershipScope(("learner-0",))
+    scope = MembershipScope(1)
     database = tmp_path / "authority.sqlite3"
     initialize_authority(database, identity, scope, wall_clock=clock.wall)
     authority = LeaderAuthority(database, identity, scope, wall_clock=clock.wall)
@@ -66,12 +82,7 @@ def _runtime(tmp_path: Path, clock: VirtualClock, *, max_terminal_merges: int):
         publication_id="publication-v0",
         **publish_checkpoint_pair(tmp_path, version=0),
     )
-    leader.bind_or_replace_static_attempt(
-        command_id="bind-learner",
-        learner_id="learner-0",
-        logical_launch_id="logical-0",
-        attempt_id="attempt-0",
-    )
+    admit_contributor(leader)
     shared = Config()
     shared.sync.scan_interval_seconds = 0.1
     shared.terminal.drain_ack_timeout_seconds = 1.0
@@ -96,6 +107,8 @@ def _runtime(tmp_path: Path, clock: VirtualClock, *, max_terminal_merges: int):
 def test_terminal_service_honors_bounded_final_merge_policy(
     tmp_path: Path, maximum: int, expected_calls: int
 ) -> None:
+    """Terminal draining performs no more than its configured final merge budget."""
+
     clock = VirtualClock(monotonic_seconds=0.0, wall_seconds=100.0)
     authority, leader, loaded = _runtime(tmp_path, clock, max_terminal_merges=maximum)
     merge = MergeProbe()
@@ -132,6 +145,8 @@ def test_terminal_service_honors_bounded_final_merge_policy(
 
 
 def test_terminal_preclose_visibility_uses_one_frozen_wall_cutoff(tmp_path: Path) -> None:
+    """All preclose admission scans use the one durable wall-clock cutoff."""
+
     clock = VirtualClock(monotonic_seconds=0.0, wall_seconds=100.0)
     authority, leader, loaded = _runtime(tmp_path, clock, max_terminal_merges=0)
     loaded.config.terminal.allow_preclose_admission_during_drain = True
@@ -162,6 +177,8 @@ def test_terminal_preclose_visibility_uses_one_frozen_wall_cutoff(tmp_path: Path
 
 
 def test_terminal_wait_does_not_sleep_past_durable_ack_deadline(tmp_path: Path) -> None:
+    """Terminal polling never sleeps beyond the durable drain-ack deadline."""
+
     clock = VirtualClock(monotonic_seconds=0.0, wall_seconds=100.0)
     authority, leader, loaded = _runtime(tmp_path, clock, max_terminal_merges=0)
     loaded.config.sync.scan_interval_seconds = 10.0
@@ -189,6 +206,8 @@ def test_terminal_wait_does_not_sleep_past_durable_ack_deadline(tmp_path: Path) 
 
 
 def test_terminal_ack_telemetry_does_not_override_writer_identity(tmp_path: Path) -> None:
+    """Ack metrics cannot override the telemetry writer's actor identity fields."""
+
     clock = VirtualClock(monotonic_seconds=0.0, wall_seconds=100.0)
     authority, leader, loaded = _runtime(tmp_path, clock, max_terminal_merges=0)
     telemetry_path = tmp_path / "metrics/syncer.jsonl"
@@ -243,6 +262,8 @@ def test_terminal_ack_telemetry_does_not_override_writer_identity(tmp_path: Path
 
 
 def test_terminal_merge_conflict_does_not_consume_terminal_budget(tmp_path: Path) -> None:
+    """A fenced merge conflict does not consume the bounded terminal merge budget."""
+
     clock = VirtualClock(monotonic_seconds=0.0, wall_seconds=100.0)
     authority, leader, loaded = _runtime(tmp_path, clock, max_terminal_merges=1)
     merge = MergeProbe([MergeAttemptStatus.FENCE_CONFLICT, MergeAttemptStatus.NO_BATCH])
@@ -269,6 +290,8 @@ def test_terminal_merge_conflict_does_not_consume_terminal_budget(tmp_path: Path
 
 
 def test_manual_reason_is_not_used_as_a_protocol_command_identity(tmp_path: Path) -> None:
+    """Untrusted manual close text never becomes a protocol command identity."""
+
     clock = VirtualClock(monotonic_seconds=0.0, wall_seconds=100.0)
     authority, leader, loaded = _runtime(tmp_path, clock, max_terminal_merges=0)
     loaded.config.terminal.admission_close_policy = "manual"
@@ -302,12 +325,16 @@ def test_manual_reason_is_not_used_as_a_protocol_command_identity(tmp_path: Path
 
 
 def test_preclose_cutoff_and_deadline_survive_successor_takeover(tmp_path: Path) -> None:
+    """A successor resumes the durable preclose cutoff and ack deadline exactly."""
+
     clock = VirtualClock(monotonic_seconds=0.0, wall_seconds=100.0)
     authority, leader, loaded = _runtime(tmp_path, clock, max_terminal_merges=0)
     loaded.config.terminal.allow_preclose_admission_during_drain = True
     first_cutoffs: list[float] = []
 
     def crash_after_first_sleep(seconds: float) -> None:
+        """Simulate process loss after the first durable terminal wait."""
+
         clock.advance(seconds)
         raise RuntimeError("injected preclose crash")
 
@@ -362,6 +389,8 @@ def test_preclose_cutoff_and_deadline_survive_successor_takeover(tmp_path: Path)
 def test_terminal_close_reason_consumes_global_target_and_deadline_policy(
     tmp_path: Path,
 ) -> None:
+    """Close-reason selection honors global targets and optional deadlines."""
+
     clock = VirtualClock(monotonic_seconds=0.0, wall_seconds=100.0)
     authority, _leader, loaded = _runtime(tmp_path, clock, max_terminal_merges=0)
     try:
@@ -440,6 +469,8 @@ def test_launch_budget_close_requires_released_reservations_and_low_capacity(
     reserved: int,
     expected: str | None,
 ) -> None:
+    """Launch-budget close requires released reservations and proven low capacity."""
+
     clock = VirtualClock(monotonic_seconds=0.0, wall_seconds=100.0)
     authority, _leader, loaded = _runtime(tmp_path, clock, max_terminal_merges=0)
     loaded.config.terminal.admission_close_policy = "global_target_or_launch_budget"
@@ -450,7 +481,7 @@ def test_launch_budget_close_requires_released_reservations_and_low_capacity(
     read = SimpleNamespace(
         controller_status=lambda: {"state": "open"},
         token_ledger_summary=lambda: SimpleNamespace(direct_applied=0),
-        dynamic_launch_requests=lambda: (
+        launch_requests=lambda: (
             {
                 "role": "scale_out",
                 "reservation_released_at": reservation_released_at,

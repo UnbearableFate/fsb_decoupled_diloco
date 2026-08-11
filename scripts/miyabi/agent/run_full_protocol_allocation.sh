@@ -8,7 +8,7 @@ trap 'echo "[ERROR] Full Protocol allocation failed at line $LINENO" >&2' ERR
 : "${RUN_ID:?RUN_ID is required}"
 : "${SHARED_ROOT:?SHARED_ROOT is required}"
 : "${EXPECTED_NODES:?EXPECTED_NODES is required}"
-: "${NUM_LEARNERS:?NUM_LEARNERS is required}"
+: "${EXPECTED_CONTRIBUTORS:?EXPECTED_CONTRIBUTORS is required}"
 : "${SYNCER_TAKEOVER_BOUNDARY_VERSION:?SYNCER_TAKEOVER_BOUNDARY_VERSION is required}"
 : "${PBS_NODEFILE:?PBS_NODEFILE is required}"
 
@@ -28,8 +28,8 @@ if [[ "${#HOSTS[@]}" -ne "$EXPECTED_NODES" ]]; then
   exit 2
 fi
 expected_learners=$((EXPECTED_NODES - 1))
-if [[ "$NUM_LEARNERS" -ne "$expected_learners" ]]; then
-  echo "NUM_LEARNERS=$NUM_LEARNERS does not match allocation topology $expected_learners" >&2
+if [[ "$EXPECTED_CONTRIBUTORS" -ne "$expected_learners" ]]; then
+  echo "EXPECTED_CONTRIBUTORS=$EXPECTED_CONTRIBUTORS does not match allocation topology $expected_learners" >&2
   exit 2
 fi
 
@@ -61,14 +61,13 @@ import json
 import sys
 
 descriptor = json.load(open(sys.argv[1], encoding="utf-8"))["descriptor"]
-if descriptor["mode"] != "static":
-    raise SystemExit("allocation runner requires a static descriptor")
 print(descriptor["resolved_config_path"])
 print(descriptor["descriptor_sha256"])
 print(descriptor["git_commit"])
 print(descriptor["source_fingerprint"])
 print(int(bool(descriptor["git_dirty"])))
-print(len(descriptor["static_learner_ids"]))
+print(descriptor["stream_pool_size"])
+print(descriptor["bootstrap_slots"])
 PY
 )
 RESOLVED_CONFIG="${descriptor_fields[0]}"
@@ -76,8 +75,8 @@ FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256="${descriptor_fields[1]}"
 FS_DILOCO_EXPECTED_GIT_COMMIT="${descriptor_fields[2]}"
 FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT="${descriptor_fields[3]}"
 FS_DILOCO_GIT_DIRTY="${descriptor_fields[4]}"
-if [[ "${descriptor_fields[5]}" -ne "$NUM_LEARNERS" ]]; then
-  echo "Descriptor learner count ${descriptor_fields[5]} != allocation $NUM_LEARNERS" >&2
+if [[ "${descriptor_fields[5]}" -ne "$EXPECTED_CONTRIBUTORS" || "${descriptor_fields[6]}" -ne "$EXPECTED_CONTRIBUTORS" ]]; then
+  echo "Descriptor stream/bootstrap topology does not match allocation $EXPECTED_CONTRIBUTORS" >&2
   exit 2
 fi
 export FS_DILOCO_REQUIRE_SOURCE_IDENTITY=1

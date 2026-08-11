@@ -1,3 +1,5 @@
+"""Verify bootstrap and scheduler-bound launch authorization invariants."""
+
 from __future__ import annotations
 
 import hashlib
@@ -5,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from fs_diloco.protocol.contributor import DynamicMembershipScope
+from fs_diloco.protocol.contributor import MembershipScope
 from fs_diloco.storage.authority import (
     AuthorityIdentity,
     LeaderAuthority,
@@ -15,8 +17,10 @@ from fs_diloco.storage.authority import (
 
 
 def _authority(tmp_path: Path) -> LeaderAuthority:
+    """Create one initialized single-stream authority for launch tests."""
+
     identity = AuthorityIdentity("run-current", "source", hashlib.sha256(b"config").hexdigest())
-    scope = DynamicMembershipScope(1)
+    scope = MembershipScope(1)
     database = tmp_path / "authority.sqlite3"
     initialize_authority(database, identity, scope, wall_clock=lambda: 100.0)
     return LeaderAuthority(database, identity, scope, wall_clock=lambda: 100.0)
@@ -25,12 +29,14 @@ def _authority(tmp_path: Path) -> LeaderAuthority:
 def test_bootstrap_slot_is_one_use_and_replacement_requires_exact_qsub_job(
     tmp_path: Path,
 ) -> None:
+    """Bootstrap slots are one-use and replacement admission binds the qsub receipt."""
+
     with _authority(tmp_path) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        leader.initialize_dynamic_membership(command_id="initialize-membership")
-        leader.admit_dynamic_incarnation(
+        leader.initialize_membership(command_id="initialize-membership")
+        leader.admit_incarnation(
             command_id="bootstrap",
             instance_id="instance-1",
             placement_id="placement-1",
@@ -42,7 +48,7 @@ def test_bootstrap_slot_is_one_use_and_replacement_requires_exact_qsub_job(
             pbs_job_id="100.opbs",
         )
         with pytest.raises(MembershipFenceError, match="already consumed"):
-            leader.admit_dynamic_incarnation(
+            leader.admit_incarnation(
                 command_id="duplicate-bootstrap",
                 instance_id="instance-unsolicited",
                 placement_id="placement-2",
@@ -66,7 +72,7 @@ def test_bootstrap_slot_is_one_use_and_replacement_requires_exact_qsub_job(
             action="replace",
             retention_count=4,
         )
-        launch = leader.plan_dynamic_launch_request(
+        launch = leader.plan_launch_request(
             command_id="plan",
             request_id="launch-replacement",
             observation_key="capacity-replacement",
@@ -78,7 +84,7 @@ def test_bootstrap_slot_is_one_use_and_replacement_requires_exact_qsub_job(
             max_total_requests=1,
             expected_scheduler_job_id="100.opbs",
         )
-        submitting = leader.transition_dynamic_launch_request(
+        submitting = leader.transition_launch_request(
             command_id="submitting",
             request_id=launch["request_id"],
             expected_state="planned",
@@ -88,7 +94,7 @@ def test_bootstrap_slot_is_one_use_and_replacement_requires_exact_qsub_job(
             evidence_source="qsub_started",
         )
         with pytest.raises(RuntimeError, match="evidence is pending"):
-            leader.admit_dynamic_incarnation(
+            leader.admit_incarnation(
                 command_id="admission-before-qsub-evidence",
                 instance_id="instance-2",
                 placement_id="placement-2",
@@ -101,7 +107,7 @@ def test_bootstrap_slot_is_one_use_and_replacement_requires_exact_qsub_job(
                 pid=3,
                 pbs_job_id="200.opbs",
             )
-        leader.transition_dynamic_launch_request(
+        leader.transition_launch_request(
             command_id="submitted",
             request_id=launch["request_id"],
             expected_state=submitting["state"],
@@ -111,7 +117,7 @@ def test_bootstrap_slot_is_one_use_and_replacement_requires_exact_qsub_job(
             evidence_source="qsub_receipt",
         )
         with pytest.raises(MembershipFenceError, match="scheduler job"):
-            leader.admit_dynamic_incarnation(
+            leader.admit_incarnation(
                 command_id="wrong-job",
                 instance_id="instance-2",
                 placement_id="placement-2",
@@ -125,7 +131,7 @@ def test_bootstrap_slot_is_one_use_and_replacement_requires_exact_qsub_job(
                 pbs_job_id="999.opbs",
             )
 
-        admitted = leader.admit_dynamic_incarnation(
+        admitted = leader.admit_incarnation(
             command_id="replacement",
             instance_id="instance-2",
             placement_id="placement-2",
@@ -140,13 +146,13 @@ def test_bootstrap_slot_is_one_use_and_replacement_requires_exact_qsub_job(
         )
 
         assert admitted.fence.instance_id == "instance-2"
-        launch_row = authority.read.dynamic_launch_requests()[-1]
+        launch_row = authority.read.launch_requests()[-1]
         assert launch_row["state"] == "admitted"
         assert launch_row["admitted_instance_id"] == "instance-2"
         assert launch_row["reservation_released_at"] == 100.0
 
         with pytest.raises(MembershipFenceError, match="replayed with different admission"):
-            leader.admit_dynamic_incarnation(
+            leader.admit_incarnation(
                 command_id="replacement-identity-mismatch",
                 instance_id="instance-2",
                 placement_id="placement-2",
@@ -162,11 +168,13 @@ def test_bootstrap_slot_is_one_use_and_replacement_requires_exact_qsub_job(
 
 
 def test_stream_cannot_hold_two_unreleased_launch_reservations(tmp_path: Path) -> None:
+    """A stream can reserve capacity for only one outstanding authorized launch."""
+
     with _authority(tmp_path) as authority:
         leader = authority.open_leader(
             authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         )
-        leader.initialize_dynamic_membership(command_id="initialize-membership")
+        leader.initialize_membership(command_id="initialize-membership")
         for sequence in (1, 2):
             leader.record_capacity_observation(
                 command_id=f"observe-{sequence}",
@@ -180,7 +188,7 @@ def test_stream_cannot_hold_two_unreleased_launch_reservations(tmp_path: Path) -
                 action="low",
                 retention_count=4,
             )
-        leader.plan_dynamic_launch_request(
+        leader.plan_launch_request(
             command_id="plan-1",
             request_id="launch-1",
             observation_key="capacity-1",
@@ -193,7 +201,7 @@ def test_stream_cannot_hold_two_unreleased_launch_reservations(tmp_path: Path) -
         )
 
         with pytest.raises(MembershipFenceError, match="already has a launch reservation"):
-            leader.plan_dynamic_launch_request(
+            leader.plan_launch_request(
                 command_id="plan-2",
                 request_id="launch-2",
                 observation_key="capacity-2",

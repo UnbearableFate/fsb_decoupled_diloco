@@ -1,6 +1,6 @@
-config_schema_version: 1
+config_schema_version: 2
 run:
-  name: dynamic_full_gpt2_wikitext2_8l_200x10
+  name: full_protocol_gpt2_wikitext2_8l_200x10
 model:
   name_or_path: gpt2
   revision: 607a30d783dfa663caf39e06633721c8d4cfcd7e
@@ -15,7 +15,6 @@ data:
   block_size: 1024
   shuffle_blocks: true
 sync:
-  num_learners: 8
   quorum_min: 4
   quorum_max: 4
   staleness_lambda: 0.0
@@ -26,7 +25,6 @@ syncer:
   compute_dtype: float32
   publish_dtype: bfloat16
 membership:
-  mode: dynamic
   stream_pool_size: 8
   bootstrap_instances: 8
   initial_membership_deadline_seconds: 300.0
@@ -35,8 +33,8 @@ membership:
   heartbeat_dead_after_seconds: 15.0
 scaling:
   enabled: true
-  desired_contributors: 4
-  low_contributor_threshold: 3
+  desired_contributors: 8
+  low_contributor_threshold: 7
   consecutive_low_windows: 2
   productive_window_count: 2
   startup_grace_seconds: 90.0
@@ -64,8 +62,7 @@ training:
   inner_steps: 200
   micro_batch_size: 2
   gradient_accumulation_steps: 8
-  max_local_steps: 2000
-  completion_mode: local_and_global
+  completion_mode: global_only
   seed: 1337
   grad_clip: 1.0
 inner_optimizer:

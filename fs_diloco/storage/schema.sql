@@ -1,9 +1,7 @@
 CREATE TABLE schema_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-    schema_version INTEGER NOT NULL CHECK (schema_version = 11),
-    protocol_version INTEGER NOT NULL CHECK (protocol_version = 4),
-    mode TEXT NOT NULL CHECK (mode IN ('static', 'dynamic')),
-    features_json TEXT NOT NULL,
+    schema_version INTEGER NOT NULL CHECK (schema_version = 12),
+    protocol_version INTEGER NOT NULL CHECK (protocol_version = 5),
     ddl_sha256 TEXT NOT NULL CHECK (length(ddl_sha256) = 64),
     schema_fingerprint TEXT NOT NULL CHECK (length(schema_fingerprint) = 64),
     created_at REAL NOT NULL CHECK (created_at >= 0)
@@ -90,7 +88,6 @@ CREATE TABLE terminal_state (
 CREATE TABLE terminal_contributor_fences (
     generation INTEGER NOT NULL CHECK (generation >= 1),
     stable_contributor_key TEXT NOT NULL,
-    fence_kind TEXT NOT NULL CHECK (fence_kind IN ('static', 'dynamic')),
     fence_json TEXT NOT NULL,
     close_last_cycle_seq INTEGER NOT NULL CHECK (close_last_cycle_seq >= 0),
     close_data_cursor INTEGER NOT NULL CHECK (close_data_cursor >= 0),
@@ -109,32 +106,6 @@ CREATE TABLE terminal_contributor_fences (
             AND acknowledged_at IS NOT NULL)
         OR (state = 'hard_crash' AND final_cycle_seq IS NULL
             AND final_update_id IS NULL AND acknowledged_at IS NOT NULL))
-);
-
-CREATE TABLE static_contributor_bindings (
-    learner_id TEXT PRIMARY KEY,
-    logical_launch_id TEXT NOT NULL,
-    attempt_id TEXT NOT NULL,
-    binding_generation INTEGER NOT NULL CHECK (binding_generation >= 1),
-    status TEXT NOT NULL CHECK (status IN ('active', 'terminal', 'replaced')),
-    bound_by_epoch INTEGER NOT NULL CHECK (bound_by_epoch >= 1),
-    bound_at REAL NOT NULL,
-    terminal_at REAL,
-    UNIQUE(logical_launch_id, attempt_id),
-    UNIQUE(learner_id, binding_generation)
-);
-
-CREATE TABLE static_binding_history (
-    learner_id TEXT NOT NULL,
-    binding_generation INTEGER NOT NULL CHECK (binding_generation >= 1),
-    logical_launch_id TEXT NOT NULL,
-    attempt_id TEXT NOT NULL,
-    final_status TEXT NOT NULL CHECK (final_status IN ('terminal', 'replaced')),
-    bound_by_epoch INTEGER NOT NULL,
-    bound_at REAL NOT NULL,
-    finalized_by_epoch INTEGER NOT NULL,
-    finalized_at REAL NOT NULL,
-    PRIMARY KEY(learner_id, binding_generation)
 );
 
 CREATE TABLE proposal_observations (
@@ -248,7 +219,6 @@ CREATE TABLE cycle_receipts (
     proposal_expected INTEGER NOT NULL CHECK (proposal_expected IN (0, 1)),
     planned_update_id TEXT,
     planned_payload_sha256 TEXT,
-    fence_kind TEXT NOT NULL CHECK (fence_kind IN ('static', 'dynamic')),
     fence_json TEXT NOT NULL,
     created_at REAL NOT NULL,
     ingested_at REAL NOT NULL,
@@ -314,7 +284,6 @@ CREATE TABLE updates (
     retained_tokens_since_base INTEGER NOT NULL,
     data_cursor_start INTEGER NOT NULL CHECK (data_cursor_start >= 0),
     data_cursor_end INTEGER NOT NULL,
-    fence_kind TEXT NOT NULL CHECK (fence_kind IN ('static', 'dynamic')),
     fence_json TEXT NOT NULL,
     payload_relative_path TEXT NOT NULL,
     payload_size INTEGER NOT NULL CHECK (payload_size > 0),
@@ -541,3 +510,163 @@ CREATE TABLE gc_candidates (
     claimed_at REAL,
     deleted_at REAL
 );
+
+CREATE TABLE placements (
+    placement_id TEXT PRIMARY KEY,
+    current_placement_epoch INTEGER NOT NULL CHECK (current_placement_epoch >= 1),
+    current_instance_id TEXT,
+    reusable_stream_id INTEGER,
+    updated_at REAL NOT NULL
+);
+
+CREATE TABLE streams (
+    stream_id INTEGER PRIMARY KEY CHECK (stream_id >= 0),
+    current_stream_epoch INTEGER NOT NULL CHECK (current_stream_epoch >= 1),
+    current_instance_id TEXT,
+    state TEXT NOT NULL CHECK (state IN ('available', 'active', 'draining', 'retired')),
+    resume_cursor INTEGER NOT NULL CHECK (resume_cursor >= 0),
+    updated_at REAL NOT NULL
+);
+
+CREATE TABLE learner_instances (
+    instance_id TEXT PRIMARY KEY,
+    placement_id TEXT NOT NULL REFERENCES placements(placement_id),
+    placement_epoch INTEGER NOT NULL CHECK (placement_epoch >= 1),
+    stream_id INTEGER REFERENCES streams(stream_id),
+    stream_epoch INTEGER,
+    admission_generation INTEGER,
+    admission_token_sha256 TEXT,
+    launch_request_id TEXT,
+    pbs_job_id TEXT,
+    hostname TEXT NOT NULL,
+    pid INTEGER NOT NULL CHECK (pid >= 0),
+    status TEXT NOT NULL CHECK (status IN (
+        'registered', 'admitted', 'draining', 'stopped', 'revoked', 'expired', 'rejected'
+    )),
+    registered_at REAL NOT NULL,
+    admitted_at REAL,
+    last_seen REAL,
+    stopped_at REAL,
+    status_reason TEXT,
+    final_update_id TEXT,
+    admitted_by_epoch INTEGER,
+    UNIQUE(placement_id, placement_epoch),
+    UNIQUE(stream_id, stream_epoch),
+    CHECK ((status IN ('admitted', 'draining', 'stopped', 'revoked', 'expired')
+            AND stream_id IS NOT NULL AND stream_epoch >= 1
+            AND admission_generation >= 1 AND length(admission_token_sha256) = 64)
+        OR status IN ('registered', 'rejected')),
+    CHECK ((status = 'draining' AND final_update_id IS NOT NULL)
+        OR (status <> 'draining' AND final_update_id IS NULL))
+);
+
+CREATE TABLE registration_requests (
+    instance_id TEXT PRIMARY KEY,
+    request_sha256 TEXT NOT NULL CHECK (length(request_sha256) = 64),
+    launch_request_id TEXT,
+    placement_id TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('pending', 'admitted', 'rejected', 'expired')),
+    created_at REAL NOT NULL,
+    expires_at REAL NOT NULL,
+    processed_by_epoch INTEGER,
+    rejection_reason TEXT,
+    result_json TEXT,
+    CHECK (expires_at > created_at)
+);
+
+CREATE TABLE launch_requests (
+    request_id TEXT PRIMARY KEY,
+    observation_key TEXT UNIQUE,
+    bootstrap_slot INTEGER UNIQUE,
+    role TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    stream_id INTEGER NOT NULL REFERENCES streams(stream_id),
+    replace_instance_id TEXT REFERENCES learner_instances(instance_id),
+    requested_by_epoch INTEGER NOT NULL CHECK (requested_by_epoch >= 1),
+    state TEXT NOT NULL CHECK (state IN (
+        'planned', 'submitting', 'submission_unknown', 'submitted', 'started',
+        'terminal_uncertain', 'admitted', 'failed', 'expired', 'manual_review'
+    )),
+    request_sha256 TEXT NOT NULL CHECK (length(request_sha256) = 64),
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL,
+    not_before REAL,
+    submission_attempts INTEGER NOT NULL CHECK (submission_attempts >= 0),
+    pbs_job_id TEXT,
+    scheduler_state TEXT,
+    scheduler_observed_at REAL,
+    first_uncertain_at REAL,
+    last_positive_evidence_at REAL,
+    uncertainty_deadline REAL,
+    reservation_released_at REAL,
+    evidence_source TEXT,
+    manual_reason TEXT,
+    admitted_instance_id TEXT UNIQUE REFERENCES learner_instances(instance_id),
+    expires_at REAL,
+    last_error TEXT,
+    authorized_placement_id TEXT,
+    authorized_placement_epoch INTEGER
+);
+
+CREATE TABLE scheduler_operator_requests (
+    request_id TEXT PRIMARY KEY,
+    launch_request_id TEXT NOT NULL REFERENCES launch_requests(request_id),
+    action TEXT NOT NULL CHECK (action IN (
+        'confirm_job_id', 'mark_failed', 'mark_expired',
+        'record_external_cancel_evidence'
+    )),
+    expected_state_sha256 TEXT NOT NULL CHECK (length(expected_state_sha256) = 64),
+    reason TEXT NOT NULL,
+    scheduler_job_id TEXT,
+    evidence_source TEXT,
+    request_sha256 TEXT NOT NULL CHECK (length(request_sha256) = 64),
+    state TEXT NOT NULL CHECK (state IN ('applied', 'stale_rejected')),
+    result_state TEXT NOT NULL,
+    processed_by_epoch INTEGER NOT NULL CHECK (processed_by_epoch >= 1),
+    processed_at REAL NOT NULL,
+    CHECK ((action = 'confirm_job_id' AND scheduler_job_id IS NOT NULL)
+        OR (action <> 'confirm_job_id' AND scheduler_job_id IS NULL))
+);
+
+CREATE TABLE scheduler_operator_file_dispositions (
+    relative_path TEXT NOT NULL,
+    content_sha256 TEXT NOT NULL CHECK (length(content_sha256) = 64),
+    disposition TEXT NOT NULL CHECK (disposition IN ('applied', 'rejected')),
+    reason TEXT NOT NULL,
+    processed_by_epoch INTEGER NOT NULL CHECK (processed_by_epoch >= 1),
+    processed_at REAL NOT NULL,
+    PRIMARY KEY(relative_path, content_sha256)
+);
+
+CREATE TABLE capacity_observations (
+    observation_key TEXT PRIMARY KEY,
+    observation_seq INTEGER NOT NULL UNIQUE CHECK (observation_seq >= 1),
+    kind TEXT NOT NULL,
+    global_version INTEGER NOT NULL CHECK (global_version >= 0),
+    observed_at REAL NOT NULL,
+    eligible_contributors INTEGER NOT NULL CHECK (eligible_contributors >= 0),
+    selected_contributors INTEGER NOT NULL CHECK (selected_contributors >= 0),
+    productive_instances INTEGER NOT NULL CHECK (productive_instances >= 0),
+    reserved_launch_capacity INTEGER NOT NULL CHECK (reserved_launch_capacity >= 0),
+    desired_contributors INTEGER NOT NULL CHECK (desired_contributors >= 0),
+    action TEXT NOT NULL,
+    command_epoch INTEGER NOT NULL CHECK (command_epoch >= 1)
+);
+
+CREATE TABLE admission_history (
+    admission_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    instance_id TEXT NOT NULL,
+    stream_id INTEGER,
+    stream_epoch INTEGER,
+    placement_id TEXT NOT NULL,
+    placement_epoch INTEGER NOT NULL,
+    admission_generation INTEGER,
+    event TEXT NOT NULL CHECK (event IN ('admitted', 'draining', 'stopped', 'revoked', 'expired')),
+    reason TEXT,
+    command_epoch INTEGER NOT NULL CHECK (command_epoch >= 1),
+    created_at REAL NOT NULL
+);
+
+CREATE INDEX idx_instances_status ON learner_instances(status, last_seen);
+CREATE INDEX idx_launch_requests_state ON launch_requests(state, updated_at);
+CREATE INDEX idx_registration_requests_state ON registration_requests(state, expires_at);

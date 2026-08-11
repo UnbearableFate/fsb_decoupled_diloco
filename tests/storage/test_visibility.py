@@ -1,3 +1,5 @@
+"""Verify bounded proposal-visibility observation and quarantine policy."""
+
 from __future__ import annotations
 
 import hashlib
@@ -8,25 +10,31 @@ from pathlib import Path
 import pytest
 
 from fs_diloco.protocol.authority import ReadResult, ReadStatus
-from fs_diloco.protocol.contributor import StaticContributorFence, StaticMembershipScope
+from fs_diloco.protocol.contributor import MembershipScope
 from fs_diloco.protocol.cycle_receipt import CycleReceiptV1
 from fs_diloco.storage.authority import AuthorityIdentity, LeaderAuthority, initialize_authority
-from tests.support.protocol import receipt_payload
+from tests.support.protocol import admit_contributor, receipt_payload
 
 
 @dataclass
 class Clock:
+    """Provide mutable deterministic time for visibility grace periods."""
+
     now: float = 100.0
 
     def __call__(self) -> float:
+        """Return the current deterministic timestamp."""
+
         return self.now
 
 
 def open_leader(tmp_path: Path, clock: Clock):
+    """Open a leader and ingest the receipt required by visibility observations."""
+
     identity = AuthorityIdentity(
         "run-current", "source-fingerprint", hashlib.sha256(b"config").hexdigest()
     )
-    scope = StaticMembershipScope(("learner-0",))
+    scope = MembershipScope(1)
     database = tmp_path / "authority.sqlite3"
     initialize_authority(database, identity, scope, wall_clock=clock)
     authority = LeaderAuthority(
@@ -38,19 +46,7 @@ def open_leader(tmp_path: Path, clock: Clock):
     )
     token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
     leader = authority.open_leader(token)
-    binding = leader.bind_or_replace_static_attempt(
-        command_id="bind",
-        learner_id="learner-0",
-        logical_launch_id="launch-0",
-        attempt_id="attempt-0",
-    )
-    fence = StaticContributorFence(
-        "static",
-        binding.learner_id,
-        binding.logical_launch_id,
-        binding.attempt_id,
-        binding.binding_generation,
-    )
+    fence = admit_contributor(leader)
     receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence.as_dict()))
     leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
     return authority, leader
@@ -68,6 +64,8 @@ def observe(
     deadline: float = 20.0,
     archive_limit: int = 8,
 ):
+    """Record one visibility observation with stable fixture identities."""
+
     result = (
         ReadResult(status, value=object(), fingerprint=fingerprint)
         if status is ReadStatus.OK
@@ -75,13 +73,13 @@ def observe(
     )
     return leader.observe_proposal_visibility(
         command_id=command,
-        stable_contributor_key="learner-0",
+        stable_contributor_key="0",
         cycle_seq=1,
         update_id="00000000-0000-4000-8000-000000000001",
         object_identity="proposal-object-1",
         pointer_signature=signature,
         pointer_sequence=sequence,
-        source_relative_path="updates/latest/learner-0.json",
+        source_relative_path="updates/latest/0.json",
         result=result,
         grace_seconds=grace,
         operator_deadline_seconds=deadline,
@@ -90,6 +88,8 @@ def observe(
 
 
 def query(tmp_path: Path, sql: str):
+    """Read one durable visibility result from the authority database."""
+
     connection = sqlite3.connect(tmp_path / "authority.sqlite3")
     try:
         return connection.execute(sql).fetchone()
@@ -98,6 +98,8 @@ def query(tmp_path: Path, sql: str):
 
 
 def test_not_found_requires_three_stable_observations_and_grace(tmp_path: Path) -> None:
+    """Missing proposals require repeated stable observations across the grace window."""
+
     clock = Clock()
     authority, leader = open_leader(tmp_path, clock)
     try:
@@ -129,6 +131,8 @@ def test_not_found_requires_three_stable_observations_and_grace(tmp_path: Path) 
 
 
 def test_malformed_requires_same_fingerprint_twice_across_grace(tmp_path: Path) -> None:
+    """Malformed content becomes terminal only after its exact fingerprint is stable."""
+
     clock = Clock()
     authority, leader = open_leader(tmp_path, clock)
     try:
@@ -172,6 +176,8 @@ def test_malformed_requires_same_fingerprint_twice_across_grace(tmp_path: Path) 
 def test_transient_recovery_never_drops_and_deadline_enters_manual_review(
     tmp_path: Path,
 ) -> None:
+    """Transient recovery clears failures while an unresolved deadline requires review."""
+
     clock = Clock()
     authority, leader = open_leader(tmp_path, clock)
     try:
@@ -214,9 +220,11 @@ def test_transient_recovery_never_drops_and_deadline_enters_manual_review(
 
 
 def test_identity_mismatch_is_immediate_fail_closed_without_unlink(tmp_path: Path) -> None:
+    """An identity mismatch quarantines immediately without deleting the source object."""
+
     clock = Clock()
     authority, leader = open_leader(tmp_path, clock)
-    source = tmp_path / "updates/latest/learner-0.json"
+    source = tmp_path / "updates/latest/0.json"
     source.parent.mkdir(parents=True)
     source.write_text("do-not-delete", encoding="utf-8")
     try:
@@ -232,6 +240,8 @@ def test_identity_mismatch_is_immediate_fail_closed_without_unlink(tmp_path: Pat
 
 
 def test_visibility_upsert_and_pointer_archive_are_bounded(tmp_path: Path) -> None:
+    """Pointer successor observations archive old signatures within a fixed bound."""
+
     clock = Clock()
     authority, leader = open_leader(tmp_path, clock)
     try:
@@ -264,6 +274,8 @@ def test_visibility_upsert_and_pointer_archive_are_bounded(tmp_path: Path) -> No
 def test_visibility_requires_receipt_and_pointer_sequence_collision_fails_closed(
     tmp_path: Path,
 ) -> None:
+    """Visibility requires a receipt and rejects conflicting pointer sequence identities."""
+
     clock = Clock()
     authority, leader = open_leader(tmp_path, clock)
     try:
@@ -301,13 +313,13 @@ def test_visibility_requires_receipt_and_pointer_sequence_collision_fails_closed
         with pytest.raises(ValueError, match="matching contiguous receipt"):
             leader.observe_proposal_visibility(
                 command_id="missing-receipt",
-                stable_contributor_key="learner-0",
+                stable_contributor_key="0",
                 cycle_seq=2,
                 update_id="00000000-0000-4000-8000-000000000002",
                 object_identity="proposal-object-2",
                 pointer_signature="pointer-2",
                 pointer_sequence=2,
-                source_relative_path="updates/latest/learner-0.json",
+                source_relative_path="updates/latest/0.json",
                 result=ReadResult(ReadStatus.NOT_FOUND, diagnostic="missing"),
                 grace_seconds=0.0,
                 operator_deadline_seconds=1.0,

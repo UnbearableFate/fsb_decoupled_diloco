@@ -21,11 +21,10 @@ import xml.etree.ElementTree as ET
 from fs_diloco.core.source_identity import capture_source_identity
 
 
-REQUIREMENTS = ("UNIT-01", "HARNESS-01")
+REQUIREMENTS = ("P05-R08",)
 FOCUSED_TESTS = (
     "tests/architecture",
     "tests/harness/test_full_protocol_harness.py",
-    "tests/harness/test_plan_completion.py",
     "tests/harness/test_validation_suite.py",
     "tests/runtime/test_learner_entrypoint.py",
     "tests/runtime/test_syncer_fault_boundary.py",
@@ -34,7 +33,7 @@ FOCUSED_TESTS = (
     "tests/runtime/test_terminal_service.py",
     "tests/storage/test_authority_operational.py",
     "tests/storage/test_contributor_progress.py",
-    "tests/storage/test_dynamic_admission_request.py",
+    "tests/storage/test_admission_request.py",
     "tests/test_capture_source_identity.py",
     "tests/test_clean_run.py",
     "tests/test_config.py",
@@ -66,6 +65,8 @@ class ValidationStep:
 
 
 def default_steps() -> tuple[ValidationStep, ...]:
+    """Return the complete Python and documentation validation ladder."""
+
     return (
         ValidationStep(
             "ruff-format",
@@ -79,6 +80,8 @@ def default_steps() -> tuple[ValidationStep, ...]:
             "pytest",
         ),
         ValidationStep("full-pytest", (sys.executable, "-m", "pytest", "-q"), "pytest"),
+        ValidationStep("website-lint", ("npm", "--prefix", "website", "run", "lint"), "command"),
+        ValidationStep("website-test", ("npm", "--prefix", "website", "test"), "command"),
     )
 
 
@@ -302,6 +305,8 @@ def run_validation(
     output: Path,
     steps: Sequence[ValidationStep] | None = None,
 ) -> dict[str, Any]:
+    """Run the registered clean-source steps and publish one create-only result artifact."""
+
     project_root = project_root.resolve()
     raw_log = raw_log.resolve()
     output = output.resolve()
@@ -415,7 +420,7 @@ def run_validation(
         "artifact_version": 1,
         "status": status,
         "gate": "U1-one-node-validation",
-        "experiment_id": "plan03-1-current-suite",
+        "experiment_id": "plan05-current-suite",
         "requirements_covered": list(REQUIREMENTS),
         "source_identity": None if source_before is None else _source_projection(source_before),
         "config_schema_identity": None,

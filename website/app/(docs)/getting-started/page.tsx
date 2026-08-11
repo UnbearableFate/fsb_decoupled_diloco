@@ -21,13 +21,13 @@ source .venv/bin/activate
 python -m pip install -e .`;
 
 const initialize = `python -m fs_diloco.tools.launch_independent_run \\
-  --config configs/full_protocol_static.yaml \\
+  --config configs/full_protocol.yaml \\
   --run-id example \\
   --shared-root /path/to/runs/example \\
   --project-root "$PWD"`;
 
 const submit = `python -m fs_diloco.tools.launch_independent_run \\
-  --config configs/full_protocol_static.yaml \\
+  --config configs/full_protocol.yaml \\
   --run-id example \\
   --shared-root /path/to/runs/example \\
   --project-root "$PWD" \\
@@ -105,17 +105,17 @@ export default function GettingStartedPage() {
               <tr>
                 <td><code>full_protocol_functional.yaml</code></td>
                 <td>CPU synthetic 功能路径。</td>
-                <td>4 个 static Learner，4 个全局步。</td>
+                <td>4 个 stream，4 个全局步，可执行容量恢复。</td>
               </tr>
               <tr>
-                <td><code>full_protocol_static.yaml</code></td>
-                <td>当前正式 static 验收配置。</td>
+                <td><code>full_protocol.yaml</code></td>
+                <td>当前正式固定容量验收配置。</td>
                 <td>8 个 Learner，50 个 inner step，10 个全局步。</td>
               </tr>
               <tr>
-                <td><code>full_protocol_dynamic.yaml</code></td>
-                <td>Dynamic membership 与容量恢复路径。</td>
-                <td>4 个 stream，quorum 为 3–4。</td>
+                <td><code>experiments/gpt2_wikitext2_8l_200x10.yaml</code></td>
+                <td>GPT-2 / WikiText-2 容量恢复实验。</td>
+                <td>8 个 stream，quorum 为 4，启用自动 replacement。</td>
               </tr>
             </tbody>
           </table>
@@ -144,7 +144,7 @@ export default function GettingStartedPage() {
         <p>初始化完成后，重点核对 JSON 输出中的以下值：</p>
         <ul>
           <li><code>descriptor.descriptor_sha256</code> 与预期运行身份一致。</li>
-          <li><code>membership_mode</code> 与所选配置一致。</li>
+          <li><code>descriptor.stream_pool_size</code> 与所选配置一致。</li>
           <li><code>syncer_qsub</code> 和每条 <code>learner_qsubs</code> 使用正确路径。</li>
         </ul>
       </section>

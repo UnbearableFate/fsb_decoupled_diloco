@@ -15,8 +15,8 @@ from typing import TYPE_CHECKING, Any
 from ..core.run_descriptor import LoadedRunDescriptor, write_actor_attestation
 from ..observability.logging_utils import ActorTelemetryWriter
 from ..storage.admission import (
+    ADMISSION_CURRENT_FORMAT_VERSION,
     ADMISSION_RESPONSE_FORMAT_VERSION,
-    AdmissionAuthorizationError,
     AdmissionRequestObservation,
     admission_request_error,
     admission_request_sha256,
@@ -27,14 +27,9 @@ from ..storage.admission import (
     publish_admission_disposition,
     publish_admission_rejection,
     repair_rejected_admission_control,
-    read_static_replacement_authorization,
 )
 from ..storage.control import ControlPublisher
-from ..protocol.contributor import (
-    ContributorFence,
-    StaticContributorFence,
-    decode_contributor_fence,
-)
+from ..protocol.contributor import ContributorFence
 from ..protocol.cycle_receipt import (
     CycleReceiptV1,
     canonical_receipt_relative_path,
@@ -121,6 +116,8 @@ def run_fenced_syncer(
     renewer: Any,
     telemetry: ActorTelemetryWriter,
 ) -> None:
+    """Run admission, merge, capacity, maintenance, and close under one leader token."""
+
     import torch
 
     from ..storage.tensor_codec import dtype_from_name, load_outer_state
@@ -214,7 +211,7 @@ def run_fenced_syncer(
             shared_root=paths.shared_root,
             descriptor_sha256=str(loaded.descriptor["descriptor_sha256"]),
         )
-        if config.membership.mode == "dynamic" and config.scaling.enabled
+        if config.scaling.enabled
         else None
     )
     maintenance_service = MaintenanceService(
@@ -418,6 +415,8 @@ def _admit_observations_unprotected(
     telemetry: ActorTelemetryWriter,
     observations: tuple[AdmissionRequestObservation, ...],
 ) -> None:
+    """Validate and disposition one batch of stable admission-file observations."""
+
     descriptor = loaded.descriptor
     for observation in observations:
         path = observation.path
@@ -477,145 +476,28 @@ def _admit_observations_unprotected(
             continue
         command_id = f"admit-{request_sha}"
         try:
-            if request.get("mode") == "static":
-                prior = authority.read.static_binding(str(request["learner_id"]))
-                if (
-                    prior is not None
-                    and prior.status == "active"
-                    and prior.logical_launch_id == str(request["logical_launch_id"])
-                    and prior.attempt_id == str(request["attempt_id"])
-                ):
-                    replay_authorization = None
-                    prior_was_active = False
-                    if prior.binding_generation > 1:
-                        history = authority.read.static_binding_history(
-                            prior.learner_id,
-                            prior.binding_generation - 1,
-                        )
-                        if history is None:
-                            raise AuthoritySchemaError(
-                                "committed static binding history is missing"
-                            )
-                        history_status = history.get("final_status")
-                        if history_status not in {"terminal", "replaced"}:
-                            raise AuthoritySchemaError(
-                                "committed static binding history status is invalid"
-                            )
-                        previous_fence = StaticContributorFence(
-                            kind="static",
-                            learner_id=str(history["learner_id"]),
-                            logical_launch_id=str(history["logical_launch_id"]),
-                            attempt_id=str(history["attempt_id"]),
-                            binding_generation=int(history["binding_generation"]),
-                        )
-                        prior_was_active = history_status == "replaced"
-                        if prior_was_active or (
-                            previous_fence.logical_launch_id != str(request["logical_launch_id"])
-                        ):
-                            replay_authorization = read_static_replacement_authorization(
-                                loaded.paths,
-                                request=request,
-                                current_fence=previous_fence,
-                            )
-                            if replay_authorization is None:
-                                raise AdmissionAuthorizationError(
-                                    "committed static replacement authorization is missing"
-                                )
-                    binding = leader.replay_committed_static_binding(
-                        command_id=command_id,
-                        learner_id=str(request["learner_id"]),
-                        logical_launch_id=str(request["logical_launch_id"]),
-                        attempt_id=str(request["attempt_id"]),
-                        expected_generation=request["expected_generation"],
-                        allow_logical_replacement=replay_authorization is not None,
-                        replacement_reason=(
-                            f"operator_static_replacement:{replay_authorization[1]}"
-                            if prior_was_active and replay_authorization is not None
-                            else None
-                        ),
-                        registration_created_at=float(request["created_at"]),
-                    )
-                    if binding is None or binding != prior:
-                        raise MembershipFenceError(
-                            "active static attempt ID belongs to another admission request"
-                        )
-                else:
-                    authorization = None
-                    if prior is not None:
-                        prior_fence = StaticContributorFence(
-                            kind="static",
-                            learner_id=prior.learner_id,
-                            logical_launch_id=prior.logical_launch_id,
-                            attempt_id=prior.attempt_id,
-                            binding_generation=prior.binding_generation,
-                        )
-                        if prior.status == "active" or (
-                            prior.logical_launch_id != str(request["logical_launch_id"])
-                        ):
-                            authorization = read_static_replacement_authorization(
-                                loaded.paths,
-                                request=request,
-                                current_fence=prior_fence,
-                            )
-                    binding = leader.bind_or_replace_static_attempt(
-                        command_id=command_id,
-                        learner_id=str(request["learner_id"]),
-                        logical_launch_id=str(request["logical_launch_id"]),
-                        attempt_id=str(request["attempt_id"]),
-                        expected_generation=request["expected_generation"],
-                        allow_logical_replacement=authorization is not None,
-                        replacement_reason=(
-                            f"operator_static_replacement:{authorization[1]}"
-                            if prior is not None
-                            and prior.status == "active"
-                            and authorization is not None
-                            else None
-                        ),
-                        registration_created_at=float(request["created_at"]),
-                    )
-                fence = StaticContributorFence(
-                    kind="static",
-                    learner_id=binding.learner_id,
-                    logical_launch_id=binding.logical_launch_id,
-                    attempt_id=binding.attempt_id,
-                    binding_generation=binding.binding_generation,
-                )
-                progress = authority.read.contributor_progress(binding.learner_id)
-                resume = ContributorResumeState(
-                    cursor=0 if progress is None else progress.data_cursor,
-                    last_receipt_id=None if progress is None else progress.last_receipt_id,
-                    last_receipt_sha256=(
-                        None if progress is None else progress.last_receipt_sha256
-                    ),
-                    last_update_id=None if progress is None else progress.last_update_id,
-                    next_cycle_seq=1 if progress is None else progress.last_cycle_seq + 1,
-                )
-            elif request.get("mode") == "dynamic":
-                admission = leader.admit_dynamic_incarnation(
-                    command_id=command_id,
-                    instance_id=str(request["instance_id"]),
-                    placement_id=str(request["placement_id"]),
-                    stream_id=int(request["stream_id"]),
-                    admission_token_sha256=str(request["admission_token_sha256"]),
-                    hostname=str(request["hostname"]),
-                    pid=int(request["pid"]),
-                    pbs_job_id=request.get("pbs_job_id"),
-                    bootstrap_slot=request.get("bootstrap_slot"),
-                    launch_request_id=request.get("launch_request_id"),
-                    replace_instance_id=request.get("replace_instance_id"),
-                    replacement_reason=(
-                        "explicit_dynamic_replacement"
-                        if request.get("replace_instance_id") is not None
-                        else None
-                    ),
-                    registration_created_at=float(request["created_at"]),
-                )
-                fence = admission.fence
-                resume = admission.resume
-            else:
-                raise ValueError("unknown admission request mode")
+            admission = leader.admit_incarnation(
+                command_id=command_id,
+                instance_id=str(request["instance_id"]),
+                placement_id=str(request["placement_id"]),
+                stream_id=int(request["stream_id"]),
+                admission_token_sha256=str(request["admission_token_sha256"]),
+                hostname=str(request["hostname"]),
+                pid=int(request["pid"]),
+                pbs_job_id=request.get("pbs_job_id"),
+                bootstrap_slot=request.get("bootstrap_slot"),
+                launch_request_id=request.get("launch_request_id"),
+                replace_instance_id=request.get("replace_instance_id"),
+                replacement_reason=(
+                    "authorized_replacement"
+                    if request.get("replace_instance_id") is not None
+                    else None
+                ),
+                registration_created_at=float(request["created_at"]),
+            )
+            fence = admission.fence
+            resume = admission.resume
         except (
-            AdmissionAuthorizationError,
             CommandConflictError,
             MembershipFenceError,
             ValueError,
@@ -657,8 +539,8 @@ def _admit_observations_unprotected(
                 "admission command returned a fence that is no longer current"
             )
         authority.committed_leader_lease(leader.token)
-        actor_id = fence.learner_id if fence.kind == "static" else fence.instance_id
-        attempt_id = fence.attempt_id if fence.kind == "static" else fence.instance_id
+        actor_id = fence.instance_id
+        attempt_id = fence.instance_id
         persisted_resume = _existing_admission_resume(
             loaded,
             leader,
@@ -700,6 +582,8 @@ def _repair_current_admission_controls(
     authority: LeaderAuthority,
     leader: LeaderSession,
 ) -> None:
+    """Project current authority fences into the successor epoch admission controls."""
+
     descriptor = loaded.descriptor
     current_fences = authority.read.current_contributor_fences()
     current_keys = {fence.stable_contributor_key for fence in current_fences}
@@ -712,7 +596,7 @@ def _repair_current_admission_controls(
         for pointer_path in current_directory.glob("*.json"):
             if pointer_path.stem not in current_keys:
                 tombstone = {
-                    "format_version": 1,
+                    "format_version": ADMISSION_CURRENT_FORMAT_VERSION,
                     "kind": "superseded",
                     "run_id": descriptor["run_id"],
                     "leader_epoch": leader.token.epoch,
@@ -722,25 +606,13 @@ def _repair_current_admission_controls(
                 if safe_read_json(pointer_path) != tombstone:
                     atomic_write_json(pointer_path, tombstone)
     for fence in current_fences:
-        if fence.kind == "static":
-            actor_id = fence.learner_id
-            attempt_id = fence.attempt_id
-            request = {
-                "mode": "static",
-                "run_id": descriptor["run_id"],
-                "descriptor_sha256": descriptor["descriptor_sha256"],
-                "learner_id": fence.learner_id,
-                "attempt_id": fence.attempt_id,
-            }
-        else:
-            actor_id = fence.instance_id
-            attempt_id = fence.instance_id
-            request = {
-                "mode": "dynamic",
-                "run_id": descriptor["run_id"],
-                "descriptor_sha256": descriptor["descriptor_sha256"],
-                "instance_id": fence.instance_id,
-            }
+        actor_id = fence.instance_id
+        attempt_id = fence.instance_id
+        request = {
+            "run_id": descriptor["run_id"],
+            "descriptor_sha256": descriptor["descriptor_sha256"],
+            "instance_id": fence.instance_id,
+        }
         resume = _existing_admission_resume(
             loaded,
             leader,
@@ -769,6 +641,8 @@ def _existing_admission_resume(
     actor_id: str,
     attempt_id: str,
 ) -> ContributorResumeState | None:
+    """Recover a current epoch response only when its identity and fence are exact."""
+
     response_path = loaded.paths.epoch_admission_response_path(
         leader.token.epoch,
         leader.token.owner_id,
@@ -794,7 +668,7 @@ def _existing_admission_resume(
         existing.get(key) != value for key, value in expected.items()
     ):
         raise RuntimeError("existing admission response identity is invalid")
-    if decode_contributor_fence(existing.get("fence")) != fence:
+    if ContributorFence.from_dict(existing.get("fence")) != fence:
         raise RuntimeError("existing admission response does not match current fence")
     resume_payload = existing.get("resume")
     if not isinstance(resume_payload, dict) or set(resume_payload) != {
@@ -820,13 +694,15 @@ def _existing_admission_resume(
 
 
 def _resume_from_progress(fence: ContributorFence, progress: Any) -> ContributorResumeState:
+    """Derive the next stream cursor and receipt link from durable contributor progress."""
+
     return ContributorResumeState(
         cursor=0 if progress is None else progress.data_cursor,
         last_receipt_id=None if progress is None else progress.last_receipt_id,
         last_receipt_sha256=None if progress is None else progress.last_receipt_sha256,
         last_update_id=None if progress is None else progress.last_update_id,
         next_cycle_seq=1 if progress is None else progress.last_cycle_seq + 1,
-        stream_epoch=fence.stream_epoch if fence.kind == "dynamic" else None,
+        stream_epoch=fence.stream_epoch,
     )
 
 
@@ -855,7 +731,7 @@ def _terminal_snapshot_allows_proposal(
         if row.get("stable_contributor_key") != proposal.stable_contributor_key:
             continue
         try:
-            fence = decode_contributor_fence(json.loads(str(row["fence_json"])))
+            fence = ContributorFence.from_dict(json.loads(str(row["fence_json"])))
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise AuthoritySchemaError("terminal contributor fence is malformed") from exc
         if fence != proposal.contributor_fence:

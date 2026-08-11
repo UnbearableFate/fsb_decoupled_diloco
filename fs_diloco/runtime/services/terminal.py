@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 from ...core.run_descriptor import LoadedRunDescriptor
 from ...core.versions import CONTROL_FORMAT_VERSION
-from ...protocol.contributor import decode_contributor_fence
+from ...protocol.contributor import ContributorFence
 from ...storage.authority import LeaderAuthority, LeaderSession
 from ...storage.control import ControlPublisher, iter_terminal_acks
 from ...storage.terminal_request import read_manual_terminal_request
@@ -94,9 +94,7 @@ def terminal_close_reason(
         ):
             return "configured_deadline"
     if policy == "global_target_or_launch_budget" and config.scaling.enabled:
-        launches = [
-            row for row in authority.read.dynamic_launch_requests() if row["role"] != "bootstrap"
-        ]
+        launches = [row for row in authority.read.launch_requests() if row["role"] != "bootstrap"]
         active = [row for row in launches if row["reservation_released_at"] is None]
         observations = authority.read.capacity_observations()
         latest_capacity = None if not observations else observations[-1]
@@ -115,6 +113,8 @@ def terminal_close_reason(
 
 
 class TerminalService:
+    """Drive one durable close, drain, hard-crash adjudication, and finalization."""
+
     def __init__(
         self,
         *,
@@ -257,6 +257,8 @@ class TerminalService:
         return f"{prefix}-{hashlib.sha256(reason.encode('utf-8')).hexdigest()}"
 
     def _ingest_acks(self, controller: dict[str, Any]) -> None:
+        """Ingest exact current-instance terminal acknowledgements for one generation."""
+
         for path, payload, fence in iter_terminal_acks(self.loaded.paths):
             try:
                 generation = payload.get("generation")
@@ -283,10 +285,7 @@ class TerminalService:
                     continue
                 actor_id = payload["actor_id"]
                 attempt_id = payload["attempt_id"]
-                if fence.kind == "static":
-                    if actor_id != fence.learner_id or attempt_id != fence.attempt_id:
-                        continue
-                elif actor_id != fence.instance_id or attempt_id != fence.instance_id:
+                if actor_id != fence.instance_id or attempt_id != fence.instance_id:
                     continue
                 ack_digest = hashlib.sha256(path.read_bytes()).hexdigest()
                 self.leader.acknowledge_terminal_contributor(
@@ -309,10 +308,12 @@ class TerminalService:
                 )
 
     def _adjudicate_hard_crashes(self, cycle_token_budget: int) -> None:
+        """Bound every unacknowledged frozen contributor by one configured cycle."""
+
         for row in self.authority.read.terminal_contributor_fences():
             if row["state"] != "awaiting_ack":
                 continue
-            fence = decode_contributor_fence(json.loads(str(row["fence_json"])))
+            fence = ContributorFence.from_dict(json.loads(str(row["fence_json"])))
             ack_digest = hashlib.sha256(
                 json.dumps(fence.as_dict(), sort_keys=True).encode()
             ).hexdigest()

@@ -20,12 +20,7 @@ from ._validation import (
     strict_int,
     uuid4_string,
 )
-from .contributor import (
-    ContributorFence,
-    DynamicContributorFence,
-    StaticContributorFence,
-    decode_contributor_fence,
-)
+from .contributor import ContributorFence
 
 
 def canonical_update_relative_path(stable_contributor_key: str, update_id: str) -> str:
@@ -48,6 +43,8 @@ def _validate_relative_path(value: Any, *, expected: str) -> str:
 
 @dataclass(frozen=True)
 class FullUpdateProposalV2:
+    """Describe one complete parameter proposal bound to a cycle receipt and fence."""
+
     proposal_format_version: int
     run_id: str
     stable_contributor_key: str
@@ -76,6 +73,8 @@ class FullUpdateProposalV2:
     created_at: float
 
     def __post_init__(self) -> None:
+        """Reject proposals with inconsistent work, cursor, payload, or membership identity."""
+
         version = strict_int(
             self.proposal_format_version, name="proposal_format_version", minimum=1
         )
@@ -122,10 +121,7 @@ class FullUpdateProposalV2:
         cursor_end = strict_int(self.data_cursor_end, name="data_cursor_end", minimum=1)
         if cursor_end <= cursor_start:
             raise ValueError("data_cursor_end must be greater than data_cursor_start")
-        if not isinstance(
-            self.contributor_fence,
-            (StaticContributorFence, DynamicContributorFence),
-        ):
+        if not isinstance(self.contributor_fence, ContributorFence):
             raise ValueError("contributor_fence must be a typed contributor fence")
         if self.contributor_fence.stable_contributor_key != stable_key:
             raise ValueError("contributor fence does not match stable_contributor_key")
@@ -153,6 +149,8 @@ class FullUpdateProposalV2:
 
     @classmethod
     def from_dict(cls, value: Any) -> "FullUpdateProposalV2":
+        """Decode the exact current proposal schema without accepting legacy fields."""
+
         payload = require_mapping(value, name="FullUpdateProposalV2")
         fields = {
             "proposal_format_version",
@@ -188,7 +186,7 @@ class FullUpdateProposalV2:
         )
         if version != PROPOSAL_FORMAT_VERSION:
             raise ValueError(f"unsupported proposal_format_version: {version}")
-        fence = decode_contributor_fence(payload["contributor_fence"])
+        fence = ContributorFence.from_dict(payload["contributor_fence"])
         stable_key = identity(payload["stable_contributor_key"], name="stable_contributor_key")
         if fence.stable_contributor_key != stable_key:
             raise ValueError("contributor fence does not match stable_contributor_key")

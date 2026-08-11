@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 const quickstart = `python -m fs_diloco.tools.launch_independent_run \\
-  --config configs/full_protocol_static.yaml \\
+  --config configs/full_protocol.yaml \\
   --run-id example \\
   --shared-root /path/to/runs/example \\
   --project-root "$PWD"`;
@@ -50,8 +50,8 @@ export default function Home() {
                 <span>可运行协议</span>
               </div>
               <div>
-                <strong>2</strong>
-                <span>Membership 模式</span>
+                <strong>1</strong>
+                <span>成员协议</span>
               </div>
               <div>
                 <strong>1</strong>

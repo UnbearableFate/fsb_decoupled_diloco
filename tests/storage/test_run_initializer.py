@@ -1,3 +1,5 @@
+"""Verify create-once run initialization, recovery, and descriptor identity."""
+
 from __future__ import annotations
 
 import hashlib
@@ -28,16 +30,19 @@ from fs_diloco.tools.init_run import initialize_run
 MODEL_COMMIT = "a" * 40
 TOKENIZER_COMMIT = "b" * 40
 DATASET_COMMIT = "c" * 40
+ROOT = Path(__file__).resolve().parents[2]
 
 
 class InjectedCrash(RuntimeError):
-    pass
+    """Represent one intentional run-initializer crash boundary."""
 
 
 def _config(tmp_path: Path, name: str = "run"):
+    """Resolve one source-bound current config into a fresh temporary run root."""
+
     root = tmp_path / name
     shared = resolve_config(
-        "configs/full_protocol_static.yaml",
+        ROOT / "configs/full_protocol.yaml",
         project_root=tmp_path,
         run_id=name,
         shared_root=str(root),
@@ -64,9 +69,13 @@ def _config(tmp_path: Path, name: str = "run"):
 def test_each_precomplete_crash_prefix_is_invisible_and_same_staging_retry_recovers(
     tmp_path: Path, fault_point: str
 ) -> None:
+    """Every precomplete crash stays invisible and the reserved staging retry recovers."""
+
     config = _config(tmp_path, fault_point.replace(":", "-"))
 
     def fault(point: str) -> None:
+        """Raise at the selected precomplete initializer boundary."""
+
         if point == fault_point:
             raise InjectedCrash(point)
 
@@ -89,9 +98,13 @@ def test_each_precomplete_crash_prefix_is_invisible_and_same_staging_retry_recov
 def test_crash_after_complete_is_visible_and_retry_removes_staging_directory(
     tmp_path: Path,
 ) -> None:
+    """A post-complete crash leaves a visible run and retry removes its staging root."""
+
     config = _config(tmp_path, "post-complete")
 
     def fault(point: str) -> None:
+        """Raise immediately after the complete marker becomes durable."""
+
         if point == "after_complete_marker":
             raise InjectedCrash(point)
 
@@ -106,6 +119,8 @@ def test_crash_after_complete_is_visible_and_retry_removes_staging_directory(
 
 
 def test_fresh_initialization_is_not_reported_as_recovery(tmp_path: Path) -> None:
+    """A first successful initialization is distinguished from recovery."""
+
     config = _config(tmp_path, "fresh-result")
 
     assert initialize_run(config, project_root=tmp_path)["recovered"] is False
@@ -114,9 +129,13 @@ def test_fresh_initialization_is_not_reported_as_recovery(tmp_path: Path) -> Non
 def test_retry_and_completed_replay_bind_the_entire_resolved_config_identity(
     tmp_path: Path,
 ) -> None:
+    """Both staged retry and completed replay bind the entire resolved config."""
+
     staged = _config(tmp_path, "staged-config-identity")
 
     def crash(point: str) -> None:
+        """Interrupt initialization after its identity reservation."""
+
         if point == "after_identity_reservation":
             raise InjectedCrash(point)
 
@@ -136,6 +155,8 @@ def test_retry_and_completed_replay_bind_the_entire_resolved_config_identity(
 def test_descriptor_validation_is_bounded_and_accepts_runtime_control_publications(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Descriptor validation avoids recursive scans while accepting runtime controls."""
+
     config = _config(tmp_path, "runtime-publications")
     initialize_run(config, project_root=tmp_path)
     paths = RunPaths(Path(config.run.shared_root))
@@ -155,6 +176,8 @@ def test_descriptor_validation_is_bounded_and_accepts_runtime_control_publicatio
         )
 
     def forbidden_rglob(_self: Path, _pattern: str):
+        """Fail if actor startup attempts an unbounded recursive scan."""
+
         raise AssertionError("actor startup must not recursively scan the run root")
 
     monkeypatch.setattr(Path, "rglob", forbidden_rglob)
@@ -162,8 +185,10 @@ def test_descriptor_validation_is_bounded_and_accepts_runtime_control_publicatio
     assert loaded.descriptor["run_id"] == config.run.run_id
 
 
-def test_completed_descriptor_rejects_identity_mode_mismatch(tmp_path: Path) -> None:
-    config = _config(tmp_path, "identity-mode-mismatch")
+def test_completed_descriptor_rejects_legacy_identity_field(tmp_path: Path) -> None:
+    """Completed-run validation rejects legacy identity fields without compatibility."""
+
+    config = _config(tmp_path, "identity-legacy-field")
     initialize_run(config, project_root=tmp_path)
     identity_path = RunPaths(Path(config.run.shared_root)).run_identity_file
     identity = read_json(identity_path)
@@ -191,11 +216,13 @@ def test_completed_descriptor_rejects_identity_mode_mismatch(tmp_path: Path) -> 
     complete_path.write_text(json.dumps(complete, sort_keys=True) + "\n", encoding="utf-8")
     complete_path.chmod(0o444)
 
-    with pytest.raises(RuntimeError, match="run identity does not match descriptor.*mode"):
+    with pytest.raises(RuntimeError, match="run identity schema is invalid"):
         load_run_descriptor(config.run.shared_root)
 
 
 def test_every_manifest_object_link_fault_is_invisible_and_retryable(tmp_path: Path) -> None:
+    """Each manifest object-link crash remains invisible and retryable."""
+
     observed: list[str] = []
     probe = _config(tmp_path, "object-link-probe")
     initialize_run(probe, project_root=tmp_path, fault_hook=observed.append)
@@ -207,6 +234,8 @@ def test_every_manifest_object_link_fault_is_invisible_and_retryable(tmp_path: P
         config = _config(tmp_path, f"object-link-{index}")
 
         def fault(point: str, *, expected: str = fault_point) -> None:
+            """Raise at one selected manifest object-link boundary."""
+
             if point == expected:
                 raise InjectedCrash(point)
 
@@ -221,10 +250,14 @@ def test_every_manifest_object_link_fault_is_invisible_and_retryable(tmp_path: P
 def test_every_initializer_directory_fsync_failure_is_retryable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Each create-once directory fsync failure allows an exact retry."""
+
     real_fsync = initializer_module.fsync_directory
     observed: list[Path] = []
 
     def observe(path: Path) -> None:
+        """Record initializer directory-fsync order during the probe run."""
+
         observed.append(path)
         real_fsync(path)
 
@@ -238,6 +271,8 @@ def test_every_initializer_directory_fsync_failure_is_retryable(
         call_count = 0
 
         def fail_once(path: Path) -> None:
+            """Raise once at the selected directory-fsync ordinal."""
+
             nonlocal call_count
             current = call_count
             call_count += 1
@@ -262,9 +297,13 @@ def test_every_initializer_directory_fsync_failure_is_retryable(
 def test_different_inode_staging_cannot_take_an_existing_identity_reservation(
     tmp_path: Path,
 ) -> None:
+    """An identity reservation cannot be taken over by a different staging inode."""
+
     config = _config(tmp_path, "collision")
 
     def crash_after_reservation(point: str) -> None:
+        """Interrupt after reserving the first staging inode."""
+
         if point == "after_identity_reservation":
             raise InjectedCrash(point)
 
@@ -284,6 +323,8 @@ def test_different_inode_staging_cannot_take_an_existing_identity_reservation(
 def test_completed_run_reservation_repair_requires_explicit_full_self_check(
     tmp_path: Path,
 ) -> None:
+    """Reservation repair for a completed run requires explicit full validation."""
+
     config = _config(tmp_path, "repair")
     initialize_run(config, project_root=tmp_path)
     final_root = Path(config.run.shared_root).resolve()
@@ -298,6 +339,8 @@ def test_completed_run_reservation_repair_requires_explicit_full_self_check(
 
 
 def test_reservation_repair_rejects_protocol_external_entry(tmp_path: Path) -> None:
+    """Reservation repair rejects files outside the initializer protocol surface."""
+
     config = _config(tmp_path, "repair-external")
     initialize_run(config, project_root=tmp_path)
     final_root = Path(config.run.shared_root).resolve()
@@ -310,6 +353,8 @@ def test_reservation_repair_rejects_protocol_external_entry(tmp_path: Path) -> N
 
 
 def test_existing_final_race_releases_new_reservation_before_fault_hook(tmp_path: Path) -> None:
+    """Losing a final-root race releases the new reservation before later hooks."""
+
     final_root = tmp_path / "race"
     staging = create_staging_root(final_root)
     (staging / ".identity").write_text("identity", encoding="utf-8")
@@ -328,6 +373,8 @@ def test_existing_final_race_releases_new_reservation_before_fault_hook(tmp_path
 
 
 def test_broken_symlink_final_collision_releases_new_reservation(tmp_path: Path) -> None:
+    """A broken final-root symlink collision releases a fresh reservation."""
+
     final_root = tmp_path / "broken-link-race"
     staging = create_staging_root(final_root)
     (staging / ".identity").write_text("identity", encoding="utf-8")
@@ -342,9 +389,13 @@ def test_broken_symlink_final_collision_releases_new_reservation(tmp_path: Path)
 def test_retry_rejects_symlinked_manifest_directory_without_writing_outside(
     tmp_path: Path,
 ) -> None:
+    """Staging retry never follows a symlinked manifest directory outside the run."""
+
     config = _config(tmp_path, "symlink-directory")
 
     def fault(point: str) -> None:
+        """Interrupt after publishing the reserved staging identity."""
+
         if point == "after_final_identity":
             raise InjectedCrash(point)
 
@@ -362,9 +413,13 @@ def test_retry_rejects_symlinked_manifest_directory_without_writing_outside(
 
 
 def test_retry_rejects_changed_staging_object_before_complete(tmp_path: Path) -> None:
+    """Retry rejects a staging object whose bytes changed before completion."""
+
     config = _config(tmp_path, "changed-staging")
 
     def fault(point: str) -> None:
+        """Interrupt immediately before publishing the complete marker."""
+
         if point == "after_identity_reservation":
             raise InjectedCrash(point)
 
@@ -388,6 +443,8 @@ def test_retry_rejects_changed_staging_object_before_complete(tmp_path: Path) ->
 def test_reservation_repair_reopens_and_integrity_checks_mutable_authority_db(
     tmp_path: Path,
 ) -> None:
+    """Repair reopens and integrity-checks the mutable authority database."""
+
     config = _config(tmp_path, "repair-corrupt-db")
     initialize_run(config, project_root=tmp_path)
     final_root = Path(config.run.shared_root).resolve()
@@ -403,6 +460,8 @@ def test_reservation_repair_reopens_and_integrity_checks_mutable_authority_db(
 
 
 def test_actor_attestation_is_immutable_and_attempt_scoped(tmp_path: Path) -> None:
+    """Actor attestations are create-once and scoped to one process attempt."""
+
     config = _config(tmp_path, "attestation")
     initialize_run(config, project_root=tmp_path)
     loaded = load_run_descriptor(config.run.shared_root)
@@ -449,6 +508,8 @@ def test_actor_attestation_is_immutable_and_attempt_scoped(tmp_path: Path) -> No
 
 
 def test_actor_attestation_requires_explicit_runtime_resource_evidence(tmp_path: Path) -> None:
+    """Formal actor attestations require explicit scheduler resource evidence."""
+
     config = _config(tmp_path, "attestation-required")
     initialize_run(config, project_root=tmp_path)
     loaded = load_run_descriptor(config.run.shared_root)

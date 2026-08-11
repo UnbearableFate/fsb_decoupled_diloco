@@ -42,7 +42,7 @@ markers = [
 ]
 
 [tool.setuptools.package-data]
-"fs_diloco.storage" = ["schema.sql", "schema_dynamic.sql"]
+"fs_diloco.storage" = ["schema.sql"]
 
 [tool.setuptools.packages.find]
 include = ["fs_diloco*", "torch_ddp_baselines*"]

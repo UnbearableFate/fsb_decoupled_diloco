@@ -23,8 +23,8 @@ from typing import Any
 from ..core.versions import AUTHORITY_SCHEMA_VERSION, PROTOCOL_VERSION
 from ..protocol._validation import identity as validate_identity
 from ..protocol.authority import (
+    Admission,
     ContributorProgress,
-    DynamicAdmission,
     MergeFenceConflict,
     ProposalDisposition,
     PublicationIntent,
@@ -33,18 +33,11 @@ from ..protocol.authority import (
     SelectionBatch,
     SelectionAttempt,
     SelectionCandidate,
-    StaticBinding,
     TerminalState,
     TokenLedgerSummary,
     VisibilityDecision,
 )
-from ..protocol.contributor import (
-    DynamicContributorFence,
-    DynamicMembershipScope,
-    StaticContributorFence,
-    StaticMembershipScope,
-    decode_contributor_fence,
-)
+from ..protocol.contributor import ContributorFence, MembershipScope
 from ..protocol.cycle_receipt import CycleReceiptV1
 from ..protocol.data_cursor import ContributorResumeState
 from ..protocol.proposal import FullUpdateProposalV2
@@ -72,7 +65,6 @@ from .paths import RunPaths
 
 AUTHORITY_APPLICATION_ID = 0x46534450  # "FSDP"
 BASE_SCHEMA_NAME = "schema.sql"
-DYNAMIC_SCHEMA_NAME = "schema_dynamic.sql"
 BOOTSTRAP_MARKER_NAME = "bootstrap_complete.json"
 
 
@@ -120,10 +112,10 @@ class AuthorityIdentity:
 
 @dataclass(frozen=True)
 class AuthorityMetadata:
+    """Describe the exact current authority schema identity."""
+
     schema_version: int
     protocol_version: int
-    mode: str
-    features: tuple[str, ...]
     ddl_sha256: str
     schema_fingerprint: str
 
@@ -150,39 +142,22 @@ def _schema_dir() -> Path:
     return Path(__file__).resolve().parent
 
 
-def _schema_text(mode: str) -> tuple[str, ...]:
-    base = (_schema_dir() / BASE_SCHEMA_NAME).read_text(encoding="utf-8")
-    if mode == "static":
-        return (base,)
-    if mode == "dynamic":
-        dynamic = (_schema_dir() / DYNAMIC_SCHEMA_NAME).read_text(encoding="utf-8")
-        return (base, dynamic)
-    raise ValueError("authority mode must be 'static' or 'dynamic'")
+def _schema_text() -> str:
+    """Read the sole packaged DDL bundle."""
+
+    return (_schema_dir() / BASE_SCHEMA_NAME).read_text(encoding="utf-8")
 
 
-def canonical_features(mode: str) -> tuple[str, ...]:
-    if mode == "static":
-        return ()
-    if mode == "dynamic":
-        return ("dynamic_membership",)
-    raise ValueError("authority mode must be 'static' or 'dynamic'")
+def ddl_bundle_sha256() -> str:
+    """Hash the named sole DDL bundle with an unambiguous framing."""
 
-
-def _features_json(features: tuple[str, ...]) -> str:
-    return json.dumps(list(features), sort_keys=True, separators=(",", ":"))
-
-
-def ddl_bundle_sha256(mode: str) -> str:
     digest = hashlib.sha256()
-    for name, schema in zip(
-        (BASE_SCHEMA_NAME, DYNAMIC_SCHEMA_NAME), _schema_text(mode), strict=False
-    ):
-        encoded = schema.encode("utf-8")
-        digest.update(name.encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(str(len(encoded)).encode("ascii"))
-        digest.update(b"\0")
-        digest.update(encoded)
+    encoded = _schema_text().encode("utf-8")
+    digest.update(BASE_SCHEMA_NAME.encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(str(len(encoded)).encode("ascii"))
+    digest.update(b"\0")
+    digest.update(encoded)
     return digest.hexdigest()
 
 
@@ -268,7 +243,7 @@ def _configure_read_connection(connection: sqlite3.Connection, *, busy_timeout_m
 def initialize_authority(
     database_path: str | Path,
     identity: AuthorityIdentity,
-    membership_scope: StaticMembershipScope | DynamicMembershipScope,
+    membership_scope: MembershipScope,
     *,
     marker_path: str | Path | None = None,
     busy_timeout_ms: int = 60_000,
@@ -281,10 +256,10 @@ def initialize_authority(
     if _path_entry_exists(path) or _path_entry_exists(marker):
         raise FileExistsError(f"authority target already exists: {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
-    mode = "static" if isinstance(membership_scope, StaticMembershipScope) else "dynamic"
-    schemas = _schema_text(mode)
-    ddl_sha = ddl_bundle_sha256(mode)
-    features = canonical_features(mode)
+    if not isinstance(membership_scope, MembershipScope):
+        raise TypeError("membership_scope must be a MembershipScope")
+    schema = _schema_text()
+    ddl_sha = ddl_bundle_sha256()
     temporary_fd, temporary_name = tempfile.mkstemp(
         prefix=f".{path.name}.", suffix=".staging", dir=path.parent
     )
@@ -295,7 +270,7 @@ def initialize_authority(
         connection = sqlite3.connect(temporary_path)
         try:
             _configure_connection(connection, busy_timeout_ms=busy_timeout_ms)
-            connection.executescript("BEGIN IMMEDIATE;\n" + "\n".join(schemas) + "\nCOMMIT;\n")
+            connection.executescript("BEGIN IMMEDIATE;\n" + schema + "\nCOMMIT;\n")
             connection.execute(f"PRAGMA application_id={AUTHORITY_APPLICATION_ID}")
             connection.execute(f"PRAGMA user_version={AUTHORITY_SCHEMA_VERSION}")
             fingerprint = _schema_fingerprint(connection)
@@ -304,15 +279,13 @@ def initialize_authority(
             connection.execute(
                 """
                 INSERT INTO schema_meta(
-                    singleton, schema_version, protocol_version, mode, features_json,
-                    ddl_sha256, schema_fingerprint, created_at
-                ) VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+                    singleton, schema_version, protocol_version, ddl_sha256,
+                    schema_fingerprint, created_at
+                ) VALUES (1, ?, ?, ?, ?, ?)
                 """,
                 (
                     AUTHORITY_SCHEMA_VERSION,
                     PROTOCOL_VERSION,
-                    mode,
-                    _features_json(features),
                     ddl_sha,
                     fingerprint,
                     now,
@@ -340,8 +313,6 @@ def initialize_authority(
         marker_payload = {
             "authority_schema_version": AUTHORITY_SCHEMA_VERSION,
             "protocol_version": PROTOCOL_VERSION,
-            "mode": mode,
-            "features": list(features),
             "ddl_sha256": ddl_sha,
             "schema_fingerprint": fingerprint,
             "identity": identity.as_dict(),
@@ -362,8 +333,6 @@ def initialize_authority(
     return AuthorityMetadata(
         schema_version=AUTHORITY_SCHEMA_VERSION,
         protocol_version=PROTOCOL_VERSION,
-        mode=mode,
-        features=features,
         ddl_sha256=ddl_sha,
         schema_fingerprint=fingerprint,
     )
@@ -375,9 +344,10 @@ def _validate_open(
     path: Path,
     marker: Path,
     identity: AuthorityIdentity,
-    mode: str,
     busy_timeout_ms: int,
 ) -> AuthorityMetadata:
+    """Validate the sole current DDL, bootstrap marker, and run identity on open."""
+
     try:
         marker_metadata = marker.lstat()
     except FileNotFoundError as exc:
@@ -387,22 +357,15 @@ def _validate_open(
     marker_payload = read_json(marker)
     if not isinstance(marker_payload, Mapping):
         raise AuthoritySchemaError(f"missing or malformed bootstrap marker: {marker}")
-    expected_features = canonical_features(mode)
-    expected_ddl = ddl_bundle_sha256(mode)
+    expected_ddl = ddl_bundle_sha256()
     row = connection.execute("SELECT * FROM schema_meta WHERE singleton = 1").fetchone()
     identity_row = connection.execute("SELECT * FROM run_identity WHERE singleton = 1").fetchone()
     if row is None or identity_row is None:
         raise AuthoritySchemaError("authority metadata is incomplete")
-    try:
-        stored_features = tuple(json.loads(str(row["features_json"])))
-    except (json.JSONDecodeError, TypeError) as exc:
-        raise AuthoritySchemaError("features_json is malformed") from exc
     actual_fingerprint = _schema_fingerprint(connection)
     expected = {
         "schema_version": AUTHORITY_SCHEMA_VERSION,
         "protocol_version": PROTOCOL_VERSION,
-        "mode": mode,
-        "features_json": _features_json(expected_features),
         "ddl_sha256": expected_ddl,
         "schema_fingerprint": actual_fingerprint,
     }
@@ -411,16 +374,12 @@ def _validate_open(
             raise AuthoritySchemaError(
                 f"authority metadata mismatch for {key}: expected {value!r}, got {row[key]!r}"
             )
-    if stored_features != expected_features:
-        raise AuthoritySchemaError("authority features are not canonical")
     for key, value in identity.as_dict().items():
         if identity_row[key] != value:
             raise AuthoritySchemaError(f"authority identity mismatch for {key}")
     marker_expectations: dict[str, Any] = {
         "authority_schema_version": AUTHORITY_SCHEMA_VERSION,
         "protocol_version": PROTOCOL_VERSION,
-        "mode": mode,
-        "features": list(expected_features),
         "ddl_sha256": expected_ddl,
         "schema_fingerprint": actual_fingerprint,
         "identity": identity.as_dict(),
@@ -429,6 +388,9 @@ def _validate_open(
     for key, value in marker_expectations.items():
         if marker_payload.get(key) != value:
             raise AuthoritySchemaError(f"bootstrap marker mismatch for {key}")
+    expected_marker_fields = set(marker_expectations) | {"created_at"}
+    if set(marker_payload) != expected_marker_fields:
+        raise AuthoritySchemaError("bootstrap marker fields are not the current exact shape")
     if int(connection.execute("PRAGMA application_id").fetchone()[0]) != AUTHORITY_APPLICATION_ID:
         raise AuthoritySchemaError("authority application_id mismatch")
     if int(connection.execute("PRAGMA user_version").fetchone()[0]) != AUTHORITY_SCHEMA_VERSION:
@@ -444,8 +406,6 @@ def _validate_open(
     return AuthorityMetadata(
         schema_version=AUTHORITY_SCHEMA_VERSION,
         protocol_version=PROTOCOL_VERSION,
-        mode=mode,
-        features=expected_features,
         ddl_sha256=expected_ddl,
         schema_fingerprint=actual_fingerprint,
     )
@@ -479,31 +439,6 @@ class AuthorityReadModel:
             "SELECT * FROM global_versions WHERE version = ?", (version,)
         )
         return None if row is None else _decode_committed_version(row)
-
-    def static_binding(self, learner_id: str) -> StaticBinding | None:
-        row = self._authority._fetchone(
-            "SELECT * FROM static_contributor_bindings WHERE learner_id = ?", (learner_id,)
-        )
-        return None if row is None else _decode_static_binding(row)
-
-    def static_binding_history(
-        self, learner_id: str, binding_generation: int
-    ) -> dict[str, Any] | None:
-        validate_identity(learner_id, name="learner_id")
-        if (
-            isinstance(binding_generation, bool)
-            or not isinstance(binding_generation, int)
-            or binding_generation < 1
-        ):
-            raise ValueError("binding_generation must be a positive integer")
-        row = self._authority._fetchone(
-            """
-            SELECT * FROM static_binding_history
-            WHERE learner_id=? AND binding_generation=?
-            """,
-            (learner_id, binding_generation),
-        )
-        return None if row is None else dict(row)
 
     def contributor_progress(self, stable_contributor_key: str) -> ContributorProgress | None:
         row = self._authority._fetchone(
@@ -544,33 +479,16 @@ class AuthorityReadModel:
         )
         return tuple(dict(row) for row in rows)
 
-    def current_contributor_fences(
-        self,
-    ) -> tuple[StaticContributorFence | DynamicContributorFence, ...]:
-        if isinstance(self._authority._scope, StaticMembershipScope):
-            rows = self._authority._fetchall(
-                """
-                SELECT * FROM static_contributor_bindings
-                WHERE status='active' ORDER BY learner_id
-                """
-            )
-            return tuple(
-                StaticContributorFence(
-                    kind="static",
-                    learner_id=str(row["learner_id"]),
-                    logical_launch_id=str(row["logical_launch_id"]),
-                    attempt_id=str(row["attempt_id"]),
-                    binding_generation=int(row["binding_generation"]),
-                )
-                for row in rows
-            )
+    def current_contributor_fences(self) -> tuple[ContributorFence, ...]:
+        """Return the current admitted or draining stream owners."""
+
         rows = self._authority._fetchall(
             """
             SELECT * FROM learner_instances
             WHERE status IN ('admitted', 'draining') ORDER BY stream_id
             """
         )
-        return tuple(LeaderSession._dynamic_fence_from_instance(row) for row in rows)
+        return tuple(LeaderSession._fence_from_instance(row) for row in rows)
 
     def token_ledger_summary(self) -> TokenLedgerSummary:
         row = self._authority._fetchone("SELECT * FROM token_rollups WHERE singleton=1")
@@ -618,17 +536,17 @@ class AuthorityReadModel:
         rows = self._authority._fetchall("SELECT * FROM syncer_epochs ORDER BY epoch")
         return tuple(dict(row) for row in rows)
 
-    def dynamic_streams(self) -> tuple[dict[str, Any], ...]:
-        if not isinstance(self._authority._scope, DynamicMembershipScope):
-            return ()
+    def streams(self) -> tuple[dict[str, Any], ...]:
+        """Return all logical streams in stable order."""
+
         return tuple(
             dict(row)
             for row in self._authority._fetchall("SELECT * FROM streams ORDER BY stream_id")
         )
 
-    def dynamic_instances(self) -> tuple[dict[str, Any], ...]:
-        if not isinstance(self._authority._scope, DynamicMembershipScope):
-            return ()
+    def instances(self) -> tuple[dict[str, Any], ...]:
+        """Return all learner process incarnations in registration order."""
+
         return tuple(
             dict(row)
             for row in self._authority._fetchall(
@@ -636,9 +554,9 @@ class AuthorityReadModel:
             )
         )
 
-    def dynamic_launch_requests(self) -> tuple[dict[str, Any], ...]:
-        if not isinstance(self._authority._scope, DynamicMembershipScope):
-            return ()
+    def launch_requests(self) -> tuple[dict[str, Any], ...]:
+        """Return bootstrap and capacity launch authorization records."""
+
         return tuple(
             dict(row)
             for row in self._authority._fetchall(
@@ -647,8 +565,8 @@ class AuthorityReadModel:
         )
 
     def capacity_observations(self) -> tuple[dict[str, Any], ...]:
-        if not isinstance(self._authority._scope, DynamicMembershipScope):
-            return ()
+        """Return the bounded durable capacity observation history."""
+
         return tuple(
             dict(row)
             for row in self._authority._fetchall(
@@ -659,8 +577,8 @@ class AuthorityReadModel:
     def scheduler_operator_file_disposition(
         self, relative_path: str, content_sha256: str
     ) -> dict[str, Any] | None:
-        if not isinstance(self._authority._scope, DynamicMembershipScope):
-            return None
+        """Return the disposition for one exact immutable scheduler request file."""
+
         row = self._authority._fetchone(
             """
             SELECT * FROM scheduler_operator_file_dispositions
@@ -734,12 +652,14 @@ class AuthorityReader:
         self,
         database_path: str | Path,
         identity: AuthorityIdentity,
-        membership_scope: StaticMembershipScope | DynamicMembershipScope,
+        membership_scope: MembershipScope,
         *,
         marker_path: str | Path | None = None,
         busy_timeout_ms: int = 60_000,
         wall_clock: Callable[[], float] = time.time,
     ) -> None:
+        """Open one validated query-only connection for the current membership scope."""
+
         database = Path(database_path)
         try:
             database_metadata = database.lstat()
@@ -748,7 +668,8 @@ class AuthorityReader:
         if not stat.S_ISREG(database_metadata.st_mode):
             raise AuthoritySchemaError("authority database must be a regular file")
         path = database.resolve()
-        mode = "static" if isinstance(membership_scope, StaticMembershipScope) else "dynamic"
+        if not isinstance(membership_scope, MembershipScope):
+            raise TypeError("membership_scope must be a MembershipScope")
         connection = sqlite3.connect(
             f"{path.as_uri()}?mode=ro",
             uri=True,
@@ -761,7 +682,6 @@ class AuthorityReader:
                 path=path,
                 marker=_marker_path(path, marker_path),
                 identity=identity,
-                mode=mode,
                 busy_timeout_ms=busy_timeout_ms,
             )
         except Exception:
@@ -799,7 +719,7 @@ class LeaderAuthority:
         self,
         database_path: str | Path,
         identity: AuthorityIdentity,
-        membership_scope: StaticMembershipScope | DynamicMembershipScope,
+        membership_scope: MembershipScope,
         *,
         marker_path: str | Path | None = None,
         lease_duration_seconds: float = 90.0,
@@ -811,10 +731,13 @@ class LeaderAuthority:
         wall_clock: Callable[[], float] = time.time,
         lease_safety_check: Callable[[LeaderToken], None] | None = None,
     ) -> None:
+        """Open one validated writable authority and configure its lease boundary."""
+
         if lease_duration_seconds <= max_clock_skew_seconds:
             raise ValueError("lease duration must exceed maximum clock skew")
         path = Path(database_path)
-        mode = "static" if isinstance(membership_scope, StaticMembershipScope) else "dynamic"
+        if not isinstance(membership_scope, MembershipScope):
+            raise TypeError("membership_scope must be a MembershipScope")
         connection = sqlite3.connect(path, timeout=busy_timeout_ms / 1000.0)
         _configure_connection(connection, busy_timeout_ms=busy_timeout_ms)
         try:
@@ -823,7 +746,6 @@ class LeaderAuthority:
                 path=path,
                 marker=_marker_path(path, marker_path),
                 identity=identity,
-                mode=mode,
                 busy_timeout_ms=busy_timeout_ms,
             )
         except Exception:
@@ -1083,225 +1005,16 @@ class LeaderSession:
         self._authority = authority
         self.token = token
 
-    def replay_committed_static_binding(
-        self,
-        *,
-        command_id: str,
-        learner_id: str,
-        logical_launch_id: str,
-        attempt_id: str,
-        expected_generation: int | None = None,
-        allow_logical_replacement: bool = False,
-        replacement_reason: str | None = None,
-        registration_created_at: float | None = None,
-    ) -> StaticBinding | None:
-        """Replay only an exact committed static-binding command request."""
-
-        request = _static_binding_command_request(
-            learner_id=learner_id,
-            logical_launch_id=logical_launch_id,
-            attempt_id=attempt_id,
-            expected_generation=expected_generation,
-            allow_logical_replacement=allow_logical_replacement,
-            replacement_reason=replacement_reason,
-            registration_created_at=registration_created_at,
-        )
-        try:
-            payload = self._command_replay(
-                command_id,
-                "bind_or_replace_static_attempt",
-                request,
-            )
-            if payload is None:
-                return None
-            if not isinstance(payload, Mapping):
-                raise TypeError("committed static binding result is not an object")
-            return _decode_static_binding(payload)
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
-            raise AuthoritySchemaError("committed static binding result is invalid") from exc
-
-    def bind_or_replace_static_attempt(
-        self,
-        *,
-        command_id: str,
-        learner_id: str,
-        logical_launch_id: str,
-        attempt_id: str,
-        expected_generation: int | None = None,
-        allow_logical_replacement: bool = False,
-        replacement_reason: str | None = None,
-        registration_created_at: float | None = None,
-    ) -> StaticBinding:
-        request = _static_binding_command_request(
-            learner_id=learner_id,
-            logical_launch_id=logical_launch_id,
-            attempt_id=attempt_id,
-            expected_generation=expected_generation,
-            allow_logical_replacement=allow_logical_replacement,
-            replacement_reason=replacement_reason,
-            registration_created_at=registration_created_at,
-        )
-
-        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
-            if not isinstance(self._authority._scope, StaticMembershipScope):
-                raise RuntimeError("static binding command requires static authority mode")
-            if learner_id not in self._authority._scope.learner_ids:
-                raise MembershipFenceError(f"unknown static learner: {learner_id}")
-            controller = connection.execute(
-                "SELECT state, requested_at FROM controller_state WHERE singleton=1"
-            ).fetchone()
-            if controller is None or controller["state"] not in {"open", "preclosing"}:
-                raise MembershipFenceError("static admission is closed")
-            if controller["state"] == "preclosing" and (
-                registration_created_at is None
-                or controller["requested_at"] is None
-                or float(registration_created_at) > float(controller["requested_at"])
-            ):
-                raise MembershipFenceError("static registration is after the preclose cutoff")
-            row = connection.execute(
-                "SELECT * FROM static_contributor_bindings WHERE learner_id=?", (learner_id,)
-            ).fetchone()
-            now = float(self._authority._wall_clock())
-            if row is None:
-                if expected_generation not in (None, 0):
-                    raise MembershipFenceError("static binding generation changed")
-                generation = 1
-                connection.execute(
-                    """
-                    INSERT INTO static_contributor_bindings(
-                        learner_id, logical_launch_id, attempt_id, binding_generation,
-                        status, bound_by_epoch, bound_at
-                    ) VALUES (?, ?, ?, ?, 'active', ?, ?)
-                    """,
-                    (
-                        learner_id,
-                        logical_launch_id,
-                        attempt_id,
-                        generation,
-                        self.token.epoch,
-                        now,
-                    ),
-                )
-            else:
-                current_generation = int(row["binding_generation"])
-                if expected_generation is not None and expected_generation != current_generation:
-                    raise MembershipFenceError("static binding generation changed")
-                if (
-                    row["logical_launch_id"] == logical_launch_id
-                    and row["attempt_id"] == attempt_id
-                    and row["status"] == "active"
-                ):
-                    return dict(row)
-                history_status = str(row["status"])
-                if row["status"] == "active":
-                    if expected_generation is None or replacement_reason is None:
-                        raise MembershipFenceError(
-                            "active static replacement requires expected_generation and reason"
-                        )
-                    old_fence = StaticContributorFence(
-                        kind="static",
-                        learner_id=str(row["learner_id"]),
-                        logical_launch_id=str(row["logical_launch_id"]),
-                        attempt_id=str(row["attempt_id"]),
-                        binding_generation=current_generation,
-                    )
-                    self._terminalize_fenced_updates(
-                        connection,
-                        fence_json=_canonical_json(old_fence.as_dict()),
-                        reason=replacement_reason,
-                    )
-                    history_status = "replaced"
-                if row["logical_launch_id"] != logical_launch_id and not allow_logical_replacement:
-                    raise MembershipFenceError(
-                        "a new logical launch requires explicit replacement authorization"
-                    )
-                generation = current_generation + 1
-                connection.execute(
-                    """
-                    INSERT INTO static_binding_history(
-                        learner_id, binding_generation, logical_launch_id, attempt_id,
-                        final_status, bound_by_epoch, bound_at, finalized_by_epoch, finalized_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        learner_id,
-                        current_generation,
-                        row["logical_launch_id"],
-                        row["attempt_id"],
-                        history_status,
-                        row["bound_by_epoch"],
-                        row["bound_at"],
-                        self.token.epoch,
-                        now,
-                    ),
-                )
-                connection.execute(
-                    """
-                    UPDATE static_contributor_bindings
-                    SET logical_launch_id=?, attempt_id=?, binding_generation=?, status='active',
-                        bound_by_epoch=?, bound_at=?, terminal_at=NULL
-                    WHERE learner_id=?
-                    """,
-                    (
-                        logical_launch_id,
-                        attempt_id,
-                        generation,
-                        self.token.epoch,
-                        now,
-                        learner_id,
-                    ),
-                )
-            result = connection.execute(
-                "SELECT * FROM static_contributor_bindings WHERE learner_id=?", (learner_id,)
-            ).fetchone()
-            assert result is not None
-            return dict(result)
-
-        result = self._command(command_id, "bind_or_replace_static_attempt", request, operation)
-        return _decode_static_binding(result)
-
-    def mark_static_attempt_terminal(
-        self,
-        *,
-        command_id: str,
-        fence: StaticContributorFence,
-        reason: str = "static_attempt_terminal",
-    ) -> StaticBinding:
-        if not reason:
-            raise ValueError("terminal reason must not be empty")
-        request = {"fence": fence.as_dict(), "reason": reason}
-
-        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
-            self._require_current_fence(connection, fence)
-            now = float(self._authority._wall_clock())
-            self._terminalize_fenced_updates(
-                connection,
-                fence_json=_canonical_json(fence.as_dict()),
-                reason=reason,
-            )
-            connection.execute(
-                """
-                UPDATE static_contributor_bindings SET status='terminal', terminal_at=?
-                WHERE learner_id=?
-                """,
-                (now, fence.learner_id),
-            )
-            row = connection.execute(
-                "SELECT * FROM static_contributor_bindings WHERE learner_id=?",
-                (fence.learner_id,),
-            ).fetchone()
-            assert row is not None
-            return dict(row)
-
-        result = self._command(command_id, "mark_static_attempt_terminal", request, operation)
-        return _decode_static_binding(result)
-
     def ingest_cycle_receipt(
         self, *, command_id: str, receipt: CycleReceiptV1
     ) -> ContributorProgress:
+        """Commit one exact contiguous receipt and advance its stable stream progress."""
+
         request = receipt.as_dict()
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            """Validate and insert the receipt within the fenced command transaction."""
+
             if receipt.run_id != self._authority._identity.run_id:
                 raise MembershipFenceError("receipt belongs to another run")
             self._require_current_fence(
@@ -1341,9 +1054,9 @@ class LeaderSession:
                     processed_tokens_this_cycle, effective_tokens_this_cycle,
                     local_discarded_tokens_this_cycle, retained_tokens_since_base,
                     data_cursor_start, data_cursor_end, proposal_expected, planned_update_id,
-                    planned_payload_sha256, fence_kind, fence_json, created_at, ingested_at,
+                    planned_payload_sha256, fence_json, created_at, ingested_at,
                     ingested_by_epoch
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     receipt.receipt_id,
@@ -1363,7 +1076,6 @@ class LeaderSession:
                     int(receipt.proposal_expected),
                     receipt.planned_update_id,
                     receipt.planned_payload_sha256,
-                    receipt.contributor_fence.kind,
                     _canonical_json(receipt.contributor_fence.as_dict()),
                     receipt.created_at,
                     now,
@@ -1428,6 +1140,8 @@ class LeaderSession:
     def ingest_proposal(
         self, *, command_id: str, proposal: FullUpdateProposalV2
     ) -> ProposalDisposition:
+        """Verify and ingest one proposal whose promised receipt and fence are current."""
+
         request = proposal.as_dict()
         replay = self._command_replay(command_id, "ingest_proposal", request)
         if replay is not None:
@@ -1445,6 +1159,8 @@ class LeaderSession:
         verified_payload = verification.value
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            """Commit proposal identity and token fate after out-of-transaction payload proof."""
+
             if proposal.run_id != self._authority._identity.run_id:
                 raise MembershipFenceError("proposal belongs to another run")
             self._require_current_fence(
@@ -1553,11 +1269,11 @@ class LeaderSession:
                     local_step_start, local_step_end, inner_steps,
                     processed_tokens_this_cycle, effective_tokens_this_update,
                     local_discarded_tokens_this_cycle, retained_tokens_since_base,
-                    data_cursor_start, data_cursor_end, fence_kind, fence_json,
+                    data_cursor_start, data_cursor_end, fence_json,
                     payload_relative_path, payload_size, payload_sha256,
                     tensor_schema_sha256, tensor_dtype, tensor_numel, created_at,
                     ingested_at, status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
                 """,
                 (
@@ -1579,7 +1295,6 @@ class LeaderSession:
                     proposal.retained_tokens_since_base,
                     proposal.data_cursor_start,
                     proposal.data_cursor_end,
-                    proposal.contributor_fence.kind,
                     _canonical_json(proposal.contributor_fence.as_dict()),
                     proposal.payload_relative_path,
                     proposal.payload_size,
@@ -2022,23 +1737,17 @@ class LeaderSession:
             raise RuntimeError("genesis unexpectedly encountered a membership fence conflict")
         return committed
 
-    def initialize_dynamic_membership(self, *, command_id: str) -> tuple[int, ...]:
-        """Create the configured dynamic stream pool exactly once."""
+    def initialize_membership(self, *, command_id: str) -> tuple[int, ...]:
+        """Create the configured logical stream pool exactly once."""
 
-        request = {
-            "stream_pool_size": (
-                self._authority._scope.stream_pool_size
-                if isinstance(self._authority._scope, DynamicMembershipScope)
-                else None
-            )
-        }
+        request = {"stream_pool_size": self._authority._scope.stream_pool_size}
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
-            if not isinstance(self._authority._scope, DynamicMembershipScope):
-                raise RuntimeError("dynamic membership initialization requires dynamic mode")
+            """Create every configured stream atomically or prove the pool is complete."""
+
             existing = int(connection.execute("SELECT COUNT(*) FROM streams").fetchone()[0])
             if existing not in {0, self._authority._scope.stream_pool_size}:
-                raise AuthoritySchemaError("dynamic stream pool is partially initialized")
+                raise AuthoritySchemaError("stream pool is partially initialized")
             now = float(self._authority._wall_clock())
             if existing == 0:
                 connection.executemany(
@@ -2054,7 +1763,7 @@ class LeaderSession:
                 )
             return {"stream_ids": list(range(self._authority._scope.stream_pool_size))}
 
-        result = self._command(command_id, "initialize_dynamic_membership", request, operation)
+        result = self._command(command_id, "initialize_membership", request, operation)
         return tuple(int(item) for item in result["stream_ids"])
 
     def record_capacity_observation(
@@ -2099,8 +1808,8 @@ class LeaderSession:
         }
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
-            if not isinstance(self._authority._scope, DynamicMembershipScope):
-                raise RuntimeError("capacity observations require dynamic membership")
+            """Insert one sequenced capacity sample and prune its bounded hot history."""
+
             sequence = int(
                 connection.execute(
                     "SELECT COALESCE(MAX(observation_seq), 0) + 1 FROM capacity_observations"
@@ -2147,7 +1856,7 @@ class LeaderSession:
 
         return self._command(command_id, "record_capacity_observation", request, operation)
 
-    def plan_dynamic_launch_request(
+    def plan_launch_request(
         self,
         *,
         command_id: str,
@@ -2197,13 +1906,13 @@ class LeaderSession:
         request_sha256 = hashlib.sha256(_canonical_json(request).encode("utf-8")).hexdigest()
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
-            if not isinstance(self._authority._scope, DynamicMembershipScope):
-                raise RuntimeError("dynamic launch requests require dynamic membership")
+            """Reserve one stream launch under observation, budget, and current-owner checks."""
+
             controller = connection.execute(
                 "SELECT state FROM controller_state WHERE singleton=1"
             ).fetchone()
             if controller is None or controller["state"] != "open":
-                raise RuntimeError("dynamic launch planning requires an open controller")
+                raise RuntimeError("launch planning requires an open controller")
             if (
                 connection.execute(
                     "SELECT 1 FROM capacity_observations WHERE observation_key=?",
@@ -2226,7 +1935,7 @@ class LeaderSession:
                 ).fetchone()[0]
             )
             if total >= max_total_requests or pending >= max_pending_requests:
-                raise RuntimeError("dynamic launch request budget is exhausted")
+                raise RuntimeError("launch request budget is exhausted")
             if (
                 connection.execute(
                     """
@@ -2238,15 +1947,15 @@ class LeaderSession:
                 ).fetchone()
                 is not None
             ):
-                raise MembershipFenceError("dynamic stream already has a launch reservation")
+                raise MembershipFenceError("stream already has a launch reservation")
             stream = connection.execute(
                 "SELECT * FROM streams WHERE stream_id=?", (stream_id,)
             ).fetchone()
             if stream is None:
-                raise RuntimeError("dynamic launch stream is missing")
+                raise RuntimeError("launch stream is missing")
             now = float(self._authority._wall_clock())
             if float(expires_at) <= now:
-                raise RuntimeError("dynamic launch request is already expired")
+                raise RuntimeError("launch request is already expired")
             role = "scale_out"
             if replace_instance_id is None:
                 if stream["state"] != "available" or stream["current_instance_id"] is not None:
@@ -2267,9 +1976,9 @@ class LeaderSession:
                     raise MembershipFenceError(
                         "replacement requires exact terminal scheduler job evidence"
                     )
-                self._retire_dynamic_in_transaction(
+                self._retire_in_transaction(
                     connection,
-                    fence=self._dynamic_fence_from_instance(instance),
+                    fence=self._fence_from_instance(instance),
                     reason=reason,
                     final_status="expired",
                 )
@@ -2302,9 +2011,9 @@ class LeaderSession:
             assert row is not None
             return dict(row)
 
-        return self._command(command_id, "plan_dynamic_launch_request", request, operation)
+        return self._command(command_id, "plan_launch_request", request, operation)
 
-    def transition_dynamic_launch_request(
+    def transition_launch_request(
         self,
         *,
         command_id: str,
@@ -2365,13 +2074,13 @@ class LeaderSession:
         }
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
-            if not isinstance(self._authority._scope, DynamicMembershipScope):
-                raise RuntimeError("scheduler transitions require dynamic membership")
+            """Apply one allowed launch transition against its exact expected durable state."""
+
             row = connection.execute(
                 "SELECT * FROM launch_requests WHERE request_id=?", (request_id,)
             ).fetchone()
             if row is None or row["state"] != expected_state:
-                raise RuntimeError("dynamic launch request state changed")
+                raise RuntimeError("launch request state changed")
             now = float(self._authority._wall_clock())
             if state in {"failed", "expired", "manual_review"} and expected_state in {
                 "submission_unknown",
@@ -2440,7 +2149,7 @@ class LeaderSession:
             assert result is not None
             return dict(result)
 
-        return self._command(command_id, "transition_dynamic_launch_request", request, operation)
+        return self._command(command_id, "transition_launch_request", request, operation)
 
     def apply_scheduler_operator_request(
         self,
@@ -2448,11 +2157,13 @@ class LeaderSession:
         command_id: str,
         operator_request: SchedulerOperatorRequest,
     ) -> dict[str, Any]:
+        """Apply one immutable scheduler uncertainty decision through an exact state CAS."""
+
         request = operator_request.as_dict()
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
-            if not isinstance(self._authority._scope, DynamicMembershipScope):
-                raise RuntimeError("scheduler launch requests require dynamic membership")
+            """Apply one CAS-bound operator decision and retain its durable audit row."""
+
             table = "launch_requests"
             row = connection.execute(
                 "SELECT * FROM launch_requests WHERE request_id=?",
@@ -2605,8 +2316,8 @@ class LeaderSession:
         }
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
-            if not isinstance(self._authority._scope, DynamicMembershipScope):
-                raise RuntimeError("scheduler operator dispositions require dynamic membership")
+            """Record one immutable scheduler request file as applied or rejected."""
+
             now = float(self._authority._wall_clock())
             connection.execute(
                 """
@@ -2641,7 +2352,7 @@ class LeaderSession:
             operation,
         )
 
-    def admit_dynamic_incarnation(
+    def admit_incarnation(
         self,
         *,
         command_id: str,
@@ -2657,8 +2368,8 @@ class LeaderSession:
         replace_instance_id: str | None = None,
         replacement_reason: str | None = None,
         registration_created_at: float | None = None,
-    ) -> DynamicAdmission:
-        """Admit one current dynamic incarnation, optionally replacing one exact owner."""
+    ) -> Admission:
+        """Admit one current stream incarnation, optionally replacing one exact owner."""
 
         validate_identity(instance_id, name="instance_id")
         validate_identity(placement_id, name="placement_id")
@@ -2692,9 +2403,9 @@ class LeaderSession:
         if replacement_reason is not None and not replacement_reason:
             raise ValueError("replacement_reason must not be empty")
         if replace_instance_id is not None and launch_request_id is None:
-            raise ValueError("dynamic replacement requires an explicit launch request ID")
+            raise ValueError("replacement requires an explicit launch request ID")
         if launch_request_id is not None and bootstrap_slot is not None:
-            raise ValueError("dynamic admission cannot be both bootstrap and launch-authorized")
+            raise ValueError("admission cannot be both bootstrap and launch-authorized")
         effective_bootstrap_slot = (
             stream_id if launch_request_id is None and bootstrap_slot is None else bootstrap_slot
         )
@@ -2714,31 +2425,31 @@ class LeaderSession:
         }
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
-            if not isinstance(self._authority._scope, DynamicMembershipScope):
-                raise RuntimeError("dynamic admission requires dynamic authority mode")
+            """Admit one bootstrap or launch-authorized instance and advance exact ownership."""
+
             controller = connection.execute(
                 "SELECT state, requested_at FROM controller_state WHERE singleton=1"
             ).fetchone()
             if controller is None or controller["state"] not in {"open", "preclosing"}:
-                raise MembershipFenceError("dynamic admission is closed")
+                raise MembershipFenceError("admission is closed")
             if controller["state"] == "preclosing" and (
                 registration_created_at is None
                 or controller["requested_at"] is None
                 or float(registration_created_at) > float(controller["requested_at"])
             ):
-                raise MembershipFenceError("dynamic registration is after the preclose cutoff")
+                raise MembershipFenceError("registration is after the preclose cutoff")
             if stream_id >= self._authority._scope.stream_pool_size:
                 raise MembershipFenceError("stream_id is outside the configured pool")
             stream = connection.execute(
                 "SELECT * FROM streams WHERE stream_id=?", (stream_id,)
             ).fetchone()
             if stream is None:
-                raise AuthoritySchemaError("dynamic stream pool is not initialized")
+                raise AuthoritySchemaError("stream pool is not initialized")
             existing_instance = connection.execute(
                 "SELECT * FROM learner_instances WHERE instance_id=?", (instance_id,)
             ).fetchone()
             if existing_instance is not None:
-                fence = self._dynamic_fence_from_instance(existing_instance)
+                fence = self._fence_from_instance(existing_instance)
                 self._require_current_fence(connection, fence, allow_draining=True)
                 if (
                     fence.placement_id != placement_id
@@ -2755,7 +2466,7 @@ class LeaderSession:
                     )
                 ):
                     raise MembershipFenceError("instance ID was replayed with different admission")
-                return self._dynamic_admission_result(connection, fence=fence)
+                return self._admission_result(connection, fence=fence)
             launch_row = None
             if launch_request_id is not None:
                 launch_row = connection.execute(
@@ -2763,7 +2474,7 @@ class LeaderSession:
                     (launch_request_id,),
                 ).fetchone()
                 if launch_row is None:
-                    raise MembershipFenceError("dynamic launch authorization is missing")
+                    raise MembershipFenceError("launch authorization is missing")
                 if (
                     int(launch_row["stream_id"]) != stream_id
                     or launch_row["replace_instance_id"] != replace_instance_id
@@ -2776,13 +2487,13 @@ class LeaderSession:
                         "terminal_uncertain",
                     }
                 ):
-                    raise MembershipFenceError("dynamic launch authorization does not match")
+                    raise MembershipFenceError("launch authorization does not match")
                 if launch_row["pbs_job_id"] is None:
-                    raise RuntimeError("dynamic launch scheduler job evidence is pending")
+                    raise RuntimeError("launch scheduler job evidence is pending")
                 if pbs_job_id is None or (
                     str(launch_row["pbs_job_id"]).split(".", 1)[0] != pbs_job_id.split(".", 1)[0]
                 ):
-                    raise MembershipFenceError("dynamic launch scheduler job does not match")
+                    raise MembershipFenceError("launch scheduler job does not match")
             else:
                 if effective_bootstrap_slot != stream_id:
                     raise MembershipFenceError("bootstrap slot must equal its stream ID")
@@ -2809,17 +2520,17 @@ class LeaderSession:
                 current_instance_id = next(iter(occupied))
                 if replace_instance_id != current_instance_id or replacement_reason is None:
                     raise MembershipFenceError(
-                        "occupied dynamic admission requires exact replacement authorization"
+                        "occupied admission requires exact replacement authorization"
                     )
                 current = connection.execute(
                     "SELECT * FROM learner_instances WHERE instance_id=?",
                     (current_instance_id,),
                 ).fetchone()
                 if current is None:
-                    raise AuthoritySchemaError("current dynamic instance row is missing")
-                self._retire_dynamic_in_transaction(
+                    raise AuthoritySchemaError("current instance row is missing")
+                self._retire_in_transaction(
                     connection,
-                    fence=self._dynamic_fence_from_instance(current),
+                    fence=self._fence_from_instance(current),
                     reason=replacement_reason,
                     final_status="revoked",
                 )
@@ -2974,9 +2685,8 @@ class LeaderSession:
                     (instance_id, now, now, now, now, launch_request_id),
                 )
                 if connection.execute("SELECT changes()").fetchone()[0] != 1:
-                    raise MembershipFenceError("dynamic launch admission lost its authorization")
-            fence = DynamicContributorFence(
-                kind="dynamic",
+                    raise MembershipFenceError("launch admission lost its authorization")
+            fence = ContributorFence(
                 instance_id=instance_id,
                 placement_id=placement_id,
                 placement_epoch=placement_epoch,
@@ -2985,11 +2695,11 @@ class LeaderSession:
                 admission_generation=generation,
                 admission_token_sha256=admission_token_sha256,
             )
-            return self._dynamic_admission_result(connection, fence=fence)
+            return self._admission_result(connection, fence=fence)
 
-        result = self._command(command_id, "admit_dynamic_incarnation", request, operation)
-        return DynamicAdmission(
-            fence=DynamicContributorFence.from_dict(result["fence"]),
+        result = self._command(command_id, "admit_incarnation", request, operation)
+        return Admission(
+            fence=ContributorFence.from_dict(result["fence"]),
             resume=ContributorResumeState(
                 cursor=int(result["resume_cursor"]),
                 last_receipt_id=result["last_receipt_id"],
@@ -3004,12 +2714,12 @@ class LeaderSession:
         self,
         *,
         command_id: str,
-        fence: DynamicContributorFence,
+        fence: ContributorFence,
         reason: str,
         final_status: str = "revoked",
         final_update_id: str | None = None,
     ) -> tuple[str, ...]:
-        """Retire one current dynamic incarnation and terminalize its active proposals."""
+        """Retire one current stream incarnation and terminalize its active proposals."""
 
         if final_status not in {"draining", "stopped", "revoked", "expired"}:
             raise ValueError("final_status must be draining, stopped, revoked, or expired")
@@ -3027,7 +2737,9 @@ class LeaderSession:
         }
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
-            update_ids = self._retire_dynamic_in_transaction(
+            """Retire the current incarnation and return every terminalized update identity."""
+
+            update_ids = self._retire_in_transaction(
                 connection,
                 fence=fence,
                 reason=reason,
@@ -4306,6 +4018,8 @@ class LeaderSession:
         hard_crash_cycle_token_budget: int = 0,
         drain_ack_timeout_seconds: float = 0.0,
     ) -> TerminalState:
+        """Freeze every current contributor fence and begin a bounded drain generation."""
+
         if not reason:
             raise ValueError("terminal close reason must not be empty")
         if (
@@ -4328,6 +4042,8 @@ class LeaderSession:
         }
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            """Freeze stream owners and commit close deadlines in one transaction."""
+
             row = connection.execute("SELECT * FROM controller_state WHERE singleton=1").fetchone()
             assert row is not None
             if row["state"] not in {"open", "preclosing"}:
@@ -4342,60 +4058,38 @@ class LeaderSession:
                 generation = int(row["generation"])
             else:
                 generation = int(row["generation"]) + 1
-            if isinstance(self._authority._scope, StaticMembershipScope):
-                contributors = connection.execute(
-                    """
-                    SELECT b.learner_id AS stable_contributor_key, 'static' AS fence_kind,
-                        json_object(
-                            'kind', 'static', 'learner_id', b.learner_id,
-                            'logical_launch_id', b.logical_launch_id,
-                            'attempt_id', b.attempt_id,
-                            'binding_generation', b.binding_generation
-                        ) AS fence_json,
-                        COALESCE(p.last_cycle_seq, 0) AS last_cycle_seq,
-                        COALESCE(p.data_cursor, 0) AS data_cursor
-                    FROM static_contributor_bindings AS b
-                    LEFT JOIN contributor_progress AS p
-                        ON p.stable_contributor_key=b.learner_id
-                    WHERE b.status='active'
-                    ORDER BY b.learner_id
-                    """
-                ).fetchall()
-            else:
-                contributors = connection.execute(
-                    """
-                    SELECT CAST(i.stream_id AS TEXT) AS stable_contributor_key,
-                        'dynamic' AS fence_kind,
-                        json_object(
-                            'kind', 'dynamic', 'instance_id', i.instance_id,
-                            'placement_id', i.placement_id,
-                            'placement_epoch', i.placement_epoch,
-                            'stream_id', i.stream_id, 'stream_epoch', i.stream_epoch,
-                            'admission_generation', i.admission_generation,
-                            'admission_token_sha256', i.admission_token_sha256
-                        ) AS fence_json,
-                        COALESCE(p.last_cycle_seq, 0) AS last_cycle_seq,
-                        COALESCE(p.data_cursor, 0) AS data_cursor
-                    FROM learner_instances AS i
-                    LEFT JOIN contributor_progress AS p
-                        ON p.stable_contributor_key=CAST(i.stream_id AS TEXT)
-                    WHERE i.status IN ('admitted', 'draining')
-                    ORDER BY i.stream_id
-                    """
-                ).fetchall()
+            contributors = connection.execute(
+                """
+                SELECT CAST(i.stream_id AS TEXT) AS stable_contributor_key,
+                    json_object(
+                        'instance_id', i.instance_id,
+                        'placement_id', i.placement_id,
+                        'placement_epoch', i.placement_epoch,
+                        'stream_id', i.stream_id, 'stream_epoch', i.stream_epoch,
+                        'admission_generation', i.admission_generation,
+                        'admission_token_sha256', i.admission_token_sha256
+                    ) AS fence_json,
+                    COALESCE(p.last_cycle_seq, 0) AS last_cycle_seq,
+                    COALESCE(p.data_cursor, 0) AS data_cursor
+                FROM learner_instances AS i
+                LEFT JOIN contributor_progress AS p
+                    ON p.stable_contributor_key=CAST(i.stream_id AS TEXT)
+                WHERE i.status IN ('admitted', 'draining')
+                ORDER BY i.stream_id
+                """
+            ).fetchall()
             for contributor in contributors:
                 fence_payload = json.loads(str(contributor["fence_json"]))
                 connection.execute(
                     """
                     INSERT INTO terminal_contributor_fences(
-                        generation, stable_contributor_key, fence_kind, fence_json,
+                        generation, stable_contributor_key, fence_json,
                         close_last_cycle_seq, close_data_cursor, state
-                    ) VALUES (?, ?, ?, ?, ?, ?, 'awaiting_ack')
+                    ) VALUES (?, ?, ?, ?, ?, 'awaiting_ack')
                     """,
                     (
                         generation,
                         contributor["stable_contributor_key"],
-                        contributor["fence_kind"],
                         _canonical_json(fence_payload),
                         contributor["last_cycle_seq"],
                         contributor["data_cursor"],
@@ -4484,11 +4178,13 @@ class LeaderSession:
         self,
         *,
         command_id: str,
-        fence: StaticContributorFence | DynamicContributorFence,
+        fence: ContributorFence,
         final_cycle_seq: int | None,
         final_update_id: str | None = None,
         hard_crash_gap_tokens_upper_bound: int = 0,
     ) -> str:
+        """Acknowledge one frozen contributor or adjudicate its bounded hard crash."""
+
         if final_cycle_seq is not None and (
             isinstance(final_cycle_seq, bool)
             or not isinstance(final_cycle_seq, int)
@@ -4517,6 +4213,8 @@ class LeaderSession:
         }
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            """Validate the frozen lineage and retire its exact current incarnation."""
+
             controller = connection.execute(
                 "SELECT * FROM controller_state WHERE singleton=1"
             ).fetchone()
@@ -4541,34 +4239,12 @@ class LeaderSession:
                 ):
                     raise ValueError("hard-crash gap exceeds the frozen one-cycle token budget")
                 state = "hard_crash"
-                if isinstance(fence, DynamicContributorFence):
-                    self._retire_dynamic_in_transaction(
-                        connection,
-                        fence=fence,
-                        reason="terminal_hard_crash",
-                        final_status="expired",
-                    )
-                else:
-                    self._terminalize_fenced_updates(
-                        connection,
-                        fence_json=_canonical_json(fence.as_dict()),
-                        reason="terminal_hard_crash",
-                    )
-                    connection.execute(
-                        """
-                        UPDATE static_contributor_bindings
-                        SET status='terminal', terminal_at=?
-                        WHERE learner_id=? AND logical_launch_id=? AND attempt_id=?
-                            AND binding_generation=? AND status='active'
-                        """,
-                        (
-                            now,
-                            fence.learner_id,
-                            fence.logical_launch_id,
-                            fence.attempt_id,
-                            fence.binding_generation,
-                        ),
-                    )
+                self._retire_in_transaction(
+                    connection,
+                    fence=fence,
+                    reason="terminal_hard_crash",
+                    final_status="expired",
+                )
             else:
                 assert final_cycle_seq is not None
                 close_sequence = int(frozen["close_last_cycle_seq"])
@@ -4626,27 +4302,19 @@ class LeaderSession:
                         raise MembershipFenceError(
                             "final update does not match the frozen contributor lineage"
                         )
-                if isinstance(fence, DynamicContributorFence):
-                    if final_update_id is not None:
-                        self._retire_dynamic_in_transaction(
-                            connection,
-                            fence=fence,
-                            reason="terminal_graceful_ack",
-                            final_status="draining",
-                            final_update_id=final_update_id,
-                        )
-                    else:
-                        self._terminalize_fenced_updates(
-                            connection,
-                            fence_json=_canonical_json(fence.as_dict()),
-                            reason="terminal_graceful_ack",
-                        )
+                if final_update_id is not None:
+                    self._retire_in_transaction(
+                        connection,
+                        fence=fence,
+                        reason="terminal_graceful_ack",
+                        final_status="draining",
+                        final_update_id=final_update_id,
+                    )
                 else:
                     self._terminalize_fenced_updates(
                         connection,
                         fence_json=_canonical_json(fence.as_dict()),
                         reason="terminal_graceful_ack",
-                        preserve_update_id=final_update_id,
                     )
                 state = "acked"
             connection.execute(
@@ -4687,9 +4355,13 @@ class LeaderSession:
         reason: str,
         error: bool = False,
     ) -> TerminalState:
+        """Assign final proposal fates and publish the immutable terminal authority record."""
+
         request = {"reason": reason, "error": error}
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            """Terminalize frozen work and close controller and token-ledger state atomically."""
+
             controller = connection.execute(
                 "SELECT * FROM controller_state WHERE singleton=1"
             ).fetchone()
@@ -4705,36 +4377,19 @@ class LeaderSession:
             ).fetchall()
             now = float(self._authority._wall_clock())
             for row in frozen:
-                fence = decode_contributor_fence(json.loads(str(row["fence_json"])))
+                fence = ContributorFence.from_dict(json.loads(str(row["fence_json"])))
                 self._terminalize_fenced_updates(
                     connection,
                     fence_json=str(row["fence_json"]),
                     reason="terminal_final_update_not_selected",
                 )
-                if isinstance(fence, DynamicContributorFence):
-                    self._retire_dynamic_in_transaction(
-                        connection,
-                        fence=fence,
-                        reason="terminal_graceful_ack",
-                        final_status="stopped",
-                        final_update_id=row["final_update_id"],
-                    )
-                else:
-                    connection.execute(
-                        """
-                        UPDATE static_contributor_bindings
-                        SET status='terminal', terminal_at=?
-                        WHERE learner_id=? AND logical_launch_id=? AND attempt_id=?
-                            AND binding_generation=? AND status='active'
-                        """,
-                        (
-                            now,
-                            fence.learner_id,
-                            fence.logical_launch_id,
-                            fence.attempt_id,
-                            fence.binding_generation,
-                        ),
-                    )
+                self._retire_in_transaction(
+                    connection,
+                    fence=fence,
+                    reason="terminal_graceful_ack",
+                    final_status="stopped",
+                    final_update_id=row["final_update_id"],
+                )
             outstanding = connection.execute(
                 """
                 SELECT COUNT(*) FROM updates WHERE status IN ('pending', 'selected')
@@ -4802,6 +4457,8 @@ class LeaderSession:
         connection: sqlite3.Connection,
         proposal: FullUpdateProposalV2,
     ) -> sqlite3.Row:
+        """Require the proposal to exactly match its previously ingested receipt promise."""
+
         receipt = connection.execute(
             "SELECT * FROM cycle_receipts WHERE receipt_id=?",
             (proposal.cycle_receipt_id,),
@@ -4819,7 +4476,6 @@ class LeaderSession:
             "retained_tokens_since_base": proposal.retained_tokens_since_base,
             "data_cursor_start": proposal.data_cursor_start,
             "data_cursor_end": proposal.data_cursor_end,
-            "fence_kind": proposal.contributor_fence.kind,
             "fence_json": _canonical_json(proposal.contributor_fence.as_dict()),
             "proposal_expected": 1,
         }
@@ -5370,15 +5026,17 @@ class LeaderSession:
                 ),
             )
 
-    def _retire_dynamic_in_transaction(
+    def _retire_in_transaction(
         self,
         connection: sqlite3.Connection,
         *,
-        fence: DynamicContributorFence,
+        fence: ContributorFence,
         reason: str,
         final_status: str,
         final_update_id: str | None = None,
     ) -> tuple[str, ...]:
+        """Retire one current fence and release its stream and placement ownership."""
+
         self._require_current_fence(connection, fence, allow_draining=True)
         now = float(self._authority._wall_clock())
         update_ids = self._terminalize_fenced_updates(
@@ -5449,9 +5107,10 @@ class LeaderSession:
         return update_ids
 
     @staticmethod
-    def _dynamic_fence_from_instance(row: Mapping[str, Any]) -> DynamicContributorFence:
-        return DynamicContributorFence(
-            kind="dynamic",
+    def _fence_from_instance(row: Mapping[str, Any]) -> ContributorFence:
+        """Reconstruct the canonical current fence from one admitted instance row."""
+
+        return ContributorFence(
             instance_id=str(row["instance_id"]),
             placement_id=str(row["placement_id"]),
             placement_epoch=int(row["placement_epoch"]),
@@ -5462,11 +5121,13 @@ class LeaderSession:
         )
 
     @staticmethod
-    def _dynamic_admission_result(
+    def _admission_result(
         connection: sqlite3.Connection,
         *,
-        fence: DynamicContributorFence,
+        fence: ContributorFence,
     ) -> dict[str, Any]:
+        """Build the admission response and resume cursor from durable stream progress."""
+
         progress = connection.execute(
             "SELECT * FROM contributor_progress WHERE stable_contributor_key=?",
             (fence.stable_contributor_key,),
@@ -5483,58 +5144,41 @@ class LeaderSession:
     def _require_current_fence(
         self,
         connection: sqlite3.Connection,
-        fence: StaticContributorFence | DynamicContributorFence,
+        fence: ContributorFence,
         *,
         update_id: str | None = None,
         allow_draining: bool = False,
     ) -> None:
-        if isinstance(fence, StaticContributorFence):
-            if not isinstance(self._authority._scope, StaticMembershipScope):
-                raise MembershipFenceError("static fence used with dynamic authority")
-            row = connection.execute(
-                """
-                SELECT 1 FROM static_contributor_bindings
-                WHERE learner_id=? AND logical_launch_id=? AND attempt_id=?
-                    AND binding_generation=? AND status='active'
-                """,
-                (
-                    fence.learner_id,
-                    fence.logical_launch_id,
-                    fence.attempt_id,
-                    fence.binding_generation,
-                ),
-            ).fetchone()
-        else:
-            if not isinstance(self._authority._scope, DynamicMembershipScope):
-                raise MembershipFenceError("dynamic fence used with static authority")
-            row = connection.execute(
-                """
-                SELECT 1 FROM learner_instances AS i
-                JOIN placements AS p ON p.placement_id=i.placement_id
-                JOIN streams AS s ON s.stream_id=i.stream_id
-                WHERE i.instance_id=? AND i.placement_id=? AND i.placement_epoch=?
-                    AND i.stream_id=? AND i.stream_epoch=? AND i.admission_generation=?
-                    AND i.admission_token_sha256=?
-                    AND (i.status='admitted'
-                        OR (? AND i.status='draining')
-                        OR (i.status='draining' AND i.final_update_id=?))
-                    AND p.current_instance_id=i.instance_id
-                    AND p.current_placement_epoch=i.placement_epoch
-                    AND s.current_instance_id=i.instance_id
-                    AND s.current_stream_epoch=i.stream_epoch
-                """,
-                (
-                    fence.instance_id,
-                    fence.placement_id,
-                    fence.placement_epoch,
-                    fence.stream_id,
-                    fence.stream_epoch,
-                    fence.admission_generation,
-                    fence.admission_token_sha256,
-                    int(allow_draining),
-                    update_id,
-                ),
-            ).fetchone()
+        """Require an exact instance, placement, stream, generation, and token owner."""
+
+        row = connection.execute(
+            """
+            SELECT 1 FROM learner_instances AS i
+            JOIN placements AS p ON p.placement_id=i.placement_id
+            JOIN streams AS s ON s.stream_id=i.stream_id
+            WHERE i.instance_id=? AND i.placement_id=? AND i.placement_epoch=?
+                AND i.stream_id=? AND i.stream_epoch=? AND i.admission_generation=?
+                AND i.admission_token_sha256=?
+                AND (i.status='admitted'
+                    OR (? AND i.status='draining')
+                    OR (i.status='draining' AND i.final_update_id=?))
+                AND p.current_instance_id=i.instance_id
+                AND p.current_placement_epoch=i.placement_epoch
+                AND s.current_instance_id=i.instance_id
+                AND s.current_stream_epoch=i.stream_epoch
+            """,
+            (
+                fence.instance_id,
+                fence.placement_id,
+                fence.placement_epoch,
+                fence.stream_id,
+                fence.stream_epoch,
+                fence.admission_generation,
+                fence.admission_token_sha256,
+                int(allow_draining),
+                update_id,
+            ),
+        ).fetchone()
         if row is None:
             raise MembershipFenceError("contributor fence is stale or not admitted")
 
@@ -5542,10 +5186,12 @@ class LeaderSession:
         self,
         connection: sqlite3.Connection,
         *,
-        fence: StaticContributorFence | DynamicContributorFence,
+        fence: ContributorFence,
         cycle_seq: int,
         update_id: str | None,
     ) -> None:
+        """Restrict closing input to the frozen current cycle and declared final update."""
+
         controller = connection.execute(
             "SELECT state, generation FROM controller_state WHERE singleton=1"
         ).fetchone()
@@ -5584,12 +5230,9 @@ class LeaderSession:
         update_id: str | None = None,
         allow_draining: bool = False,
     ) -> None:
-        payload = json.loads(fence_json)
-        fence = (
-            StaticContributorFence.from_dict(payload)
-            if payload.get("kind") == "static"
-            else DynamicContributorFence.from_dict(payload)
-        )
+        """Decode a strict fence JSON value and require its current authority ownership."""
+
+        fence = ContributorFence.from_dict(json.loads(fence_json))
         self._require_current_fence(
             connection, fence, update_id=update_id, allow_draining=allow_draining
         )
@@ -5936,46 +5579,6 @@ def _audit_history_records(
     return sorted(records, key=lambda item: (item["table"], item["primary_key"]))
 
 
-def _static_binding_command_request(
-    *,
-    learner_id: str,
-    logical_launch_id: str,
-    attempt_id: str,
-    expected_generation: int | None,
-    allow_logical_replacement: bool,
-    replacement_reason: str | None,
-    registration_created_at: float | None,
-) -> dict[str, Any]:
-    validate_identity(learner_id, name="learner_id")
-    validate_identity(logical_launch_id, name="logical_launch_id")
-    validate_identity(attempt_id, name="attempt_id")
-    if expected_generation is not None and (
-        isinstance(expected_generation, bool)
-        or not isinstance(expected_generation, int)
-        or expected_generation < 0
-    ):
-        raise ValueError("expected_generation must be a non-negative integer")
-    if not isinstance(allow_logical_replacement, bool):
-        raise ValueError("allow_logical_replacement must be a boolean")
-    if replacement_reason is not None and not replacement_reason:
-        raise ValueError("replacement_reason must not be empty")
-    if registration_created_at is not None and (
-        isinstance(registration_created_at, bool)
-        or not isinstance(registration_created_at, (int, float))
-        or not float("-inf") < float(registration_created_at) < float("inf")
-    ):
-        raise ValueError("registration_created_at must be a finite timestamp")
-    return {
-        "learner_id": learner_id,
-        "logical_launch_id": logical_launch_id,
-        "attempt_id": attempt_id,
-        "expected_generation": expected_generation,
-        "allow_logical_replacement": allow_logical_replacement,
-        "replacement_reason": replacement_reason,
-        "registration_created_at": registration_created_at,
-    }
-
-
 def _canonical_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
@@ -5988,16 +5591,6 @@ def _decode_committed_leader_lease(
         renewed_at=float(row["renewed_at"]),
         lease_expires_at=float(row["lease_expires_at"]),
         heartbeat_seq=int(row["heartbeat_seq"]),
-    )
-
-
-def _decode_static_binding(row: Mapping[str, Any]) -> StaticBinding:
-    return StaticBinding(
-        learner_id=str(row["learner_id"]),
-        logical_launch_id=str(row["logical_launch_id"]),
-        attempt_id=str(row["attempt_id"]),
-        binding_generation=int(row["binding_generation"]),
-        status=str(row["status"]),
     )
 
 

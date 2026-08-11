@@ -10,13 +10,12 @@ import os
 import socket
 import stat
 import time
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from ..protocol._validation import identity as validate_identity
-from ..protocol.contributor import ContributorFence, decode_contributor_fence
+from ..protocol.contributor import ContributorFence
 from ..protocol.cycle_receipt import contributor_fence_namespace
 from ..protocol.data_cursor import ContributorResumeState
 from .atomic_io import (
@@ -29,12 +28,11 @@ from .control import read_current_control
 from .paths import RunPaths
 
 
-ADMISSION_REQUEST_FORMAT_VERSION = 1
-ADMISSION_RESPONSE_FORMAT_VERSION = 2
-ADMISSION_REJECTION_FORMAT_VERSION = 1
-ADMISSION_CURRENT_FORMAT_VERSION = 1
-ADMISSION_DISPOSITION_FORMAT_VERSION = 1
-STATIC_REPLACEMENT_REQUEST_FORMAT_VERSION = 1
+ADMISSION_REQUEST_FORMAT_VERSION = 2
+ADMISSION_RESPONSE_FORMAT_VERSION = 3
+ADMISSION_REJECTION_FORMAT_VERSION = 2
+ADMISSION_CURRENT_FORMAT_VERSION = 2
+ADMISSION_DISPOSITION_FORMAT_VERSION = 2
 
 
 class AdmissionRejectedError(RuntimeError):
@@ -45,97 +43,35 @@ class AdmissionSupersededError(RuntimeError):
     """The response fence is no longer the contributor's current admission."""
 
 
-class AdmissionAuthorizationError(ValueError):
-    """An operator replacement authorization is malformed or mismatched."""
-
-
 @dataclass(frozen=True)
 class AdmissionContext:
-    actor_id: str
-    attempt_id: str
-    fence: ContributorFence
-    resume: ContributorResumeState
+    """Bundle a granted instance identity, current fence, and resume state."""
+
+    actor_id: str  # Admitted learner instance identity.
+    attempt_id: str  # Response namespace identity, equal to the instance identity.
+    fence: ContributorFence  # Current stream ownership credential.
+    resume: ContributorResumeState  # Durable stream progress restored for the learner.
 
 
 @dataclass(frozen=True)
 class AdmissionRequestObservation:
-    path: Path
-    original: bytes | None
-    identity: tuple[int, int] | None
-    payload: dict[str, Any] | None
-    read_error_type: str | None = None
-    read_errno: int | None = None
+    """Describe one bounded hot-request read without hiding filesystem failures."""
+
+    path: Path  # Exact hot request path.
+    original: bytes | None  # Bytes read through the inode-stability guard.
+    identity: tuple[int, int] | None  # Device and inode used for safe archival removal.
+    payload: dict[str, Any] | None  # Parsed request when the bytes are valid JSON.
+    read_error_type: str | None = None  # Stable error class for an unreadable request.
+    read_errno: int | None = None  # Platform errno when the guarded read fails.
 
 
-def new_attempt_id() -> str:
-    return f"attempt-{uuid.uuid4()}"
-
-
-def static_logical_launch_id(*, descriptor_sha256: str, learner_id: str) -> str:
-    digest = hashlib.sha256(
-        f"{descriptor_sha256}\0static\0{learner_id}".encode("utf-8")
-    ).hexdigest()
-    return f"static-{digest[:32]}"
-
-
-def dynamic_placement_id(*, hostname: str, accelerator: str) -> str:
+def derive_placement_id(*, hostname: str, accelerator: str) -> str:
     """Return a stable, opaque placement identity accepted by authority validation."""
     digest = hashlib.sha256(f"{hostname}\0{accelerator}".encode("utf-8")).hexdigest()
     return validate_identity(f"placement-{digest[:32]}", name="placement_id")
 
 
-def publish_static_request(
-    paths: RunPaths,
-    *,
-    run_id: str,
-    descriptor_sha256: str,
-    learner_id: str,
-    logical_launch_id: str,
-    attempt_id: str,
-    expected_generation: int | None,
-) -> Path:
-    path, _request_sha256 = publish_static_request_with_sha256(
-        paths,
-        run_id=run_id,
-        descriptor_sha256=descriptor_sha256,
-        learner_id=learner_id,
-        logical_launch_id=logical_launch_id,
-        attempt_id=attempt_id,
-        expected_generation=expected_generation,
-    )
-    return path
-
-
-def publish_static_request_with_sha256(
-    paths: RunPaths,
-    *,
-    run_id: str,
-    descriptor_sha256: str,
-    learner_id: str,
-    logical_launch_id: str,
-    attempt_id: str,
-    expected_generation: int | None,
-) -> tuple[Path, str]:
-    payload = {
-        "format_version": ADMISSION_REQUEST_FORMAT_VERSION,
-        "mode": "static",
-        "run_id": run_id,
-        "descriptor_sha256": descriptor_sha256,
-        "learner_id": learner_id,
-        "logical_launch_id": logical_launch_id,
-        "attempt_id": attempt_id,
-        "expected_generation": expected_generation,
-        "hostname": socket.gethostname(),
-        "pid": os.getpid(),
-        "pbs_job_id": os.environ.get("PBS_JOBID"),
-        "created_at": time.time(),
-    }
-    target = paths.registration_requests / "static" / learner_id / f"{attempt_id}.json"
-    _publish_json(target, payload)
-    return target, admission_request_sha256(payload)
-
-
-def publish_dynamic_request(
+def publish_admission_request(
     paths: RunPaths,
     *,
     run_id: str,
@@ -147,7 +83,9 @@ def publish_dynamic_request(
     launch_request_id: str | None = None,
     replace_instance_id: str | None = None,
 ) -> Path:
-    path, _request_sha256 = publish_dynamic_request_with_sha256(
+    """Publish one canonical admission request and return its hot path."""
+
+    path, _request_sha256 = publish_admission_request_with_sha256(
         paths,
         run_id=run_id,
         descriptor_sha256=descriptor_sha256,
@@ -161,7 +99,7 @@ def publish_dynamic_request(
     return path
 
 
-def publish_dynamic_request_with_sha256(
+def publish_admission_request_with_sha256(
     paths: RunPaths,
     *,
     run_id: str,
@@ -173,11 +111,12 @@ def publish_dynamic_request_with_sha256(
     launch_request_id: str | None = None,
     replace_instance_id: str | None = None,
 ) -> tuple[Path, str]:
+    """Publish one request and return its path plus canonical content digest."""
+
     hostname = socket.gethostname()
     accelerator = os.environ.get("CUDA_VISIBLE_DEVICES") or "cpu"
     payload = {
         "format_version": ADMISSION_REQUEST_FORMAT_VERSION,
-        "mode": "dynamic",
         "run_id": run_id,
         "descriptor_sha256": descriptor_sha256,
         "instance_id": instance_id,
@@ -185,7 +124,7 @@ def publish_dynamic_request_with_sha256(
         "bootstrap_slot": bootstrap_slot,
         "launch_request_id": launch_request_id,
         "replace_instance_id": replace_instance_id,
-        "placement_id": dynamic_placement_id(
+        "placement_id": derive_placement_id(
             hostname=hostname,
             accelerator=accelerator,
         ),
@@ -195,17 +134,19 @@ def publish_dynamic_request_with_sha256(
         "pbs_job_id": os.environ.get("PBS_JOBID"),
         "created_at": time.time(),
     }
-    target = paths.registration_requests / "dynamic" / f"{instance_id}.json"
+    target = paths.registration_requests / f"{instance_id}.json"
     _publish_json(target, payload)
     return target, admission_request_sha256(payload)
 
 
 def iter_admission_requests(paths: RunPaths) -> tuple[AdmissionRequestObservation, ...]:
+    """Read the flat bounded hot request directory in lexical order."""
+
     results: list[AdmissionRequestObservation] = []
     root = paths.registration_requests
     if not root.is_dir():
         return ()
-    for path in sorted(root.glob("*/*/*.json")) + sorted(root.glob("dynamic/*.json")):
+    for path in sorted(root.glob("*.json")):
         try:
             original, identity = _read_hot_request(path)
         except FileNotFoundError:
@@ -247,33 +188,22 @@ def admission_request_error(
 
     if request.get("run_id") != run_id or request.get("descriptor_sha256") != descriptor_sha256:
         return "ForeignAdmissionRequest", "request run or descriptor identity does not match"
-    common = {
+    expected = {
         "format_version",
-        "mode",
         "run_id",
         "descriptor_sha256",
         "hostname",
         "pid",
         "pbs_job_id",
         "created_at",
+        "instance_id",
+        "stream_id",
+        "bootstrap_slot",
+        "launch_request_id",
+        "replace_instance_id",
+        "placement_id",
+        "admission_token_sha256",
     }
-    mode = request.get("mode")
-    expected = (
-        common | {"learner_id", "logical_launch_id", "attempt_id", "expected_generation"}
-        if mode == "static"
-        else common
-        | {
-            "instance_id",
-            "stream_id",
-            "bootstrap_slot",
-            "launch_request_id",
-            "replace_instance_id",
-            "placement_id",
-            "admission_token_sha256",
-        }
-        if mode == "dynamic"
-        else set()
-    )
     if (
         request.get("format_version") != ADMISSION_REQUEST_FORMAT_VERSION
         or set(request) != expected
@@ -284,38 +214,27 @@ def admission_request_error(
         _require_nonnegative_integer(request["pid"], name="pid")
         _require_optional_string(request["pbs_job_id"], name="pbs_job_id")
         _require_timestamp(request["created_at"], name="created_at")
-        if mode == "static":
-            _require_identity(request["learner_id"], name="learner_id")
-            _require_identity(request["logical_launch_id"], name="logical_launch_id")
-            _require_identity(request["attempt_id"], name="attempt_id")
-            if request["expected_generation"] is not None:
-                _require_nonnegative_integer(
-                    request["expected_generation"], name="expected_generation"
-                )
-        else:
-            _require_identity(request["instance_id"], name="instance_id")
-            _require_identity(request["placement_id"], name="placement_id")
-            _require_nonnegative_integer(request["stream_id"], name="stream_id")
-            if request["bootstrap_slot"] is not None:
-                _require_nonnegative_integer(request["bootstrap_slot"], name="bootstrap_slot")
-            _require_optional_identity(request["launch_request_id"], name="launch_request_id")
-            _require_optional_identity(request["replace_instance_id"], name="replace_instance_id")
-            if (request["bootstrap_slot"] is None) == (request["launch_request_id"] is None):
-                raise ValueError(
-                    "dynamic request requires exactly one bootstrap or launch authorization"
-                )
-            if request["bootstrap_slot"] is not None and (
-                request["bootstrap_slot"] != request["stream_id"]
-                or request["replace_instance_id"] is not None
-            ):
-                raise ValueError("bootstrap authorization does not match the requested stream")
-            digest = request["admission_token_sha256"]
-            if (
-                not isinstance(digest, str)
-                or len(digest) != 64
-                or any(character not in "0123456789abcdef" for character in digest)
-            ):
-                raise ValueError("admission_token_sha256 is invalid")
+        _require_identity(request["instance_id"], name="instance_id")
+        _require_identity(request["placement_id"], name="placement_id")
+        _require_nonnegative_integer(request["stream_id"], name="stream_id")
+        if request["bootstrap_slot"] is not None:
+            _require_nonnegative_integer(request["bootstrap_slot"], name="bootstrap_slot")
+        _require_optional_identity(request["launch_request_id"], name="launch_request_id")
+        _require_optional_identity(request["replace_instance_id"], name="replace_instance_id")
+        if (request["bootstrap_slot"] is None) == (request["launch_request_id"] is None):
+            raise ValueError("request requires exactly one bootstrap or launch authorization")
+        if request["bootstrap_slot"] is not None and (
+            request["bootstrap_slot"] != request["stream_id"]
+            or request["replace_instance_id"] is not None
+        ):
+            raise ValueError("bootstrap authorization does not match the requested stream")
+        digest = request["admission_token_sha256"]
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+        ):
+            raise ValueError("admission_token_sha256 is invalid")
     except (TypeError, ValueError) as exc:
         return "MalformedAdmissionRequest", str(exc)
     return None
@@ -330,12 +249,10 @@ def publish_admission_response(
     fence: ContributorFence,
     resume: ContributorResumeState,
 ) -> Path:
-    actor_id = (
-        str(request["learner_id"])
-        if request.get("mode") == "static"
-        else str(request["instance_id"])
-    )
-    attempt_id = str(request["attempt_id"]) if request.get("mode") == "static" else actor_id
+    """Publish a successful admission response and its current-fence pointer."""
+
+    actor_id = str(request["instance_id"])
+    attempt_id = actor_id
     payload = {
         "format_version": ADMISSION_RESPONSE_FORMAT_VERSION,
         "run_id": request["run_id"],
@@ -419,6 +336,8 @@ def read_admission_response(
     max_clock_skew_seconds: float,
     expected_fence: ContributorFence | None = None,
 ) -> AdmissionContext | None:
+    """Read one current response and reject stale, terminal, or mismatched controls."""
+
     current = read_current_control(
         paths,
         run_id=run_id,
@@ -466,7 +385,7 @@ def read_admission_response(
             return None
         raise AdmissionSupersededError("admission response was superseded by another fence")
     try:
-        pointer_fence = decode_contributor_fence(pointer.get("fence"))
+        pointer_fence = ContributorFence.from_dict(pointer.get("fence"))
     except (TypeError, ValueError) as exc:
         raise RuntimeError("current admission pointer fence is invalid") from exc
     if (
@@ -536,6 +455,8 @@ def _decode_admission_response_control(
     epoch: int,
     owner_id: str,
 ) -> tuple[ContributorFence, ContributorResumeState]:
+    """Decode one exact epoch response into its sole fence and resume state."""
+
     expected = {
         "format_version": ADMISSION_RESPONSE_FORMAT_VERSION,
         "run_id": run_id,
@@ -560,7 +481,7 @@ def _decode_admission_response_control(
     }:
         raise RuntimeError("admission response resume state is invalid")
     try:
-        fence = decode_contributor_fence(payload.get("fence"))
+        fence = ContributorFence.from_dict(payload.get("fence"))
         resume = ContributorResumeState(
             cursor=resume_payload["cursor"],
             last_receipt_id=resume_payload["last_receipt_id"],
@@ -924,6 +845,8 @@ def _validate_admission_disposition(
     request: dict[str, Any],
     disposition: Any,
 ) -> None:
+    """Validate one durable accepted or rejected request disposition."""
+
     request_sha = admission_request_sha256(request)
     expected = {
         "format_version": ADMISSION_DISPOSITION_FORMAT_VERSION,
@@ -961,7 +884,7 @@ def _validate_admission_disposition(
     actor_id, attempt_id = _request_actor_attempt(request)
     if outcome == "admitted":
         try:
-            fence = decode_contributor_fence(disposition.get("fence"))
+            fence = ContributorFence.from_dict(disposition.get("fence"))
         except (TypeError, ValueError) as exc:
             raise RuntimeError("admission disposition fence is invalid") from exc
         expected_control = paths.epoch_admission_response_path(
@@ -1080,109 +1003,11 @@ def repair_rejected_admission_control(
     )
 
 
-def publish_static_replacement_authorization(
-    paths: RunPaths,
-    *,
-    run_id: str,
-    descriptor_sha256: str,
-    old_fence: ContributorFence,
-    new_logical_launch_id: str,
-    new_attempt_id: str,
-    reason: str,
-) -> Path:
-    if old_fence.kind != "static":
-        raise ValueError("static replacement authorization requires a static fence")
-    if not reason.strip():
-        raise ValueError("static replacement authorization reason must not be empty")
-    validate_identity(new_logical_launch_id, name="new_logical_launch_id")
-    validate_identity(new_attempt_id, name="new_attempt_id")
-    payload = {
-        "format_version": STATIC_REPLACEMENT_REQUEST_FORMAT_VERSION,
-        "run_id": run_id,
-        "descriptor_sha256": descriptor_sha256,
-        "old_fence": old_fence.as_dict(),
-        "learner_id": old_fence.stable_contributor_key,
-        "new_logical_launch_id": new_logical_launch_id,
-        "new_attempt_id": new_attempt_id,
-        "reason": reason,
-        "created_at": time.time(),
-    }
-    target = paths.static_replacement_request_path(old_fence.stable_contributor_key, new_attempt_id)
-    _publish_json(target, payload)
-    return target
-
-
-def read_static_replacement_authorization(
-    paths: RunPaths,
-    *,
-    request: dict[str, Any],
-    current_fence: ContributorFence,
-) -> tuple[str, str] | None:
-    if current_fence.kind != "static" or request.get("mode") != "static":
-        return None
-    target = paths.static_replacement_request_path(
-        str(request["learner_id"]), str(request["attempt_id"])
-    )
-    try:
-        data = target.read_bytes()
-        payload = json.loads(data)
-    except FileNotFoundError:
-        return None
-    except (OSError, json.JSONDecodeError) as exc:
-        raise AdmissionAuthorizationError(
-            f"invalid static replacement authorization: {target}"
-        ) from exc
-    expected = {
-        "format_version": STATIC_REPLACEMENT_REQUEST_FORMAT_VERSION,
-        "run_id": request["run_id"],
-        "descriptor_sha256": request["descriptor_sha256"],
-        "old_fence": current_fence.as_dict(),
-        "learner_id": request["learner_id"],
-        "new_logical_launch_id": request["logical_launch_id"],
-        "new_attempt_id": request["attempt_id"],
-    }
-    if not isinstance(payload, dict) or set(payload) != {*expected, "reason", "created_at"}:
-        raise AdmissionAuthorizationError("static replacement authorization fields are invalid")
-    if any(payload.get(key) != value for key, value in expected.items()):
-        raise AdmissionAuthorizationError("static replacement authorization identity mismatch")
-    reason = payload.get("reason")
-    created_at = payload.get("created_at")
-    if (
-        not isinstance(reason, str)
-        or not reason.strip()
-        or isinstance(created_at, bool)
-        or not isinstance(created_at, (int, float))
-        or not math.isfinite(float(created_at))
-        or float(created_at) < 0.0
-    ):
-        raise AdmissionAuthorizationError("static replacement authorization payload is invalid")
-    return reason, hashlib.sha256(data).hexdigest()
-
-
 def _request_actor_attempt(request: dict[str, Any]) -> tuple[str, str]:
-    if request.get("mode") == "static":
-        return str(request["learner_id"]), str(request["attempt_id"])
-    if request.get("mode") == "dynamic":
-        actor_id = str(request["instance_id"])
-        return actor_id, actor_id
-    raise ValueError("unknown admission request mode")
+    """Return the sole instance identity used by response and rejection paths."""
 
-
-def highest_static_generation(paths: RunPaths, learner_id: str) -> int | None:
-    highest: int | None = None
-    if not paths.syncer_epochs.is_dir():
-        return None
-    for path in paths.syncer_epochs.glob(
-        f"e*_*/membership/admissions/responses/{learner_id}/**/*.json"
-    ):
-        payload = safe_read_json(path)
-        if not isinstance(payload, dict):
-            continue
-        fence = payload.get("fence")
-        if isinstance(fence, dict) and fence.get("kind") == "static":
-            generation = int(fence["binding_generation"])
-            highest = generation if highest is None else max(highest, generation)
-    return highest
+    actor_id = str(request["instance_id"])
+    return actor_id, actor_id
 
 
 def _canonical_json_bytes(payload: dict[str, Any], *, newline: bool) -> bytes:

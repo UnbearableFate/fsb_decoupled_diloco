@@ -18,7 +18,6 @@ print(descriptor["descriptor_sha256"])
 print(descriptor["git_commit"])
 print(descriptor["source_fingerprint"])
 print(int(bool(descriptor["git_dirty"])))
-print(descriptor["mode"])
 PY
   )
   FS_DILOCO_RESOLVED_CONFIG="${descriptor_fields[0]}"
@@ -26,7 +25,6 @@ PY
   FS_DILOCO_EXPECTED_GIT_COMMIT="${descriptor_fields[2]}"
   FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT="${descriptor_fields[3]}"
   FS_DILOCO_EXPECTED_GIT_DIRTY="${descriptor_fields[4]}"
-  FS_DILOCO_MEMBERSHIP_MODE="${descriptor_fields[5]}"
 
   readarray -t actual_source < <(
     "$python_bin" - "$project_root" <<'PY'
@@ -50,7 +48,7 @@ PY
   FS_DILOCO_SOURCE_FINGERPRINT="$FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT"
   FS_DILOCO_GIT_DIRTY="$FS_DILOCO_EXPECTED_GIT_DIRTY"
   FS_DILOCO_REQUIRE_SOURCE_IDENTITY=1
-  export FS_DILOCO_RESOLVED_CONFIG FS_DILOCO_MEMBERSHIP_MODE
+  export FS_DILOCO_RESOLVED_CONFIG
   export FS_DILOCO_EXPECTED_DESCRIPTOR_SHA256 FS_DILOCO_EXPECTED_GIT_COMMIT
   export FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT FS_DILOCO_EXPECTED_GIT_DIRTY
   export FS_DILOCO_GIT_COMMIT FS_DILOCO_SOURCE_FINGERPRINT FS_DILOCO_GIT_DIRTY

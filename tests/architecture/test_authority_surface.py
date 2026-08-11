@@ -1,3 +1,5 @@
+"""Verify the explicit neutral authority API and sole DDL owner."""
+
 from __future__ import annotations
 
 import ast
@@ -10,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_authority_surfaces_have_no_dynamic_dispatch_or_public_sql_escape() -> None:
+    """Authority callers cannot reach dynamic dispatch or public raw SQL."""
+
     for cls in (AuthorityReader, LeaderAuthority, LeaderSession):
         assert "__getattr__" not in cls.__dict__
         assert "execute" not in cls.__dict__
@@ -19,12 +23,14 @@ def test_authority_surfaces_have_no_dynamic_dispatch_or_public_sql_escape() -> N
 
 
 def test_named_write_commands_are_explicit_methods() -> None:
+    """Every current write command is an explicit LeaderSession method."""
+
     expected = {
-        "bind_or_replace_static_attempt",
-        "mark_static_attempt_terminal",
         "initialize_genesis",
-        "initialize_dynamic_membership",
-        "admit_dynamic_incarnation",
+        "initialize_membership",
+        "admit_incarnation",
+        "plan_launch_request",
+        "transition_launch_request",
         "ingest_cycle_receipt",
         "ingest_proposal",
         "observe_proposal_visibility",
@@ -43,6 +49,8 @@ def test_named_write_commands_are_explicit_methods() -> None:
 
 
 def test_authority_module_owns_the_canonical_schema_and_read_write_surfaces() -> None:
+    """The authority module owns the only schema bundle and read/write surfaces."""
+
     source = (ROOT / "fs_diloco/storage/authority.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     definitions = {
@@ -53,4 +61,4 @@ def test_authority_module_owns_the_canonical_schema_and_read_write_surfaces() ->
         definitions
     )
     assert source.count('BASE_SCHEMA_NAME = "schema.sql"') == 1
-    assert source.count('DYNAMIC_SCHEMA_NAME = "schema_dynamic.sql"') == 1
+    assert "schema_dynamic.sql" not in source

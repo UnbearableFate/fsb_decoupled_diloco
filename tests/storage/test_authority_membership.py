@@ -1,3 +1,5 @@
+"""Verify authority transactions over stream incarnations and current fences."""
+
 from __future__ import annotations
 
 import hashlib
@@ -8,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from fs_diloco.protocol.authority import MergeFenceConflict
-from fs_diloco.protocol.contributor import DynamicContributorFence, DynamicMembershipScope
+from fs_diloco.protocol.contributor import ContributorFence, MembershipScope
 from fs_diloco.protocol.cycle_receipt import CycleReceiptV1
 from fs_diloco.protocol.proposal import FullUpdateProposalV2
 from fs_diloco.storage.authority import (
@@ -27,23 +29,31 @@ from tests.support.protocol import (
 
 @dataclass
 class Clock:
+    """Provide a mutable deterministic wall clock for authority transactions."""
+
     now: float = 100.0
 
     def __call__(self) -> float:
+        """Return the current deterministic timestamp."""
+
         return self.now
 
 
-def open_dynamic(tmp_path: Path, clock: Clock, *, streams: int = 2) -> LeaderAuthority:
+def open_authority(tmp_path: Path, clock: Clock, *, streams: int = 2) -> LeaderAuthority:
+    """Create an initialized authority with the requested fixed stream pool."""
+
     identity = AuthorityIdentity(
         "run-current", "source-fingerprint", hashlib.sha256(b"config").hexdigest()
     )
-    scope = DynamicMembershipScope(streams)
+    scope = MembershipScope(streams)
     database = tmp_path / "authority.sqlite3"
     initialize_authority(database, identity, scope, wall_clock=clock)
     return LeaderAuthority(database, identity, scope, wall_clock=clock)
 
 
-def admit(leader, *, index: int, replace: str | None = None) -> DynamicContributorFence:
+def admit(leader, *, index: int, replace: str | None = None) -> ContributorFence:
+    """Admit a bootstrap instance or a scheduler-authorized replacement."""
+
     launch_request_id = None
     if replace is not None:
         launch_request_id = f"replacement-launch-{index}"
@@ -61,7 +71,7 @@ def admit(leader, *, index: int, replace: str | None = None) -> DynamicContribut
             retention_count=32,
         )
         old_index = int(replace.rsplit("-", 1)[1])
-        planned = leader.plan_dynamic_launch_request(
+        planned = leader.plan_launch_request(
             command_id=f"plan-replacement-{index}",
             request_id=launch_request_id,
             observation_key=observation_key,
@@ -73,7 +83,7 @@ def admit(leader, *, index: int, replace: str | None = None) -> DynamicContribut
             max_total_requests=32,
             expected_scheduler_job_id=f"{old_index}.opbs",
         )
-        submitting = leader.transition_dynamic_launch_request(
+        submitting = leader.transition_launch_request(
             command_id=f"submit-replacement-{index}",
             request_id=launch_request_id,
             expected_state=planned["state"],
@@ -82,7 +92,7 @@ def admit(leader, *, index: int, replace: str | None = None) -> DynamicContribut
             scheduler_state="qsub_started",
             evidence_source="qsub_started",
         )
-        leader.transition_dynamic_launch_request(
+        leader.transition_launch_request(
             command_id=f"submitted-replacement-{index}",
             request_id=launch_request_id,
             expected_state=submitting["state"],
@@ -91,7 +101,7 @@ def admit(leader, *, index: int, replace: str | None = None) -> DynamicContribut
             scheduler_state="queued",
             evidence_source="qsub_receipt",
         )
-    admission = leader.admit_dynamic_incarnation(
+    admission = leader.admit_incarnation(
         command_id=f"admit-{index}",
         instance_id=f"instance-{index}",
         placement_id=f"placement-{index % 2}",
@@ -104,18 +114,20 @@ def admit(leader, *, index: int, replace: str | None = None) -> DynamicContribut
         replace_instance_id=replace,
         replacement_reason="authorized_replacement" if replace is not None else None,
     )
-    assert isinstance(admission.fence, DynamicContributorFence)
+    assert isinstance(admission.fence, ContributorFence)
     return admission.fence
 
 
 def ingest_update(
     leader,
     run_root: Path,
-    fence: DynamicContributorFence,
+    fence: ContributorFence,
     *,
     sequence: int = 1,
     ordinal: int = 0,
 ) -> FullUpdateProposalV2:
+    """Publish and ingest one receipt-linked update from a current fence."""
+
     update_id = f"00000000-0000-4000-8000-{ordinal * 1000 + sequence:012d}"
     receipt = CycleReceiptV1.from_dict(
         receipt_payload(
@@ -143,6 +155,8 @@ def ingest_update(
 
 
 def initialize_genesis(leader, run_root: Path) -> None:
+    """Publish and initialize the version-zero checkpoint pair."""
+
     leader.initialize_genesis(
         command_id="initialize-v0",
         publication_id="publication-v0",
@@ -151,11 +165,13 @@ def initialize_genesis(leader, run_root: Path) -> None:
 
 
 def test_revoke_before_selection_leaves_current_quorum_progressing(tmp_path: Path) -> None:
+    """Retiring one instance drops its update without blocking a current quorum."""
+
     clock = Clock()
-    with open_dynamic(tmp_path, clock) as authority:
+    with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         leader = authority.open_leader(token)
-        leader.initialize_dynamic_membership(command_id="initialize-membership")
+        leader.initialize_membership(command_id="initialize-membership")
         stale_fence = admit(leader, index=0)
         current_fence = admit(leader, index=1)
         stale = ingest_update(leader, tmp_path, stale_fence, ordinal=0)
@@ -187,11 +203,13 @@ def test_revoke_before_selection_leaves_current_quorum_progressing(tmp_path: Pat
 
 
 def test_selection_classifies_stale_rows_without_partial_abort(tmp_path: Path) -> None:
+    """Selection classifies a stale row while atomically selecting current work."""
+
     clock = Clock()
-    with open_dynamic(tmp_path, clock) as authority:
+    with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         leader = authority.open_leader(token)
-        leader.initialize_dynamic_membership(command_id="initialize-membership")
+        leader.initialize_membership(command_id="initialize-membership")
         stale_fence = admit(leader, index=0)
         current_fence = admit(leader, index=1)
         stale = ingest_update(leader, tmp_path, stale_fence, ordinal=0)
@@ -220,11 +238,13 @@ def test_selection_classifies_stale_rows_without_partial_abort(tmp_path: Path) -
 def test_revoke_after_selection_returns_per_row_conflict_then_retry_commits(
     tmp_path: Path,
 ) -> None:
+    """A post-selection retirement yields a row conflict and permits a clean retry."""
+
     clock = Clock()
-    with open_dynamic(tmp_path, clock) as authority:
+    with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         leader = authority.open_leader(token)
-        leader.initialize_dynamic_membership(command_id="initialize-membership")
+        leader.initialize_membership(command_id="initialize-membership")
         stale_fence = admit(leader, index=0)
         current_fence = admit(leader, index=1)
         stale = ingest_update(leader, tmp_path, stale_fence, ordinal=0)
@@ -277,11 +297,13 @@ def test_revoke_after_selection_returns_per_row_conflict_then_retry_commits(
 def test_draining_preserves_only_declared_final_update_and_stop_terminalizes_it(
     tmp_path: Path,
 ) -> None:
+    """Draining admits only the declared final update before terminalizing it."""
+
     clock = Clock()
-    with open_dynamic(tmp_path, clock, streams=1) as authority:
+    with open_authority(tmp_path, clock, streams=1) as authority:
         token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         leader = authority.open_leader(token)
-        leader.initialize_dynamic_membership(command_id="initialize-membership")
+        leader.initialize_membership(command_id="initialize-membership")
         fence = admit(leader, index=0)
         final_update_id = "00000000-0000-4000-8000-000000000001"
 
@@ -332,11 +354,13 @@ def test_draining_preserves_only_declared_final_update_and_stop_terminalizes_it(
 
 
 def test_authorized_replacement_atomically_retires_old_incarnation(tmp_path: Path) -> None:
+    """Replacement advances placement and stream epochs while dropping old pending work."""
+
     clock = Clock()
-    with open_dynamic(tmp_path, clock, streams=1) as authority:
+    with open_authority(tmp_path, clock, streams=1) as authority:
         token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         leader = authority.open_leader(token)
-        leader.initialize_dynamic_membership(command_id="initialize-membership")
+        leader.initialize_membership(command_id="initialize-membership")
         old_fence = admit(leader, index=0)
         old = ingest_update(leader, tmp_path, old_fence)
 

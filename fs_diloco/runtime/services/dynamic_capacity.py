@@ -88,8 +88,8 @@ class DynamicCapacityService:
         ):
             return tuple(actions)
 
-        instances = self.authority.read.dynamic_instances()
-        launches = self.authority.read.dynamic_launch_requests()
+        instances = self.authority.read.instances()
+        launches = self.authority.read.launch_requests()
         reserved = sum(
             row["role"] != "bootstrap" and row["reservation_released_at"] is None
             for row in launches
@@ -171,7 +171,7 @@ class DynamicCapacityService:
             available = next(
                 (
                     row
-                    for row in self.authority.read.dynamic_streams()
+                    for row in self.authority.read.streams()
                     if row["state"] == "available"
                     and row["current_instance_id"] is None
                     and int(row["stream_id"]) not in reserved_streams
@@ -250,10 +250,12 @@ class DynamicCapacityService:
         expected_scheduler_job_id: str | None,
         now: float,
     ) -> bool:
+        """Persist one deterministic launch authorization when budget and fencing permit."""
+
         request_material = f"{observation_key}\0{stream_id}\0{replace_instance_id or ''}\0{reason}"
         request_id = "launch-" + hashlib.sha256(request_material.encode()).hexdigest()[:32]
         try:
-            self.leader.plan_dynamic_launch_request(
+            self.leader.plan_launch_request(
                 command_id=f"plan-{request_id}",
                 request_id=request_id,
                 observation_key=observation_key,
@@ -274,8 +276,10 @@ class DynamicCapacityService:
         return True
 
     def _reconcile_launches(self) -> tuple[str, ...]:
+        """Advance every nonterminal launch request from durable scheduler evidence."""
+
         actions: list[str] = []
-        for row in self.authority.read.dynamic_launch_requests():
+        for row in self.authority.read.launch_requests():
             if row["role"] == "bootstrap":
                 continue
             state = str(row["state"])
@@ -293,7 +297,7 @@ class DynamicCapacityService:
                     )
                     actions.append("expired")
                     continue
-                self.leader.transition_dynamic_launch_request(
+                self.leader.transition_launch_request(
                     command_id=f"submit-start-{request_id}",
                     request_id=request_id,
                     expected_state="planned",
@@ -646,6 +650,8 @@ class DynamicCapacityService:
         terminal_evidence: bool = False,
         last_error: str | None = None,
     ) -> None:
+        """Commit one identity-bound launch transition through the leader session."""
+
         uncertain = state in {"submission_unknown", "terminal_uncertain"}
         transition_identity = json.dumps(
             {
@@ -662,7 +668,7 @@ class DynamicCapacityService:
             sort_keys=True,
             separators=(",", ":"),
         )
-        self.leader.transition_dynamic_launch_request(
+        self.leader.transition_launch_request(
             command_id="launch-transition-"
             + hashlib.sha256(transition_identity.encode()).hexdigest(),
             request_id=str(row["request_id"]),

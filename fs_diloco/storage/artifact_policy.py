@@ -102,6 +102,8 @@ class ArtifactPolicy:
 
 
 def build_artifact_policy() -> dict[str, Any]:
+    """Build the sole current retention policy for authority and generated artifacts."""
+
     policy: dict[str, Any] = {
         "format_version": 1,
         "classes": {
@@ -121,7 +123,6 @@ def build_artifact_policy() -> dict[str, Any]:
                 "control/registration_requests/**",
                 "control/registration_history/**",
                 "control/registration_dispositions/**",
-                "control/static_replacement_requests/**",
                 "control/syncer_epochs/**",
                 "updates/receipts/**",
                 "updates/proposals/**",

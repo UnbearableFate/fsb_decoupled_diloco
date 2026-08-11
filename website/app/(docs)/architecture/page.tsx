@@ -57,7 +57,7 @@ export default function ArchitecturePage() {
           </div>
           <div>
             <span>RUNTIME SERVICES</span>
-            <p>admission · merge · terminal · maintenance · dynamic capacity</p>
+            <p>admission · merge · terminal · maintenance · capacity control</p>
           </div>
           <div>
             <span>PROTOCOL</span>
@@ -109,7 +109,7 @@ export default function ArchitecturePage() {
         <div className="sequence">
           {[
             ["01", "Descriptor gate", "读取 immutable descriptor，核对 config 路径与期望源码身份。"],
-            ["02", "Admission", "发布 static 或 dynamic request，等待带 contributor fence 的响应。"],
+            ["02", "Admission", "发布 instance request，等待带 contributor fence 的响应。"],
             ["03", "Runtime import", "再次验证 admission 后才导入 Torch、加载模型并写 attestation。"],
             ["04", "Local train", "从 cursor 构造确定性数据 shard，执行 inner optimizer step 并累计 token。"],
             ["05", "Publish cycle", "写入不可变 local parameter payload、proposal pointer 与 cycle receipt。"],
@@ -142,7 +142,7 @@ export default function ArchitecturePage() {
           <article><strong>Merge</strong><p>选择 quorum、读取 proposal、执行外层优化并提交版本。</p></article>
           <article><strong>Terminal</strong><p>判定 close、发布 drain、收集 ack、执行受限尾部合并。</p></article>
           <article><strong>Maintenance</strong><p>归档已处置行，清理孤儿 publication，并保持活跃扫描有界。</p></article>
-          <article><strong>Dynamic capacity</strong><p>记录容量窗口、创建 launch reservation，并与 PBS 状态对账。</p></article>
+          <article><strong>Capacity control</strong><p>记录容量窗口、创建 launch reservation，并与 PBS 状态对账。</p></article>
         </div>
       </section>
 

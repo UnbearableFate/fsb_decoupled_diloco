@@ -14,7 +14,7 @@ from fs_diloco.protocol.scheduler import (
     SchedulerOperatorRequest,
     scheduler_state_sha256,
 )
-from fs_diloco.protocol.contributor import DynamicMembershipScope
+from fs_diloco.protocol.contributor import MembershipScope
 from fs_diloco.runtime.pbs_scheduler import PBSJobObservation
 from fs_diloco.runtime.services.dynamic_capacity import DynamicCapacityService
 from fs_diloco.storage.atomic_io import publish_immutable_bytes
@@ -28,28 +28,36 @@ from tests.support import FakePBS
 
 
 class Clock:
+    """Provide mutable deterministic time to capacity-service tests."""
+
     def __init__(self) -> None:
+        """Start the test clock at a stable nonzero timestamp."""
+
         self.now = 100.0
 
     def __call__(self) -> float:
+        """Return the current deterministic timestamp."""
+
         return self.now
 
 
 def _identity() -> AuthorityIdentity:
+    """Return the stable authority identity used by capacity fixtures."""
+
     return AuthorityIdentity("run-current", "source", hashlib.sha256(b"config").hexdigest())
 
 
 def _runtime(tmp_path: Path, clock: Clock, *, streams: int = 2):
     """Create a dynamic-capacity runtime fixture with a recording scheduler."""
 
-    scope = DynamicMembershipScope(streams)
+    scope = MembershipScope(streams)
     database = tmp_path / "authority.sqlite3"
     initialize_authority(database, _identity(), scope, wall_clock=clock)
     authority = LeaderAuthority(database, _identity(), scope, wall_clock=clock)
     leader = authority.open_leader(
         authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
     )
-    leader.initialize_dynamic_membership(command_id="initialize-membership")
+    leader.initialize_membership(command_id="initialize-membership")
     scaling = ScalingSection(
         enabled=True,
         desired_contributors=2,
@@ -73,7 +81,6 @@ def _runtime(tmp_path: Path, clock: Clock, *, streams: int = 2):
         learner_queue="debug-g",
     )
     membership = MembershipSection(
-        mode="dynamic",
         stream_pool_size=streams,
         bootstrap_instances=0,
         heartbeat_dead_after_seconds=4.0,
@@ -93,6 +100,8 @@ def _runtime(tmp_path: Path, clock: Clock, *, streams: int = 2):
 
 
 def _observation(job_id: str, classification: str) -> PBSJobObservation:
+    """Build one scheduler observation with no diagnostic payload."""
+
     return PBSJobObservation(job_id, classification, {}, 0, "")
 
 
@@ -108,9 +117,7 @@ def test_persistent_low_windows_plan_and_submit_exact_stream(tmp_path: Path) -> 
         clock.now += 1.1
         actions = service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
 
-        launches = [
-            row for row in authority.read.dynamic_launch_requests() if row["role"] != "bootstrap"
-        ]
+        launches = [row for row in authority.read.launch_requests() if row["role"] != "bootstrap"]
         assert "scale_out_planned" in actions
         assert len(launches) == 1
         assert launches[0]["state"] == "submitted"
@@ -132,12 +139,14 @@ def test_persistent_low_windows_plan_and_submit_exact_stream(tmp_path: Path) -> 
 
 
 def test_initial_bootstrap_deadline_suppresses_ordinary_scale_out(tmp_path: Path) -> None:
+    """Initial bootstrap admissions receive their full deadline before scale-out."""
+
     clock = Clock()
     authority, leader, scheduler, service = _runtime(tmp_path, clock)
     service.membership.bootstrap_instances = 2
     service.membership.initial_membership_deadline_seconds = 5.0
     try:
-        leader.admit_dynamic_incarnation(
+        leader.admit_incarnation(
             command_id="bootstrap-0",
             instance_id="instance-0",
             placement_id="placement-0",
@@ -170,10 +179,12 @@ def test_initial_bootstrap_deadline_suppresses_ordinary_scale_out(tmp_path: Path
 def test_replacement_loss_window_starts_at_its_own_admission(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Loss detection gives every replacement its own post-admission heartbeat window."""
+
     clock = Clock()
     authority, leader, scheduler, service = _runtime(tmp_path, clock)
     try:
-        leader.admit_dynamic_incarnation(
+        leader.admit_incarnation(
             command_id="bootstrap-0",
             instance_id="instance-0",
             placement_id="placement-0",
@@ -184,7 +195,7 @@ def test_replacement_loss_window_starts_at_its_own_admission(
             pbs_job_id="replacement.opbs",
             bootstrap_slot=0,
         )
-        instances = authority.read.dynamic_instances()
+        instances = authority.read.instances()
         monkeypatch.setattr(
             authority.read,
             "contributor_progress",
@@ -205,6 +216,8 @@ def test_replacement_loss_window_starts_at_its_own_admission(
 
 
 def test_multiple_pending_scale_outs_reserve_distinct_streams(tmp_path: Path) -> None:
+    """Concurrent planned launches reserve distinct currently vacant streams."""
+
     clock = Clock()
     authority, _leader, _scheduler, service = _runtime(tmp_path, clock, streams=2)
     service.scaling.max_pending_launch_requests = 2
@@ -217,7 +230,7 @@ def test_multiple_pending_scale_outs_reserve_distinct_streams(tmp_path: Path) ->
 
         active = [
             row
-            for row in authority.read.dynamic_launch_requests()
+            for row in authority.read.launch_requests()
             if row["role"] != "bootstrap" and row["reservation_released_at"] is None
         ]
         assert len(active) == 2
@@ -226,13 +239,7 @@ def test_multiple_pending_scale_outs_reserve_distinct_streams(tmp_path: Path) ->
         clock.now += 1.1
         service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
         assert (
-            len(
-                [
-                    row
-                    for row in authority.read.dynamic_launch_requests()
-                    if row["role"] != "bootstrap"
-                ]
-            )
+            len([row for row in authority.read.launch_requests() if row["role"] != "bootstrap"])
             == 2
         )
     finally:
@@ -240,15 +247,15 @@ def test_multiple_pending_scale_outs_reserve_distinct_streams(tmp_path: Path) ->
 
 
 def test_scheduler_state_flapping_rearms_with_each_new_row_version(tmp_path: Path) -> None:
+    """Each fresh scheduler transition resets uncertainty from its durable row version."""
+
     clock = Clock()
     authority, _leader, scheduler, service = _runtime(tmp_path, clock)
     try:
         service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
         clock.now += 1.1
         service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
-        launch = [
-            row for row in authority.read.dynamic_launch_requests() if row["role"] != "bootstrap"
-        ][0]
+        launch = [row for row in authority.read.launch_requests() if row["role"] != "bootstrap"][0]
         job_id = str(launch["pbs_job_id"])
 
         for classification, expected_state in (
@@ -260,7 +267,7 @@ def test_scheduler_state_flapping_rearms_with_each_new_row_version(tmp_path: Pat
             clock.now += 1.1
             scheduler.queue_query(job_id, _observation(job_id, classification))
             service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
-            current = authority.read.dynamic_launch_requests()[-1]
+            current = authority.read.launch_requests()[-1]
             assert current["state"] == expected_state
             if expected_state == "started":
                 assert current["uncertainty_deadline"] is None
@@ -269,8 +276,14 @@ def test_scheduler_state_flapping_rearms_with_each_new_row_version(tmp_path: Pat
 
 
 def test_lost_qsub_result_never_resubmits_and_ends_in_manual_review(tmp_path: Path) -> None:
+    """Unknown qsub outcomes retain one reservation without duplicate submission."""
+
     class LostResultPBS(FakePBS):
+        """Simulate qsub timing out after the scheduler may have accepted a job."""
+
         def submit_learner(self, **kwargs):
+            """Record one submission and return an indeterminate transport result."""
+
             self.submissions.append(dict(kwargs))
             return {"returncode": -1, "stderr": "timeout"}
 
@@ -282,15 +295,13 @@ def test_lost_qsub_result_never_resubmits_and_ends_in_manual_review(tmp_path: Pa
         service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
         clock.now += 1.1
         service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
-        request = [
-            row for row in authority.read.dynamic_launch_requests() if row["role"] != "bootstrap"
-        ][0]
+        request = [row for row in authority.read.launch_requests() if row["role"] != "bootstrap"][0]
         assert request["state"] == "submission_unknown"
         assert len(scheduler.submissions) == 1
 
         clock.now += 1.1
         service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
-        uncertain = authority.read.dynamic_launch_requests()[-1]
+        uncertain = authority.read.launch_requests()[-1]
         assert uncertain["state"] == "terminal_uncertain"
         deadline = uncertain["uncertainty_deadline"]
         assert deadline == pytest.approx(104.1)
@@ -311,7 +322,7 @@ def test_lost_qsub_result_never_resubmits_and_ends_in_manual_review(tmp_path: Pa
             wall_clock=clock,
         )
         successor_service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
-        reviewed = authority.read.dynamic_launch_requests()[-1]
+        reviewed = authority.read.launch_requests()[-1]
         assert reviewed["state"] == "manual_review"
         assert reviewed["uncertainty_deadline"] == deadline
         assert reviewed["reservation_released_at"] is None
@@ -335,7 +346,7 @@ def test_lost_qsub_result_never_resubmits_and_ends_in_manual_review(tmp_path: Pa
             eligible_contributors=0,
             selected_contributors=0,
         )
-        resolved = authority.read.dynamic_launch_requests()[-1]
+        resolved = authority.read.launch_requests()[-1]
         assert "operator_applied" in actions
         assert resolved["state"] == "failed"
         assert resolved["reservation_released_at"] == clock.now
@@ -353,6 +364,8 @@ def test_lost_qsub_result_never_resubmits_and_ends_in_manual_review(tmp_path: Pa
 
 
 def test_invalid_operator_file_is_disposed_once(tmp_path: Path) -> None:
+    """Malformed operator input gets one durable rejection and cannot replay."""
+
     clock = Clock()
     authority, _leader, _scheduler, service = _runtime(tmp_path, clock)
     request_path = RunPaths(tmp_path).scheduler_operator_requests / "invalid.json"
@@ -371,6 +384,8 @@ def test_invalid_operator_file_is_disposed_once(tmp_path: Path) -> None:
 
 
 def test_operator_disposal_never_follows_processed_symlink(tmp_path: Path) -> None:
+    """Rejected input cleanup never follows an attacker-controlled processed symlink."""
+
     clock = Clock()
     authority, _leader, _scheduler, service = _runtime(tmp_path, clock)
     root = RunPaths(tmp_path).scheduler_operator_requests
@@ -394,6 +409,8 @@ def test_operator_disposal_never_follows_processed_symlink(tmp_path: Path) -> No
 def test_oversize_operator_file_is_streamed_bounded_and_disposed_once(
     tmp_path: Path,
 ) -> None:
+    """Oversize operator input is read with a hard bound and disposed exactly once."""
+
     clock = Clock()
     authority, _leader, _scheduler, service = _runtime(tmp_path, clock)
     request_path = RunPaths(tmp_path).scheduler_operator_requests / "oversize.json"
@@ -422,6 +439,8 @@ def test_oversize_operator_file_is_streamed_bounded_and_disposed_once(
 def test_disposed_operator_file_successor_cleanup_preserves_replacement(
     tmp_path: Path,
 ) -> None:
+    """Cleanup of a disposed file never unlinks a same-name replacement payload."""
+
     clock = Clock()
     authority, leader, _scheduler, service = _runtime(tmp_path, clock)
     request_path = RunPaths(tmp_path).scheduler_operator_requests / "invalid.json"
@@ -467,8 +486,14 @@ def test_disposed_operator_file_successor_cleanup_preserves_replacement(
 def test_lost_qsub_result_uses_historical_request_scan_without_resubmission(
     tmp_path: Path,
 ) -> None:
+    """Historical scheduler lookup resolves a lost qsub response without resubmission."""
+
     class LostButHistoricallyFinishedPBS(FakePBS):
+        """Simulate a lost qsub response whose request is visible in history."""
+
         def submit_learner(self, **kwargs):
+            """Bind historical evidence while returning a transport failure."""
+
             self.submissions.append(dict(kwargs))
             request_id = str(kwargs["launch_request_id"])
             self.bind_historical_request(
@@ -490,9 +515,7 @@ def test_lost_qsub_result_uses_historical_request_scan_without_resubmission(
             selected_contributors=0,
         )
 
-        request = [
-            row for row in authority.read.dynamic_launch_requests() if row["role"] != "bootstrap"
-        ][0]
+        request = [row for row in authority.read.launch_requests() if row["role"] != "bootstrap"][0]
         assert "submission_recovered" in actions
         assert request["state"] == "failed"
         assert request["pbs_job_id"] == "historical-123"
@@ -503,6 +526,8 @@ def test_lost_qsub_result_uses_historical_request_scan_without_resubmission(
 
 
 def test_successor_recovers_submitting_request_without_duplicate_qsub(tmp_path: Path) -> None:
+    """A successor binds scheduler evidence for an inherited submitting request."""
+
     clock = Clock()
     authority, leader, scheduler, service = _runtime(tmp_path, clock)
     try:
@@ -518,7 +543,7 @@ def test_successor_recovers_submitting_request_without_duplicate_qsub(tmp_path: 
             action="low",
             retention_count=8,
         )
-        row = leader.plan_dynamic_launch_request(
+        row = leader.plan_launch_request(
             command_id="plan",
             request_id="launch-successor",
             observation_key=observation["observation_key"],
@@ -529,7 +554,7 @@ def test_successor_recovers_submitting_request_without_duplicate_qsub(tmp_path: 
             max_pending_requests=1,
             max_total_requests=4,
         )
-        leader.transition_dynamic_launch_request(
+        leader.transition_launch_request(
             command_id="submitting",
             request_id=row["request_id"],
             expected_state="planned",
@@ -547,7 +572,7 @@ def test_successor_recovers_submitting_request_without_duplicate_qsub(tmp_path: 
 
         service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
 
-        recovered = authority.read.dynamic_launch_requests()[-1]
+        recovered = authority.read.launch_requests()[-1]
         assert recovered["state"] == "submitted"
         assert recovered["pbs_job_id"] == "123"
         assert scheduler.submissions == []
@@ -558,12 +583,14 @@ def test_successor_recovers_submitting_request_without_duplicate_qsub(tmp_path: 
 def test_replacement_requires_stale_progress_and_terminal_scheduler_evidence(
     tmp_path: Path,
 ) -> None:
+    """Replacement requires both stale progress and terminal scheduler evidence."""
+
     clock = Clock()
     authority, leader, scheduler, service = _runtime(tmp_path, clock, streams=1)
     service.scaling.desired_contributors = 1
     service.scaling.low_contributor_threshold = 0
     try:
-        leader.admit_dynamic_incarnation(
+        leader.admit_incarnation(
             command_id="bootstrap",
             instance_id="instance-old",
             placement_id="placement-old",
@@ -579,17 +606,13 @@ def test_replacement_requires_stale_progress_and_terminal_scheduler_evidence(
 
         actions = service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
 
-        launch = [
-            row for row in authority.read.dynamic_launch_requests() if row["role"] != "bootstrap"
-        ]
+        launch = [row for row in authority.read.launch_requests() if row["role"] != "bootstrap"]
         assert "replacement_planned" in actions
         assert len(launch) == 1
         assert launch[0]["replace_instance_id"] == "instance-old"
         assert launch[0]["stream_id"] == 0
         old = next(
-            row
-            for row in authority.read.dynamic_instances()
-            if row["instance_id"] == "instance-old"
+            row for row in authority.read.instances() if row["instance_id"] == "instance-old"
         )
         assert old["status"] == "expired"
     finally:
@@ -599,12 +622,14 @@ def test_replacement_requires_stale_progress_and_terminal_scheduler_evidence(
 def test_suspended_or_unknown_scheduler_state_never_authorizes_replacement(
     tmp_path: Path,
 ) -> None:
+    """Suspended or unknown scheduler states never authorize incarnation replacement."""
+
     clock = Clock()
     authority, leader, scheduler, service = _runtime(tmp_path, clock, streams=1)
     service.scaling.desired_contributors = 1
     service.scaling.low_contributor_threshold = 0
     try:
-        leader.admit_dynamic_incarnation(
+        leader.admit_incarnation(
             command_id="bootstrap",
             instance_id="instance-paused",
             placement_id="placement-paused",
@@ -620,20 +645,20 @@ def test_suspended_or_unknown_scheduler_state_never_authorizes_replacement(
 
         service.tick(global_version=0, eligible_contributors=0, selected_contributors=0)
 
-        assert [
-            row for row in authority.read.dynamic_launch_requests() if row["role"] != "bootstrap"
-        ] == []
-        assert authority.read.dynamic_instances()[0]["status"] == "admitted"
+        assert [row for row in authority.read.launch_requests() if row["role"] != "bootstrap"] == []
+        assert authority.read.instances()[0]["status"] == "admitted"
     finally:
         authority.close()
 
 
 def test_shared_running_pbs_job_never_proves_one_child_process_lost(tmp_path: Path) -> None:
+    """A running shared parent allocation cannot prove one learner child is gone."""
+
     clock = Clock()
     authority, leader, scheduler, service = _runtime(tmp_path, clock, streams=2)
     try:
         for stream_id in range(2):
-            leader.admit_dynamic_incarnation(
+            leader.admit_incarnation(
                 command_id=f"bootstrap-{stream_id}",
                 instance_id=f"instance-{stream_id}",
                 placement_id=f"placement-{stream_id}",
@@ -650,9 +675,7 @@ def test_shared_running_pbs_job_never_proves_one_child_process_lost(tmp_path: Pa
         actions = service.tick(global_version=0, eligible_contributors=2, selected_contributors=0)
 
         assert "replacement_planned" not in actions
-        assert [
-            row for row in authority.read.dynamic_launch_requests() if row["role"] != "bootstrap"
-        ] == []
-        assert {row["status"] for row in authority.read.dynamic_instances()} == {"admitted"}
+        assert [row for row in authority.read.launch_requests() if row["role"] != "bootstrap"] == []
+        assert {row["status"] for row in authority.read.instances()} == {"admitted"}
     finally:
         authority.close()

@@ -13,7 +13,7 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Literal
 
 from ..core.versions import CONTROL_FORMAT_VERSION, SYNCER_HEARTBEAT_FORMAT_VERSION
-from ..protocol.contributor import ContributorFence, decode_contributor_fence
+from ..protocol.contributor import ContributorFence
 from ..protocol.cycle_receipt import CycleReceiptV1
 from .atomic_io import atomic_write_json, publish_immutable_bytes, safe_read_json
 from .leader_lease import CommittedLeaderLease, LeaderToken, StaleLeaderTokenError
@@ -667,6 +667,8 @@ def publish_terminal_ack(
 def iter_terminal_acks(
     paths: RunPaths,
 ) -> tuple[tuple[Path, dict[str, Any], ContributorFence], ...]:
+    """Return readable terminal acknowledgements with strictly decoded current fences."""
+
     root = paths.shared_root / "updates" / "terminal_acks"
     if not root.is_dir():
         return ()
@@ -676,7 +678,7 @@ def iter_terminal_acks(
         if not isinstance(payload, dict):
             continue
         try:
-            fence = decode_contributor_fence(payload.get("fence"))
+            fence = ContributorFence.from_dict(payload.get("fence"))
         except ValueError:
             continue
         results.append((path, payload, fence))

@@ -1,3 +1,5 @@
+"""Verify strict cycle-receipt identity, accounting, cursor, and fence semantics."""
+
 from __future__ import annotations
 
 import math
@@ -5,7 +7,8 @@ from dataclasses import replace
 
 import pytest
 
-from fs_diloco.protocol.contributor import StaticContributorFence
+from fs_diloco.protocol.contributor import ContributorFence
+from fs_diloco.core.versions import CYCLE_RECEIPT_FORMAT_VERSION
 from fs_diloco.protocol.cycle_receipt import (
     CycleReceiptV1,
     canonical_receipt_relative_path,
@@ -14,6 +17,8 @@ from tests.support.protocol import receipt_payload
 
 
 def test_cycle_receipt_v1_strict_round_trip() -> None:
+    """The current receipt wire shape must survive canonical serialization exactly."""
+
     receipt = CycleReceiptV1.from_dict(receipt_payload())
 
     assert CycleReceiptV1.from_json(receipt.canonical_bytes()) == receipt
@@ -21,8 +26,10 @@ def test_cycle_receipt_v1_strict_round_trip() -> None:
 
 
 def test_receipt_path_is_namespaced_by_complete_contributor_fence() -> None:
-    first = StaticContributorFence("static", "learner-0", "launch-0", "attempt-1", 1)
-    replacement = StaticContributorFence("static", "learner-0", "launch-0", "attempt-2", 2)
+    """A replacement incarnation must never collide with the retired receipt namespace."""
+
+    first = ContributorFence("instance-1", "placement-1", 1, 0, 1, 1, "a" * 64)
+    replacement = ContributorFence("instance-2", "placement-2", 1, 0, 2, 2, "b" * 64)
 
     first_path = canonical_receipt_relative_path(first, 1)
     replacement_path = canonical_receipt_relative_path(replacement, 1)
@@ -34,6 +41,8 @@ def test_receipt_path_is_namespaced_by_complete_contributor_fence() -> None:
 
 
 def test_zero_effective_cycle_is_valid_only_without_a_proposal() -> None:
+    """A discarded cycle may be receipted but cannot claim an effective proposal."""
+
     payload = receipt_payload()
     payload.update(
         {
@@ -57,6 +66,8 @@ def test_zero_effective_cycle_is_valid_only_without_a_proposal() -> None:
 
 @pytest.mark.parametrize("value", [-1, True])
 def test_cycle_receipt_rejects_invalid_token_types(value: object) -> None:
+    """Token accounting rejects negative values and booleans at the wire boundary."""
+
     payload = receipt_payload()
     payload["local_discarded_tokens_this_cycle"] = value
     with pytest.raises(ValueError):
@@ -65,6 +76,8 @@ def test_cycle_receipt_rejects_invalid_token_types(value: object) -> None:
 
 @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
 def test_cycle_receipt_rejects_nonfinite_time(value: float) -> None:
+    """Receipt timestamps must remain finite for deterministic ordering."""
+
     payload = receipt_payload()
     payload["created_at"] = value
     with pytest.raises(ValueError, match="finite"):
@@ -72,6 +85,8 @@ def test_cycle_receipt_rejects_nonfinite_time(value: float) -> None:
 
 
 def test_cycle_receipt_requires_contiguous_hash_link_shape() -> None:
+    """Only the first cycle may omit its predecessor receipt identity."""
+
     missing = receipt_payload(cycle_seq=2, cursor_start=8, cursor_end=16)
     with pytest.raises(ValueError, match="previous receipt"):
         CycleReceiptV1.from_dict(missing)
@@ -82,13 +97,15 @@ def test_cycle_receipt_requires_contiguous_hash_link_shape() -> None:
 
 
 def test_cycle_receipt_rejects_unknown_field_and_version() -> None:
+    """Receipt decoding rejects legacy versions and extension fields."""
+
     unknown = receipt_payload()
     unknown["unknown"] = None
     with pytest.raises(ValueError, match="unknown fields"):
         CycleReceiptV1.from_dict(unknown)
 
     version = receipt_payload()
-    version["cycle_receipt_format_version"] = 2
+    version["cycle_receipt_format_version"] = CYCLE_RECEIPT_FORMAT_VERSION - 1
     with pytest.raises(ValueError, match="unsupported cycle_receipt_format_version"):
         CycleReceiptV1.from_dict(version)
 
@@ -99,6 +116,8 @@ def test_cycle_receipt_rejects_unknown_field_and_version() -> None:
 
 
 def test_direct_receipt_and_fence_construction_cannot_bypass_validation() -> None:
+    """Dataclass replacement and direct fence construction preserve validation."""
+
     receipt = CycleReceiptV1.from_dict(receipt_payload())
 
     with pytest.raises(ValueError, match="processed tokens"):
@@ -107,5 +126,5 @@ def test_direct_receipt_and_fence_construction_cannot_bypass_validation() -> Non
         replace(receipt, planned_update_id="not-a-uuid")
     with pytest.raises(ValueError, match="finite"):
         replace(receipt, created_at=math.nan)
-    with pytest.raises(ValueError, match="kind"):
-        StaticContributorFence("dynamic", "learner-0", "launch-0", "attempt-1", 1)
+    with pytest.raises(ValueError, match="stream_epoch"):
+        ContributorFence("instance-1", "placement-1", 1, 0, 0, 1, "a" * 64)

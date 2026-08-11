@@ -15,7 +15,7 @@ trap 'echo "[ERROR] independent launcher failed at line $LINENO" >&2' ERR
 : "${ACTOR_QUEUE:?ACTOR_QUEUE is required}"
 PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
-CONFIG="${CONFIG:-$PROJECT_ROOT/configs/full_protocol_static.yaml}"
+CONFIG="${CONFIG:-$PROJECT_ROOT/configs/full_protocol.yaml}"
 SYNCER_WALLTIME="${SYNCER_WALLTIME:-00:10:00}"
 LEARNER_WALLTIME="${LEARNER_WALLTIME:-00:10:00}"
 

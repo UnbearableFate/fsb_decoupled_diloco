@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Supervise one plan04 Dynamic Full scheduler-backed experiment."""
+"""Supervise one current Full Protocol scheduler-backed experiment."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from fs_diloco.core.config import load_config
 from fs_diloco.core.source_identity import SOURCE_SCOPES
 from fs_diloco.runtime.pbs_scheduler import PBSScheduler
 from fs_diloco.storage.audit_archive import read_logical_authority_rows
@@ -28,55 +29,16 @@ from fs_diloco.tools.launch_independent_run import launch
 class Scenario:
     """Describe one fixed submission and fault timeline."""
 
-    experiment_id: str  # Plan experiment number.
-    learner_batches: tuple[tuple[float, tuple[int, ...]], ...]  # Delay and bootstrap slots.
-    fault: str | None  # One supported scheduler fault, or no fault.
-    second_syncer_delay: float | None = None  # Delay before successor/candidate submission.
-    fault_delay: float | None = None  # Delay before deleting the registered fault target.
+    experiment_id: str  # Plan05 experiment number.
+    scaling_enabled: bool  # Whether the production capacity service may launch replacement.
+    inject_learner_failure: bool  # Whether the supervisor deletes one admitted learner job.
+    fault_delay: float | None = None  # Delay before deleting the registered learner.
 
 
 SCENARIOS: dict[str, Scenario] = {
-    "normal": Scenario("1", ((0.0, tuple(range(8))),), None),
-    "staggered_4_4": Scenario(
-        "2",
-        ((0.0, tuple(range(4))), (30.0, tuple(range(4, 8)))),
-        None,
-    ),
-    "staggered_3_3_2": Scenario(
-        "3",
-        (
-            (0.0, tuple(range(3))),
-            (30.0, tuple(range(3, 6))),
-            (60.0, tuple(range(6, 8))),
-        ),
-        None,
-    ),
-    "learner_loss": Scenario(
-        "4",
-        ((0.0, tuple(range(8))),),
-        "learner_loss",
-        fault_delay=60.0,
-    ),
-    "staggered_learner_loss": Scenario(
-        "5",
-        ((0.0, tuple(range(4))), (30.0, tuple(range(4, 8)))),
-        "learner_loss",
-        fault_delay=60.0,
-    ),
-    "syncer_loss": Scenario(
-        "6",
-        ((0.0, tuple(range(8))),),
-        "syncer_loss",
-        second_syncer_delay=80.0,
-        fault_delay=60.0,
-    ),
-    "dual_syncer": Scenario(
-        "7",
-        ((0.0, tuple(range(8))),),
-        "dual_syncer",
-        second_syncer_delay=60.0,
-        fault_delay=120.0,
-    ),
+    "no_failure": Scenario("1", False, False),
+    "failure_no_replacement": Scenario("2", False, True, fault_delay=60.0),
+    "failure_authorized_replacement": Scenario("3", True, True, fault_delay=60.0),
 }
 
 
@@ -277,28 +239,7 @@ def _wait_terminal(summary_path: Path, *, timeout_seconds: float) -> dict[str, A
                 raise RuntimeError("terminal summary does not prove all learners stopped")
             return payload
         time.sleep(2.0)
-    raise TimeoutError("Dynamic Full run did not publish terminal summary")
-
-
-def _require_active_first_syncer(database: Path, first_syncer_job_id: str) -> dict[str, Any]:
-    """Require the injected syncer fault to target the current leader lease owner."""
-
-    rows = _read_rows(
-        database,
-        "SELECT epoch, owner_id, pbs_job_id, state, acquired_at, lease_expires_at "
-        "FROM syncer_leader WHERE singleton=1",
-    )
-    if len(rows) != 1:
-        raise RuntimeError("syncer fault target has no unique current leader lease")
-    leader = rows[0]
-    pbs_job_id = leader.get("pbs_job_id")
-    if (
-        leader.get("state") != "active"
-        or not isinstance(pbs_job_id, str)
-        or _normalize_job_id(pbs_job_id) != _normalize_job_id(first_syncer_job_id)
-    ):
-        raise RuntimeError("syncer fault target is not the active first syncer")
-    return leader
+    raise TimeoutError("Full Protocol run did not publish terminal summary")
 
 
 def _scheduler_history(job_id: str, scheduler: PBSScheduler) -> dict[str, Any]:
@@ -402,7 +343,6 @@ def _final_authority_evidence(
     run_root: Path,
     scenario: Scenario,
     first_syncer_job_id: str,
-    second_syncer_job_id: str | None,
     victim: dict[str, Any] | None,
     replacement: dict[str, Any] | None,
 ) -> dict[str, Any]:
@@ -484,12 +424,18 @@ def _final_authority_evidence(
 
     if controller["state"] != "finalized" or int(terminal["final_version"]) != 10:
         raise RuntimeError("terminal authority did not finalize global version 10")
-    if len(fences) != 8 or {row["state"] for row in fences} != {"acked"}:
-        raise RuntimeError("terminal authority does not contain eight acknowledged contributors")
-    if {int(row["final_cycle_seq"]) for row in fences} != {10}:
-        raise RuntimeError("terminal contributors did not each complete ten local cycles")
-    if any(int(row["hard_crash_gap_tokens_upper_bound"]) != 0 for row in fences):
-        raise RuntimeError("terminal authority recorded an unexpected hard-crash token gap")
+    if len(fences) != 8:
+        raise RuntimeError("terminal authority does not cover the eight-stream pool")
+    hard_crashes = [row for row in fences if row["state"] == "hard_crash"]
+    if scenario.inject_learner_failure and not scenario.scaling_enabled:
+        if len(hard_crashes) != 1 or sum(row["state"] == "acked" for row in fences) != 7:
+            raise RuntimeError("fixed-capacity learner failure lacks one bounded hard-crash fence")
+        if int(hard_crashes[0]["hard_crash_gap_tokens_upper_bound"]) <= 0:
+            raise RuntimeError("fixed-capacity hard crash lacks a positive one-cycle token bound")
+    elif {row["state"] for row in fences} != {"acked"} or any(
+        int(row["hard_crash_gap_tokens_upper_bound"]) != 0 for row in fences
+    ):
+        raise RuntimeError("healthy terminal streams are not all acknowledged without gaps")
     expected_merges = [
         {
             "applied_version": version,
@@ -504,9 +450,9 @@ def _final_authority_evidence(
     nonbootstrap = [row for row in launches if row["role"] != "bootstrap"]
 
     replacement_boundary: dict[str, Any] | None = None
-    if scenario.fault == "learner_loss":
+    if scenario.scaling_enabled:
         if victim is None or replacement is None or len(nonbootstrap) != 1:
-            raise RuntimeError("learner fault did not produce exactly one replacement")
+            raise RuntimeError("authorized learner fault did not produce exactly one replacement")
         launch_row = nonbootstrap[0]
         if (
             launch_row["role"] != "replacement"
@@ -533,7 +479,6 @@ def _final_authority_evidence(
         )
         old_fence = json.dumps(
             {
-                "kind": "dynamic",
                 "instance_id": old["instance_id"],
                 "placement_id": old["placement_id"],
                 "placement_epoch": old["placement_epoch"],
@@ -560,25 +505,48 @@ def _final_authority_evidence(
             "new_instance": new,
             "launch": launch_row,
         }
+    elif scenario.inject_learner_failure:
+        if victim is None or replacement is not None or nonbootstrap:
+            raise RuntimeError("fixed-capacity learner failure produced a launch or replacement")
+        by_id = {str(row["instance_id"]): row for row in instances}
+        old = by_id[str(victim["instance_id"])]
+        if old["status"] != "expired":
+            raise RuntimeError("terminal close did not retire the failed fixed-capacity instance")
+        old_fence = json.dumps(
+            {
+                "instance_id": old["instance_id"],
+                "placement_id": old["placement_id"],
+                "placement_epoch": old["placement_epoch"],
+                "stream_id": old["stream_id"],
+                "stream_epoch": old["stream_epoch"],
+                "admission_generation": old["admission_generation"],
+                "admission_token_sha256": old["admission_token_sha256"],
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        late_created = [
+            str(row["update_id"])
+            for row in updates
+            if row["fence_json"] == old_fence
+            and float(row["created_at"]) > float(victim["fault_requested_at"])
+        ]
+        if late_created:
+            raise RuntimeError("deleted fixed-capacity learner created proposals after qdel")
+        replacement_boundary = {
+            "fault_requested_at": victim["fault_requested_at"],
+            "old_instance": old,
+            "late_created_update_ids": late_created,
+        }
     elif nonbootstrap:
         raise RuntimeError("non-fault scenario produced an unexpected scale-out or replacement")
 
-    expected_epoch_count = 2 if scenario.fault in {"syncer_loss", "dual_syncer"} else 1
-    if len(epochs) != expected_epoch_count:
-        raise RuntimeError(
-            f"scenario recorded {len(epochs)} syncer epochs, expected {expected_epoch_count}"
-        )
+    if len(epochs) != 1:
+        raise RuntimeError("learner scenarios must retain one clean syncer epoch")
     if _normalize_job_id(str(epochs[0]["pbs_job_id"])) != _normalize_job_id(first_syncer_job_id):
         raise RuntimeError("first syncer epoch does not belong to the submitted first candidate")
-    if expected_epoch_count == 2:
-        if second_syncer_job_id is None or _normalize_job_id(
-            str(epochs[1]["pbs_job_id"])
-        ) != _normalize_job_id(second_syncer_job_id):
-            raise RuntimeError("successor epoch does not belong to the submitted second candidate")
-        if epochs[0]["final_state"] != "expired" or epochs[1]["final_state"] != "released":
-            raise RuntimeError("syncer lease history does not prove fenced takeover")
-    elif epochs[0]["final_state"] != "released":
-        raise RuntimeError("normal syncer epoch did not release cleanly")
+    if epochs[0]["final_state"] != "released":
+        raise RuntimeError("syncer epoch did not release cleanly")
 
     return {
         "integrity_check": ["ok"],
@@ -626,6 +594,9 @@ def supervise(
     """Initialize, schedule, fault, verify, and cleanly close one experiment."""
 
     scenario = SCENARIOS[scenario_name]
+    resolved_experiment_config = load_config(config)
+    if resolved_experiment_config.scaling.enabled is not scenario.scaling_enabled:
+        raise RuntimeError("scenario scaling policy differs from its config")
     if evidence_output.exists() or run_root.exists() or log_root.exists():
         raise FileExistsError("run, log, and evidence outputs must all be fresh")
     known_job_ids: set[str] = set()
@@ -633,7 +604,6 @@ def supervise(
     faults: list[dict[str, Any]] = []
     victim: dict[str, Any] | None = None
     replacement: dict[str, Any] | None = None
-    second_syncer_job_id: str | None = None
     started_at = time.time()
     try:
         prepared = launch(
@@ -649,8 +619,8 @@ def supervise(
             actor_queue=actor_queue,
         )
         descriptor = prepared["descriptor"]
-        if descriptor.get("mode") != "dynamic" or descriptor.get("git_dirty") is not False:
-            raise RuntimeError("experiment requires a clean dynamic run descriptor")
+        if descriptor.get("git_dirty") is not False:
+            raise RuntimeError("experiment requires a clean run descriptor")
         log_root.mkdir(parents=True, exist_ok=False)
         _atomic_json(log_root / "init_run.json", prepared)
         syncer_command = _replace_output_path(
@@ -663,26 +633,21 @@ def supervise(
         learner_commands = [list(command) for command in prepared["learner_qsubs"]]
         origin = time.monotonic()
         initial_job_ids: list[str] = []
-        for delay, slots in scenario.learner_batches:
-            _sleep_until(origin, delay)
-            for slot in slots:
-                command = _replace_output_path(
-                    learner_commands[slot], log_root / f"bootstrap_{slot:03d}.log"
-                )
-                receipt = _qsub(command, role="bootstrap_learner", slot=slot)
-                submissions.append(receipt)
-                job_id = str(receipt["job_id"])
-                initial_job_ids.append(job_id)
-                known_job_ids.add(job_id)
-            _atomic_json(
-                log_root / "scenario_state.json", {"submissions": submissions, "faults": faults}
-            )
+        for slot, learner_command in enumerate(learner_commands):
+            command = _replace_output_path(learner_command, log_root / f"bootstrap_{slot:03d}.log")
+            receipt = _qsub(command, role="bootstrap_learner", slot=slot)
+            submissions.append(receipt)
+            job_id = str(receipt["job_id"])
+            initial_job_ids.append(job_id)
+            known_job_ids.add(job_id)
+        _atomic_json(
+            log_root / "scenario_state.json", {"submissions": submissions, "faults": faults}
+        )
         if len(initial_job_ids) != 8:
             raise RuntimeError("scenario did not submit exactly eight bootstrap learners")
 
         database = run_root / "control" / "syncer_metadata.sqlite3"
-        admissions: list[dict[str, Any]] | None = None
-        if scenario.fault == "learner_loss":
+        if scenario.inject_learner_failure:
             assert scenario.fault_delay is not None
             _sleep_until(origin, scenario.fault_delay)
             admissions = _wait_bootstrap_admissions(
@@ -691,47 +656,17 @@ def supervise(
             victim = _choose_learner_victim(run_id, admissions)
             victim_job_id = str(victim["pbs_job_id"])
             deletion = _qdel(victim_job_id, reason="inject_learner_loss")
+            victim["fault_requested_at"] = deletion["requested_at"]
             faults.append({"kind": "learner_loss", "victim": victim, "qdel": deletion})
-            replacement = _wait_replacement(
-                database,
-                victim_instance_id=str(victim["instance_id"]),
-                timeout_seconds=300.0,
-            )
-            replacement_job_id = str(replacement["pbs_job_id"])
-            known_job_ids.add(replacement_job_id)
-            faults[-1]["replacement"] = replacement
-        elif scenario.fault in {"syncer_loss", "dual_syncer"}:
-            assert scenario.second_syncer_delay is not None
-            assert scenario.fault_delay is not None
-            events = sorted(
-                (
-                    (scenario.second_syncer_delay, "submit_second"),
-                    (scenario.fault_delay, "delete_first"),
+            if scenario.scaling_enabled:
+                replacement = _wait_replacement(
+                    database,
+                    victim_instance_id=str(victim["instance_id"]),
+                    timeout_seconds=300.0,
                 )
-            )
-            for delay, event in events:
-                _sleep_until(origin, delay)
-                if (run_root / "control" / "summary.json").exists():
-                    raise RuntimeError("run finalized before the registered syncer fault")
-                if event == "submit_second":
-                    second_command = _replace_output_path(
-                        list(prepared["syncer_qsub"]), log_root / "syncer_001.log"
-                    )
-                    receipt = _qsub(second_command, role="syncer", slot=1)
-                    submissions.append(receipt)
-                    second_syncer_job_id = str(receipt["job_id"])
-                    known_job_ids.add(second_syncer_job_id)
-                    faults.append({"kind": "second_syncer_submitted", "receipt": receipt})
-                else:
-                    active_leader = _require_active_first_syncer(database, first_syncer_job_id)
-                    deletion = _qdel(first_syncer_job_id, reason="inject_syncer_loss")
-                    faults.append(
-                        {
-                            "kind": "first_syncer_deleted",
-                            "active_leader_before_qdel": active_leader,
-                            "qdel": deletion,
-                        }
-                    )
+                replacement_job_id = str(replacement["pbs_job_id"])
+                known_job_ids.add(replacement_job_id)
+                faults[-1]["replacement"] = replacement
         _atomic_json(
             log_root / "scenario_state.json", {"submissions": submissions, "faults": faults}
         )
@@ -752,7 +687,6 @@ def supervise(
             run_root=run_root,
             scenario=scenario,
             first_syncer_job_id=first_syncer_job_id,
-            second_syncer_job_id=second_syncer_job_id,
             victim=victim,
             replacement=replacement,
         )
@@ -760,21 +694,9 @@ def supervise(
         summary_csv = _summary_row(project_root, run_root, log_root)
         evidence = {
             "status": "PASS",
-            "gate": f"plan04-dynamic-full-{scenario_name}",
+            "gate": f"plan05-full-protocol-{scenario_name}",
             "experiment_id": scenario.experiment_id,
-            "requirements": {
-                "normal": ["CFG-01", "HARNESS-01", "NORMAL-01"],
-                "staggered_4_4": ["CFG-01", "HARNESS-01", "STAGGER-01"],
-                "staggered_3_3_2": ["CFG-01", "HARNESS-01", "STAGGER-01"],
-                "learner_loss": ["CFG-01", "HARNESS-01", "LEARNER-FAULT-01"],
-                "staggered_learner_loss": [
-                    "CFG-01",
-                    "HARNESS-01",
-                    "LEARNER-FAULT-01",
-                ],
-                "syncer_loss": ["CFG-01", "HARNESS-01", "SYNCER-FAULT-01"],
-                "dual_syncer": ["CFG-01", "HARNESS-01", "DUAL-SYNCER-01"],
-            }[scenario_name],
+            "requirements": ["P05-R06", "P05-R10"],
             "source": {
                 "commit": descriptor["git_commit"],
                 "dirty": descriptor["git_dirty"],
@@ -799,8 +721,7 @@ def supervise(
                 },
                 "scenario": scenario_name,
                 "timeline": {
-                    "learner_batches": scenario.learner_batches,
-                    "second_syncer_delay": scenario.second_syncer_delay,
+                    "bootstrap_slots": list(range(8)),
                     "fault_delay": scenario.fault_delay,
                 },
             },
@@ -833,9 +754,9 @@ def supervise(
         cleanup = _best_effort_cancel(known_job_ids)
         failure = {
             "status": "FAIL",
-            "gate": f"plan04-dynamic-full-{scenario_name}",
+            "gate": f"plan05-full-protocol-{scenario_name}",
             "experiment_id": scenario.experiment_id,
-            "requirements": ["CFG-01", "HARNESS-01"],
+            "requirements": ["P05-R06", "P05-R10"],
             "source": {"commit": None, "dirty": None, "scopes": None, "fingerprint": None},
             "environment": {
                 "supervisor_pbs_job_id": os.environ.get("PBS_JOBID"),
@@ -878,7 +799,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Resolve arguments and supervise one registered plan04 scenario."""
+    """Resolve arguments and supervise one registered plan05 scenario."""
 
     args = build_parser().parse_args(argv)
     supervise(

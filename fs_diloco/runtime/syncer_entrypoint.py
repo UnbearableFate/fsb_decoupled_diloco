@@ -83,19 +83,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _scope(loaded: LoadedRunDescriptor) -> Any:
-    from ..protocol.contributor import DynamicMembershipScope, StaticMembershipScope
+    """Construct the immutable stream-pool authority scope."""
 
-    if loaded.config.membership.mode == "dynamic":
-        return DynamicMembershipScope(int(loaded.descriptor["stream_pool_size"]))
-    return StaticMembershipScope(tuple(loaded.descriptor["static_learner_ids"]))
+    from ..protocol.contributor import MembershipScope
+
+    return MembershipScope(int(loaded.descriptor["stream_pool_size"]))
 
 
 def _initial_admission_ready(loaded: LoadedRunDescriptor, authority: Any) -> bool:
+    """Report whether the configured bootstrap population has been admitted."""
+
     fences = authority.read.current_contributor_fences()
-    if loaded.config.membership.mode == "static":
-        return {fence.stable_contributor_key for fence in fences} == set(
-            loaded.descriptor["static_learner_ids"]
-        )
     return len(fences) >= int(loaded.descriptor["bootstrap_slots"])
 
 
@@ -144,6 +142,8 @@ def _admit_before_runtime_import(
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Validate identity, acquire a fenced leader session, and run one syncer candidate."""
+
     args = build_parser().parse_args(argv)
     loaded = load_run_descriptor(
         args.shared_root,
@@ -217,10 +217,7 @@ def main(argv: list[str] | None = None) -> None:
         from .syncer import _admit_requests, run_fenced_syncer
 
         try:
-            if config.membership.mode == "dynamic":
-                leader.initialize_dynamic_membership(
-                    command_id=f"initialize-dynamic-membership-e{token.epoch}"
-                )
+            leader.initialize_membership(command_id=f"initialize-membership-e{token.epoch}")
             _admit_before_runtime_import(
                 loaded,
                 authority,

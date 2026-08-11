@@ -12,7 +12,11 @@ from typing import Any
 import torch
 
 from ..core.run_descriptor import LoadedRunDescriptor, write_actor_attestation
-from ..core.versions import CYCLE_RECEIPT_FORMAT_VERSION, PROPOSAL_FORMAT_VERSION
+from ..core.versions import (
+    CYCLE_RECEIPT_FORMAT_VERSION,
+    PROPOSAL_FORMAT_VERSION,
+    PROPOSAL_POINTER_FORMAT_VERSION,
+)
 from ..modeling.hf_data import build_indexed_batch_iterator
 from ..modeling.hf_model import choose_device, load_causal_lm_and_tokenizer
 from ..modeling.outer_optim import outer_optimizer_step
@@ -455,12 +459,8 @@ def run_admitted_learner(
         return True
 
     cursor = admission.resume.cursor
-    shard_index = (
-        fence.stream_id if fence.kind == "dynamic" else int(fence.learner_id.rsplit("_", 1)[1])
-    )
-    shard_count = (
-        config.membership.stream_pool_size if fence.kind == "dynamic" else config.sync.num_learners
-    )
+    shard_index = fence.stream_id
+    shard_count = config.membership.stream_pool_size
     dataset_identity_sha256 = hashlib.sha256(
         json.dumps(
             loaded.descriptor["dataset_identity"],
@@ -741,7 +741,7 @@ def run_admitted_learner(
         atomic_write_json(
             paths.update_pointer_path(fence.stable_contributor_key),
             {
-                "format_version": 2,
+                "format_version": PROPOSAL_POINTER_FORMAT_VERSION,
                 "run_id": config.run.run_id,
                 "stable_contributor_key": fence.stable_contributor_key,
                 "cycle_seq": receipt.cycle_seq,

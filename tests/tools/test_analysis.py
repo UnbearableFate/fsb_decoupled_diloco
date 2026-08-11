@@ -1,3 +1,5 @@
+"""Verify read-only analysis over the current authority and descriptor schema."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -12,6 +14,8 @@ from fs_diloco.tools import analysis
 
 @dataclass(frozen=True)
 class _Fence:
+    """Provide the stable contributor key consumed by analysis."""
+
     stable_contributor_key: str
 
 
@@ -19,7 +23,9 @@ def test_summarize_run_projects_current_read_only_authority(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    fence = _Fence(stable_contributor_key="learner_000")
+    """Run summary projects the neutral stream, instance, launch, and capacity views."""
+
+    fence = _Fence(stable_contributor_key="0")
     read = SimpleNamespace(
         current_contributor_fences=lambda: (fence,),
         contributor_progress=lambda key: {"stable_contributor_key": key, "data_cursor": 7},
@@ -29,21 +35,27 @@ def test_summarize_run_projects_current_read_only_authority(
         latest_committed_version=lambda: {"version": 3},
         token_ledger_summary=lambda: {"balance": 0},
         terminal_record=lambda: {"state": "finalized", "final_version": 3},
-        terminal_contributor_fences=lambda: ({"stable_contributor_key": "learner_000"},),
+        terminal_contributor_fences=lambda: ({"stable_contributor_key": "0"},),
         syncer_epochs=lambda: ({"epoch": 1, "final_state": "released"},),
-        dynamic_streams=lambda: (),
-        dynamic_instances=lambda: (),
-        dynamic_launch_requests=lambda: (),
+        streams=lambda: (),
+        instances=lambda: (),
+        launch_requests=lambda: (),
         capacity_observations=lambda: (),
         audit_archive_summary=lambda: {"batches": 0},
     )
     closed: list[bool] = []
 
     class Reader:
+        """Expose the fake read model and record closure."""
+
         def __init__(self, *_args: object, **_kwargs: object) -> None:
+            """Attach the shared fake read model."""
+
             self.read = read
 
         def close(self) -> None:
+            """Record read-only authority closure."""
+
             closed.append(True)
 
     loaded = SimpleNamespace(
@@ -63,9 +75,8 @@ def test_summarize_run_projects_current_read_only_authority(
             },
         ),
         descriptor={
-            "mode": "static",
             "descriptor_sha256": "3" * 64,
-            "static_learner_ids": ["learner_000"],
+            "stream_pool_size": 1,
         },
         config=SimpleNamespace(leader=SimpleNamespace(business_busy_timeout_ms=1000)),
     )
@@ -79,7 +90,7 @@ def test_summarize_run_projects_current_read_only_authority(
     assert summary["integrity_check"] == ["ok"]
     assert summary["latest_version"] == {"version": 3}
     assert summary["contributor_progress"] == {
-        "learner_000": {"stable_contributor_key": "learner_000", "data_cursor": 7}
+        "0": {"stable_contributor_key": "0", "data_cursor": 7}
     }
     json.dumps(summary)
     analysis.assert_summary(
@@ -95,6 +106,8 @@ def test_analysis_cli_applies_registered_assertions_before_json_output(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    """The analysis CLI applies requested invariants before emitting JSON."""
+
     summary = {
         "integrity_check": ["ok"],
         "latest_version": {"version": 2},

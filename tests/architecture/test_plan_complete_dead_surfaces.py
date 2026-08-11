@@ -1,3 +1,5 @@
+"""Verify that the current product exposes one unversioned protocol surface."""
+
 from __future__ import annotations
 
 import ast
@@ -11,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _top_level_definitions(relative: str) -> set[str]:
+    """Return top-level class and function names from one repository module."""
+
     tree = ast.parse((ROOT / relative).read_text(encoding="utf-8"))
     return {
         node.name
@@ -20,6 +24,8 @@ def _top_level_definitions(relative: str) -> set[str]:
 
 
 def _string_literals(relative: str) -> set[str]:
+    """Return all string literals contained in one repository module."""
+
     tree = ast.parse((ROOT / relative).read_text(encoding="utf-8"))
     return {
         node.value
@@ -29,6 +35,8 @@ def _string_literals(relative: str) -> set[str]:
 
 
 def _class_definitions(relative: str, class_name: str) -> set[str]:
+    """Return method names declared directly on one class."""
+
     tree = ast.parse((ROOT / relative).read_text(encoding="utf-8"))
     cls = next(
         node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == class_name
@@ -39,6 +47,8 @@ def _class_definitions(relative: str, class_name: str) -> set[str]:
 
 
 def _class_annotated_fields(relative: str, class_name: str) -> tuple[str, ...]:
+    """Return annotated field names declared directly on one class."""
+
     tree = ast.parse((ROOT / relative).read_text(encoding="utf-8"))
     cls = next(
         node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == class_name
@@ -51,10 +61,10 @@ def _class_annotated_fields(relative: str, class_name: str) -> tuple[str, ...]:
 
 
 def test_merge_and_admission_modules_expose_the_current_protocol_surface() -> None:
+    """Merge math and admission expose only their current named surfaces."""
+
     merge = _top_level_definitions("fs_diloco/protocol/merge.py")
-    admission_fields = _class_annotated_fields(
-        "fs_diloco/protocol/authority.py", "DynamicAdmission"
-    )
+    admission_fields = _class_annotated_fields("fs_diloco/protocol/authority.py", "Admission")
 
     assert merge == {
         "staleness",
@@ -66,6 +76,8 @@ def test_merge_and_admission_modules_expose_the_current_protocol_surface() -> No
 
 
 def test_receipt_identity_and_paths_have_one_protocol_owner() -> None:
+    """Receipt identity and path derivation have one protocol owner."""
+
     receipt = _top_level_definitions("fs_diloco/protocol/cycle_receipt.py")
     syncer = (ROOT / "fs_diloco/runtime/syncer.py").read_text(encoding="utf-8")
     admission = (ROOT / "fs_diloco/storage/admission.py").read_text(encoding="utf-8")
@@ -80,6 +92,8 @@ def test_receipt_identity_and_paths_have_one_protocol_owner() -> None:
 
 
 def test_runtime_composition_has_one_current_actor_boundary() -> None:
+    """Public learner and syncer entrypoints delegate to one runtime boundary."""
+
     learner = _top_level_definitions("fs_diloco/runtime/learner.py")
     syncer = _top_level_definitions("fs_diloco/runtime/syncer.py")
     learner_entrypoint = _top_level_definitions("fs_diloco/runtime/learner_entrypoint.py")
@@ -100,6 +114,8 @@ def test_runtime_composition_has_one_current_actor_boundary() -> None:
 
 
 def test_only_unversioned_product_surfaces_exist() -> None:
+    """Tracked product paths contain no parallel generation-suffixed surfaces."""
+
     tracked = set(
         subprocess.check_output(
             ["git", "ls-files", "--", "fs_diloco", "configs", "scripts", "tests"],
@@ -113,6 +129,8 @@ def test_only_unversioned_product_surfaces_exist() -> None:
 
 
 def test_no_product_generation_suffix_in_tracked_contents() -> None:
+    """Tracked product contents contain no current generation-suffixed naming."""
+
     tracked = tuple(
         subprocess.check_output(
             [
@@ -163,6 +181,8 @@ def test_no_product_generation_suffix_in_tracked_contents() -> None:
 
 
 def test_python_floor_and_public_invocation_surface_are_unique() -> None:
+    """The project declares one Python floor and one public invocation path."""
+
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert metadata["project"]["requires-python"] == ">=3.13"
     assert metadata["tool"]["ruff"]["target-version"] == "py313"
@@ -174,6 +194,8 @@ def test_python_floor_and_public_invocation_surface_are_unique() -> None:
 
 
 def test_artifact_versions_and_run_paths_have_explicit_owners() -> None:
+    """Artifact formats and run paths retain explicit single owners."""
+
     constants = ast.parse((ROOT / "fs_diloco/core/constants.py").read_text(encoding="utf-8"))
     versions = ast.parse((ROOT / "fs_diloco/core/versions.py").read_text(encoding="utf-8"))
     paths = _class_definitions("fs_diloco/storage/paths.py", "RunPaths")

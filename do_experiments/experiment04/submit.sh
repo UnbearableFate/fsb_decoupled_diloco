@@ -1,20 +1,19 @@
 #!/bin/bash
 
-# Submit one plan04 Dynamic Full scenario from a Miyabi login host.
+# Submit one plan05 Full Protocol scenario from a Miyabi login host.
 
 set -eEuo pipefail
-trap 'echo "[ERROR] plan04 submission failed at line $LINENO" >&2' ERR
+trap 'echo "[ERROR] plan05 submission failed at line $LINENO" >&2' ERR
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd -P)"
 SCENARIO="${1:-}"
 
 case "$SCENARIO" in
-  normal|staggered_4_4|staggered_3_3_2|learner_loss|staggered_learner_loss|syncer_loss|dual_syncer) ;;
+  no_failure|failure_no_replacement|failure_authorized_replacement) ;;
   *)
     echo "Usage: bash do_experiments/experiment04/submit.sh SCENARIO" >&2
-    echo "SCENARIO: normal, staggered_4_4, staggered_3_3_2, learner_loss," >&2
-    echo "          staggered_learner_loss, syncer_loss, dual_syncer" >&2
+    echo "SCENARIO: no_failure, failure_no_replacement, failure_authorized_replacement" >&2
     exit 2
     ;;
 esac
@@ -32,7 +31,14 @@ if [[ -n "${PBS_JOBID:-}" ]]; then
 fi
 
 PYTHON_BIN="$PROJECT_ROOT/.venv/bin/python"
-CONFIG="$PROJECT_ROOT/configs/dynamic_full/gpt2_wikitext2_8l_200x10.yaml"
+case "$SCENARIO" in
+  failure_authorized_replacement)
+    CONFIG="$PROJECT_ROOT/configs/experiments/gpt2_wikitext2_8l_200x10.yaml"
+    ;;
+  no_failure|failure_no_replacement)
+    CONFIG="$PROJECT_ROOT/configs/experiments/gpt2_wikitext2_8l_200x10_fixed.yaml"
+    ;;
+esac
 PBS_SCRIPT="$SCRIPT_DIR/run_scenario.pbs"
 SUPERVISOR_QUEUE="debug-g"
 SUPERVISOR_WALLTIME="00:30:00"
@@ -50,7 +56,7 @@ command -v rg >/dev/null
 SOURCE_STATUS="$(
   git -C "$PROJECT_ROOT" status --short --untracked-files=all -- \
     fs_diloco configs do_experiments scripts/miyabi tests tools torch_ddp_baselines \
-    pyproject.toml README.md docs
+    pyproject.toml README.md docs plans/00-RESEARCH_PLAN.md website/app website/scripts
 )"
 if [[ -n "$SOURCE_STATUS" ]]; then
   echo "Formal source scopes are not clean:" >&2
@@ -69,11 +75,11 @@ for pbs_script in "$PROJECT_ROOT"/scripts/miyabi/agent/*.pbs "$PBS_SCRIPT"; do
 done
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
-RUN_ID="plan04_${SCENARIO}_${STAMP}"
+RUN_ID="plan05_${SCENARIO}_${STAMP}"
 RUN_ROOT="$PROJECT_ROOT/runs/full_protocol/$RUN_ID"
-LOG_ROOT="$PROJECT_ROOT/logs/plan04/$RUN_ID"
-SUPERVISOR_LOG="$PROJECT_ROOT/logs/plan04/${RUN_ID}_supervisor.log"
-EVIDENCE_OUTPUT="$PROJECT_ROOT/reports/DOING/plan04/artifacts/${STAMP}_${SCENARIO}.json"
+LOG_ROOT="$PROJECT_ROOT/logs/plan05/$RUN_ID"
+SUPERVISOR_LOG="$PROJECT_ROOT/logs/plan05/${RUN_ID}_supervisor.log"
+EVIDENCE_OUTPUT="$PROJECT_ROOT/reports/DOING/plan05/artifacts/${STAMP}_${SCENARIO}.json"
 SOURCE_COMMIT="$(git -C "$PROJECT_ROOT" rev-parse HEAD)"
 
 for value in \
@@ -88,7 +94,7 @@ if [[ -e "$RUN_ROOT" || -e "$LOG_ROOT" || -e "$EVIDENCE_OUTPUT" ]]; then
   echo "Generated run, log, or evidence path already exists." >&2
   exit 2
 fi
-mkdir -p "$PROJECT_ROOT/logs/plan04" "$PROJECT_ROOT/reports/DOING/plan04/artifacts"
+mkdir -p "$PROJECT_ROOT/logs/plan05" "$PROJECT_ROOT/reports/DOING/plan05/artifacts"
 
 PBS_VARIABLES="PROJECT_ROOT=$PROJECT_ROOT,PYTHON_BIN=$PYTHON_BIN,CONFIG=$CONFIG,SCENARIO=$SCENARIO,RUN_ID=$RUN_ID,RUN_ROOT=$RUN_ROOT,LOG_ROOT=$LOG_ROOT,EVIDENCE_OUTPUT=$EVIDENCE_OUTPUT,ACTOR_QUEUE=$ACTOR_QUEUE,ACTOR_WALLTIME=$ACTOR_WALLTIME,TIMEOUT_SECONDS=$TIMEOUT_SECONDS"
 SUPERVISOR_JOB_ID="$(

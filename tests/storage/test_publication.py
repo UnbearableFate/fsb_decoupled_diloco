@@ -1,3 +1,5 @@
+"""Verify immutable checkpoint publication and fenced reconciliation."""
+
 from __future__ import annotations
 
 import hashlib
@@ -11,7 +13,7 @@ import pytest
 import torch
 from safetensors.torch import save
 
-from fs_diloco.protocol.contributor import StaticMembershipScope
+from fs_diloco.protocol.contributor import MembershipScope
 from fs_diloco.storage.atomic_io import publish_immutable_bytes
 from fs_diloco.storage.authority import AuthorityIdentity, LeaderAuthority, initialize_authority
 from fs_diloco.storage.leader_lease import StaleLeaderTokenError
@@ -21,13 +23,19 @@ import fs_diloco.storage.atomic_io as atomic_io_module
 
 @dataclass
 class Clock:
+    """Provide mutable deterministic time for publication recovery tests."""
+
     now: float = 100.0
 
     def __call__(self) -> float:
+        """Return the current deterministic timestamp."""
+
         return self.now
 
 
 def checkpoint_bytes(version: int) -> tuple[bytes, bytes, str]:
+    """Encode matching model and optimizer checkpoint bytes for one version."""
+
     theta = torch.tensor([float(version)], dtype=torch.float32)
     theta_sha256 = tensor_content_sha256(theta)
     metadata = {"fs_diloco_theta_sha256": theta_sha256}
@@ -43,6 +51,8 @@ def checkpoint_bytes(version: int) -> tuple[bytes, bytes, str]:
 
 
 def metadata_for_bytes(weight: bytes, optim: bytes, theta_sha256: str) -> dict[str, object]:
+    """Return publication metadata matching a checkpoint byte pair."""
+
     return {
         "weight_relative_path": "weights/epochs/e1/v0.safetensors",
         "weight_size": len(weight),
@@ -55,11 +65,13 @@ def metadata_for_bytes(weight: bytes, optim: bytes, theta_sha256: str) -> dict[s
     }
 
 
-def open_static(tmp_path: Path, clock: Clock) -> LeaderAuthority:
+def open_authority(tmp_path: Path, clock: Clock) -> LeaderAuthority:
+    """Open the sole authority schema for publication tests."""
+
     identity = AuthorityIdentity(
         "run-current", "source-fingerprint", hashlib.sha256(b"config").hexdigest()
     )
-    scope = StaticMembershipScope(("learner-0",))
+    scope = MembershipScope(1)
     database = tmp_path / "authority.sqlite3"
     initialize_authority(database, identity, scope, wall_clock=clock)
     return LeaderAuthority(database, identity, scope, wall_clock=clock)
@@ -68,6 +80,8 @@ def open_static(tmp_path: Path, clock: Clock) -> LeaderAuthority:
 def test_immutable_publication_is_create_no_replace_and_exact_replay_is_idempotent(
     tmp_path: Path,
 ) -> None:
+    """Immutable objects allow exact replay but never replacement or writable modes."""
+
     target = tmp_path / "updates/payloads/learner/update.safetensors"
     first = publish_immutable_bytes(target, b"first")
     replay = publish_immutable_bytes(target, b"first")
@@ -91,10 +105,14 @@ def test_immutable_publication_is_create_no_replace_and_exact_replay_is_idempote
 
 
 def test_concurrent_immutable_publishers_never_overwrite_the_winner(tmp_path: Path) -> None:
+    """Concurrent publishers preserve exactly one complete create-once winner."""
+
     target = tmp_path / "object.safetensors"
     payloads = [b"alpha", b"beta"] * 8
 
     def publish(payload: bytes) -> tuple[str, bool]:
+        """Attempt one immutable publication from a concurrent worker."""
+
         try:
             result = publish_immutable_bytes(target, payload)
         except FileExistsError:
@@ -121,10 +139,14 @@ def test_immutable_publication_crash_boundaries_replay_exactly(
     object_kind: str,
     crash_boundary: str,
 ) -> None:
+    """Every injected immutable-publication crash prefix can replay exactly."""
+
     target = tmp_path / f"{object_kind}-{crash_boundary}-{repetition}.immutable"
     payload = checkpoint_bytes(0)[0] if object_kind == "tensor" else b'{"proposal":1}\n'
 
     def inject(name: str) -> None:
+        """Raise once at the selected immutable-publication crash boundary."""
+
         if name == crash_boundary:
             raise RuntimeError(f"injected crash at {name}")
 
@@ -146,10 +168,12 @@ def test_immutable_publication_crash_boundaries_replay_exactly(
 def test_prepared_intent_precedes_io_and_commit_verifies_exact_theta_pair(
     tmp_path: Path,
 ) -> None:
+    """A durable intent precedes I/O and commit verifies both theta identities."""
+
     clock = Clock()
     weight, optim, theta_sha256 = checkpoint_bytes(0)
     metadata = metadata_for_bytes(weight, optim, theta_sha256)
-    with open_static(tmp_path, clock) as authority:
+    with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         leader = authority.open_leader(token)
         intent = leader.prepare_publication(
@@ -183,10 +207,12 @@ def test_prepared_intent_precedes_io_and_commit_verifies_exact_theta_pair(
 
 
 def test_mismatched_theta_identity_never_commits(tmp_path: Path) -> None:
+    """Model and optimizer checkpoints with different theta identities cannot commit."""
+
     clock = Clock()
     weight, optim, theta_sha256 = checkpoint_bytes(0)
     metadata = metadata_for_bytes(weight, optim, theta_sha256)
-    with open_static(tmp_path, clock) as authority:
+    with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         leader = authority.open_leader(token)
         with pytest.raises(ValueError, match="theta identities"):
@@ -216,12 +242,14 @@ def test_mismatched_theta_identity_never_commits(tmp_path: Path) -> None:
 def test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe(
     tmp_path: Path,
 ) -> None:
+    """Takeover reconciliation never claims orphan files before the lease-safe grace."""
+
     clock = Clock()
     weight, optim, theta_sha256 = checkpoint_bytes(0)
     metadata = metadata_for_bytes(weight, optim, theta_sha256)
     publish_immutable_bytes(tmp_path / str(metadata["weight_relative_path"]), weight)
     publish_immutable_bytes(tmp_path / str(metadata["optim_relative_path"]), optim)
-    with open_static(tmp_path, clock) as authority:
+    with open_authority(tmp_path, clock) as authority:
         first_token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
         first = authority.open_leader(first_token)
         first.prepare_publication(
@@ -281,12 +309,14 @@ def test_publication_crash_prefix_is_reconciled_idempotently(
     repetition: int,
     crash_point: str,
 ) -> None:
+    """Every durable publication crash prefix reconciles idempotently after takeover."""
+
     root = tmp_path / f"{crash_point}-{repetition}"
     root.mkdir()
     clock = Clock()
     weight, optim, theta_sha256 = checkpoint_bytes(0)
     metadata = metadata_for_bytes(weight, optim, theta_sha256)
-    with open_static(root, clock) as authority:
+    with open_authority(root, clock) as authority:
         token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
         leader = authority.open_leader(token)
         if crash_point == "before_prepare":

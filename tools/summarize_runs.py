@@ -2,7 +2,7 @@
 
 The tool accepts exact run directories or roots containing runs, projects both
 current artifact layouts into one CSV schema, and optionally writes explicit
-Dynamic Full versus baseline comparisons.  Completed artifacts are parsed
+Full Protocol versus baseline comparisons. Completed artifacts are parsed
 strictly before any output is replaced, so malformed evidence cannot produce a
 partially updated result table.
 """
@@ -22,6 +22,7 @@ from typing import Any
 
 import yaml
 
+from fs_diloco.protocol.contributor import ContributorFence
 from fs_diloco.storage.audit_archive import read_logical_authority_rows
 from fs_diloco.storage.paths import RunPaths
 
@@ -379,8 +380,10 @@ def _terminal_fences(connection: sqlite3.Connection, *, path: Path) -> list[dict
             fence = json.loads(row["fence_json"])
         except json.JSONDecodeError as exc:
             raise RunParseError(f"{path}: terminal fence JSON is malformed") from exc
-        if not isinstance(fence, dict) or fence.get("kind") != "dynamic":
-            raise RunParseError(f"{path}: Dynamic Full requires dynamic terminal fences")
+        try:
+            typed_fence = ContributorFence.from_dict(fence)
+        except (TypeError, ValueError) as exc:
+            raise RunParseError(f"{path}: terminal fence has an invalid current shape") from exc
         final_cycle_seq = row["final_cycle_seq"]
         if (
             isinstance(final_cycle_seq, bool)
@@ -388,15 +391,16 @@ def _terminal_fences(connection: sqlite3.Connection, *, path: Path) -> list[dict
             or final_cycle_seq < 1
         ):
             raise RunParseError(f"{path}: terminal fence has no valid final cycle sequence")
-        fence["stable_contributor_key"] = str(row["stable_contributor_key"])
-        fence["canonical_json"] = str(row["fence_json"])
-        fence["final_cycle_seq"] = final_cycle_seq
-        fences.append(fence)
+        decoded = typed_fence.as_dict()
+        decoded["stable_contributor_key"] = str(row["stable_contributor_key"])
+        decoded["canonical_json"] = str(row["fence_json"])
+        decoded["final_cycle_seq"] = final_cycle_seq
+        fences.append(decoded)
     return fences
 
 
 def _last_proposal_loss(run_dir: Path, fence: dict[str, Any]) -> float:
-    """Return the last proposal loss emitted by one terminal dynamic instance."""
+    """Return the last proposal loss emitted by one terminal instance."""
 
     instance_id = fence.get("instance_id")
     if not isinstance(instance_id, str) or not instance_id:
@@ -433,7 +437,7 @@ def _last_proposal_loss(run_dir: Path, fence: dict[str, Any]) -> float:
 
 
 def _parse_full_protocol_run(run_dir: Path) -> dict[str, Any]:
-    """Project one completed Dynamic Full run into the unified schema."""
+    """Project one completed current Full Protocol run into the unified schema."""
 
     summary_path = run_dir / "control" / "summary.json"
     descriptor_path = run_dir / "control" / "run_descriptor.json"
@@ -452,12 +456,10 @@ def _parse_full_protocol_run(run_dir: Path) -> dict[str, Any]:
     run_id = _text(summary, "run_id", path=summary_path)
     if run_id != run_dir.name or _text(descriptor, "run_id", path=descriptor_path) != run_id:
         raise RunParseError(f"{run_dir}: run directory, summary, and descriptor IDs differ")
-    if descriptor.get("mode") != "dynamic":
-        raise RunParseError(f"{run_dir}: unified summary accepts Dynamic Full runs only")
-
     model = _mapping(config, "model", path=config_path)
     data = _mapping(config, "data", path=config_path)
     sync = _mapping(config, "sync", path=config_path)
+    membership = _mapping(config, "membership", path=config_path)
     training = _mapping(config, "training", path=config_path)
     optimizer = _mapping(config, "inner_optimizer", path=config_path)
     final_version = _integer(summary, "final_version", path=summary_path)
@@ -473,7 +475,7 @@ def _parse_full_protocol_run(run_dir: Path) -> dict[str, Any]:
     connection = _open_authority(authority_path)
     try:
         fences = _terminal_fences(connection, path=authority_path)
-        expected = _integer(sync, "num_learners", path=config_path)
+        expected = _integer(membership, "stream_pool_size", path=config_path)
         if len(fences) != expected:
             raise RunParseError(
                 f"{run_dir}: expected {expected} terminal contributors, found {len(fences)}"
@@ -504,7 +506,7 @@ def _parse_full_protocol_run(run_dir: Path) -> dict[str, Any]:
         connection.close()
     merge_contributors = _integer(sync, "quorum_min", path=config_path)
     if _integer(sync, "quorum_max", path=config_path) != merge_contributors:
-        raise RunParseError(f"{run_dir}: Dynamic Full requires one exact merge threshold")
+        raise RunParseError(f"{run_dir}: Full Protocol comparison requires one merge threshold")
     expected_counts = [(version, merge_contributors) for version in range(1, final_version + 1)]
     actual_counts = sorted(counts_by_version.items())
     if actual_counts != expected_counts:
@@ -519,9 +521,9 @@ def _parse_full_protocol_run(run_dir: Path) -> dict[str, Any]:
     return {
         "run_id": run_id,
         "run_dir": str(run_dir),
-        "run_kind": "fs_diloco_dynamic_full",
+        "run_kind": "fs_diloco_full_protocol",
         "status": "completed",
-        "mode": "dynamic_full",
+        "mode": "full_protocol",
         "git_commit": _text(source, "git_commit", path=source_path),
         "source_fingerprint": _text(source, "source_fingerprint", path=source_path),
         "pbs_job_ids": ";".join(pbs_job_ids),
@@ -699,17 +701,17 @@ def _float_cell(row: dict[str, str], key: str) -> float:
 
 
 def build_comparisons(rows: Sequence[dict[str, str]]) -> dict[str, Any]:
-    """Compare every Dynamic Full row with both baseline modes at a 20% threshold."""
+    """Compare every Full Protocol row with both baseline modes at a 20% threshold."""
 
     baselines = [row for row in rows if row.get("run_kind") == "torch_ddp_baseline"]
-    dynamics = [row for row in rows if row.get("run_kind") == "fs_diloco_dynamic_full"]
+    full_protocol_runs = [row for row in rows if row.get("run_kind") == "fs_diloco_full_protocol"]
     modes = {row.get("mode") for row in baselines}
     if modes != {"ddp", "periodic_average"}:
         raise RunParseError("comparison requires exactly the ddp and periodic_average modes")
-    if not dynamics:
-        raise RunParseError("comparison requires at least one Dynamic Full run")
+    if not full_protocol_runs:
+        raise RunParseError("comparison requires at least one Full Protocol run")
     comparisons: list[dict[str, Any]] = []
-    for dynamic in dynamics:
+    for full_protocol in full_protocol_runs:
         for baseline in baselines:
             identity_fields = (
                 "model_name_or_path",
@@ -722,26 +724,28 @@ def build_comparisons(rows: Sequence[dict[str, str]]) -> dict[str, Any]:
                 "micro_batch_size",
                 "gradient_accumulation_steps",
             )
-            mismatches = [key for key in identity_fields if dynamic.get(key) != baseline.get(key)]
+            mismatches = [
+                key for key in identity_fields if full_protocol.get(key) != baseline.get(key)
+            ]
             metrics: dict[str, Any] = {}
             exceeded = False
             for key in ("final_mean_loss", "training_time_seconds"):
                 baseline_value = _float_cell(baseline, key)
-                dynamic_value = _float_cell(dynamic, key)
+                full_protocol_value = _float_cell(full_protocol, key)
                 if baseline_value == 0.0:
                     raise RunParseError(f"baseline {baseline['run_id']} has zero {key}")
-                relative = (dynamic_value - baseline_value) / abs(baseline_value)
+                relative = (full_protocol_value - baseline_value) / abs(baseline_value)
                 metric_exceeded = abs(relative) > COMPARISON_THRESHOLD
                 exceeded = exceeded or metric_exceeded
                 metrics[key] = {
                     "baseline": baseline_value,
-                    "dynamic": dynamic_value,
+                    "full_protocol": full_protocol_value,
                     "relative_difference": relative,
                     "absolute_difference_exceeds_threshold": metric_exceeded,
                 }
             comparisons.append(
                 {
-                    "dynamic_run_id": dynamic["run_id"],
+                    "full_protocol_run_id": full_protocol["run_id"],
                     "baseline_run_id": baseline["run_id"],
                     "baseline_mode": baseline["mode"],
                     "identity_mismatches": mismatches,
@@ -751,9 +755,9 @@ def build_comparisons(rows: Sequence[dict[str, str]]) -> dict[str, Any]:
                             int(baseline["optimizer_steps_min"]),
                             int(baseline["optimizer_steps_max"]),
                         ],
-                        "dynamic": [
-                            int(dynamic["optimizer_steps_min"]),
-                            int(dynamic["optimizer_steps_max"]),
+                        "full_protocol": [
+                            int(full_protocol["optimizer_steps_min"]),
+                            int(full_protocol["optimizer_steps_max"]),
                         ],
                     },
                     "metrics": metrics,
@@ -793,7 +797,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--comparison-output",
         type=Path,
-        help="optional Dynamic Full versus baseline comparison JSON",
+        help="optional Full Protocol versus baseline comparison JSON",
     )
     return parser
 

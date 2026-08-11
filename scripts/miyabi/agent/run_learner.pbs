@@ -24,26 +24,18 @@ prepare_actor_identity "$DESCRIPTOR" "$PROJECT_ROOT" "$PYTHON_BIN"
 cd "$PROJECT_ROOT"
 
 authorization=()
-if [[ "$FS_DILOCO_MEMBERSHIP_MODE" == "static" ]]; then
-  : "${LEARNER_INDEX:?LEARNER_INDEX is required}"
-  printf -v LEARNER_ID 'learner_%03d' "$LEARNER_INDEX"
-  STATIC_JOB_ID="${PBS_JOBID%%.*}"
-  LOGICAL_LAUNCH_ID="${FS_DILOCO_STATIC_LAUNCH_PREFIX:-static}-${STATIC_JOB_ID}-${LEARNER_ID}"
-  authorization=(--learner-id "$LEARNER_ID" --logical-launch-id "$LOGICAL_LAUNCH_ID")
-else
-  if [[ -n "${FS_DILOCO_LAUNCH_REQUEST_ID:-}" ]]; then
-    : "${FS_DILOCO_STREAM_ID:?FS_DILOCO_STREAM_ID is required for a replacement launch}"
-    authorization=(
-      --launch-request-id "$FS_DILOCO_LAUNCH_REQUEST_ID"
-      --stream-id "$FS_DILOCO_STREAM_ID"
-    )
-    if [[ -n "${FS_DILOCO_REPLACE_INSTANCE_ID:-}" ]]; then
-      authorization+=(--replace-instance-id "$FS_DILOCO_REPLACE_INSTANCE_ID")
-    fi
-  else
-    : "${BOOTSTRAP_SLOT:?BOOTSTRAP_SLOT is required}"
-    authorization=(--bootstrap-slot "$BOOTSTRAP_SLOT")
+if [[ -n "${FS_DILOCO_LAUNCH_REQUEST_ID:-}" ]]; then
+  : "${FS_DILOCO_STREAM_ID:?FS_DILOCO_STREAM_ID is required for an authorized launch}"
+  authorization=(
+    --launch-request-id "$FS_DILOCO_LAUNCH_REQUEST_ID"
+    --stream-id "$FS_DILOCO_STREAM_ID"
+  )
+  if [[ -n "${FS_DILOCO_REPLACE_INSTANCE_ID:-}" ]]; then
+    authorization+=(--replace-instance-id "$FS_DILOCO_REPLACE_INSTANCE_ID")
   fi
+else
+  : "${BOOTSTRAP_SLOT:?BOOTSTRAP_SLOT is required}"
+  authorization=(--bootstrap-slot "$BOOTSTRAP_SLOT")
 fi
 
 exec "$PYTHON_BIN" -m fs_diloco.learner \

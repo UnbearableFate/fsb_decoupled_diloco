@@ -2,13 +2,13 @@
   "schema_version": 2,
   "surfaces": [
     {
-      "surface": "configs/dynamic_full/gpt2_wikitext2_8l_200x10.yaml",
-      "boundary": "plan04 dynamic 8-learner exact-four merge workload",
+      "surface": "configs/experiments/gpt2_wikitext2_8l_200x10.yaml",
+      "boundary": "8-stream exact-four merge workload with authorized capacity recovery",
       "tests": ["tests/test_config.py::test_repository_configs_use_the_one_strict_schema"]
     },
     {
-      "surface": "configs/full_protocol_dynamic.yaml",
-      "boundary": "strict current dynamic configuration",
+      "surface": "configs/experiments/gpt2_wikitext2_8l_200x10_fixed.yaml",
+      "boundary": "8-stream exact-four merge fixed-capacity control workload",
       "tests": ["tests/test_config.py::test_repository_configs_use_the_one_strict_schema"]
     },
     {
@@ -17,7 +17,7 @@
       "tests": ["tests/harness/test_full_protocol_harness.py::test_checker_parser_freezes_topology_workload_and_fault_oracles"]
     },
     {
-      "surface": "configs/full_protocol_static.yaml",
+      "surface": "configs/full_protocol.yaml",
       "boundary": "registered 8+1 formal configuration",
       "tests": ["tests/test_config.py::test_repository_configs_use_the_one_strict_schema"]
     },
@@ -124,12 +124,12 @@
     {
       "surface": "fs_diloco/protocol/authority.py",
       "boundary": "typed authority outcomes and conflicts",
-      "tests": ["tests/storage/test_authority_dynamic.py::test_selection_classifies_stale_rows_without_partial_abort"]
+      "tests": ["tests/storage/test_authority_membership.py::test_selection_classifies_stale_rows_without_partial_abort"]
     },
     {
       "surface": "fs_diloco/protocol/contributor.py",
-      "boundary": "static and dynamic contributor fences",
-      "tests": ["tests/storage/test_static_contributor_binding.py::test_static_binding_requires_terminal_old_attempt_and_increments_generation"]
+      "boundary": "sole stream-incarnation contributor fence",
+      "tests": ["tests/storage/test_authority_membership.py::test_authorized_replacement_atomically_retires_old_incarnation"]
     },
     {
       "surface": "fs_diloco/protocol/cycle_receipt.py",
@@ -189,7 +189,7 @@
     {
       "surface": "fs_diloco/runtime/learner_entrypoint.py",
       "boundary": "pre-Torch learner admission and revalidation",
-      "tests": ["tests/runtime/test_learner_entrypoint.py::test_static_learner_admission_is_revalidated_before_runtime_import"]
+      "tests": ["tests/runtime/test_learner_entrypoint.py::test_bootstrap_admission_is_revalidated_before_runtime_import"]
     },
     {
       "surface": "fs_diloco/runtime/pbs_scheduler.py",
@@ -224,12 +224,12 @@
     {
       "surface": "fs_diloco/runtime/syncer.py",
       "boundary": "single fenced syncer admission and ingest composition",
-      "tests": ["tests/runtime/test_syncer_composition.py::test_active_static_attempt_replacement_requires_matching_authorization"]
+      "tests": ["tests/runtime/test_syncer_composition.py::test_replacement_request_consumes_exact_launch_authorization"]
     },
     {
       "surface": "fs_diloco/runtime/syncer_entrypoint.py",
       "boundary": "lease acquisition and pre-runtime admission",
-      "tests": ["tests/runtime/test_syncer_startup_admission.py::test_initial_static_requests_are_admitted_before_runtime_import"]
+      "tests": ["tests/runtime/test_syncer_startup_admission.py::test_initial_requests_are_admitted_before_runtime_import"]
     },
     {
       "surface": "fs_diloco/storage/__init__.py",
@@ -239,7 +239,7 @@
     {
       "surface": "fs_diloco/storage/admission.py",
       "boundary": "immutable admission request and response files",
-      "tests": ["tests/storage/test_dynamic_admission_request.py::test_dynamic_request_carries_exact_bootstrap_authorization"]
+      "tests": ["tests/storage/test_admission_request.py::test_request_carries_exact_bootstrap_authorization"]
     },
     {
       "surface": "fs_diloco/storage/artifact_policy.py",
@@ -288,13 +288,8 @@
     },
     {
       "surface": "fs_diloco/storage/schema.sql",
-      "boundary": "current static authority DDL",
+      "boundary": "sole current stream, instance, and launch authority DDL",
       "tests": ["tests/storage/test_schema.py::test_fresh_schema_initializes_reopens_and_is_integral"]
-    },
-    {
-      "surface": "fs_diloco/storage/schema_dynamic.sql",
-      "boundary": "current dynamic authority DDL extension",
-      "tests": ["tests/storage/test_schema.py::test_dynamic_stream_pool_is_initialized_by_explicit_fenced_command"]
     },
     {
       "surface": "fs_diloco/storage/tensor_codec.py",
@@ -337,11 +332,6 @@
       "tests": ["tests/tools/test_launch_independent_run.py::test_launch_uses_one_syncer_and_scalar_learner_jobs"]
     },
     {
-      "surface": "fs_diloco/tools/request_static_replacement.py",
-      "boundary": "exact static replacement authorization command",
-      "tests": ["tests/tools/test_request_static_replacement.py::test_authorization_collision_tells_operator_to_issue_a_fresh_attempt_id"]
-    },
-    {
       "surface": "fs_diloco/tools/request_terminal_close.py",
       "boundary": "manual close CLI bound to descriptor identity",
       "tests": ["tests/tools/test_request_terminal_close.py::test_manual_close_cli_binds_descriptor_identity_and_reason"]
@@ -372,11 +362,6 @@
       "tests": ["tests/harness/test_full_protocol_harness.py::test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner"]
     },
     {
-      "surface": "scripts/miyabi/agent/check_plan_completion.py",
-      "boundary": "same-target formal ladder and requirement completion aggregation",
-      "tests": ["tests/harness/test_plan_completion.py::test_completion_aggregate_accepts_registered_staged_inputs"]
-    },
-    {
       "surface": "scripts/miyabi/agent/run_full_protocol.pbs",
       "boundary": "single multi-node wrapper and structured early-exit evidence",
       "tests": ["tests/harness/test_full_protocol_harness.py::test_pbs_wrapper_publishes_blocked_artifact_when_allocation_exits"]
@@ -388,7 +373,7 @@
     },
     {
       "surface": "scripts/miyabi/agent/run_full_protocol_rank.sh",
-      "boundary": "normal, learner replacement and syncer takeover rank scenarios",
+      "boundary": "normal and syncer-takeover co-allocated rank scenarios",
       "tests": ["tests/harness/test_full_protocol_harness.py::test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner"]
     },
     {

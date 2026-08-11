@@ -25,6 +25,8 @@
 
 ## 3. 已有研究信号
 
+> **冻结历史基线：** 本节和后续恢复章节中的 `static`、`dynamic`、旧 schema 版本与 matched-run 数据只描述对应历史 commit 和证据，不是当前接口。当前代码只使用固定 stream pool、instance admission 和唯一 `ContributorFence`。后续对照实验以 `scaling.enabled=false` 的 Full Protocol 作为 fixed-capacity/no-churn control；启用 scaling 只增加自动 replacement 或 scale-out，不改变成员协议。
+
 早期研究记录给出了几项重要背景信号。Miyabi Lustre 上曾观测到约 7.95 ms 的跨节点可见性 p99，十万次原子替换测试没有发现完整性违例，元数据处理能力显著高于原型所需的轮询速率，并发 fragment 写入时间也远小于当时估计的同步周期。这些结果说明，共享文件系统的基本可见性和原子发布能力不是当前最明显的障碍。
 
 早期 stale 仿真则给出了相反方向的提醒：预注册配置下，`S_max=1` 的预测收益接近零，stale 接受率约为 5.31%，accepted-token 效率约为 33.48%。这表明“存在大量未吸收计算”与“允许一个版本的 stale 就能回收这些计算”并不是同一个命题。stale 研究值得保留，但更需要解释丢弃来自 latest-wins 覆盖、quorum 选择、base 过期还是调度节奏，而不是直接扩大多种子训练矩阵。

@@ -22,6 +22,9 @@ SOURCE_SCOPES = (
     "pyproject.toml",
     "README.md",
     "docs",
+    "plans/00-RESEARCH_PLAN.md",
+    "website/app",
+    "website/scripts",
 )
 
 

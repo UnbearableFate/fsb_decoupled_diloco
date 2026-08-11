@@ -1,3 +1,5 @@
+"""Exercise bounded authority state machines across generated event sequences."""
+
 from __future__ import annotations
 
 import hashlib
@@ -9,18 +11,14 @@ import pytest
 from hypothesis import given, strategies as st
 
 from fs_diloco.protocol.authority import ReadResult, ReadStatus
-from fs_diloco.protocol.contributor import (
-    DynamicMembershipScope,
-    StaticContributorFence,
-    StaticMembershipScope,
-)
+from fs_diloco.protocol.contributor import MembershipScope
 from fs_diloco.protocol.cycle_receipt import CycleReceiptV1
 from fs_diloco.storage.authority import AuthorityIdentity, LeaderAuthority, initialize_authority
 from tests.storage.test_proposal_adjudication import (
-    build_cycle as _build_static_cycle,
-    open_static as _open_static,
+    build_cycle,
+    open_authority,
 )
-from tests.support.protocol import receipt_payload
+from tests.support.protocol import admit_contributor, receipt_payload
 
 
 @pytest.mark.state_machine
@@ -42,31 +40,21 @@ from tests.support.protocol import receipt_payload
 def test_visibility_state_machine_is_bounded_and_terminal_is_sticky(
     events: list[ReadStatus],
 ) -> None:
+    """Visibility storage remains bounded and terminal decisions remain sticky."""
+
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         now = [100.0]
         identity = AuthorityIdentity(
             "run-current", "source-fingerprint", hashlib.sha256(b"config").hexdigest()
         )
-        scope = StaticMembershipScope(("learner-0",))
+        scope = MembershipScope(1)
         database = root / "authority.sqlite3"
         initialize_authority(database, identity, scope, wall_clock=lambda: now[0])
         with LeaderAuthority(database, identity, scope, wall_clock=lambda: now[0]) as authority:
             token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
             leader = authority.open_leader(token)
-            binding = leader.bind_or_replace_static_attempt(
-                command_id="bind",
-                learner_id="learner-0",
-                logical_launch_id="launch-0",
-                attempt_id="attempt-0",
-            )
-            fence = StaticContributorFence(
-                "static",
-                binding.learner_id,
-                binding.logical_launch_id,
-                binding.attempt_id,
-                binding.binding_generation,
-            )
+            fence = admit_contributor(leader)
             receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence.as_dict()))
             leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
             terminal_observation: int | None = None
@@ -83,13 +71,13 @@ def test_visibility_state_machine_is_bounded_and_terminal_is_sticky(
                 )
                 decision = leader.observe_proposal_visibility(
                     command_id=f"observe-{index}",
-                    stable_contributor_key="learner-0",
+                    stable_contributor_key="0",
                     cycle_seq=1,
                     update_id="00000000-0000-4000-8000-000000000001",
                     object_identity="proposal-object",
                     pointer_signature="pointer-signature",
                     pointer_sequence=1,
-                    source_relative_path="updates/latest/learner-0.json",
+                    source_relative_path="updates/latest/0.json",
                     result=result,
                     grace_seconds=2.0,
                     operator_deadline_seconds=5.0,
@@ -124,13 +112,15 @@ def test_visibility_state_machine_is_bounded_and_terminal_is_sticky(
 def test_proposal_state_machine_keeps_one_pending_and_monotonic_frontier(
     cycles: int,
 ) -> None:
+    """Accepted cycles retain one pending update and a monotonic terminal frontier."""
+
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
-        authority, leader, fence = _open_static(root)
+        authority, leader, fence = open_authority(root)
         try:
             previous = None
             for sequence in range(1, cycles + 1):
-                previous, proposal = _build_static_cycle(
+                previous, proposal = build_cycle(
                     leader,
                     root,
                     fence,
@@ -160,22 +150,24 @@ def test_proposal_state_machine_keeps_one_pending_and_monotonic_frontier(
 
 @pytest.mark.state_machine
 @given(st.integers(min_value=0, max_value=8))
-def test_dynamic_membership_state_machine_has_one_current_incarnation(
+def test_membership_state_machine_has_one_current_incarnation(
     replacements: int,
 ) -> None:
+    """Every authorized replacement leaves exactly one current stream incarnation."""
+
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         now = [100.0]
         identity = AuthorityIdentity(
             "run-current", "source-fingerprint", hashlib.sha256(b"config").hexdigest()
         )
-        scope = DynamicMembershipScope(1)
+        scope = MembershipScope(1)
         database = root / "authority.sqlite3"
         initialize_authority(database, identity, scope, wall_clock=lambda: now[0])
         with LeaderAuthority(database, identity, scope, wall_clock=lambda: now[0]) as authority:
             token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
             leader = authority.open_leader(token)
-            leader.initialize_dynamic_membership(command_id="initialize-membership")
+            leader.initialize_membership(command_id="initialize-membership")
             current_instance: str | None = None
             previous_stream_epoch = 0
             for generation in range(replacements + 1):
@@ -196,7 +188,7 @@ def test_dynamic_membership_state_machine_has_one_current_incarnation(
                         action="replace",
                         retention_count=16,
                     )
-                    planned = leader.plan_dynamic_launch_request(
+                    planned = leader.plan_launch_request(
                         command_id=f"plan-replacement-{generation}",
                         request_id=launch_request_id,
                         observation_key=observation_key,
@@ -208,7 +200,7 @@ def test_dynamic_membership_state_machine_has_one_current_incarnation(
                         max_total_requests=16,
                         expected_scheduler_job_id=f"{generation - 1}.opbs",
                     )
-                    submitting = leader.transition_dynamic_launch_request(
+                    submitting = leader.transition_launch_request(
                         command_id=f"submit-replacement-{generation}",
                         request_id=launch_request_id,
                         expected_state=planned["state"],
@@ -217,7 +209,7 @@ def test_dynamic_membership_state_machine_has_one_current_incarnation(
                         scheduler_state="qsub_started",
                         evidence_source="qsub_started",
                     )
-                    leader.transition_dynamic_launch_request(
+                    leader.transition_launch_request(
                         command_id=f"submitted-replacement-{generation}",
                         request_id=launch_request_id,
                         expected_state=submitting["state"],
@@ -226,7 +218,7 @@ def test_dynamic_membership_state_machine_has_one_current_incarnation(
                         scheduler_state="queued",
                         evidence_source="qsub_receipt",
                     )
-                admission = leader.admit_dynamic_incarnation(
+                admission = leader.admit_incarnation(
                     command_id=f"admit-{generation}",
                     instance_id=instance_id,
                     placement_id="placement-0",
@@ -237,6 +229,7 @@ def test_dynamic_membership_state_machine_has_one_current_incarnation(
                     hostname="host",
                     pid=generation + 1,
                     pbs_job_id=f"{generation}.opbs",
+                    bootstrap_slot=0 if current_instance is None else None,
                     launch_request_id=launch_request_id,
                     replace_instance_id=current_instance,
                     replacement_reason=(

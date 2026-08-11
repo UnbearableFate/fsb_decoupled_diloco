@@ -165,49 +165,25 @@ def launch(
         variables,
         str(project_root / "scripts/miyabi/agent/run_syncer.pbs"),
     ]
-    dynamic = shared.membership.mode == "dynamic"
-    if dynamic:
-        learner_commands = [
-            [
-                "qsub",
-                *actor_queue_resource,
-                *learner_walltime_resource,
-                *(
-                    []
-                    if resolved_log_root is None
-                    else ["-o", str(resolved_log_root / f"bootstrap_{slot:03d}.log")]
-                ),
-                "-v",
-                f"{variables},BOOTSTRAP_SLOT={slot}",
-                str(project_root / "scripts/miyabi/agent/run_learner.pbs"),
-            ]
-            for slot in range(shared.membership.bootstrap_instances)
+    learner_commands = [
+        [
+            "qsub",
+            *actor_queue_resource,
+            *learner_walltime_resource,
+            *(
+                []
+                if resolved_log_root is None
+                else ["-o", str(resolved_log_root / f"bootstrap_{slot:03d}.log")]
+            ),
+            "-v",
+            f"{variables},BOOTSTRAP_SLOT={slot}",
+            str(project_root / "scripts/miyabi/agent/run_learner.pbs"),
         ]
-    else:
-        learner_commands = [
-            [
-                "qsub",
-                *actor_queue_resource,
-                *learner_walltime_resource,
-                *(
-                    []
-                    if resolved_log_root is None
-                    else ["-o", str(resolved_log_root / f"learner_{index:03d}.log")]
-                ),
-                "-v",
-                (
-                    f"{variables},"
-                    f"FS_DILOCO_STATIC_LAUNCH_PREFIX={descriptor['descriptor_sha256']},"
-                    f"LEARNER_INDEX={index}"
-                ),
-                str(project_root / "scripts/miyabi/agent/run_learner.pbs"),
-            ]
-            for index in range(int(shared.sync.num_learners))
-        ]
+        for slot in range(shared.membership.bootstrap_instances)
+    ]
     result: dict[str, Any] = {
         **initialized,
         "syncer_qsub": syncer_command,
-        "membership_mode": shared.membership.mode,
         "actor_queue": actor_queue,
         "learner_qsubs": learner_commands,
         "log_root": None if resolved_log_root is None else str(resolved_log_root),
@@ -232,8 +208,7 @@ def launch(
         result["learner_submissions"] = learner_receipts
         for slot, learner_command in enumerate(learner_commands):
             learner_receipt = _qsub(learner_command)
-            learner_receipt["bootstrap_slot"] = slot if dynamic else None
-            learner_receipt["learner_index"] = None if dynamic else slot
+            learner_receipt["bootstrap_slot"] = slot
             learner_receipts.append(learner_receipt)
             result["accepted_learner_job_ids"] = [
                 receipt["job_id"]

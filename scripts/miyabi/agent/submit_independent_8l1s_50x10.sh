@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Submit one short launcher control job. The launcher initializes a fresh run
-# on a compute node and submits exactly one syncer plus eight scalar learners.
+# on a compute node and submits one syncer plus eight scalar bootstrap learners.
 
 set -eEuo pipefail
 trap 'echo "[ERROR] actor submission failed at line $LINENO" >&2' ERR
@@ -27,7 +27,7 @@ command -v qsub >/dev/null
 command -v rg >/dev/null
 
 PYTHON_BIN="$PROJECT_ROOT/.venv/bin/python"
-CONFIG="$PROJECT_ROOT/configs/full_protocol_static.yaml"
+CONFIG="$PROJECT_ROOT/configs/full_protocol.yaml"
 LAUNCHER_SCRIPT="$PROJECT_ROOT/scripts/miyabi/agent/run_independent_launcher.pbs"
 
 LAUNCHER_QUEUE="debug-g"

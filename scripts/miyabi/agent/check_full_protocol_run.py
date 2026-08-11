@@ -22,7 +22,7 @@ from fs_diloco.core.versions import (
     CONTROL_FORMAT_VERSION,
     PROTOCOL_VERSION,
 )
-from fs_diloco.protocol.contributor import StaticMembershipScope
+from fs_diloco.protocol.contributor import ContributorFence, MembershipScope
 from fs_diloco.storage.authority import (
     AuthorityIdentity,
     AuthorityReader,
@@ -258,13 +258,13 @@ def _token_balance(row: dict[str, Any] | None) -> int:
     )
 
 
-def _scenario_expectations(fault_scenario: str) -> tuple[tuple[str, ...], str | None]:
+def _scenario_expectations(fault_scenario: str) -> tuple[str, ...]:
+    """Return the exact durable syncer epoch lifecycle for a co-allocated scenario."""
+
     if fault_scenario == "none":
-        return ("released",), None
-    if fault_scenario == "learner_replacement":
-        return ("released",), "learner_000"
+        return ("released",)
     if fault_scenario == "syncer_takeover":
-        return ("expired", "released"), None
+        return ("expired", "released")
     raise ValueError(f"unregistered Full Protocol fault scenario: {fault_scenario}")
 
 
@@ -274,6 +274,8 @@ def _evidence_paths(
     log_root: Path,
     attestations: list[dict[str, Any]],
 ) -> list[str]:
+    """Collect exact regular evidence files for the completed run and scheduler topology."""
+
     candidates = [
         run_root / "control/run_descriptor.json",
         run_root / "control/run_config.resolved.yaml",
@@ -284,7 +286,6 @@ def _evidence_paths(
         log_root / "source_identity.json",
         log_root / "init_run.json",
         log_root / "summary.json",
-        log_root / "learner_replacement.json",
         log_root / "syncer_takeover.json",
         log_root / "syncer_primary_fault_boundary.json",
     ]
@@ -362,9 +363,7 @@ def validate_run(
             source_fingerprint=str(descriptor.get("source_fingerprint", "")),
             config_sha256=str(descriptor.get("resolved_config_sha256", "")),
         ),
-        StaticMembershipScope(
-            tuple(f"learner_{index:03d}" for index in range(expected_contributors))
-        ),
+        MembershipScope(expected_contributors),
         busy_timeout_ms=resolved_config.leader.business_busy_timeout_ms,
     )
     reader.close()
@@ -419,13 +418,16 @@ def validate_run(
             connection,
             "SELECT * FROM terminal_contributor_fences ORDER BY stable_contributor_key",
         )
-        bindings = _rows(
+        streams = _rows(
             connection,
-            "SELECT * FROM static_contributor_bindings ORDER BY learner_id",
+            "SELECT * FROM streams ORDER BY stream_id",
         )
-        binding_history = _rows(
+        instances = _rows(
             connection,
-            "SELECT * FROM static_binding_history ORDER BY learner_id, binding_generation",
+            "SELECT * FROM learner_instances ORDER BY registered_at, instance_id",
+        )
+        launches = _rows(
+            connection, "SELECT * FROM launch_requests ORDER BY created_at, request_id"
         )
         pending = _rows(
             connection,
@@ -441,8 +443,8 @@ def validate_run(
     errors: list[str] = []
     final_version = int(terminal[0]["final_version"]) if len(terminal) == 1 else -1
     expected_versions = list(range(expected_global_steps + 1))
-    expected_contributor_ids = {f"learner_{index:03d}" for index in range(expected_contributors)}
-    expected_epoch_states, replacement_learner = _scenario_expectations(fault_scenario)
+    expected_contributor_ids = {str(index) for index in range(expected_contributors)}
+    expected_epoch_states = _scenario_expectations(fault_scenario)
     syncer_epoch_count = len(expected_epoch_states)
 
     if descriptor.get("descriptor_sha256") != _json_sha256_without(descriptor, "descriptor_sha256"):
@@ -462,21 +464,16 @@ def validate_run(
     ):
         errors.append("source manifest identity differs from the run descriptor")
 
-    if descriptor.get("mode") != "static":
-        errors.append("descriptor mode is not static")
-    if config.get("membership", {}).get("mode") != "static":
-        errors.append("resolved membership mode is not static")
     if int(config.get("training", {}).get("inner_steps", -1)) != expected_inner_steps:
         errors.append("resolved inner_steps does not equal the registered workload")
     if int(config.get("sync", {}).get("stop_after_outer_steps", -1)) != expected_global_steps:
         errors.append("resolved global stop does not equal the registered workload")
-    if int(config.get("sync", {}).get("num_learners", -1)) != expected_contributors:
-        errors.append("resolved learner count does not equal the registered topology")
-    if (
-        int(config.get("sync", {}).get("quorum_min", -1)) != expected_contributors
-        or int(config.get("sync", {}).get("quorum_max", -1)) != expected_contributors
-    ):
-        errors.append("formal selection quorum is not the full contributor set")
+    if int(config.get("membership", {}).get("stream_pool_size", -1)) != expected_contributors:
+        errors.append("resolved stream pool does not equal the registered topology")
+    quorum_min = int(config.get("sync", {}).get("quorum_min", -1))
+    quorum_max = int(config.get("sync", {}).get("quorum_max", -1))
+    if not 1 <= quorum_min <= quorum_max <= expected_contributors:
+        errors.append("resolved quorum is outside the registered stream pool")
     if integrity != ["ok"]:
         errors.append(f"SQLite integrity failed: {integrity}")
     if len(schema_meta) != 1:
@@ -486,8 +483,7 @@ def validate_run(
         or int(descriptor.get("schema_version", -1)) != AUTHORITY_SCHEMA_VERSION
         or int(schema_meta[0]["protocol_version"]) != PROTOCOL_VERSION
         or int(descriptor.get("protocol_version", -1)) != PROTOCOL_VERSION
-        or schema_meta[0]["mode"] != descriptor.get("mode")
-        or schema_meta[0]["ddl_sha256"] != ddl_bundle_sha256("static")
+        or schema_meta[0]["ddl_sha256"] != ddl_bundle_sha256()
     ):
         errors.append("authority schema identity differs from the run descriptor")
     if len(run_identity) != 1 or any(
@@ -549,41 +545,37 @@ def validate_run(
         errors.append("authority retained pending updates or prepared publications")
     if {str(row["stable_contributor_key"]) for row in selected_credit} != (
         expected_contributor_ids
-    ) or any(
-        int(row["committed_credit"]) != expected_global_steps
-        or int(row["last_committed_version"]) != expected_global_steps
-        for row in selected_credit
+    ) or sum(int(row["committed_credit"]) for row in selected_credit) != (
+        expected_global_steps * quorum_max
     ):
-        errors.append("selection credit is not exact for every contributor")
+        errors.append("selection credit total is not exact for the configured quorum")
     if {str(row["stable_contributor_key"]) for row in progress} != expected_contributor_ids:
         errors.append("contributor progress does not cover the registered topology")
     if {
         str(row["stable_contributor_key"]) for row in terminal_fences
     } != expected_contributor_ids or {row["state"] for row in terminal_fences} != {"acked"}:
         errors.append("terminal contributor acknowledgements are incomplete")
-    if {str(row["learner_id"]) for row in bindings} != expected_contributor_ids or {
-        row["status"] for row in bindings
-    } != {"terminal"}:
-        errors.append("static contributor bindings are not all terminal")
-    expected_binding_generations = {
-        learner_id: 2 if learner_id == replacement_learner else 1
-        for learner_id in expected_contributor_ids
+    if {str(row["stream_id"]) for row in streams} != expected_contributor_ids:
+        errors.append("authority streams do not cover the registered pool")
+    if any(row["current_instance_id"] is None for row in streams):
+        errors.append("a terminal stream has no final instance incarnation")
+    if launches:
+        errors.append("co-allocated harness contains unexpected scheduler launch requests")
+    current_instances = {
+        str(row["current_instance_id"]) for row in streams if row["current_instance_id"] is not None
     }
-    actual_binding_generations = {
-        str(row["learner_id"]): int(row["binding_generation"]) for row in bindings
-    }
-    if actual_binding_generations != expected_binding_generations:
-        errors.append("static binding generations do not match the registered fault scenario")
-    if replacement_learner is None:
-        if binding_history:
-            errors.append("registered scenario contains unexpected static replacement history")
-    elif (
-        len(binding_history) != 1
-        or str(binding_history[0]["learner_id"]) != replacement_learner
-        or int(binding_history[0]["binding_generation"]) != 1
-        or str(binding_history[0]["final_status"]) != "replaced"
+    if (
+        len(instances) != expected_contributors
+        or {str(row["instance_id"]) for row in instances} != current_instances
     ):
-        errors.append("registered learner replacement history is not exact")
+        errors.append("co-allocated harness instance history is not one bootstrap per stream")
+    if {str(row["status"]) for row in instances} != {"stopped"}:
+        errors.append("terminal learner instances are not all stopped")
+    try:
+        for row in terminal_fences:
+            ContributorFence.from_dict(json.loads(str(row["fence_json"])))
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        errors.append(f"terminal contributor fence is invalid: {exc}")
     if len(epochs) != syncer_epoch_count:
         errors.append("syncer epoch history does not match the registered scenario")
     elif tuple(str(row["final_state"]) for row in epochs) != expected_epoch_states:
@@ -618,7 +610,7 @@ def validate_run(
         * int(config["training"]["micro_batch_size"])
         * int(config["data"]["block_size"])
     )
-    expected_direct = expected_global_steps * expected_contributors * per_update_tokens
+    expected_direct = expected_global_steps * quorum_max * per_update_tokens
     if len(terminal) == 1 and int(terminal[0]["direct_weight_tokens_applied"]) != expected_direct:
         errors.append("terminal direct applied tokens are not exact")
     if any(int(row["processed_tokens_this_cycle"]) != per_update_tokens for row in receipts):
@@ -642,15 +634,19 @@ def validate_run(
         learner_id: sum(row["stable_contributor_key"] == learner_id for row in applied_updates)
         for learner_id in expected_contributor_ids
     }
-    if len(applied_updates) != expected_global_steps * expected_contributors or any(
-        count != expected_global_steps for count in applied_by_contributor.values()
+    applied_by_version = {
+        version: sum(int(row["applied_version"]) == version for row in applied_updates)
+        for version in range(1, expected_global_steps + 1)
+    }
+    if len(applied_updates) != expected_global_steps * quorum_max or any(
+        count != quorum_max for count in applied_by_version.values()
     ):
-        errors.append("applied proposal count is not exact for every contributor")
+        errors.append("applied proposal count is not exact for every committed quorum")
     direct_by_versions = sum(int(row["direct_weight_tokens_applied"]) for row in versions)
     rollup = rollups[0] if len(rollups) == 1 else None
     balance = _token_balance(rollup)
     receipt_processed = sum(int(row["processed_tokens_this_cycle"]) for row in receipts)
-    registered_fault = fault_scenario != "none"
+    registered_fault = False
     dropped_updates = [row for row in updates if row["status"] == "dropped"]
     if not registered_fault:
         receipt_proposals = {
@@ -704,13 +700,13 @@ def validate_run(
     attestations = _attestations(run_root)
     learner_attestations = [row for row in attestations if row.get("actor_kind") == "learner"]
     syncer_attestations = [row for row in attestations if row.get("actor_kind") == "syncer"]
-    contributor_ids = {row.get("actor_id") for row in learner_attestations}
+    learner_instance_ids = {str(row.get("actor_id")) for row in learner_attestations}
     attested_learner_attempts = {
         (str(row["actor_id"]), str(row["attempt_id"])) for row in learner_attestations
     }
     expected_learner_attempts = {
-        (str(row["learner_id"]), str(row["attempt_id"])) for row in bindings
-    } | {(str(row["learner_id"]), str(row["attempt_id"])) for row in binding_history}
+        (str(row["instance_id"]), str(row["instance_id"])) for row in instances
+    }
     attested_syncer_owners = {str(row["actor_id"]) for row in syncer_attestations}
     expected_syncer_owners = {str(row["owner_id"]) for row in epochs}
     hosts = {str(row.get("hostname")) for row in attestations}
@@ -736,10 +732,10 @@ def validate_run(
         for row in attestations
     ):
         errors.append("an actor attestation has an invalid checksum or run identity")
-    if expected_contributor_ids != contributor_ids:
-        errors.append("learner attestations do not cover every contributor")
+    if {str(row["instance_id"]) for row in instances} != learner_instance_ids:
+        errors.append("learner attestations do not cover every admitted instance")
     if attested_learner_attempts != expected_learner_attempts:
-        errors.append("learner attestations do not match exact durable binding attempts")
+        errors.append("learner attestations do not match exact durable incarnations")
     if len(syncer_attestations) != syncer_epoch_count:
         errors.append("syncer attestations do not cover every expected candidate")
     if attested_syncer_owners != expected_syncer_owners:
@@ -770,7 +766,6 @@ def validate_run(
             syncer_job_id = receipt.get("syncer_job_id")
             if (
                 receipt.get("submission_status") != "submitted"
-                or receipt.get("membership_mode") != "static"
                 or not expected_actor_queue
                 or receipt.get("actor_queue") != expected_actor_queue
                 or not isinstance(syncer_job_id, str)
@@ -786,8 +781,7 @@ def validate_run(
                     for row in learner_attestations
                 }
                 expected_learner_jobs = {
-                    f"learner_{index:03d}": str(job_id)
-                    for index, job_id in enumerate(learner_job_ids)
+                    str(row["instance_id"]): str(row["pbs_job_id"]) for row in instances
                 }
                 syncer_attestation_jobs = {
                     str(row["scheduler_job_id"]) for row in syncer_attestations
@@ -805,40 +799,6 @@ def validate_run(
                     "syncer_job_id": syncer_job_id,
                     "learner_job_ids": learner_job_ids,
                 }
-
-    replacement_evidence: dict[str, Any] | None = None
-    if replacement_learner is not None:
-        replacement_path = log_root / "learner_replacement.json"
-        if not replacement_path.is_file():
-            errors.append("registered learner replacement evidence is missing")
-        else:
-            replacement_evidence = _read_json(replacement_path)
-            current = next(
-                (row for row in bindings if row["learner_id"] == replacement_learner),
-                None,
-            )
-            old_history = next(
-                (
-                    row
-                    for row in binding_history
-                    if row["learner_id"] == replacement_learner
-                    and int(row["binding_generation"])
-                    == int(replacement_evidence.get("old_binding_generation", -1))
-                ),
-                None,
-            )
-            if (
-                replacement_evidence.get("learner_id") != replacement_learner
-                or int(replacement_evidence.get("injected_exit_status", 0)) == 0
-                or current is None
-                or old_history is None
-                or old_history["final_status"] != "replaced"
-                or old_history["attempt_id"] != replacement_evidence.get("old_attempt_id")
-                or current["attempt_id"] != replacement_evidence.get("new_attempt_id")
-                or int(current["binding_generation"])
-                != int(replacement_evidence.get("old_binding_generation", -1)) + 1
-            ):
-                errors.append("learner replacement evidence does not match durable binding history")
 
     takeover_evidence: dict[str, Any] | None = None
     if syncer_epoch_count > 1:
@@ -928,7 +888,6 @@ def validate_run(
             else {
                 "version": int(schema["schema_version"]),
                 "ddl_sha256": schema["ddl_sha256"],
-                "mode": schema["mode"],
             }
         ),
         "environment": {
@@ -1003,12 +962,12 @@ def validate_run(
             "token_rollup": rollup,
             "token_balance": balance,
             "terminal_fences": terminal_fences,
-            "static_bindings": bindings,
-            "static_binding_history": binding_history,
+            "streams": streams,
+            "instances": instances,
+            "launch_requests": launches,
             "contributor_progress": progress,
         },
         "fault_evidence": {
-            "learner_replacement": replacement_evidence,
             "syncer_takeover": takeover_evidence,
         },
         "publication_objects": objects,
@@ -1182,6 +1141,8 @@ def validate_gate_artifact(payload: dict[str, Any], *, output: Path) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the exact workload, topology, fault, and evidence acceptance interface."""
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gate", type=_safe_identifier, required=True)
     parser.add_argument("--experiment-id", type=_safe_identifier, required=True)
@@ -1197,7 +1158,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-actor-queue", type=_safe_identifier)
     parser.add_argument(
         "--fault-scenario",
-        choices=("none", "learner_replacement", "syncer_takeover"),
+        choices=("none", "syncer_takeover"),
         required=True,
     )
     parser.add_argument(

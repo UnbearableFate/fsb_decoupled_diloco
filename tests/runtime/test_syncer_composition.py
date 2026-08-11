@@ -13,12 +13,11 @@ import pytest
 from fs_diloco.core.config import Config
 from fs_diloco.core.run_descriptor import DescriptorAuthorityIdentity, LoadedRunDescriptor
 from fs_diloco.protocol.authority import ProposalDisposition
-from fs_diloco.protocol.contributor import StaticContributorFence, StaticMembershipScope
+from fs_diloco.protocol.contributor import ContributorFence, MembershipScope
 from fs_diloco.protocol.cycle_receipt import CycleReceiptV1, canonical_receipt_relative_path
 from fs_diloco.runtime.syncer import _admit_requests, _ingest_proposals
 from fs_diloco.storage.admission import (
-    publish_static_replacement_authorization,
-    publish_static_request_with_sha256,
+    publish_admission_request_with_sha256,
 )
 from fs_diloco.storage.atomic_io import read_json
 from fs_diloco.storage.authority import (
@@ -30,18 +29,26 @@ from fs_diloco.storage.authority import (
 )
 from fs_diloco.storage.leader_lease import StaleLeaderTokenError
 from fs_diloco.storage.paths import RunPaths, prepare_authority_dirs
-from tests.support.protocol import proposal, receipt_payload
+from tests.support.protocol import contributor_fence, proposal, receipt_payload
 
 
 class _Telemetry:
+    """Record syncer composition events without external telemetry I/O."""
+
     def __init__(self) -> None:
+        """Start with an empty ordered event sequence."""
+
         self.events: list[tuple[str, dict[str, object]]] = []
 
     def event(self, name: str, **fields: object) -> None:
+        """Append one structured syncer event."""
+
         self.events.append((name, fields))
 
 
 def _loaded(paths: RunPaths, *, config_sha256: str) -> LoadedRunDescriptor:
+    """Build the minimal loaded descriptor required by syncer composition helpers."""
+
     return LoadedRunDescriptor(
         paths=paths,
         descriptor={"run_id": "run-current", "descriptor_sha256": "d" * 64},
@@ -54,14 +61,16 @@ def _loaded(paths: RunPaths, *, config_sha256: str) -> LoadedRunDescriptor:
     )
 
 
-def test_active_static_attempt_replacement_requires_matching_authorization(
+def test_duplicate_bootstrap_request_is_rejected_after_first_admission(
     tmp_path: Path,
 ) -> None:
+    """A consumed bootstrap slot cannot admit a second learner instance."""
+
     paths = RunPaths(tmp_path)
     prepare_authority_dirs(paths)
     config_sha256 = hashlib.sha256(b"config").hexdigest()
     identity = AuthorityIdentity("run-current", "source", config_sha256)
-    scope = StaticMembershipScope(("learner_000",))
+    scope = MembershipScope(1)
     initialize_authority(paths.sqlite_db, identity, scope)
     telemetry = _Telemetry()
 
@@ -70,32 +79,31 @@ def test_active_static_attempt_replacement_requires_matching_authorization(
             authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
         )
         loaded = _loaded(paths, config_sha256=config_sha256)
-        publish_static_request_with_sha256(
+        leader.initialize_membership(command_id="initialize-membership")
+        publish_admission_request_with_sha256(
             paths,
             run_id="run-current",
             descriptor_sha256="d" * 64,
-            learner_id="learner_000",
-            logical_launch_id="logical-1",
-            attempt_id="attempt-1",
-            expected_generation=None,
+            instance_id="instance-1",
+            stream_id=0,
+            bootstrap_slot=0,
+            admission_token_sha256="a" * 64,
         )
         _admit_requests(loaded, authority, leader, telemetry)
 
-        first = authority.read.static_binding("learner_000")
-        assert first is not None and first.binding_generation == 1
-        _path, request_sha256 = publish_static_request_with_sha256(
+        assert authority.read.instances()[0]["instance_id"] == "instance-1"
+        _path, request_sha256 = publish_admission_request_with_sha256(
             paths,
             run_id="run-current",
             descriptor_sha256="d" * 64,
-            learner_id="learner_000",
-            logical_launch_id="logical-2",
-            attempt_id="attempt-2",
-            expected_generation=1,
+            instance_id="instance-2",
+            stream_id=0,
+            bootstrap_slot=0,
+            admission_token_sha256="b" * 64,
         )
         _admit_requests(loaded, authority, leader, telemetry)
 
-        current = authority.read.static_binding("learner_000")
-        assert current == first
+        assert authority.read.streams()[0]["current_instance_id"] == "instance-1"
         disposition = read_json(paths.registration_disposition_path(request_sha256))
         assert disposition["outcome"] == "rejected"
         assert disposition["error_type"] == "MembershipFenceError"
@@ -103,14 +111,18 @@ def test_active_static_attempt_replacement_requires_matching_authorization(
 
 
 @pytest.mark.parametrize("matching_authorization", [True, False])
-def test_active_static_replacement_consumes_exact_authorization(
-    tmp_path: Path, matching_authorization: bool
+def test_replacement_request_consumes_exact_launch_authorization(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    matching_authorization: bool,
 ) -> None:
+    """Filesystem replacement admission binds the exact launch and qsub receipt."""
+
     paths = RunPaths(tmp_path)
     prepare_authority_dirs(paths)
     config_sha256 = hashlib.sha256(b"config").hexdigest()
     identity = AuthorityIdentity("run-current", "source", config_sha256)
-    scope = StaticMembershipScope(("learner_000",))
+    scope = MembershipScope(1)
     initialize_authority(paths.sqlite_db, identity, scope)
     telemetry = _Telemetry()
 
@@ -119,62 +131,86 @@ def test_active_static_replacement_consumes_exact_authorization(
             authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
         )
         loaded = _loaded(paths, config_sha256=config_sha256)
-        publish_static_request_with_sha256(
+        leader.initialize_membership(command_id="initialize-membership")
+        monkeypatch.setenv("PBS_JOBID", "100.opbs")
+        publish_admission_request_with_sha256(
             paths,
             run_id="run-current",
             descriptor_sha256="d" * 64,
-            learner_id="learner_000",
-            logical_launch_id="logical-1",
-            attempt_id="attempt-1",
-            expected_generation=None,
+            instance_id="instance-1",
+            stream_id=0,
+            bootstrap_slot=0,
+            admission_token_sha256="a" * 64,
         )
         _admit_requests(loaded, authority, leader, telemetry)
-        first = authority.read.static_binding("learner_000")
-        assert first is not None and first.binding_generation == 1
-        current_fence = StaticContributorFence(
-            kind="static",
-            learner_id=first.learner_id,
-            logical_launch_id=first.logical_launch_id,
-            attempt_id=first.attempt_id,
-            binding_generation=(
-                first.binding_generation if matching_authorization else first.binding_generation + 1
-            ),
+        first = authority.read.current_contributor_fences()[0]
+        leader.record_capacity_observation(
+            command_id="observe-replacement",
+            observation_key="capacity-replacement",
+            global_version=0,
+            eligible_contributors=0,
+            selected_contributors=0,
+            productive_instances=0,
+            reserved_launch_capacity=0,
+            desired_contributors=1,
+            action="replace",
+            retention_count=4,
         )
-        publish_static_replacement_authorization(
+        planned = leader.plan_launch_request(
+            command_id="plan-replacement",
+            request_id="launch-replacement",
+            observation_key="capacity-replacement",
+            stream_id=0,
+            replace_instance_id=first.instance_id,
+            reason="scheduler_terminal",
+            expires_at=1000.0,
+            max_pending_requests=1,
+            max_total_requests=1,
+            expected_scheduler_job_id="100.opbs",
+        )
+        submitting = leader.transition_launch_request(
+            command_id="submitting",
+            request_id=planned["request_id"],
+            expected_state="planned",
+            state="submitting",
+            pbs_job_id=None,
+            scheduler_state="qsub_started",
+            evidence_source="qsub_started",
+        )
+        leader.transition_launch_request(
+            command_id="submitted",
+            request_id=planned["request_id"],
+            expected_state=submitting["state"],
+            state="submitted",
+            pbs_job_id="200.opbs",
+            scheduler_state="queued",
+            evidence_source="qsub_receipt",
+        )
+        monkeypatch.setenv("PBS_JOBID", "200.opbs" if matching_authorization else "999.opbs")
+        _path, request_sha256 = publish_admission_request_with_sha256(
             paths,
             run_id="run-current",
             descriptor_sha256="d" * 64,
-            old_fence=current_fence,
-            new_logical_launch_id="logical-2",
-            new_attempt_id="attempt-2",
-            reason="operator recovery",
-        )
-        _path, request_sha256 = publish_static_request_with_sha256(
-            paths,
-            run_id="run-current",
-            descriptor_sha256="d" * 64,
-            learner_id="learner_000",
-            logical_launch_id="logical-2",
-            attempt_id="attempt-2",
-            expected_generation=1,
+            instance_id="instance-2",
+            stream_id=0,
+            launch_request_id="launch-replacement",
+            replace_instance_id=first.instance_id,
+            admission_token_sha256="b" * 64,
         )
 
         _admit_requests(loaded, authority, leader, telemetry)
 
-        current = authority.read.static_binding("learner_000")
+        current = authority.read.current_contributor_fences()[0]
         disposition = read_json(paths.registration_disposition_path(request_sha256))
         if matching_authorization:
-            assert current is not None
-            assert current.binding_generation == 2
-            assert current.logical_launch_id == "logical-2"
-            history = authority.read.static_binding_history("learner_000", 1)
-            assert history is not None and history["final_status"] == "replaced"
+            assert current.instance_id == "instance-2"
+            assert current.stream_epoch == first.stream_epoch + 1
             assert disposition["outcome"] == "admitted"
             assert telemetry.events[-1][0] == "learner_admitted"
         else:
             assert current == first
             assert disposition["outcome"] == "rejected"
-            assert disposition["error_type"] == "AdmissionAuthorizationError"
+            assert disposition["error_type"] == "MembershipFenceError"
             assert telemetry.events[-1][0] == "admission_rejected"
 
 
@@ -185,15 +221,11 @@ def test_active_static_replacement_consumes_exact_authorization(
 def test_receipt_ingest_propagates_integrity_failures(
     tmp_path: Path, error_type: type[RuntimeError]
 ) -> None:
+    """Receipt ingestion propagates authority integrity failures without downgrade."""
+
     paths = RunPaths(tmp_path)
     prepare_authority_dirs(paths)
-    fence = StaticContributorFence(
-        kind="static",
-        learner_id="learner-0",
-        logical_launch_id="launch-0",
-        attempt_id="attempt-1",
-        binding_generation=1,
-    )
+    fence = ContributorFence.from_dict(contributor_fence())
     receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence.as_dict()))
     receipt_path = paths.shared_root / canonical_receipt_relative_path(fence, 1)
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
@@ -228,10 +260,12 @@ def test_receipt_ingest_propagates_integrity_failures(
 def test_proposal_ingest_propagates_integrity_failures(
     tmp_path: Path, error_type: type[RuntimeError]
 ) -> None:
+    """Proposal ingestion propagates authority integrity failures without downgrade."""
+
     paths = RunPaths(tmp_path)
     prepare_authority_dirs(paths)
     candidate = proposal()
-    proposal_path = paths.shared_root / "updates/proposals/learner-0/proposal.json"
+    proposal_path = paths.shared_root / "updates/proposals/0/proposal.json"
     proposal_path.parent.mkdir(parents=True, exist_ok=True)
     proposal_path.write_bytes(candidate.canonical_bytes())
     authority = SimpleNamespace(
@@ -413,15 +447,11 @@ def test_proposal_ingest_skips_stale_fence_before_payload_verification(tmp_path:
 def test_receipt_ingest_retries_only_sqlite_contention(
     tmp_path: Path, sqlite_code: int, propagates: bool
 ) -> None:
+    """Receipt scans retry SQLite contention but propagate storage integrity errors."""
+
     paths = RunPaths(tmp_path)
     prepare_authority_dirs(paths)
-    fence = StaticContributorFence(
-        kind="static",
-        learner_id="learner-0",
-        logical_launch_id="launch-0",
-        attempt_id="attempt-1",
-        binding_generation=1,
-    )
+    fence = ContributorFence.from_dict(contributor_fence())
     receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence.as_dict()))
     receipt_path = paths.shared_root / canonical_receipt_relative_path(fence, 1)
     receipt_path.parent.mkdir(parents=True, exist_ok=True)

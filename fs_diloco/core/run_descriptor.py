@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import Any
 
 from .config import Config, load_config
-from .versions import AUTHORITY_SCHEMA_VERSION, PROTOCOL_VERSION
+from .versions import (
+    AUTHORITY_SCHEMA_VERSION,
+    PROTOCOL_VERSION,
+    RUN_DESCRIPTOR_FORMAT_VERSION,
+)
 from ..storage.atomic_io import publish_immutable_bytes, read_json, sha256_file
 from ..storage.paths import RunPaths
 from ..storage.run_initializer import validate_completed_run_for_actor
@@ -36,6 +40,51 @@ def _optional_environment_flag(name: str) -> bool | None:
     if normalized in {"0", "false", "no", "off"}:
         return False
     raise ValueError(f"{name} must be a boolean flag")
+
+
+def _validate_descriptor_shape(descriptor: dict[str, Any]) -> None:
+    """Reject descriptors outside the one current stream-pool schema."""
+
+    required = {
+        "format_version",
+        "run_id",
+        "shared_root",
+        "resolved_config_path",
+        "resolved_config_sha256",
+        "source_manifest_path",
+        "source_manifest_sha256",
+        "source_fingerprint",
+        "git_commit",
+        "git_dirty",
+        "bootstrap_slots",
+        "stream_pool_size",
+        "protocol_version",
+        "schema_version",
+        "source_lock_sha256",
+        "model_identity",
+        "tokenizer_identity",
+        "dataset_identity",
+        "created_at",
+        "descriptor_sha256",
+    }
+    if set(descriptor) != required:
+        missing = sorted(required - set(descriptor))
+        unknown = sorted(set(descriptor) - required)
+        raise RuntimeError(
+            f"run descriptor fields are invalid: missing={missing}, unknown={unknown}"
+        )
+    if descriptor["format_version"] != RUN_DESCRIPTOR_FORMAT_VERSION:
+        raise RuntimeError("unsupported run descriptor format version")
+    pool_size = descriptor["stream_pool_size"]
+    bootstrap_slots = descriptor["bootstrap_slots"]
+    if isinstance(pool_size, bool) or not isinstance(pool_size, int) or pool_size < 1:
+        raise RuntimeError("run descriptor stream_pool_size is invalid")
+    if (
+        isinstance(bootstrap_slots, bool)
+        or not isinstance(bootstrap_slots, int)
+        or not 0 <= bootstrap_slots <= pool_size
+    ):
+        raise RuntimeError("run descriptor bootstrap_slots is invalid")
 
 
 @dataclass(frozen=True)
@@ -69,8 +118,11 @@ def load_run_descriptor(
     expected_source_fingerprint: str | None = None,
     expected_descriptor_sha256: str | None = None,
 ) -> LoadedRunDescriptor:
+    """Load and cross-check the immutable descriptor, config, and run identity."""
+
     paths = RunPaths(Path(shared_root).resolve())
     descriptor = read_json(paths.run_descriptor_json)
+    _validate_descriptor_shape(descriptor)
     recorded_descriptor_sha = str(descriptor.get("descriptor_sha256", ""))
     actual_descriptor_sha = _sha256_json_without(descriptor, "descriptor_sha256")
     if not recorded_descriptor_sha or recorded_descriptor_sha != actual_descriptor_sha:
@@ -80,18 +132,10 @@ def load_run_descriptor(
         and actual_descriptor_sha != expected_descriptor_sha256
     ):
         raise RuntimeError("run descriptor does not match the submitted job identity")
-    descriptor_mode = str(descriptor.get("mode", ""))
-    if descriptor_mode == "static":
-        expected_schema_version = AUTHORITY_SCHEMA_VERSION
-    elif descriptor_mode == "dynamic":
-        expected_schema_version = AUTHORITY_SCHEMA_VERSION
-    else:
-        raise RuntimeError(f"unsupported run descriptor mode: {descriptor_mode!r}")
     checks = {
         "shared_root": str(paths.shared_root),
         "protocol_version": PROTOCOL_VERSION,
-        "schema_version": expected_schema_version,
-        "mode": descriptor_mode,
+        "schema_version": AUTHORITY_SCHEMA_VERSION,
     }
     if expected_run_id is not None:
         checks["run_id"] = expected_run_id
@@ -125,8 +169,10 @@ def load_run_descriptor(
         if source.get(key) != descriptor.get(key):
             raise RuntimeError(f"source manifest {key} mismatch")
     config = load_config(config_path)
-    if config.membership.mode != descriptor_mode:
-        raise RuntimeError("resolved config membership mode does not match descriptor")
+    if config.membership.stream_pool_size != descriptor["stream_pool_size"]:
+        raise RuntimeError("resolved config stream pool size does not match descriptor")
+    if config.membership.bootstrap_instances != descriptor["bootstrap_slots"]:
+        raise RuntimeError("resolved config bootstrap count does not match descriptor")
     if config.run.run_id != descriptor.get("run_id"):
         raise RuntimeError("resolved config run_id mismatch")
     if Path(str(config.run.shared_root)).resolve() != paths.shared_root:

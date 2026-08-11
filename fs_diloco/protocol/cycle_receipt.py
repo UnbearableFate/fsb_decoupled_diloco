@@ -19,12 +19,7 @@ from ._validation import (
     strict_int,
     uuid4_string,
 )
-from .contributor import (
-    ContributorFence,
-    DynamicContributorFence,
-    StaticContributorFence,
-    decode_contributor_fence,
-)
+from .contributor import ContributorFence
 
 
 def canonical_receipt_id(stable_contributor_key: str, cycle_seq: int) -> str:
@@ -38,12 +33,12 @@ def canonical_receipt_id(stable_contributor_key: str, cycle_seq: int) -> str:
 def contributor_fence_namespace(fence: ContributorFence) -> str:
     """Return a safe, deterministic namespace for one contributor incarnation."""
 
-    if not isinstance(fence, (StaticContributorFence, DynamicContributorFence)):
+    if not isinstance(fence, ContributorFence):
         raise ValueError("fence must be a typed contributor fence")
     canonical_fence = json.dumps(
         fence.as_dict(), sort_keys=True, separators=(",", ":"), allow_nan=False
     ).encode("utf-8")
-    return f"{fence.kind}-{hashlib.sha256(canonical_fence).hexdigest()}"
+    return hashlib.sha256(canonical_fence).hexdigest()
 
 
 def canonical_receipt_relative_path(fence: ContributorFence, cycle_seq: int) -> str:
@@ -57,6 +52,8 @@ def canonical_receipt_relative_path(fence: ContributorFence, cycle_seq: int) -> 
 
 @dataclass(frozen=True)
 class CycleReceiptV1:
+    """Record one contiguous learner cycle and its optional promised proposal."""
+
     cycle_receipt_format_version: int
     run_id: str
     stable_contributor_key: str
@@ -78,6 +75,8 @@ class CycleReceiptV1:
     created_at: float
 
     def __post_init__(self) -> None:
+        """Reject any receipt whose identity, accounting, cursor, or fence is inconsistent."""
+
         version = strict_int(
             self.cycle_receipt_format_version,
             name="cycle_receipt_format_version",
@@ -134,10 +133,7 @@ class CycleReceiptV1:
                 raise ValueError("a proposal cannot be planned for a zero-effective cycle")
         elif self.planned_update_id is not None or self.planned_payload_sha256 is not None:
             raise ValueError("an upload-skipped receipt must not name a planned proposal")
-        if not isinstance(
-            self.contributor_fence,
-            (StaticContributorFence, DynamicContributorFence),
-        ):
+        if not isinstance(self.contributor_fence, ContributorFence):
             raise ValueError("contributor_fence must be a typed contributor fence")
         if self.contributor_fence.stable_contributor_key != stable_key:
             raise ValueError("contributor fence does not match stable_contributor_key")
@@ -152,6 +148,8 @@ class CycleReceiptV1:
 
     @classmethod
     def from_dict(cls, value: Any) -> "CycleReceiptV1":
+        """Decode the exact current receipt schema without accepting legacy fields."""
+
         payload = require_mapping(value, name="CycleReceiptV1")
         fields = {
             "cycle_receipt_format_version",
@@ -231,7 +229,7 @@ class CycleReceiptV1:
                 raise ValueError("a proposal cannot be planned for a zero-effective cycle")
         elif update_id is not None or payload_digest is not None:
             raise ValueError("an upload-skipped receipt must not name a planned proposal")
-        fence = decode_contributor_fence(payload["contributor_fence"])
+        fence = ContributorFence.from_dict(payload["contributor_fence"])
         stable_key = identity(payload["stable_contributor_key"], name="stable_contributor_key")
         if fence.stable_contributor_key != stable_key:
             raise ValueError("contributor fence does not match stable_contributor_key")

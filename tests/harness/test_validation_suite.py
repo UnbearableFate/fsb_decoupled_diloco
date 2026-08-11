@@ -47,6 +47,8 @@ def test_validation_runner_publishes_create_only_schema_complete_pass(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """A clean successful step produces one immutable schema-complete PASS artifact."""
+
     module = _module()
     identity = _identity()
     monkeypatch.setattr(module, "capture_source_identity", lambda _root: identity.copy())
@@ -70,7 +72,7 @@ def test_validation_runner_publishes_create_only_schema_complete_pass(
 
     assert artifact == json.loads(output.read_text(encoding="utf-8"))
     assert artifact["status"] == "PASS"
-    assert artifact["requirements_covered"] == ["UNIT-01", "HARNESS-01"]
+    assert artifact["requirements_covered"] == ["P05-R08"]
     assert artifact["source_identity"]["fingerprint"] == identity["source_fingerprint"]
     assert artifact["metrics"]["steps"][0]["argv"] == list(steps[0].argv)
     assert artifact["metrics"]["steps"][0]["result_kind"] == "command"

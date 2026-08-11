@@ -91,26 +91,12 @@ export default function ConceptsPage() {
           Learner 在导入 Torch 和加载模型之前，必须完成运行描述符验证和 admission。
           Admission 返回 contributor fence、稳定 contributor key 与恢复 cursor。
         </p>
-        <div className="comparison-grid">
-          <article>
-            <h3><code>static</code></h3>
-            <ul>
-              <li>身份集合由 <code>sync.num_learners</code> 固定。</li>
-              <li>Learner ID 形如 <code>learner_000</code>。</li>
-              <li>替换现有绑定需要精确匹配旧 fence 的 operator authorization。</li>
-              <li>配置中不得声明 inert <code>scaling</code> 段。</li>
-            </ul>
-          </article>
-          <article>
-            <h3><code>dynamic</code></h3>
-            <ul>
-              <li>逻辑并行度由固定 <code>stream_pool_size</code> 定义。</li>
-              <li>实例 ID 每次 admission 都是新的 UUID。</li>
-              <li>Leader 持久化容量观测、launch request 和 scheduler reconciliation。</li>
-              <li>启动实例或 replacement 必须绑定 bootstrap slot 或 launch reservation。</li>
-            </ul>
-          </article>
-        </div>
+        <ul>
+          <li>逻辑并行度和数据分片数由固定 <code>stream_pool_size</code> 定义。</li>
+          <li>每个进程实例在 admission 时取得新的 instance ID。</li>
+          <li>启动实例必须绑定 bootstrap slot 或已授权的 launch request。</li>
+          <li>启用 scaling 时，Leader 持久化容量观测、launch request 和 scheduler reconciliation。</li>
+        </ul>
       </section>
 
       <section id="fencing">
@@ -120,9 +106,8 @@ export default function ConceptsPage() {
           authority 在每个受保护写操作前验证 token 尚未被替代，也没有越过考虑时钟偏差后的安全边界。
         </p>
         <p>
-          Contributor fence 保护 Learner 身份。Static fence 绑定 learner、logical launch、attempt
-          和 generation；dynamic fence 绑定 instance、stream 与 generation。
-          Selection 后、commit 前再次检查 fence，从而拒绝已经失效的 proposal。
+          Contributor fence 保护 Learner 身份。Fence 绑定 instance、placement、stream 和
+          admission generation。Selection 后、commit 前再次检查同一 fence，从而拒绝已经失效的 proposal。
         </p>
         <Callout title="Fence conflict 不会提交半个版本" tone="success">
           <p>

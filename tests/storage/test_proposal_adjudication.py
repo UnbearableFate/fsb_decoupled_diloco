@@ -1,3 +1,5 @@
+"""Verify proposal replay, conflict, quarantine, and frontier adjudication."""
+
 from __future__ import annotations
 
 import hashlib
@@ -8,51 +10,44 @@ from pathlib import Path
 import pytest
 
 from fs_diloco.protocol.authority import ProposalDisposition
-from fs_diloco.protocol.contributor import StaticContributorFence, StaticMembershipScope
+from fs_diloco.protocol.contributor import ContributorFence, MembershipScope
 from fs_diloco.protocol.cycle_receipt import CycleReceiptV1
 from fs_diloco.protocol.proposal import FullUpdateProposalV2
 from fs_diloco.storage.authority import AuthorityIdentity, LeaderAuthority, initialize_authority
 from tests.support.protocol import (
+    admit_contributor,
     proposal_payload,
     publish_proposal_payload,
     receipt_payload,
 )
 
 
-def open_static(tmp_path: Path):
+def open_authority(tmp_path: Path):
+    """Open an authority leader with one admitted stream incarnation."""
+
     identity = AuthorityIdentity(
         "run-current", "source-fingerprint", hashlib.sha256(b"config").hexdigest()
     )
-    scope = StaticMembershipScope(("learner-0",))
+    scope = MembershipScope(1)
     database = tmp_path / "authority.sqlite3"
     initialize_authority(database, identity, scope, wall_clock=lambda: 100.0)
     authority = LeaderAuthority(database, identity, scope, wall_clock=lambda: 100.0)
     token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
     leader = authority.open_leader(token)
-    binding = leader.bind_or_replace_static_attempt(
-        command_id="bind",
-        learner_id="learner-0",
-        logical_launch_id="launch-0",
-        attempt_id="attempt-0",
-    )
-    fence = StaticContributorFence(
-        "static",
-        binding.learner_id,
-        binding.logical_launch_id,
-        binding.attempt_id,
-        binding.binding_generation,
-    )
+    fence = admit_contributor(leader)
     return authority, leader, fence
 
 
 def build_cycle(
     leader,
     run_root: Path,
-    fence: StaticContributorFence,
+    fence: ContributorFence,
     *,
     cycle_seq: int,
     previous: CycleReceiptV1 | None = None,
 ) -> tuple[CycleReceiptV1, FullUpdateProposalV2]:
+    """Ingest one receipt and publish its matching proposal payload."""
+
     receipt = CycleReceiptV1.from_dict(
         receipt_payload(
             cycle_seq=cycle_seq,
@@ -76,6 +71,8 @@ def build_cycle(
 
 
 def query_one(database: Path, sql: str, parameters: tuple = ()):
+    """Read one SQLite result row for durable adjudication assertions."""
+
     connection = sqlite3.connect(database)
     try:
         return connection.execute(sql, parameters).fetchone()
@@ -86,7 +83,9 @@ def query_one(database: Path, sql: str, parameters: tuple = ()):
 def test_replay_collision_and_logical_conflict_are_explicit_and_audited(
     tmp_path: Path,
 ) -> None:
-    authority, leader, fence = open_static(tmp_path)
+    """Exact replays remain idempotent while collisions are durably audited."""
+
+    authority, leader, fence = open_authority(tmp_path)
     database = tmp_path / "authority.sqlite3"
     try:
         receipt, proposal = build_cycle(leader, tmp_path, fence, cycle_seq=1)
@@ -154,7 +153,9 @@ def test_conflict_cannot_cross_receipt_gap_and_command_replay_needs_no_object(
 ) -> None:
     """An accepted command replay is identified without rereading its payload."""
 
-    authority, leader, fence = open_static(tmp_path)
+    """Logical conflicts cannot jump a receipt gap or depend on replayed objects."""
+
+    authority, leader, fence = open_authority(tmp_path)
     database = tmp_path / "authority.sqlite3"
     try:
         _receipt, proposal = build_cycle(leader, tmp_path, fence, cycle_seq=1)
@@ -187,7 +188,9 @@ def test_conflict_cannot_cross_receipt_gap_and_command_replay_needs_no_object(
 
 
 def test_quarantine_hot_rows_are_bounded_for_distinct_conflicts(tmp_path: Path) -> None:
-    authority, leader, fence = open_static(tmp_path)
+    """Per-contributor conflict quarantine remains bounded under unique collisions."""
+
+    authority, leader, fence = open_authority(tmp_path)
     database = tmp_path / "authority.sqlite3"
     try:
         receipt, accepted = build_cycle(leader, tmp_path, fence, cycle_seq=1)
@@ -215,7 +218,9 @@ def test_quarantine_hot_rows_are_bounded_for_distinct_conflicts(tmp_path: Path) 
 
 @pytest.mark.crash_matrix
 def test_insert_supersede_and_frontier_failures_roll_back_as_one_unit(tmp_path: Path) -> None:
-    authority, leader, fence = open_static(tmp_path)
+    """Proposal insertion, supersession, and frontier advance share one transaction."""
+
+    authority, leader, fence = open_authority(tmp_path)
     database = tmp_path / "authority.sqlite3"
     try:
         first_receipt, first = build_cycle(leader, tmp_path, fence, cycle_seq=1)
@@ -288,7 +293,9 @@ def test_insert_supersede_and_frontier_failures_roll_back_as_one_unit(tmp_path: 
 
 
 def test_frontier_foreign_key_and_active_proposal_bound(tmp_path: Path) -> None:
-    authority, leader, fence = open_static(tmp_path)
+    """The active proposal frontier remains referentially valid and bounded."""
+
+    authority, leader, fence = open_authority(tmp_path)
     database = tmp_path / "authority.sqlite3"
     try:
         previous = None

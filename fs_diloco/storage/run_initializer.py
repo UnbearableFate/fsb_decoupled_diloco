@@ -546,16 +546,12 @@ def _validate_completed_protocol_identity(final_root: Path, *, validate_authorit
     for field in ("git_commit", "git_dirty", "source_fingerprint"):
         if source.get(field) != descriptor.get(field):
             raise RuntimeError(f"source manifest {field} mismatch")
-    descriptor_mode = descriptor.get("mode")
-    if descriptor_mode not in {"static", "dynamic"}:
-        raise RuntimeError(f"unsupported run descriptor mode: {descriptor_mode!r}")
-    bootstrap_mode = descriptor_mode
     identity = validate_identity_file(paths.run_identity_file)
     identity_checks = {
+        "format_version": 2,
         "run_id": descriptor.get("run_id"),
         "source_fingerprint": descriptor.get("source_fingerprint"),
         "config_sha256": descriptor.get("resolved_config_sha256"),
-        "mode": bootstrap_mode,
         "logical_root": str(final_root),
     }
     mismatches = {
@@ -568,19 +564,13 @@ def _validate_completed_protocol_identity(final_root: Path, *, validate_authorit
     ArtifactPolicy.from_dict(read_json(paths.artifact_policy_json))
     if not validate_authority:
         return
-    from ..protocol.contributor import DynamicMembershipScope, StaticMembershipScope
+    from ..protocol.contributor import MembershipScope
     from .authority import AuthorityIdentity, LeaderAuthority
 
-    if descriptor_mode == "dynamic":
-        stream_pool_size = descriptor.get("stream_pool_size")
-        if isinstance(stream_pool_size, bool) or not isinstance(stream_pool_size, int):
-            raise RuntimeError("dynamic descriptor stream_pool_size is invalid")
-        scope = DynamicMembershipScope(stream_pool_size)
-    else:
-        learner_ids = descriptor.get("static_learner_ids")
-        if not isinstance(learner_ids, list) or not learner_ids:
-            raise RuntimeError("static descriptor learner IDs are invalid")
-        scope = StaticMembershipScope(tuple(str(item) for item in learner_ids))
+    stream_pool_size = descriptor.get("stream_pool_size")
+    if isinstance(stream_pool_size, bool) or not isinstance(stream_pool_size, int):
+        raise RuntimeError("descriptor stream_pool_size is invalid")
+    scope = MembershipScope(stream_pool_size)
     authority = LeaderAuthority(
         paths.sqlite_db,
         AuthorityIdentity(

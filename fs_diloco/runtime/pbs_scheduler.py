@@ -1,4 +1,4 @@
-"""Small auditable PBS query/submission adapter for dynamic learners."""
+"""Small auditable PBS query and submission adapter for learner capacity."""
 
 from __future__ import annotations
 

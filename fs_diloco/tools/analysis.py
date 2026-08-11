@@ -9,14 +9,14 @@ from pathlib import Path
 from typing import Any
 
 from ..core.run_descriptor import LoadedRunDescriptor, load_run_descriptor
-from ..protocol.contributor import DynamicMembershipScope, StaticMembershipScope
+from ..protocol.contributor import MembershipScope
 from ..storage.authority import AuthorityIdentity, AuthorityReader
 
 
-def _scope(loaded: LoadedRunDescriptor) -> StaticMembershipScope | DynamicMembershipScope:
-    if loaded.descriptor["mode"] == "dynamic":
-        return DynamicMembershipScope(int(loaded.descriptor["stream_pool_size"]))
-    return StaticMembershipScope(tuple(loaded.descriptor["static_learner_ids"]))
+def _scope(loaded: LoadedRunDescriptor) -> MembershipScope:
+    """Construct the sole authority scope from the immutable descriptor."""
+
+    return MembershipScope(int(loaded.descriptor["stream_pool_size"]))
 
 
 def _json_value(value: Any) -> Any:
@@ -30,6 +30,8 @@ def _json_value(value: Any) -> Any:
 
 
 def summarize_run(shared_root: str | Path) -> dict[str, Any]:
+    """Project one run's current durable authority into a neutral summary."""
+
     loaded = load_run_descriptor(shared_root)
     authority = AuthorityReader(
         loaded.paths.sqlite_db,
@@ -50,7 +52,6 @@ def summarize_run(shared_root: str | Path) -> dict[str, Any]:
             "run": {
                 "shared_root": str(loaded.paths.shared_root),
                 "run_id": loaded.identity.run_id,
-                "mode": loaded.descriptor["mode"],
                 "descriptor_sha256": loaded.descriptor["descriptor_sha256"],
                 "source_fingerprint": loaded.identity.source_fingerprint,
                 "config_sha256": loaded.identity.config_sha256,
@@ -65,10 +66,10 @@ def summarize_run(shared_root: str | Path) -> dict[str, Any]:
             "terminal": authority.read.terminal_record(),
             "terminal_contributor_fences": list(authority.read.terminal_contributor_fences()),
             "syncer_epochs": list(authority.read.syncer_epochs()),
-            "dynamic": {
-                "streams": list(authority.read.dynamic_streams()),
-                "instances": list(authority.read.dynamic_instances()),
-                "launch_requests": list(authority.read.dynamic_launch_requests()),
+            "membership": {
+                "streams": list(authority.read.streams()),
+                "instances": list(authority.read.instances()),
+                "launch_requests": list(authority.read.launch_requests()),
                 "capacity_observations": list(authority.read.capacity_observations()),
             },
             "audit": authority.read.audit_archive_summary(),

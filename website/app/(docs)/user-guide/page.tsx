@@ -16,18 +16,6 @@ const toc = [
   { id: "cleanup", label: "完成后清理" },
 ];
 
-const staticReplacement = `python -m fs_diloco.tools.request_static_replacement \\
-  --shared-root /path/to/run \\
-  --run-id RUN_ID \\
-  --descriptor-sha256 DESCRIPTOR_SHA256 \\
-  --learner-id learner_003 \\
-  --old-logical-launch-id OLD_LAUNCH_ID \\
-  --old-attempt-id OLD_ATTEMPT_ID \\
-  --old-binding-generation 1 \\
-  --new-logical-launch-id NEW_LAUNCH_ID \\
-  --new-attempt-id NEW_ATTEMPT_ID \\
-  --reason "operator-approved replacement"`;
-
 const uncertainty = `python -m fs_diloco.tools.resolve_scheduler_uncertainty \\
   --shared-root /path/to/run \\
   --launch-request-id REQUEST_ID \\
@@ -74,9 +62,9 @@ export default function UserGuidePage() {
             <div>
               <strong>从最接近目标的当前配置复制。</strong>
               <p>
-                功能路径使用 <code>full_protocol_functional.yaml</code>；固定拓扑使用
-                <code>full_protocol_static.yaml</code>；容量恢复研究使用
-                <code>full_protocol_dynamic.yaml</code>。
+                功能路径使用 <code>full_protocol_functional.yaml</code>；正式固定容量路径使用
+                <code>full_protocol.yaml</code>；GPT-2 容量恢复实验使用
+                <code>experiments/gpt2_wikitext2_8l_200x10.yaml</code>。
               </p>
             </div>
           </li>
@@ -85,7 +73,7 @@ export default function UserGuidePage() {
             <div>
               <strong>只修改一个明确的实验维度。</strong>
               <p>
-                模型、数据、训练预算、quorum、外层优化器和成员模式会共同改变运行语义。
+                模型、数据、训练预算、quorum、外层优化器和容量策略会共同改变运行语义。
                 不要把不相关变更放进同一配置。
               </p>
             </div>
@@ -113,8 +101,8 @@ export default function UserGuidePage() {
         </ol>
         <Callout title="严格字段集合" tone="note">
           <p>
-            解析器拒绝未知顶层段和未知字段。Static membership 还会拒绝独立的
-            <code>scaling</code> 配置，因为该段在 static 模式没有运行语义。
+            解析器拒绝未知顶层段和未知字段。<code>scaling.enabled=false</code> 使用固定容量；
+            启用 scaling 时，所有 launch budget、调度器和 walltime 约束必须同时成立。
           </p>
         </Callout>
       </section>
@@ -124,8 +112,7 @@ export default function UserGuidePage() {
         <h3>独立 PBS actor</h3>
         <p>
           推荐入口是 <code>fs_diloco.tools.launch_independent_run</code>。它先提交一个
-          Syncer job，再逐个提交 Learner scalar job。Static 模式不使用 job array；
-          dynamic 模式按 bootstrap slot 提交初始实例。
+          Syncer job，再按 bootstrap slot 逐个提交 Learner scalar job。此入口不使用 job array。
         </p>
         <h3>单个多节点 allocation</h3>
         <p>
@@ -205,13 +192,7 @@ export default function UserGuidePage() {
 
       <section id="operator-actions">
         <h2>Operator 操作</h2>
-        <h3>替换 static Learner</h3>
-        <p>
-          先从 authority 与现有 admission publication 读取完整旧 fence，
-          再发布精确的新 attempt authorization。命令会写入不可变请求；没有 dry-run 模式。
-        </p>
-        <CodeBlock label="Shell">{staticReplacement}</CodeBlock>
-        <h3>解决 dynamic scheduler uncertainty</h3>
+        <h3>解决 scheduler uncertainty</h3>
         <p>
           先使用默认 dry-run 输出核对目标路径、action 和 expected state hash。
           只有 PBS 证据明确时才附加 <code>--apply</code>。
@@ -241,15 +222,15 @@ export default function UserGuidePage() {
             </p>
           </article>
           <article>
-            <span>STATIC LEARNER</span>
-            <h3>固定身份需要替换</h3>
+            <span>LEARNER CAPACITY</span>
+            <h3>实例丢失并需要替换</h3>
             <p>
-              不要直接复用 learner ID 启动新 attempt。先发布与旧 fence 精确匹配的 replacement
-              authorization，再让新进程进入 admission。
+              Capacity service 先持久化观测和 launch request，再由调度器提交新实例。
+              Replacement admission 必须绑定旧 instance、目标 stream 和 launch request。
             </p>
           </article>
           <article>
-            <span>DYNAMIC CAPACITY</span>
+            <span>SCHEDULER</span>
             <h3>PBS 提交结果不确定</h3>
             <p>
               保存 <code>qstat</code> 或调度器证据。用 expected state hash 发布 operator request，

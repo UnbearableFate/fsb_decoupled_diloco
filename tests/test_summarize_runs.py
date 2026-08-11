@@ -1,4 +1,4 @@
-"""Verify unified baseline and Dynamic Full run aggregation."""
+"""Verify unified baseline and Full Protocol run aggregation."""
 
 from __future__ import annotations
 
@@ -142,7 +142,7 @@ def _write_full_protocol_run(
     *,
     archive_through_version: int | None = None,
 ) -> Path:
-    """Create a finalized eight-stream Dynamic Full authority and telemetry fixture."""
+    """Create a finalized eight-stream Full Protocol authority and telemetry fixture."""
 
     run = runs_root / "full_protocol" / run_id
     control = run / "control"
@@ -156,7 +156,6 @@ def _write_full_protocol_run(
     }
     descriptor = {
         "run_id": run_id,
-        "mode": "dynamic",
         "created_at": 100.0,
     }
     source = {
@@ -166,11 +165,11 @@ def _write_full_protocol_run(
     config = {
         **_shared_config(),
         "sync": {
-            "num_learners": 8,
             "quorum_min": 4,
             "quorum_max": 4,
             "stop_after_outer_steps": 10,
         },
+        "membership": {"stream_pool_size": 8, "bootstrap_instances": 8},
         "training": {
             "inner_steps": 200,
             "micro_batch_size": 2,
@@ -220,7 +219,15 @@ def _write_full_protocol_run(
     for stream in range(8):
         instance_id = f"instance-{stream}"
         fence = json.dumps(
-            {"kind": "dynamic", "instance_id": instance_id, "stream_id": stream},
+            {
+                "instance_id": instance_id,
+                "placement_id": f"placement-{stream}",
+                "placement_epoch": 1,
+                "stream_id": stream,
+                "stream_epoch": 1,
+                "admission_generation": stream + 1,
+                "admission_token_sha256": f"{stream:x}" * 64,
+            },
             sort_keys=True,
             separators=(",", ":"),
         )
@@ -303,17 +310,17 @@ def test_parse_baseline_extracts_unified_loss_workload_and_timing(tmp_path: Path
     assert row["synchronization_time_fraction"] == pytest.approx(0.1)
 
 
-def test_parse_dynamic_full_uses_terminal_fences_and_exact_merge_counts(
+def test_parse_full_protocol_uses_terminal_fences_and_exact_merge_counts(
     tmp_path: Path,
 ) -> None:
-    """Dynamic rows must use final fence telemetry and ten exact four-update merges."""
+    """Full Protocol rows use final fence telemetry and ten exact four-update merges."""
 
     module = _module()
-    run = _write_full_protocol_run(tmp_path / "runs", "dynamic-run")
+    run = _write_full_protocol_run(tmp_path / "runs", "full-protocol-run")
 
     row = module.parse_completed_run(run)
 
-    assert row["run_kind"] == "fs_diloco_dynamic_full"
+    assert row["run_kind"] == "fs_diloco_full_protocol"
     assert row["terminal_contributors"] == 8
     assert row["global_steps"] == 10
     assert row["merge_contributors"] == 4
@@ -323,13 +330,13 @@ def test_parse_dynamic_full_uses_terminal_fences_and_exact_merge_counts(
     assert row["final_mean_loss"] == pytest.approx(2.35)
 
 
-def test_parse_dynamic_full_includes_maintenance_archives(tmp_path: Path) -> None:
+def test_parse_full_protocol_includes_maintenance_archives(tmp_path: Path) -> None:
     """Completed summaries must reconstruct early updates removed from the hot database."""
 
     module = _module()
     run = _write_full_protocol_run(
         tmp_path / "runs",
-        "archived-dynamic-run",
+        "archived-full-protocol-run",
         archive_through_version=9,
     )
 
@@ -346,13 +353,13 @@ def test_csv_update_discovers_both_layouts_and_deduplicates(tmp_path: Path) -> N
     module = _module()
     runs_root = tmp_path / "runs"
     _write_baseline_run(runs_root, "ddp-run")
-    _write_full_protocol_run(runs_root, "dynamic-run")
+    _write_full_protocol_run(runs_root, "full-protocol-run")
     _write_baseline_run(runs_root, "running-run", status="running")
     output = tmp_path / "results" / "runs.csv"
 
     assert module.update_summary_csv([runs_root], output) == (2, 0, 2)
     assert module.update_summary_csv([runs_root], output) == (0, 2, 2)
-    assert [row["run_id"] for row in _read_rows(output)] == ["dynamic-run", "ddp-run"]
+    assert [row["run_id"] for row in _read_rows(output)] == ["ddp-run", "full-protocol-run"]
 
 
 def test_comparison_flags_twenty_percent_metric_difference(tmp_path: Path) -> None:
@@ -362,10 +369,10 @@ def test_comparison_flags_twenty_percent_metric_difference(tmp_path: Path) -> No
     runs_root = tmp_path / "runs"
     ddp = _write_baseline_run(runs_root, "ddp-run", mode="ddp")
     periodic = _write_baseline_run(runs_root, "periodic-run", mode="periodic_average")
-    dynamic = _write_full_protocol_run(runs_root, "dynamic-run")
+    full_protocol = _write_full_protocol_run(runs_root, "full-protocol-run")
     output = tmp_path / "runs.csv"
     comparison = tmp_path / "comparison.json"
-    module.update_summary_csv([ddp, periodic, dynamic], output)
+    module.update_summary_csv([ddp, periodic, full_protocol], output)
 
     module.write_comparisons(output, comparison)
 

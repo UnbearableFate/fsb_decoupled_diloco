@@ -128,7 +128,8 @@ class DataSection(ConfigSection):
 
 @dataclass
 class SyncSection(ConfigSection):
-    num_learners: int = 8
+    """Configure merge quorum, cadence, staleness, and global stop conditions."""
+
     quorum_min: int = 4
     quorum_max: int = 8
     staleness_lambda: float = 0.25
@@ -146,9 +147,10 @@ class SyncerSection(ConfigSection):
 
 @dataclass
 class MembershipSection(ConfigSection):
-    mode: str = "static"
-    stream_pool_size: int = 8
-    bootstrap_instances: int = 8
+    """Configure the fixed logical stream pool and admission timing."""
+
+    stream_pool_size: int = 8  # Total logical contributors and dataset shards.
+    bootstrap_instances: int = 8  # Initial scalar learner jobs eligible for admission.
     initial_membership_deadline_seconds: float = 1800.0
     registration_scan_interval_seconds: float = 2.0
     registration_request_ttl_seconds: float = 120.0
@@ -341,36 +343,18 @@ def _from_dict(
 
 
 def config_to_dict(config: Config) -> dict[str, Any]:
-    payload = dataclasses.asdict(config)
-    if config.membership.mode == "static":
-        payload["membership"].pop("stream_pool_size")
-        payload["membership"].pop("bootstrap_instances")
-        payload.pop("scaling")
-    return payload
+    """Return the complete canonical representation of the sole config schema."""
 
-
-def _validate_source_shape(data: dict[str, Any]) -> None:
-    membership = data.get("membership") or {}
-    if not isinstance(membership, dict):
-        return
-    mode = membership.get("mode", "static")
-    if mode == "static":
-        repeated = sorted({"stream_pool_size", "bootstrap_instances"} & set(membership))
-        if repeated:
-            raise ValueError(
-                "static membership derives contributor counts from sync.num_learners; "
-                f"remove: {', '.join(repeated)}"
-            )
-        if "scaling" in data:
-            raise ValueError("static membership must not declare inert scaling configuration")
+    return dataclasses.asdict(config)
 
 
 def _parse_config(path: str | Path) -> Config:
+    """Parse one YAML mapping and reject every unknown field recursively."""
+
     with Path(path).open("r", encoding="utf-8") as handle:
         loaded = yaml.safe_load(handle) or {}
     if not isinstance(loaded, dict):
         raise ValueError(f"config {path} must contain a mapping")
-    _validate_source_shape(loaded)
     return _from_dict(Config, loaded)
 
 
@@ -434,6 +418,8 @@ def resolve_config(
 
 
 def _normalize_and_validate(config: Config) -> Config:
+    """Validate all cross-section invariants without rewriting user intent."""
+
     config._validate_structure()
     safe_component = re.compile(r"[A-Za-z0-9._-]+\Z")
     if not config.run.name or safe_component.fullmatch(config.run.name) is None:
@@ -531,32 +517,14 @@ def _normalize_and_validate(config: Config) -> Config:
     membership = config.membership
     scaling = config.scaling
     terminal = config.terminal
-    if membership.mode not in {"static", "dynamic"}:
-        raise ValueError("membership.mode must be one of: static, dynamic")
-    dynamic = membership.mode == "dynamic"
-    if dynamic and config.sync.num_learners != membership.stream_pool_size:
-        raise ValueError("sync.num_learners must equal membership.stream_pool_size")
-    if not dynamic:
-        membership.stream_pool_size = config.sync.num_learners
-        membership.bootstrap_instances = config.sync.num_learners
-    if scaling.enabled and not dynamic:
-        raise ValueError("scaling.enabled requires membership.mode=dynamic")
     if membership.stream_pool_size < membership.bootstrap_instances:
         raise ValueError("membership.stream_pool_size must be >= bootstrap_instances")
     if membership.bootstrap_instances < 0:
         raise ValueError("membership.bootstrap_instances must be >= 0")
     if membership.stream_pool_size < 1:
         raise ValueError("membership.stream_pool_size must be >= 1")
-    if dynamic and not (
-        config.sync.quorum_min
-        <= scaling.desired_contributors
-        <= config.sync.quorum_max
-        <= membership.stream_pool_size
-    ):
-        raise ValueError(
-            "dynamic capacity requires quorum_min <= desired_contributors <= "
-            "quorum_max <= stream_pool_size"
-        )
+    if not 1 <= config.sync.quorum_min <= config.sync.quorum_max <= membership.stream_pool_size:
+        raise ValueError("sync quorum must satisfy 1 <= min <= max <= stream_pool_size")
     if membership.initial_membership_deadline_seconds < membership.registration_request_ttl_seconds:
         raise ValueError(
             "membership initial_membership_deadline_seconds must cover registration request TTL"
@@ -570,6 +538,8 @@ def _normalize_and_validate(config: Config) -> Config:
         if float(getattr(membership, field_name)) <= 0.0:
             raise ValueError(f"membership.{field_name} must be > 0")
     if scaling.enabled:
+        if not 1 <= scaling.desired_contributors <= membership.stream_pool_size:
+            raise ValueError("scaling.desired_contributors must be between 1 and stream_pool_size")
         if scaling.max_pending_launch_requests > scaling.max_total_launch_requests:
             raise ValueError("scaling max_pending_launch_requests must not exceed max_total")
         if scaling.max_pending_launch_requests < 0 or scaling.max_total_launch_requests < 0:
@@ -585,7 +555,7 @@ def _normalize_and_validate(config: Config) -> Config:
             )
         if scaling.low_contributor_threshold >= scaling.desired_contributors:
             raise ValueError("scaling low_contributor_threshold must be below desired_contributors")
-        if scaling.low_contributor_threshold < 0 or scaling.desired_contributors < 1:
+        if scaling.low_contributor_threshold < 0:
             raise ValueError("scaling contributor thresholds are invalid")
         if scaling.consecutive_low_windows < 2:
             raise ValueError("scaling.consecutive_low_windows must be >= 2")
@@ -660,10 +630,8 @@ def _normalize_and_validate(config: Config) -> Config:
     has_global_target = config.sync.stop_after_outer_steps is not None
     if terminal.admission_close_policy == "global_target" and not has_global_target:
         raise ValueError("global_target close policy requires a configured global target")
-    if (
-        dynamic
-        and terminal.admission_close_policy == "global_target_or_launch_budget"
-        and not (has_global_target or (scaling.enabled and scaling.max_total_launch_requests > 0))
+    if terminal.admission_close_policy == "global_target_or_launch_budget" and not (
+        has_global_target or (scaling.enabled and scaling.max_total_launch_requests > 0)
     ):
         raise ValueError(
             "global_target_or_launch_budget requires a global target or finite scale budget"
@@ -682,8 +650,6 @@ def _normalize_and_validate(config: Config) -> Config:
         raise ValueError("learner.post_publish_latest_wait_seconds must be >= 0")
     if config.learner.post_publish_latest_poll_seconds <= 0.0:
         raise ValueError("learner.post_publish_latest_poll_seconds must be > 0")
-    if not 1 <= config.sync.quorum_min <= config.sync.quorum_max <= config.sync.num_learners:
-        raise ValueError("sync quorum must satisfy 1 <= min <= max <= num_learners")
     for name, value in (
         ("training.inner_steps", config.training.inner_steps),
         ("training.micro_batch_size", config.training.micro_batch_size),

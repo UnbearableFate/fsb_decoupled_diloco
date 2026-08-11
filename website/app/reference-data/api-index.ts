@@ -48,7 +48,7 @@ export const apiModuleIndex = [
     "package": "fs_diloco.core",
     "counts": {
       "classes": 18,
-      "functions": 18,
+      "functions": 17,
       "methods": 3
     }
   },
@@ -74,7 +74,7 @@ export const apiModuleIndex = [
     "package": "fs_diloco.core",
     "counts": {
       "classes": 2,
-      "functions": 5,
+      "functions": 6,
       "methods": 1
     }
   },
@@ -139,7 +139,7 @@ export const apiModuleIndex = [
     "package": "fs_diloco.modeling",
     "counts": {
       "classes": 1,
-      "functions": 10,
+      "functions": 7,
       "methods": 1
     }
   },
@@ -268,22 +268,22 @@ export const apiModuleIndex = [
     "visibility": "public",
     "package": "fs_diloco.protocol",
     "counts": {
-      "classes": 16,
+      "classes": 15,
       "functions": 0,
-      "methods": 15
+      "methods": 14
     }
   },
   {
     "module": "fs_diloco.protocol.contributor",
     "route": "/reference/fs_diloco/protocol/contributor",
-    "summary": "定义 static 与 dynamic contributor fence 和 membership scope。",
+    "summary": "定义唯一的 contributor fence 和固定 stream-pool membership scope。",
     "isPackage": false,
     "visibility": "public",
     "package": "fs_diloco.protocol",
     "counts": {
-      "classes": 4,
-      "functions": 1,
-      "methods": 10
+      "classes": 2,
+      "functions": 0,
+      "methods": 5
     }
   },
   {
@@ -400,7 +400,7 @@ export const apiModuleIndex = [
     "counts": {
       "classes": 10,
       "functions": 3,
-      "methods": 43
+      "methods": 44
     }
   },
   {
@@ -425,7 +425,7 @@ export const apiModuleIndex = [
     "package": "fs_diloco.runtime",
     "counts": {
       "classes": 0,
-      "functions": 1,
+      "functions": 2,
       "methods": 0
     }
   },
@@ -445,7 +445,7 @@ export const apiModuleIndex = [
   {
     "module": "fs_diloco.runtime.pbs_scheduler",
     "route": "/reference/fs_diloco/runtime/pbs_scheduler",
-    "summary": "查询和提交 dynamic Learner 使用的 PBS 作业。",
+    "summary": "查询和提交容量控制使用的 PBS 作业。",
     "isPackage": false,
     "visibility": "public",
     "package": "fs_diloco.runtime",
@@ -471,7 +471,7 @@ export const apiModuleIndex = [
   {
     "module": "fs_diloco.runtime.services.dynamic_capacity",
     "route": "/reference/fs_diloco/runtime/services/dynamic_capacity",
-    "summary": "持久化 dynamic capacity 观测并与 PBS launch 状态对账。",
+    "summary": "持久化 capacity 观测并与 PBS launch 状态对账。",
     "isPackage": false,
     "visibility": "public",
     "package": "fs_diloco.runtime.services",
@@ -516,7 +516,7 @@ export const apiModuleIndex = [
     "package": "fs_diloco.runtime.services",
     "counts": {
       "classes": 1,
-      "functions": 1,
+      "functions": 2,
       "methods": 6
     }
   },
@@ -529,7 +529,7 @@ export const apiModuleIndex = [
     "package": "fs_diloco.runtime",
     "counts": {
       "classes": 1,
-      "functions": 10,
+      "functions": 11,
       "methods": 0
     }
   },
@@ -567,8 +567,8 @@ export const apiModuleIndex = [
     "visibility": "public",
     "package": "fs_diloco.storage",
     "counts": {
-      "classes": 5,
-      "functions": 37,
+      "classes": 4,
+      "functions": 30,
       "methods": 0
     }
   },
@@ -607,7 +607,7 @@ export const apiModuleIndex = [
     "package": "fs_diloco.storage",
     "counts": {
       "classes": 0,
-      "functions": 16,
+      "functions": 19,
       "methods": 0
     }
   },
@@ -620,8 +620,8 @@ export const apiModuleIndex = [
     "package": "fs_diloco.storage",
     "counts": {
       "classes": 11,
-      "functions": 24,
-      "methods": 112
+      "functions": 20,
+      "methods": 107
     }
   },
   {
@@ -659,7 +659,7 @@ export const apiModuleIndex = [
     "package": "fs_diloco.storage",
     "counts": {
       "classes": 3,
-      "functions": 5,
+      "functions": 6,
       "methods": 0
     }
   },
@@ -673,7 +673,7 @@ export const apiModuleIndex = [
     "counts": {
       "classes": 1,
       "functions": 2,
-      "methods": 56
+      "methods": 54
     }
   },
   {
@@ -768,19 +768,6 @@ export const apiModuleIndex = [
     }
   },
   {
-    "module": "fs_diloco.tools.clean_run",
-    "route": "/reference/fs_diloco/tools/clean_run",
-    "summary": "保守地筛选并删除已完成运行中的冗余输出。",
-    "isPackage": false,
-    "visibility": "public",
-    "package": "fs_diloco.tools",
-    "counts": {
-      "classes": 3,
-      "functions": 19,
-      "methods": 2
-    }
-  },
-  {
     "module": "fs_diloco.tools.init_run",
     "route": "/reference/fs_diloco/tools/init_run",
     "summary": "在提交 PBS Actor 前初始化不可变 Full Protocol 运行。",
@@ -803,19 +790,6 @@ export const apiModuleIndex = [
     "counts": {
       "classes": 0,
       "functions": 6,
-      "methods": 0
-    }
-  },
-  {
-    "module": "fs_diloco.tools.request_static_replacement",
-    "route": "/reference/fs_diloco/tools/request_static_replacement",
-    "summary": "发布替换 active static attempt 的显式 operator request。",
-    "isPackage": false,
-    "visibility": "public",
-    "package": "fs_diloco.tools",
-    "counts": {
-      "classes": 0,
-      "functions": 2,
       "methods": 0
     }
   },
@@ -848,12 +822,12 @@ export const apiModuleIndex = [
 ] as const;
 
 export const apiReferenceStats = {
-  "modules": 65,
+  "modules": 63,
   "packages": 9,
-  "classes": 112,
-  "functions": 324,
-  "methods": 342,
-  "fields": 592,
-  "variables": 55,
-  "symbols": 1425
+  "classes": 105,
+  "functions": 295,
+  "methods": 328,
+  "fields": 560,
+  "variables": 49,
+  "symbols": 1337
 } as const;

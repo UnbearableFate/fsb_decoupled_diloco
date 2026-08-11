@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -N plan04_dynamic_full
+#PBS -N plan05_full_protocol
 #PBS -q debug-g
 #PBS -W group_list=xg24i002
 #PBS -l select=1:mpiprocs=1
@@ -8,7 +8,7 @@
 #PBS -m ae
 
 set -eEuo pipefail
-trap 'echo "[ERROR] plan04 scenario supervisor failed at line $LINENO" >&2' ERR
+trap 'echo "[ERROR] plan05 scenario supervisor failed at line $LINENO" >&2' ERR
 
 : "${SCENARIO:?SCENARIO is required}"
 : "${RUN_ID:?RUN_ID is required}"
@@ -18,7 +18,7 @@ trap 'echo "[ERROR] plan04 scenario supervisor failed at line $LINENO" >&2' ERR
 
 PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
-CONFIG="${CONFIG:-$PROJECT_ROOT/configs/dynamic_full/gpt2_wikitext2_8l_200x10.yaml}"
+: "${CONFIG:?CONFIG is required}"
 ACTOR_QUEUE="${ACTOR_QUEUE:-debug-g}"
 ACTOR_WALLTIME="${ACTOR_WALLTIME:-00:25:00}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-1500}"

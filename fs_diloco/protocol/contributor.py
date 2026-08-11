@@ -1,13 +1,12 @@
-"""Typed static and dynamic contributor fences for the Full Protocol."""
+"""The sole stream-incarnation membership types for the Full Protocol."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, TypeAlias
+from typing import Any
 
 from ._validation import (
     identity,
-    nonempty_string,
     require_exact_fields,
     require_mapping,
     sha256,
@@ -16,75 +15,20 @@ from ._validation import (
 
 
 @dataclass(frozen=True)
-class StaticContributorFence:
-    kind: Literal["static"]
-    learner_id: str
-    logical_launch_id: str
-    attempt_id: str
-    binding_generation: int
+class ContributorFence:
+    """Prove that one admitted instance owns the current stream incarnation."""
+
+    instance_id: str  # Concrete learner process identity.
+    placement_id: str  # Scheduler placement identity for the process.
+    placement_epoch: int  # Monotonic incarnation of the placement.
+    stream_id: int  # Stable logical contributor and data-shard identity.
+    stream_epoch: int  # Monotonic incarnation of the stream.
+    admission_generation: int  # Monotonic admission grant generation.
+    admission_token_sha256: str  # Digest of the unpersisted admission capability.
 
     def __post_init__(self) -> None:
-        if self.kind != "static":
-            raise ValueError("static contributor fence kind must be 'static'")
-        identity(self.learner_id, name="learner_id")
-        identity(self.logical_launch_id, name="logical_launch_id")
-        identity(self.attempt_id, name="attempt_id")
-        strict_int(self.binding_generation, name="binding_generation", minimum=1)
+        """Reject incomplete or structurally invalid ownership credentials."""
 
-    @property
-    def stable_contributor_key(self) -> str:
-        return self.learner_id
-
-    @classmethod
-    def from_dict(cls, value: Any) -> "StaticContributorFence":
-        payload = require_mapping(value, name="static contributor fence")
-        require_exact_fields(
-            payload,
-            required={
-                "kind",
-                "learner_id",
-                "logical_launch_id",
-                "attempt_id",
-                "binding_generation",
-            },
-            name="static contributor fence",
-        )
-        if payload["kind"] != "static":
-            raise ValueError("static contributor fence kind must be 'static'")
-        return cls(
-            kind="static",
-            learner_id=identity(payload["learner_id"], name="learner_id"),
-            logical_launch_id=identity(payload["logical_launch_id"], name="logical_launch_id"),
-            attempt_id=identity(payload["attempt_id"], name="attempt_id"),
-            binding_generation=strict_int(
-                payload["binding_generation"], name="binding_generation", minimum=1
-            ),
-        )
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "kind": self.kind,
-            "learner_id": self.learner_id,
-            "logical_launch_id": self.logical_launch_id,
-            "attempt_id": self.attempt_id,
-            "binding_generation": self.binding_generation,
-        }
-
-
-@dataclass(frozen=True)
-class DynamicContributorFence:
-    kind: Literal["dynamic"]
-    instance_id: str
-    placement_id: str
-    placement_epoch: int
-    stream_id: int
-    stream_epoch: int
-    admission_generation: int
-    admission_token_sha256: str
-
-    def __post_init__(self) -> None:
-        if self.kind != "dynamic":
-            raise ValueError("dynamic contributor fence kind must be 'dynamic'")
         identity(self.instance_id, name="instance_id")
         identity(self.placement_id, name="placement_id")
         strict_int(self.placement_epoch, name="placement_epoch", minimum=1)
@@ -95,15 +39,18 @@ class DynamicContributorFence:
 
     @property
     def stable_contributor_key(self) -> str:
+        """Return the stable contributor key used by proposals and progress."""
+
         return str(self.stream_id)
 
     @classmethod
-    def from_dict(cls, value: Any) -> "DynamicContributorFence":
-        payload = require_mapping(value, name="dynamic contributor fence")
+    def from_dict(cls, value: Any) -> "ContributorFence":
+        """Decode the exact current fence shape and reject all legacy fields."""
+
+        payload = require_mapping(value, name="contributor fence")
         require_exact_fields(
             payload,
             required={
-                "kind",
                 "instance_id",
                 "placement_id",
                 "placement_epoch",
@@ -112,12 +59,9 @@ class DynamicContributorFence:
                 "admission_generation",
                 "admission_token_sha256",
             },
-            name="dynamic contributor fence",
+            name="contributor fence",
         )
-        if payload["kind"] != "dynamic":
-            raise ValueError("dynamic contributor fence kind must be 'dynamic'")
         return cls(
-            kind="dynamic",
             instance_id=identity(payload["instance_id"], name="instance_id"),
             placement_id=identity(payload["placement_id"], name="placement_id"),
             placement_epoch=strict_int(
@@ -134,8 +78,9 @@ class DynamicContributorFence:
         )
 
     def as_dict(self) -> dict[str, Any]:
+        """Return the canonical wire representation without a mode discriminator."""
+
         return {
-            "kind": self.kind,
             "instance_id": self.instance_id,
             "placement_id": self.placement_id,
             "placement_epoch": self.placement_epoch,
@@ -146,35 +91,13 @@ class DynamicContributorFence:
         }
 
 
-ContributorFence: TypeAlias = StaticContributorFence | DynamicContributorFence
-
-
-def decode_contributor_fence(value: Any) -> ContributorFence:
-    payload = require_mapping(value, name="contributor_fence")
-    kind = nonempty_string(payload.get("kind"), name="contributor_fence.kind")
-    if kind == "static":
-        return StaticContributorFence.from_dict(payload)
-    if kind == "dynamic":
-        return DynamicContributorFence.from_dict(payload)
-    raise ValueError(f"unknown contributor fence kind: {kind}")
-
-
 @dataclass(frozen=True)
-class StaticMembershipScope:
-    learner_ids: tuple[str, ...]
+class MembershipScope:
+    """Describe the immutable logical stream pool for one run."""
+
+    stream_pool_size: int  # Total logical contributors and dataset shards.
 
     def __post_init__(self) -> None:
-        if not self.learner_ids:
-            raise ValueError("static membership scope must not be empty")
-        normalized = tuple(identity(item, name="learner_id") for item in self.learner_ids)
-        if len(set(normalized)) != len(normalized):
-            raise ValueError("static membership learner IDs must be unique")
-        object.__setattr__(self, "learner_ids", normalized)
+        """Require at least one stream in every run."""
 
-
-@dataclass(frozen=True)
-class DynamicMembershipScope:
-    stream_pool_size: int
-
-    def __post_init__(self) -> None:
         strict_int(self.stream_pool_size, name="stream_pool_size", minimum=1)

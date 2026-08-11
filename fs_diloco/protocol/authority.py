@@ -191,23 +191,6 @@ class PublicationIntent:
 
 
 @dataclass(frozen=True)
-class StaticBinding:
-    learner_id: str
-    logical_launch_id: str
-    attempt_id: str
-    binding_generation: int
-    status: str
-
-    def __post_init__(self) -> None:
-        identity(self.learner_id, name="learner_id")
-        identity(self.logical_launch_id, name="logical_launch_id")
-        identity(self.attempt_id, name="attempt_id")
-        strict_int(self.binding_generation, name="binding_generation", minimum=1)
-        if self.status not in {"active", "terminal", "replaced"}:
-            raise ValueError(f"invalid static binding status: {self.status}")
-
-
-@dataclass(frozen=True)
 class ContributorProgress:
     stable_contributor_key: str
     last_cycle_seq: int
@@ -274,17 +257,19 @@ class TokenLedgerSummary:
 
 
 @dataclass(frozen=True)
-class DynamicAdmission:
-    fence: ContributorFence
-    resume: ContributorResumeState
+class Admission:
+    """Return the current stream fence and its durable resume state."""
+
+    fence: ContributorFence  # Current ownership credential for the admitted instance.
+    resume: ContributorResumeState  # Stream progress restored at admission time.
 
     def __post_init__(self) -> None:
-        from .contributor import DynamicContributorFence
+        """Require the resume state to belong to the granted stream incarnation."""
 
-        if not isinstance(self.fence, DynamicContributorFence):
-            raise ValueError("dynamic admission requires a dynamic contributor fence")
+        if not isinstance(self.fence, ContributorFence):
+            raise ValueError("admission requires a contributor fence")
         if not isinstance(self.resume, ContributorResumeState):
-            raise ValueError("dynamic admission requires typed contributor resume state")
+            raise ValueError("admission requires typed contributor resume state")
         if self.resume.stream_epoch != self.fence.stream_epoch:
             raise ValueError("resume state stream epoch does not match the admission fence")
 

@@ -42,7 +42,7 @@ export default function OverviewPage() {
         <StatStrip
           items={[
             { value: "Full", label: "唯一运行协议" },
-            { value: "static / dynamic", label: "成员模式" },
+            { value: "stream pool", label: "唯一成员协议" },
             { value: "SQLite + files", label: "共享状态载体" },
           ]}
         />
@@ -62,10 +62,10 @@ export default function OverviewPage() {
           </article>
           <article>
             <span>02</span>
-            <h3>两种 Membership</h3>
+            <h3>唯一 Membership</h3>
             <p>
-              <code>static</code> 使用固定 Learner 身份；<code>dynamic</code> 使用固定 stream
-              pool，并持久化 admission、容量观测和 PBS launch reservation。
+              固定 stream pool 定义逻辑 contributor。Instance admission、容量观测和 PBS
+              launch reservation 使用同一身份与 fence 协议。
             </p>
           </article>
           <article>

@@ -26,41 +26,43 @@ def test_one_command_submission_wrapper_freezes_the_validated_actor_shape() -> N
     assert "run_independent_launcher.pbs" in script
 
 
-def _config(mode: str) -> Config:
+def _config() -> Config:
+    """Return one four-stream config with two scalar bootstrap learners."""
+
     config = Config()
     config.model.name_or_path = "synthetic-tiny"
     config.data.dataset_name = "synthetic"
     config.run.run_id = "run"
     config.run.shared_root = "/runs/run"
-    config.membership.mode = mode
-    if mode == "dynamic":
-        config.sync.num_learners = 4
-        config.sync.quorum_min = 2
-        config.sync.quorum_max = 4
-        config.membership.stream_pool_size = 4
-        config.membership.bootstrap_instances = 2
-        config.scaling.desired_contributors = 3
-        config.scaling.low_contributor_threshold = 2
+    config.sync.quorum_min = 2
+    config.sync.quorum_max = 4
+    config.membership.stream_pool_size = 4
+    config.membership.bootstrap_instances = 2
     return config
 
 
 @pytest.mark.parametrize("value", [None, "00:09:59", "invalid", "00:00:00"])
 def test_submission_walltime_is_explicit_and_at_least_ten_minutes(value: str | None) -> None:
+    """Actor submission rejects missing, malformed, and sub-ten-minute walltimes."""
+
     with pytest.raises(ValueError):
         launch_independent_run._walltime_resource(value, required=True)
 
 
 @pytest.mark.parametrize("value", [None, "", "bad queue", "-debug-g"])
 def test_submission_queue_is_explicit_and_safe(value: str | None) -> None:
+    """Actor submission requires a nonempty shell-safe queue name."""
+
     with pytest.raises(ValueError):
         launch_independent_run._queue_resource(value, required=True)
 
 
-@pytest.mark.parametrize("mode", ["static", "dynamic"])
 def test_launch_uses_one_syncer_and_scalar_learner_jobs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    config = _config(mode)
+    """Launch construction emits one syncer and one scalar job per bootstrap slot."""
+
+    config = _config()
     descriptor = {
         "shared_root": config.run.shared_root,
         "descriptor_sha256": "d" * 64,
@@ -95,27 +97,20 @@ def test_launch_uses_one_syncer_and_scalar_learner_jobs(
     assert result["syncer_qsub"][result["syncer_qsub"].index("-q") + 1] == "debug-g"
     assert all(command[command.index("-q") + 1] == "debug-g" for command in result["learner_qsubs"])
     assert {Path(command[-1]).name for command in result["learner_qsubs"]} == {"run_learner.pbs"}
-    if mode == "static":
-        assert len(result["learner_qsubs"]) == config.sync.num_learners
-        variables = [command[command.index("-v") + 1] for command in result["learner_qsubs"]]
-        assert {item.rsplit("LEARNER_INDEX=", 1)[1] for item in variables} == {
-            str(index) for index in range(config.sync.num_learners)
-        }
-        assert all(
-            "-J" not in command and "-r" not in command for command in result["learner_qsubs"]
-        )
-    else:
-        assert len(result["learner_qsubs"]) == config.membership.bootstrap_instances
-        variables = [command[command.index("-v") + 1] for command in result["learner_qsubs"]]
-        assert {item.rsplit("BOOTSTRAP_SLOT=", 1)[1] for item in variables} == {
-            str(index) for index in range(config.membership.bootstrap_instances)
-        }
+    assert len(result["learner_qsubs"]) == config.membership.bootstrap_instances
+    variables = [command[command.index("-v") + 1] for command in result["learner_qsubs"]]
+    assert {item.rsplit("BOOTSTRAP_SLOT=", 1)[1] for item in variables} == {
+        str(index) for index in range(config.membership.bootstrap_instances)
+    }
+    assert all("-J" not in command and "-r" not in command for command in result["learner_qsubs"])
 
 
 def test_submit_returns_every_scalar_actor_job_id(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    config = _config("static")
+    """A submitted run returns every independently accepted scalar actor job ID."""
+
+    config = _config()
     descriptor = {
         "shared_root": config.run.shared_root,
         "descriptor_sha256": "d" * 64,
@@ -134,6 +129,8 @@ def test_submit_returns_every_scalar_actor_job_id(
     submitted: list[list[str]] = []
 
     def fake_qsub(command: list[str]) -> dict[str, object]:
+        """Record one qsub command and assign a deterministic job ID."""
+
         submitted.append(command)
         return {"status": "submitted", "job_id": f"job-{len(submitted)}"}
 
@@ -152,24 +149,26 @@ def test_submit_returns_every_scalar_actor_job_id(
         actor_queue="debug-g",
     )
 
-    assert len(submitted) == 1 + config.sync.num_learners
+    assert len(submitted) == 1 + config.membership.bootstrap_instances
     assert result["syncer_job_id"] == "job-1"
     assert result["actor_queue"] == "debug-g"
     assert all(command[command.index("-q") + 1] == "debug-g" for command in submitted)
     assert result["learner_job_ids"] == [
-        f"job-{index}" for index in range(2, config.sync.num_learners + 2)
+        f"job-{index}" for index in range(2, config.membership.bootstrap_instances + 2)
     ]
     receipt = json.loads((tmp_path / "logs/submission_receipt.json").read_text(encoding="utf-8"))
     assert receipt["submission_status"] == "submitted"
     assert len(tuple((tmp_path / "logs/submission_receipts").glob("*.json"))) == (
-        1 + config.sync.num_learners
+        1 + config.membership.bootstrap_instances
     )
 
 
 def test_submission_receipts_are_create_only_and_preserve_partial_acceptance(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    config = _config("static")
+    """Create-once staged receipts preserve partial scheduler acceptance."""
+
+    config = _config()
     descriptor = {
         "shared_root": config.run.shared_root,
         "descriptor_sha256": "d" * 64,
@@ -186,6 +185,8 @@ def test_submission_receipts_are_create_only_and_preserve_partial_acceptance(
     call_count = 0
 
     def fake_qsub(command: list[str]) -> dict[str, object]:
+        """Reject the second learner while assigning deterministic accepted IDs."""
+
         nonlocal call_count
         call_count += 1
         if call_count == 3:

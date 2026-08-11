@@ -1,3 +1,5 @@
+"""Verify fenced leader business commands and transactional replay semantics."""
+
 from __future__ import annotations
 
 import hashlib
@@ -8,7 +10,7 @@ from pathlib import Path
 import pytest
 
 import fs_diloco.storage.authority as authority_module
-from fs_diloco.protocol.contributor import StaticMembershipScope
+from fs_diloco.protocol.contributor import MembershipScope
 from fs_diloco.protocol.cycle_receipt import CycleReceiptV1
 from fs_diloco.protocol.proposal import FullUpdateProposalV2
 from fs_diloco.storage.authority import (
@@ -19,6 +21,7 @@ from fs_diloco.storage.authority import (
 )
 from fs_diloco.storage.leader_lease import StaleLeaderTokenError
 from tests.support.protocol import (
+    admit_contributor,
     proposal_payload,
     publish_checkpoint_pair,
     publish_proposal_payload,
@@ -28,18 +31,24 @@ from tests.support.protocol import (
 
 @dataclass
 class Clock:
+    """Provide mutable deterministic time for lease and command tests."""
+
     now: float = 100.0
 
     def __call__(self) -> float:
+        """Return the current deterministic timestamp."""
+
         return self.now
 
 
 def open_authority(tmp_path: Path, clock: Clock) -> LeaderAuthority:
+    """Open the sole authority schema with a single-stream membership."""
+
     database = tmp_path / "authority.sqlite3"
     identity = AuthorityIdentity(
         "run-current", "source-fingerprint", hashlib.sha256(b"config").hexdigest()
     )
-    scope = StaticMembershipScope(("learner-0",))
+    scope = MembershipScope(1)
     initialize_authority(database, identity, scope, wall_clock=clock)
     return LeaderAuthority(
         database,
@@ -52,6 +61,8 @@ def open_authority(tmp_path: Path, clock: Clock) -> LeaderAuthority:
 
 
 def commit_genesis(leader, run_root: Path) -> None:
+    """Publish and commit the version-zero checkpoint pair."""
+
     leader.initialize_genesis(
         command_id="initialize-v0",
         publication_id="publication-v0",
@@ -62,6 +73,8 @@ def commit_genesis(leader, run_root: Path) -> None:
 def test_genesis_uses_fenced_publication_chain_and_commit_is_idempotent(
     tmp_path: Path,
 ) -> None:
+    """Genesis uses the publication chain and exact command replay is idempotent."""
+
     clock = Clock()
     with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
@@ -86,27 +99,40 @@ def test_genesis_uses_fenced_publication_chain_and_commit_is_idempotent(
 
 
 def test_command_id_replay_with_different_request_fails_closed(tmp_path: Path) -> None:
+    """Reusing a command identity with different admission input fails closed."""
+
     clock = Clock()
     with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
         leader = authority.open_leader(token)
-        leader.bind_or_replace_static_attempt(
-            command_id="bind-1",
-            learner_id="learner-0",
-            logical_launch_id="launch-0",
-            attempt_id="attempt-1",
+        leader.initialize_membership(command_id="initialize-membership")
+        leader.admit_incarnation(
+            command_id="admit-1",
+            instance_id="instance-1",
+            placement_id="placement-1",
+            stream_id=0,
+            bootstrap_slot=0,
+            admission_token_sha256="a" * 64,
+            hostname="host",
+            pid=1,
         )
 
         with pytest.raises(CommandConflictError, match="different"):
-            leader.bind_or_replace_static_attempt(
-                command_id="bind-1",
-                learner_id="learner-0",
-                logical_launch_id="launch-0",
-                attempt_id="attempt-2",
+            leader.admit_incarnation(
+                command_id="admit-1",
+                instance_id="instance-2",
+                placement_id="placement-2",
+                stream_id=0,
+                bootstrap_slot=0,
+                admission_token_sha256="b" * 64,
+                hostname="host",
+                pid=2,
             )
 
 
 def test_stale_token_cannot_execute_a_named_business_command(tmp_path: Path) -> None:
+    """An expired leader token cannot execute a named authority command."""
+
     clock = Clock()
     with open_authority(tmp_path, clock) as authority:
         first = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
@@ -114,18 +140,15 @@ def test_stale_token_cannot_execute_a_named_business_command(tmp_path: Path) -> 
         clock.now = 123.0
         second = authority.acquire_leader(owner_id="owner-2", hostname="host", pid=2)
         current = authority.open_leader(second)
-        current.bind_or_replace_static_attempt(
-            command_id="bind-current",
-            learner_id="learner-0",
-            logical_launch_id="launch-0",
-            attempt_id="attempt-2",
-        )
+        admit_contributor(current)
 
         with pytest.raises(StaleLeaderTokenError):
             stale.begin_terminal_close(command_id="stale-close", reason="stale")
 
 
 def test_authority_surface_does_not_offer_direct_sql_or_raw_connection(tmp_path: Path) -> None:
+    """Business callers receive no public raw-SQL or connection escape hatch."""
+
     clock = Clock()
     with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
@@ -137,6 +160,8 @@ def test_authority_surface_does_not_offer_direct_sql_or_raw_connection(tmp_path:
 
 
 def test_global_version_target_cannot_skip_or_duplicate(tmp_path: Path) -> None:
+    """Publication targets must advance the committed version by exactly one."""
+
     clock = Clock()
     with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
@@ -161,23 +186,13 @@ def test_global_version_target_cannot_skip_or_duplicate(tmp_path: Path) -> None:
 
 
 def test_typed_receipt_proposal_selection_and_successor_commit_flow(tmp_path: Path) -> None:
+    """Typed receipt ingestion through merge commit preserves the fenced data flow."""
+
     clock = Clock()
     with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
         leader = authority.open_leader(token)
-        binding = leader.bind_or_replace_static_attempt(
-            command_id="bind-1",
-            learner_id="learner-0",
-            logical_launch_id="launch-0",
-            attempt_id="attempt-1",
-        )
-        fence = {
-            "kind": "static",
-            "learner_id": binding.learner_id,
-            "logical_launch_id": binding.logical_launch_id,
-            "attempt_id": binding.attempt_id,
-            "binding_generation": binding.binding_generation,
-        }
+        fence = admit_contributor(leader).as_dict()
         receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence))
         leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
         proposal_data = proposal_payload(receipt_sha256=receipt.immutable_sha256(), fence=fence)
@@ -232,6 +247,8 @@ def test_commit_fault_boundaries_roll_back_and_exact_retry(
     crash_boundary: str,
     lifecycle: str,
 ) -> None:
+    """Injected merge commit boundaries roll back fully and allow an exact retry."""
+
     clock = Clock()
     root = tmp_path / f"{crash_boundary}-{lifecycle}-{repetition}"
     with open_authority(root, clock) as authority:
@@ -248,19 +265,7 @@ def test_commit_fault_boundaries_roll_back_and_exact_retry(
             )
             expected_before = None
         else:
-            binding = leader.bind_or_replace_static_attempt(
-                command_id="bind-1",
-                learner_id="learner-0",
-                logical_launch_id="launch-0",
-                attempt_id="attempt-1",
-            )
-            fence = {
-                "kind": "static",
-                "learner_id": binding.learner_id,
-                "logical_launch_id": binding.logical_launch_id,
-                "attempt_id": binding.attempt_id,
-                "binding_generation": binding.binding_generation,
-            }
+            fence = admit_contributor(leader).as_dict()
             receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence))
             leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
             proposal = FullUpdateProposalV2.from_dict(
@@ -281,6 +286,8 @@ def test_commit_fault_boundaries_roll_back_and_exact_retry(
             expected_before = 0
 
         def inject(name: str) -> None:
+            """Raise at one selected authority commit boundary."""
+
             if name == crash_boundary:
                 raise RuntimeError(f"injected crash at {name}")
 
@@ -337,23 +344,13 @@ def test_commit_fault_boundaries_roll_back_and_exact_retry(
 def test_proposal_must_match_every_shared_receipt_field(
     tmp_path: Path, changes: dict[str, object]
 ) -> None:
+    """A proposal must exactly repeat every receipt-owned immutable field."""
+
     clock = Clock()
     with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
         leader = authority.open_leader(token)
-        binding = leader.bind_or_replace_static_attempt(
-            command_id="bind-1",
-            learner_id="learner-0",
-            logical_launch_id="launch-0",
-            attempt_id="attempt-1",
-        )
-        fence = {
-            "kind": "static",
-            "learner_id": binding.learner_id,
-            "logical_launch_id": binding.logical_launch_id,
-            "attempt_id": binding.attempt_id,
-            "binding_generation": binding.binding_generation,
-        }
+        fence = admit_contributor(leader).as_dict()
         receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence))
         leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
         payload = proposal_payload(receipt_sha256=receipt.immutable_sha256(), fence=fence)
@@ -375,23 +372,13 @@ def test_proposal_must_match_every_shared_receipt_field(
 
 
 def test_newer_accepted_proposal_supersedes_old_pending_after_insert(tmp_path: Path) -> None:
+    """A newer accepted cycle supersedes old pending work only after insertion."""
+
     clock = Clock()
     with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
         leader = authority.open_leader(token)
-        binding = leader.bind_or_replace_static_attempt(
-            command_id="bind-1",
-            learner_id="learner-0",
-            logical_launch_id="launch-0",
-            attempt_id="attempt-1",
-        )
-        fence = {
-            "kind": "static",
-            "learner_id": binding.learner_id,
-            "logical_launch_id": binding.logical_launch_id,
-            "attempt_id": binding.attempt_id,
-            "binding_generation": binding.binding_generation,
-        }
+        fence = admit_contributor(leader).as_dict()
         first_receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence))
         leader.ingest_cycle_receipt(command_id="receipt-1", receipt=first_receipt)
         first = FullUpdateProposalV2.from_dict(
@@ -435,17 +422,23 @@ def test_newer_accepted_proposal_supersedes_old_pending_after_insert(tmp_path: P
 
 
 def test_overlong_command_id_fails_before_mutation(tmp_path: Path) -> None:
+    """An overlong command identity fails before membership state can mutate."""
+
     clock = Clock()
     with open_authority(tmp_path, clock) as authority:
         token = authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
         leader = authority.open_leader(token)
 
         with pytest.raises(ValueError, match="safe protocol identity"):
-            leader.bind_or_replace_static_attempt(
+            leader.admit_incarnation(
                 command_id="c" * 129,
-                learner_id="learner-0",
-                logical_launch_id="launch-0",
-                attempt_id="attempt-1",
+                instance_id="instance-1",
+                placement_id="placement-1",
+                stream_id=0,
+                bootstrap_slot=0,
+                admission_token_sha256="a" * 64,
+                hostname="host",
+                pid=1,
             )
 
-        assert authority.read.static_binding("learner-0") is None
+        assert authority.read.instances() == ()

@@ -25,7 +25,7 @@ from ..core.versions import (
     RUN_DESCRIPTOR_FORMAT_VERSION,
     SOURCE_MANIFEST_FORMAT_VERSION,
 )
-from ..protocol.contributor import DynamicMembershipScope, StaticMembershipScope
+from ..protocol.contributor import MembershipScope
 from ..storage.atomic_io import atomic_write_json, sha256_file
 from ..storage.artifact_policy import build_artifact_policy
 from ..storage.paths import RunPaths, prepare_authority_dirs
@@ -55,6 +55,8 @@ def initialize_run(
     allow_dirty_snapshot: bool = False,
     fault_hook: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
+    """Create or exactly recover one source-bound run with the current stream protocol."""
+
     config.validate()
     shared = config
     if not shared.run.run_id or not shared.run.shared_root:
@@ -70,7 +72,6 @@ def initialize_run(
     final_root = Path(shared.run.shared_root).resolve()
     final_paths = RunPaths(final_root)
     expected_config_sha256 = hashlib.sha256(resolved_config_bytes(config)).hexdigest()
-    expected_mode = shared.membership.mode
     if final_paths.run_complete_file.is_file():
         validate_completed_run(final_root)
         completed_staging = find_reserved_staging(final_root, allow_missing_owner=True)
@@ -84,7 +85,6 @@ def initialize_run(
             "source_fingerprint": shared.run.source_fingerprint,
             "git_commit": shared.run.git_commit,
             "git_dirty": shared.run.git_dirty,
-            "mode": shared.membership.mode,
         }
         mismatches = {
             key: (descriptor.get(key), value)
@@ -121,7 +121,6 @@ def initialize_run(
             "run_id": shared.run.run_id,
             "source_fingerprint": shared.run.source_fingerprint,
             "config_sha256": expected_config_sha256,
-            "mode": expected_mode,
         }
         mismatches = {
             key: (identity.get(key), value)
@@ -150,6 +149,8 @@ def _populate_staging(
     staging_root: Path,
     logical_root: Path,
 ) -> None:
+    """Populate an unpublished run root with the current immutable identities."""
+
     shared = config
     paths = RunPaths(staging_root)
     prepare_authority_dirs(paths)
@@ -171,10 +172,7 @@ def _populate_staging(
     }
     source_manifest["manifest_sha256"] = _sha256_json(source_manifest)
     atomic_write_json(paths.run_source_manifest_json, source_manifest)
-    dynamic = shared.membership.mode == "dynamic"
     schema_version = AUTHORITY_SCHEMA_VERSION
-    descriptor_mode = shared.membership.mode
-    bootstrap_slots = shared.membership.bootstrap_instances if dynamic else shared.sync.num_learners
     descriptor = {
         "format_version": RUN_DESCRIPTOR_FORMAT_VERSION,
         "run_id": shared.run.run_id,
@@ -186,14 +184,8 @@ def _populate_staging(
         "source_fingerprint": shared.run.source_fingerprint,
         "git_commit": shared.run.git_commit,
         "git_dirty": shared.run.git_dirty,
-        "mode": descriptor_mode,
-        "bootstrap_slots": int(bootstrap_slots),
-        "static_learner_ids": (
-            [f"learner_{index:03d}" for index in range(shared.sync.num_learners)]
-            if not dynamic
-            else None
-        ),
-        "stream_pool_size": (int(shared.membership.stream_pool_size) if dynamic else None),
+        "bootstrap_slots": int(shared.membership.bootstrap_instances),
+        "stream_pool_size": int(shared.membership.stream_pool_size),
         "protocol_version": PROTOCOL_VERSION,
         "schema_version": schema_version,
         "source_lock_sha256": source_manifest["uv_lock_sha256"],
@@ -221,13 +213,7 @@ def _populate_staging(
         source_fingerprint=shared.run.source_fingerprint,
         config_sha256=config_sha256,
     )
-    membership_scope = (
-        DynamicMembershipScope(shared.membership.stream_pool_size)
-        if dynamic
-        else StaticMembershipScope(
-            tuple(f"learner_{index:03d}" for index in range(shared.sync.num_learners))
-        )
-    )
+    membership_scope = MembershipScope(shared.membership.stream_pool_size)
     initialize_authority(
         paths.sqlite_db,
         identity,
@@ -240,11 +226,10 @@ def _populate_staging(
     write_run_identity(
         staging_root,
         {
-            "format_version": 1,
+            "format_version": 2,
             "run_id": shared.run.run_id,
             "source_fingerprint": shared.run.source_fingerprint,
             "config_sha256": config_sha256,
-            "mode": shared.membership.mode,
             "logical_root": str(logical_root),
         },
     )

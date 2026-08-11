@@ -1,3 +1,5 @@
+"""Verify strict full-update proposal identity, workload, payload, and fence semantics."""
+
 from __future__ import annotations
 
 import math
@@ -6,10 +8,13 @@ from dataclasses import replace
 import pytest
 
 from fs_diloco.protocol.proposal import FullUpdateProposalV2
+from fs_diloco.core.versions import PROPOSAL_FORMAT_VERSION
 from tests.support.protocol import proposal_payload
 
 
 def test_proposal_v2_strict_round_trip() -> None:
+    """The current proposal wire shape must survive canonical serialization exactly."""
+
     proposal = FullUpdateProposalV2.from_dict(proposal_payload())
 
     assert FullUpdateProposalV2.from_json(proposal.canonical_bytes()) == proposal
@@ -28,6 +33,8 @@ def test_proposal_v2_strict_round_trip() -> None:
     ],
 )
 def test_proposal_v2_rejects_invalid_scalars(field: str, value: object, message: str) -> None:
+    """Proposal scalar invariants are enforced before authority ingestion."""
+
     payload = proposal_payload()
     payload[field] = value
 
@@ -36,6 +43,8 @@ def test_proposal_v2_rejects_invalid_scalars(field: str, value: object, message:
 
 
 def test_proposal_v2_rejects_step_cursor_and_token_mismatch() -> None:
+    """Proposal step, cursor, and token intervals must remain internally consistent."""
+
     step = proposal_payload()
     step["local_step_end"] = 9
     with pytest.raises(ValueError, match="local_step_end"):
@@ -62,6 +71,8 @@ def test_proposal_v2_rejects_step_cursor_and_token_mismatch() -> None:
     ],
 )
 def test_proposal_v2_rejects_untrusted_payload_paths(path: str) -> None:
+    """Proposal payload paths cannot escape or target staging namespaces."""
+
     payload = proposal_payload()
     payload["payload_relative_path"] = path
 
@@ -70,26 +81,32 @@ def test_proposal_v2_rejects_untrusted_payload_paths(path: str) -> None:
 
 
 def test_proposal_v2_rejects_unknown_fields_versions_and_duplicate_json_keys() -> None:
+    """Strict proposal decoding rejects legacy, ambiguous, and extended payloads."""
+
     unknown = proposal_payload()
     unknown["future"] = 1
     with pytest.raises(ValueError, match="unknown fields"):
         FullUpdateProposalV2.from_dict(unknown)
 
     version = proposal_payload()
-    version["proposal_format_version"] = 3
+    version["proposal_format_version"] = PROPOSAL_FORMAT_VERSION - 1
     with pytest.raises(ValueError, match="unsupported proposal_format_version"):
         FullUpdateProposalV2.from_dict(version)
 
     with pytest.raises(ValueError, match="duplicate key"):
-        FullUpdateProposalV2.from_json('{"proposal_format_version":2,"proposal_format_version":2}')
+        FullUpdateProposalV2.from_json('{"proposal_format_version":3,"proposal_format_version":3}')
 
 
 def test_proposal_v2_enforces_json_size_limit() -> None:
+    """The parser bounds untrusted proposal JSON before decoding it."""
+
     with pytest.raises(ValueError, match="exceeds"):
         FullUpdateProposalV2.from_json("{} " * 100, max_bytes=8)
 
 
 def test_direct_proposal_construction_cannot_bypass_validation() -> None:
+    """Dataclass replacement cannot bypass proposal validation."""
+
     proposal = FullUpdateProposalV2.from_dict(proposal_payload())
 
     with pytest.raises(ValueError, match="payload_relative_path"):

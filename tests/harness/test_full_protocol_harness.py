@@ -17,7 +17,8 @@ import pytest
 from fs_diloco.core.config import resolve_config
 from fs_diloco.core.run_descriptor import load_run_descriptor, write_actor_attestation
 from fs_diloco.core.source_identity import bind_source_identity, capture_source_identity
-from fs_diloco.protocol.contributor import StaticContributorFence, StaticMembershipScope
+from fs_diloco.core.versions import CYCLE_RECEIPT_FORMAT_VERSION, PROPOSAL_FORMAT_VERSION
+from fs_diloco.protocol.contributor import ContributorFence, MembershipScope
 from fs_diloco.protocol.cycle_receipt import CycleReceiptV1
 from fs_diloco.protocol.proposal import FullUpdateProposalV2, canonical_update_relative_path
 from fs_diloco.storage.atomic_io import atomic_write_json
@@ -40,6 +41,8 @@ CHECKER = ROOT / "scripts/miyabi/agent/check_full_protocol_run.py"
 
 
 def _checker_module():
+    """Load the standalone checker module for direct contract assertions."""
+
     specification = importlib.util.spec_from_file_location("check_full_protocol_run", CHECKER)
     assert specification is not None and specification.loader is not None
     module = importlib.util.module_from_spec(specification)
@@ -60,7 +63,6 @@ def _build_valid_checker_fixture(
         raise ValueError("independent scheduler fixture only covers the fault-free scenario")
     global_steps_by_scenario = {
         "none": 1,
-        "learner_replacement": 2,
         "syncer_takeover": 3,
     }
     expected_global_steps = global_steps_by_scenario[fault_scenario]
@@ -72,7 +74,6 @@ def _build_valid_checker_fixture(
         shared_root=str(run_root),
         project_root=ROOT,
     )
-    config.sync.num_learners = 1
     config.sync.quorum_min = 1
     config.sync.quorum_max = 1
     config.sync.stop_after_outer_steps = expected_global_steps
@@ -92,15 +93,14 @@ def _build_valid_checker_fixture(
         source_fingerprint=str(descriptor["source_fingerprint"]),
         config_sha256=str(descriptor["resolved_config_sha256"]),
     )
-    scope = StaticMembershipScope(("learner_000",))
+    scope = MembershipScope(1)
     scheduler_job_id = "fixture-syncer.opbs" if independent_scheduler_jobs else "fixture.opbs"
     learner_scheduler_job_id = (
         "fixture-learner.opbs" if independent_scheduler_jobs else scheduler_job_id
     )
     clock_value = [100.0]
     syncer_attempts = [("checker-syncer", "syncer-attempt", 101)]
-    learner_attempts = ["fixture-attempt"]
-    replacement_evidence = None
+    learner_instance_id = "fixture-instance"
     takeover_evidence = None
     with LeaderAuthority(
         loaded.paths.sqlite_db,
@@ -118,19 +118,18 @@ def _build_valid_checker_fixture(
             pbs_job_id=scheduler_job_id,
         )
         leader = authority.open_leader(token)
-        binding = leader.bind_or_replace_static_attempt(
-            command_id="bind-learner",
-            learner_id="learner_000",
-            logical_launch_id="fixture-launch",
-            attempt_id="fixture-attempt",
-        )
-        fence = StaticContributorFence(
-            kind="static",
-            learner_id=binding.learner_id,
-            logical_launch_id=binding.logical_launch_id,
-            attempt_id=binding.attempt_id,
-            binding_generation=binding.binding_generation,
-        )
+        leader.initialize_membership(command_id="initialize-membership")
+        fence = leader.admit_incarnation(
+            command_id="admit-learner",
+            instance_id=learner_instance_id,
+            placement_id="fixture-placement",
+            stream_id=0,
+            bootstrap_slot=0,
+            admission_token_sha256="a" * 64,
+            hostname=socket.gethostname(),
+            pid=103,
+            pbs_job_id=learner_scheduler_job_id,
+        ).fence
         leader.initialize_genesis(
             command_id="genesis",
             publication_id="publication-0",
@@ -139,20 +138,22 @@ def _build_valid_checker_fixture(
 
         def publish_cycle(
             sequence: int,
-            current_fence: StaticContributorFence,
+            current_fence: ContributorFence,
             previous: CycleReceiptV1 | None,
             *,
             commit: bool,
         ) -> tuple[CycleReceiptV1, FullUpdateProposalV2]:
+            """Publish, ingest, and optionally commit one contiguous stream cycle."""
+
             update_id = f"00000000-0000-4000-8000-{sequence:012d}"
             receipt = CycleReceiptV1.from_dict(
                 {
-                    "cycle_receipt_format_version": 1,
+                    "cycle_receipt_format_version": CYCLE_RECEIPT_FORMAT_VERSION,
                     "run_id": descriptor["run_id"],
-                    "stable_contributor_key": "learner_000",
+                    "stable_contributor_key": "0",
                     "cycle_seq": sequence,
                     "cycle_id": f"10000000-0000-4000-8000-{sequence:012d}",
-                    "receipt_id": f"receipt-learner_000-{sequence}",
+                    "receipt_id": f"receipt-0-{sequence}",
                     "previous_receipt_id": None if previous is None else previous.receipt_id,
                     "previous_receipt_sha256": (
                         None if previous is None else previous.immutable_sha256()
@@ -173,9 +174,9 @@ def _build_valid_checker_fixture(
             leader.ingest_cycle_receipt(command_id=f"receipt-{sequence}", receipt=receipt)
             proposal = FullUpdateProposalV2.from_dict(
                 {
-                    "proposal_format_version": 2,
+                    "proposal_format_version": PROPOSAL_FORMAT_VERSION,
                     "run_id": descriptor["run_id"],
-                    "stable_contributor_key": "learner_000",
+                    "stable_contributor_key": "0",
                     "cycle_seq": sequence,
                     "cycle_id": receipt.cycle_id,
                     "update_id": update_id,
@@ -192,9 +193,7 @@ def _build_valid_checker_fixture(
                     "data_cursor_start": sequence - 1,
                     "data_cursor_end": sequence,
                     "contributor_fence": current_fence.as_dict(),
-                    "payload_relative_path": canonical_update_relative_path(
-                        "learner_000", update_id
-                    ),
+                    "payload_relative_path": canonical_update_relative_path("0", update_id),
                     "payload_size": len(DEFAULT_PAYLOAD),
                     "payload_sha256": PAYLOAD_DIGEST,
                     "tensor_schema_sha256": SCHEMA_DIGEST,
@@ -228,31 +227,6 @@ def _build_valid_checker_fixture(
             previous_receipt, _proposal = publish_cycle(
                 sequence, fence, previous_receipt, commit=True
             )
-            if fault_scenario == "learner_replacement" and sequence == 1:
-                old_fence = fence
-                replacement = leader.bind_or_replace_static_attempt(
-                    command_id="replace-learner",
-                    learner_id="learner_000",
-                    logical_launch_id="fixture-launch",
-                    attempt_id="fixture-attempt-replacement",
-                    expected_generation=1,
-                    replacement_reason="fixture injected process replacement",
-                )
-                fence = StaticContributorFence(
-                    kind="static",
-                    learner_id=replacement.learner_id,
-                    logical_launch_id=replacement.logical_launch_id,
-                    attempt_id=replacement.attempt_id,
-                    binding_generation=replacement.binding_generation,
-                )
-                learner_attempts.append(replacement.attempt_id)
-                replacement_evidence = {
-                    "learner_id": "learner_000",
-                    "injected_exit_status": 143,
-                    "old_attempt_id": old_fence.attempt_id,
-                    "new_attempt_id": replacement.attempt_id,
-                    "old_binding_generation": old_fence.binding_generation,
-                }
             if fault_scenario == "syncer_takeover" and sequence == 2:
                 takeover_evidence = {
                     "primary_exit_status": 137,
@@ -304,15 +278,12 @@ def _build_valid_checker_fixture(
             log_root / "submission_receipt.json",
             {
                 "submission_status": "submitted",
-                "membership_mode": "static",
                 "actor_queue": "debug-g",
                 "syncer_job_id": scheduler_job_id,
                 "learner_job_ids": [learner_scheduler_job_id],
             },
         )
     atomic_write_json(log_root / "summary.json", {"final_version": expected_global_steps})
-    if replacement_evidence is not None:
-        atomic_write_json(log_root / "learner_replacement.json", replacement_evidence)
     if takeover_evidence is not None:
         atomic_write_json(log_root / "syncer_takeover.json", takeover_evidence)
     publish_audit_batch(
@@ -331,15 +302,14 @@ def _build_valid_checker_fixture(
         "module_environment": [],
         "resource_allocation": {"nodes": 1},
     }
-    for attempt_id in learner_attempts:
-        write_actor_attestation(
-            loaded,
-            actor_kind="learner",
-            actor_id="learner_000",
-            attempt_id=attempt_id,
-            runtime_evidence=runtime_evidence,
-            scheduler_job_id=learner_scheduler_job_id,
-        )
+    write_actor_attestation(
+        loaded,
+        actor_kind="learner",
+        actor_id=learner_instance_id,
+        attempt_id=learner_instance_id,
+        runtime_evidence=runtime_evidence,
+        scheduler_job_id=learner_scheduler_job_id,
+    )
     for actor_id, attempt_id, _pid in syncer_attempts:
         write_actor_attestation(
             loaded,
@@ -360,7 +330,7 @@ def _build_valid_checker_fixture(
         "--experiment-id",
         "aggregate-fixture",
         "--requirement-id",
-        "HARNESS-01",
+        "P05-R05",
         "--project-root",
         str(ROOT),
         "--run-root",
@@ -405,6 +375,8 @@ def _run_checker(command: list[str], environment: dict[str, str], output: Path):
 
 
 def test_aggregate_checker_accepts_adjudicated_terminal_overshoot(tmp_path: Path) -> None:
+    """The checker accepts exact quorum application plus durably dropped overshoot."""
+
     run_root, output, command, environment = _build_valid_checker_fixture(tmp_path)
 
     completed, artifact = _run_checker(command, environment, output)
@@ -413,8 +385,8 @@ def test_aggregate_checker_accepts_adjudicated_terminal_overshoot(tmp_path: Path
     assert artifact["status"] == "PASS"
     assert artifact["errors"] == []
     assert artifact["source_identity"]["dirty"] is False
-    assert artifact["config_schema_identity"]["version"] == 1
-    assert artifact["protocol_schema_identity"]["mode"] == "static"
+    assert artifact["config_schema_identity"]["version"] == 2
+    assert set(artifact["protocol_schema_identity"]) == {"version", "ddl_sha256"}
     assert artifact["environment"]["pbs_job_id"] == "fixture.opbs"
     assert artifact["environment"]["packages"]["torch"] != "not-installed"
     assert artifact["workload_identity"] == {
@@ -422,7 +394,7 @@ def test_aggregate_checker_accepts_adjudicated_terminal_overshoot(tmp_path: Path
         "committed_global_steps": 1,
         "processed_tokens": 32,
         "direct_weight_tokens_applied": 16,
-        "cursor_terminal": {"learner_000": 2},
+        "cursor_terminal": {"0": 2},
     }
     assert artifact["authority"]["integrity"] == ["ok"]
     assert [row["final_state"] for row in artifact["authority"]["epochs"]] == ["released"]
@@ -502,21 +474,10 @@ def test_aggregate_checker_rejects_actor_queue_mismatch(tmp_path: Path) -> None:
     assert "independent submission receipt is not complete and exact" in artifact["errors"]
 
 
-@pytest.mark.parametrize(
-    ("scenario", "global_steps", "epoch_states", "learner_attempts", "syncer_attempts"),
-    [
-        ("learner_replacement", 2, ["released"], 2, 1),
-        ("syncer_takeover", 3, ["expired", "released"], 1, 2),
-    ],
-)
-def test_aggregate_checker_accepts_registered_fault_behavior(
-    tmp_path: Path,
-    scenario: str,
-    global_steps: int,
-    epoch_states: list[str],
-    learner_attempts: int,
-    syncer_attempts: int,
-) -> None:
+def test_aggregate_checker_accepts_registered_syncer_takeover(tmp_path: Path) -> None:
+    """The co-allocated checker accepts durable syncer takeover evidence."""
+
+    scenario = "syncer_takeover"
     _run_root, output, command, environment = _build_valid_checker_fixture(
         tmp_path,
         fault_scenario=scenario,
@@ -527,15 +488,14 @@ def test_aggregate_checker_accepts_registered_fault_behavior(
     assert completed.returncode == 0, completed.stderr
     assert artifact["status"] == "PASS"
     assert artifact["fault_scenario"] == scenario
-    assert artifact["authority"]["final_version"] == global_steps
-    assert [row["final_state"] for row in artifact["authority"]["epochs"]] == epoch_states
-    assert artifact["metrics"]["learner_attestation_count"] == learner_attempts
-    assert artifact["metrics"]["syncer_attestation_count"] == syncer_attempts
-    if scenario == "learner_replacement":
-        assert artifact["authority"]["static_binding_history"][0]["final_status"] == "replaced"
-        assert artifact["fault_evidence"]["learner_replacement"] is not None
-    else:
-        assert artifact["fault_evidence"]["syncer_takeover"] is not None
+    assert artifact["authority"]["final_version"] == 3
+    assert [row["final_state"] for row in artifact["authority"]["epochs"]] == [
+        "expired",
+        "released",
+    ]
+    assert artifact["metrics"]["learner_attestation_count"] == 1
+    assert artifact["metrics"]["syncer_attestation_count"] == 2
+    assert artifact["fault_evidence"]["syncer_takeover"] is not None
 
 
 def test_syncer_takeover_boundary_is_argument_bound_and_durable(tmp_path: Path) -> None:
@@ -572,16 +532,6 @@ def test_syncer_takeover_boundary_is_argument_bound_and_durable(tmp_path: Path) 
     ("scenario", "mutation", "expected_error"),
     [
         (
-            "learner_replacement",
-            "replacement_history",
-            "registered learner replacement history is not exact",
-        ),
-        (
-            "learner_replacement",
-            "replacement_evidence",
-            "registered learner replacement evidence is missing",
-        ),
-        (
             "syncer_takeover",
             "takeover_boundary",
             "syncer takeover evidence does not prove the registered fault layer",
@@ -599,16 +549,13 @@ def test_aggregate_checker_fault_mutations_change_acceptance_to_fail(
     mutation: str,
     expected_error: str,
 ) -> None:
+    """Every registered takeover proof becomes a failure when its durable link is changed."""
+
     run_root, output, command, environment = _build_valid_checker_fixture(
         tmp_path,
         fault_scenario=scenario,
     )
-    if mutation == "replacement_history":
-        with sqlite3.connect(RunPaths(run_root).sqlite_db) as connection:
-            connection.execute("UPDATE static_binding_history SET final_status='terminal'")
-    elif mutation == "replacement_evidence":
-        (tmp_path / "logs/learner_replacement.json").unlink()
-    elif mutation == "takeover_boundary":
+    if mutation == "takeover_boundary":
         path = tmp_path / "logs/syncer_takeover.json"
         evidence = json.loads(path.read_text(encoding="utf-8"))
         evidence["fault_boundary"]["lease_renewer_quiesced"] = False
@@ -641,13 +588,14 @@ def test_aggregate_checker_fault_mutations_change_acceptance_to_fail(
         "archive_integrity",
         "exact_workload",
         "normal_non_drop_fate",
-        "unregistered_replacement",
         "publication_identity",
     ],
 )
 def test_aggregate_checker_mutations_change_acceptance_to_fail(
     tmp_path: Path, mutation: str
 ) -> None:
+    """Each authority, workload, source, topology, and object mutation fails acceptance."""
+
     run_root, output, command, environment = _build_valid_checker_fixture(tmp_path)
     paths = RunPaths(run_root)
     if mutation == "source_identity":
@@ -724,24 +672,6 @@ def test_aggregate_checker_mutations_change_acceptance_to_fail(
                 "UPDATE token_rollups SET direct_dropped=0, "
                 "direct_quarantined_or_conflicted=16 WHERE singleton=1"
             )
-    elif mutation == "unregistered_replacement":
-        with sqlite3.connect(paths.sqlite_db) as connection:
-            binding = connection.execute(
-                "SELECT learner_id, logical_launch_id, attempt_id, bound_by_epoch, bound_at "
-                "FROM static_contributor_bindings WHERE learner_id='learner_000'"
-            ).fetchone()
-            assert binding is not None
-            connection.execute(
-                "INSERT INTO static_binding_history "
-                "(learner_id, binding_generation, logical_launch_id, attempt_id, "
-                "final_status, bound_by_epoch, bound_at, finalized_by_epoch, finalized_at) "
-                "VALUES (?, 1, ?, ?, 'replaced', ?, ?, ?, ?)",
-                (*binding, 1, 200.0),
-            )
-            connection.execute(
-                "UPDATE static_contributor_bindings SET binding_generation=2 "
-                "WHERE learner_id='learner_000'"
-            )
     elif mutation == "publication_identity":
         weight = run_root / "weights/epochs/e1/v1.safetensors"
         weight.chmod(0o644)
@@ -768,6 +698,8 @@ def test_aggregate_checker_mutations_change_acceptance_to_fail(
 
 
 def test_checker_parser_freezes_topology_workload_and_fault_oracles(tmp_path: Path) -> None:
+    """The checker CLI requires explicit topology, workload, and registered fault identity."""
+
     module = _checker_module()
     args = module.build_parser().parse_args(
         [
@@ -794,7 +726,7 @@ def test_checker_parser_freezes_topology_workload_and_fault_oracles(tmp_path: Pa
             "--expected-scheduler-jobs",
             "1",
             "--fault-scenario",
-            "learner_replacement",
+            "syncer_takeover",
             "--syncer-takeover-boundary-version",
             "2",
             "--output",
@@ -815,7 +747,7 @@ def test_checker_parser_freezes_topology_workload_and_fault_oracles(tmp_path: Pa
         "expected_hosts": 5,
         "expected_scheduler_jobs": 1,
         "expected_actor_queue": None,
-        "fault_scenario": "learner_replacement",
+        "fault_scenario": "syncer_takeover",
         "syncer_takeover_boundary_version": 2,
         "blocked_reason": None,
         "output": tmp_path / "evidence.json",
@@ -1072,24 +1004,26 @@ def test_token_balance_oracle_classifies_every_direct_fate() -> None:
 
 
 @pytest.mark.parametrize(
-    ("scenario", "states", "replaced_learner"),
+    ("scenario", "states"),
     [
-        ("none", ("released",), None),
-        ("learner_replacement", ("released",), "learner_000"),
-        ("syncer_takeover", ("expired", "released"), None),
+        ("none", ("released",)),
+        ("syncer_takeover", ("expired", "released")),
     ],
 )
 def test_checker_registers_exact_fault_scenario(
     scenario: str,
     states: tuple[str, ...],
-    replaced_learner: str | None,
 ) -> None:
+    """The co-allocated checker registers only its two realizable fault scenarios."""
+
     module = _checker_module()
 
-    assert module._scenario_expectations(scenario) == (states, replaced_learner)
+    assert module._scenario_expectations(scenario) == states
 
 
 def test_checker_rejects_unregistered_fault_scenario() -> None:
+    """The checker rejects independent replacement as a co-allocated fault alias."""
+
     module = _checker_module()
 
     with pytest.raises(ValueError, match="unregistered"):
@@ -1109,7 +1043,6 @@ def test_actor_identity_shell_exports_exact_descriptor_bound_source(tmp_path: Pa
                 "git_commit": identity["git_commit"],
                 "source_fingerprint": identity["source_fingerprint"],
                 "git_dirty": identity["git_dirty"],
-                "mode": "static",
             }
         ),
         encoding="utf-8",
@@ -1125,7 +1058,6 @@ printf '%s\n' \
   "$FS_DILOCO_EXPECTED_GIT_COMMIT" \
   "$FS_DILOCO_EXPECTED_SOURCE_FINGERPRINT" \
   "$FS_DILOCO_EXPECTED_GIT_DIRTY" \
-  "$FS_DILOCO_MEMBERSHIP_MODE" \
   "$FS_DILOCO_REQUIRE_SOURCE_IDENTITY"
 """
 
@@ -1142,7 +1074,6 @@ printf '%s\n' \
         identity["git_commit"],
         identity["source_fingerprint"],
         str(int(identity["git_dirty"])),
-        "static",
         "1",
     ]
 
@@ -1176,7 +1107,7 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     rank_runner = (ROOT / "scripts/miyabi/agent/run_full_protocol_rank.sh").read_text(
         encoding="utf-8"
     )
-    assert "request_static_replacement" in rank_runner
+    assert "request_static_replacement" not in rank_runner
     assert (
         'FS_DILOCO_FAULT_PAUSE_AFTER_COMMITTED_VERSION="$SYNCER_TAKEOVER_BOUNDARY_VERSION"'
         in rank_runner
@@ -1279,7 +1210,7 @@ printf '{"status":"BLOCKED","errors":["%s"]}\n' "$blocked_reason" >"$output"
         "SHARED_ROOT": str(tmp_path / "run"),
         "LOG_ROOT": str(tmp_path / "logs"),
         "EXPECTED_NODES": "1",
-        "NUM_LEARNERS": "1",
+        "EXPECTED_CONTRIBUTORS": "1",
         "EXPECTED_INNER_STEPS": "1",
         "EXPECTED_GLOBAL_STEPS": "1",
         "FS_DILOCO_FAULT_SCENARIO": "none",
