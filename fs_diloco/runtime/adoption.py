@@ -287,7 +287,20 @@ class GlobalAdoptionStrategy(ABC):
         del ctx
         return False
 
+    @staticmethod
+    def _final_global_horizon_reached(ctx: AdoptionContext) -> bool:
+        """Return whether joint completion forbids any successor global version."""
+
+        global_target = ctx.config.sync.stop_after_outer_steps
+        return (
+            ctx.config.training.completion_mode == "local_and_global"
+            and global_target is not None
+            and ctx.last_loaded_global_version >= int(global_target)
+        )
+
     def _poll_after_publish(self, ctx: AdoptionContext, update_id: str) -> dict[str, Any] | None:
+        """Read or wait for a successor unless the configured final horizon forbids one."""
+
         maybe_latest = ctx.read_newer_latest()
         ctx.logger.event(
             "latest_polled",
@@ -295,6 +308,13 @@ class GlobalAdoptionStrategy(ABC):
             found_version=maybe_latest.get("version") if maybe_latest else None,
         )
         wait_seconds = ctx.config.learner.post_publish_latest_wait_seconds
+        if maybe_latest is None and self._final_global_horizon_reached(ctx):
+            ctx.logger.event(
+                "post_publish_latest_wait_skipped_at_global_horizon",
+                current_version=ctx.last_loaded_global_version,
+                update_id=update_id,
+            )
+            return None
         if maybe_latest is None and wait_seconds > 0.0:
             ctx.logger.event(
                 "post_publish_latest_wait_started",
@@ -366,6 +386,8 @@ class ReplaceGlobalAdoptionStrategy(GlobalAdoptionStrategy):
         ctx: AdoptionContext,
         publish_result: PublishResult,
     ) -> StrategyAction:
+        """Adopt a successor when one is available before the final global horizon."""
+
         maybe_latest = self._poll_after_publish(ctx, publish_result.update_id)
         if maybe_latest is None:
             return StrategyAction()
@@ -438,9 +460,18 @@ class RebaseGlobalAdoptionStrategy(GlobalAdoptionStrategy):
         ctx: AdoptionContext,
         publish_result: PublishResult,
     ) -> StrategyAction:
+        """Adopt a successor or retain a rebase anchor while another version is possible."""
+
         maybe_latest = self._poll_after_publish(ctx, publish_result.update_id)
         if maybe_latest is not None:
             return self._direct_adoption(ctx, maybe_latest, update_id=publish_result.update_id)
+        if self._final_global_horizon_reached(ctx):
+            ctx.logger.event(
+                "local_rebase_anchor_skipped_at_global_horizon",
+                update_id=publish_result.update_id,
+                base_global_version=publish_result.base_global_version,
+            )
+            return StrategyAction()
         if ctx.terminal_published():
             ctx.logger.event(
                 "local_rebase_anchor_skipped_on_stop",
@@ -558,10 +589,19 @@ class PredictGlobalAdoptionStrategy(GlobalAdoptionStrategy):
         ctx: AdoptionContext,
         publish_result: PublishResult,
     ) -> StrategyAction:
+        """Adopt a successor or prepare prediction only before the final global horizon."""
+
         maybe_latest = self._poll_after_publish(ctx, publish_result.update_id)
         prepared_reference: Any | None = None
         prepared_stats: dict[str, Any] | None = None
         if maybe_latest is None:
+            if self._final_global_horizon_reached(ctx):
+                ctx.logger.event(
+                    "global_prediction_start_skipped_at_global_horizon",
+                    update_id=publish_result.update_id,
+                    base_global_version=publish_result.base_global_version,
+                )
+                return StrategyAction()
             if ctx.terminal_published():
                 ctx.logger.event(
                     "global_prediction_start_skipped_on_stop",

@@ -1,3 +1,5 @@
+"""Verify global-adoption strategy state transitions and waiting boundaries."""
+
 from pathlib import Path
 
 import pytest
@@ -47,7 +49,10 @@ def _context(
     paths=None,
     snapshot_model=None,
     terminal_published=None,
+    last_loaded_global_version=1,
 ):
+    """Build one strategy context with injectable storage and model boundaries."""
+
     logger = logger or RecordingLogger()
     reference = reference if reference is not None else torch.arange(4, dtype=torch.float32)
     return AdoptionContext(
@@ -57,8 +62,8 @@ def _context(
         device=torch.device("cpu"),
         config=config,
         logger=logger,
-        last_loaded_global_version=1,
-        last_loaded_latest={"version": 1},
+        last_loaded_global_version=last_loaded_global_version,
+        last_loaded_latest={"version": last_loaded_global_version},
         tokens_since_global_load=64,
         read_latest_if_newer_fn=read_latest or (lambda *_args: None),
         wait_for_latest_if_newer_fn=wait_latest or (lambda *_args, **_kwargs: (None, 0.0)),
@@ -111,6 +116,102 @@ def test_replace_returns_reset_adoption_outcome():
     assert action.adoption.version == 2
     assert action.adoption.tokens_since_global_load == 0
     assert action.adoption.preserve_inner_state is False
+
+
+def test_joint_horizon_skips_impossible_post_target_latest_wait() -> None:
+    """Version 10 has no successor while learners finish the remaining local cycles."""
+
+    config = _config()
+    config.training.completion_mode = "local_and_global"
+    config.training.max_local_steps = 2000
+    config.training.inner_steps = 200
+    config.sync.stop_after_outer_steps = 10
+    calls: list[float] = []
+
+    def wait_latest(*, wait_seconds: float, **_kwargs):
+        """Record any forbidden attempt to wait for version 11."""
+
+        calls.append(wait_seconds)
+        return None, wait_seconds
+
+    logger = RecordingLogger()
+    action = ReplaceGlobalAdoptionStrategy().on_after_publish(
+        _context(
+            config,
+            logger=logger,
+            wait_latest=wait_latest,
+            last_loaded_global_version=10,
+        ),
+        PublishResult(update_id="update-at-v10", base_global_version=10),
+    )
+
+    assert action.adoption is None
+    assert calls == []
+    assert [event for event, _payload in logger.events] == [
+        "latest_polled",
+        "post_publish_latest_wait_skipped_at_global_horizon",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("strategy_type", "strategy_name", "skip_event"),
+    [
+        (
+            RebaseGlobalAdoptionStrategy,
+            "rebase_post_publish_delta",
+            "local_rebase_anchor_skipped_at_global_horizon",
+        ),
+        (
+            PredictGlobalAdoptionStrategy,
+            "predict_post_publish_global",
+            "global_prediction_start_skipped_at_global_horizon",
+        ),
+    ],
+)
+def test_joint_horizon_does_not_start_state_requiring_version_eleven(
+    strategy_type,
+    strategy_name: str,
+    skip_event: str,
+) -> None:
+    """Stateful adoption modes must not create work that can only reconcile with v11."""
+
+    config = _config(strategy_name)
+    config.training.completion_mode = "local_and_global"
+    config.training.max_local_steps = 2000
+    config.training.inner_steps = 200
+    config.sync.stop_after_outer_steps = 10
+    calls: list[str] = []
+
+    def snapshot(**_kwargs):
+        """Record a forbidden rebase snapshot at the final global horizon."""
+
+        calls.append("snapshot")
+        return torch.zeros(4), {}
+
+    def prepare(**_kwargs):
+        """Record a forbidden predicted-global preparation at the final horizon."""
+
+        calls.append("prepare")
+        return torch.zeros(4), {}, None, None
+
+    logger = RecordingLogger()
+    strategy = strategy_type()
+    action = strategy.on_after_publish(
+        _context(
+            config,
+            logger=logger,
+            snapshot_model=snapshot,
+            prepare_prediction=prepare,
+            last_loaded_global_version=10,
+        ),
+        PublishResult(update_id="update-at-v10", base_global_version=10),
+    )
+
+    assert action.adoption is None
+    assert action.reset_optimizer_reason is None
+    assert calls == []
+    assert [event for event, _payload in logger.events][-1] == skip_event
+    assert not strategy.wants_inner_poll(config)
 
 
 def test_replace_adoption_uses_actual_latest_returned_by_retry_helper():
