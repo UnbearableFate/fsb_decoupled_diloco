@@ -113,8 +113,8 @@ export default function GettingStartedPage() {
                 <td>8 个 Learner，50 个 inner step，10 个全局步。</td>
               </tr>
               <tr>
-                <td><code>experiments/gpt2_wikitext2_8l_200x10.yaml</code></td>
-                <td>GPT-2 / WikiText-2 容量恢复实验。</td>
+                <td><code>do_experiments/full_protocol/experiment04/fault_experiment.yaml</code></td>
+                <td>plan04 synthetic 容量恢复实验。</td>
                 <td>8 个 stream，quorum 为 4，启用自动 replacement。</td>
               </tr>
             </tbody>

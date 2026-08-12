@@ -63,8 +63,8 @@ export default function UserGuidePage() {
               <strong>从最接近目标的当前配置复制。</strong>
               <p>
                 功能路径使用 <code>full_protocol_functional.yaml</code>；正式固定容量路径使用
-                <code>full_protocol.yaml</code>；GPT-2 容量恢复实验使用
-                <code>experiments/gpt2_wikitext2_8l_200x10.yaml</code>。
+                <code>full_protocol.yaml</code>；plan04 容量恢复实验使用
+                <code>do_experiments/full_protocol/experiment04/fault_experiment.yaml</code>。
               </p>
             </div>
           </li>
