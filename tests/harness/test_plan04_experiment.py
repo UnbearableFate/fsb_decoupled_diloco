@@ -108,7 +108,8 @@ def _write_authority(
         );
         CREATE TABLE learner_instances(
             instance_id TEXT, pbs_job_id TEXT, status TEXT, stream_id INTEGER,
-            stream_epoch INTEGER, placement_epoch INTEGER, registered_at REAL
+            stream_epoch INTEGER, placement_epoch INTEGER, registered_at REAL,
+            admitted_at REAL
         );
         CREATE TABLE launch_requests(
             request_id TEXT, role TEXT, bootstrap_slot INTEGER, created_at REAL,
@@ -119,12 +120,14 @@ def _write_authority(
             generation INTEGER, stable_contributor_key TEXT, fence_json TEXT, state TEXT
         );
         CREATE TABLE global_versions(
-            version INTEGER, committed_by_epoch INTEGER, weight_relative_path TEXT
+            version INTEGER, committed_by_epoch INTEGER, weight_relative_path TEXT,
+            committed_at REAL
         );
         CREATE TABLE contributor_progress(stable_contributor_key TEXT);
         CREATE TABLE capacity_observations(observation_seq INTEGER);
         CREATE TABLE updates(
-            update_id TEXT, inner_steps INTEGER, status TEXT, applied_version INTEGER
+            update_id TEXT, inner_steps INTEGER, status TEXT, applied_version INTEGER,
+            fence_json TEXT, base_global_version INTEGER
         );
         INSERT INTO controller_state VALUES(1, 1, 'finalized');
         INSERT INTO terminal_state VALUES(1, 'finalized', 25);
@@ -149,12 +152,13 @@ def _write_authority(
         initial_id = f"instance-{stream}"
         terminal_id = "instance-7-replacement" if replacement and stream == 7 else initial_id
         connection.execute(
-            "INSERT INTO learner_instances VALUES(?, ?, ?, ?, 1, 1, ?)",
+            "INSERT INTO learner_instances VALUES(?, ?, ?, ?, 1, 1, ?, ?)",
             (
                 initial_id,
                 f"{stream}.opbs",
                 "expired" if replacement and stream == 7 else "stopped",
                 stream,
+                float(stream),
                 float(stream),
             ),
         )
@@ -186,7 +190,7 @@ def _write_authority(
     if replacement:
         connection.execute(
             "INSERT INTO learner_instances VALUES("
-            "'instance-7-replacement', '300.opbs', 'stopped', 7, 2, 2, 100.0)"
+            "'instance-7-replacement', '300.opbs', 'stopped', 7, 2, 2, 90.0, 100.0)"
         )
         connection.execute(
             "INSERT INTO launch_requests VALUES("
@@ -217,15 +221,25 @@ def _write_authority(
             f"global_v{version:06d}_pfixture.safetensors"
         )
         connection.execute(
-            "INSERT INTO global_versions VALUES(?, ?, ?)",
-            (version, committed_epoch, weight_relative_path),
+            "INSERT INTO global_versions VALUES(?, ?, ?, ?)",
+            (version, committed_epoch, weight_relative_path, float(version * 10)),
         )
         if version == 0:
             continue
         for contributor in range(4):
+            update_stream = 7 if replacement and version == 25 and contributor == 3 else contributor
+            update_instance = (
+                "instance-7-replacement" if update_stream == 7 else f"instance-{update_stream}"
+            )
+            update_epoch = 2 if update_stream == 7 else 1
             connection.execute(
-                "INSERT INTO updates VALUES(?, 200, 'applied', ?)",
-                (f"update-{version}-{contributor}", version),
+                "INSERT INTO updates VALUES(?, 200, 'applied', ?, ?, ?)",
+                (
+                    f"update-{version}-{contributor}",
+                    version,
+                    json.dumps(_fence(update_instance, update_stream, epoch=update_epoch)),
+                    version - 1,
+                ),
             )
     connection.commit()
     connection.close()
@@ -327,12 +341,14 @@ def test_one_line_submitter_freezes_current_baseline_and_full_protocol_jobs() ->
 
     assert "QUEUE=regular-g" in submitter
     assert "WALLTIME=00:40:00" in submitter
+    assert "TIMEOUT_SECONDS=1800" in submitter
     assert "submit_5000steps.sh" in submitter
     assert 'CONFIG="$SCRIPT_DIR/experiment.yaml"' in submitter
     assert 'bash -n "$PROJECT_ROOT"/scripts/miyabi/agent/*.pbs' in submitter
     assert "#PBS -q regular-g" in wrapper
     assert "#PBS -W group_list=xg24i002" in wrapper
     assert "#PBS -l walltime=00:40:00" in wrapper
+    assert 'TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-1800}"' in wrapper
     assert "scenario_supervisor.py" in wrapper
     assert "#PBS -q regular-g" in baseline_wrapper
     assert "#PBS -W group_list=xg24i002" in baseline_wrapper
@@ -624,13 +640,18 @@ def test_authority_oracle_reads_archived_global_version_history(
     archived_versions = [
         dict(
             zip(
-                ("version", "committed_by_epoch", "weight_relative_path"),
+                (
+                    "version",
+                    "committed_by_epoch",
+                    "weight_relative_path",
+                    "committed_at",
+                ),
                 row,
                 strict=True,
             )
         )
         for row in connection.execute(
-            "SELECT version, committed_by_epoch, weight_relative_path "
+            "SELECT version, committed_by_epoch, weight_relative_path, committed_at "
             "FROM global_versions ORDER BY version"
         )
     ]
@@ -685,6 +706,8 @@ def test_authority_oracle_binds_replacement_to_the_expired_stream(tmp_path: Path
         replacement=replacement,
     )
     assert evidence["replacement"]["successor"]["stream_epoch"] == 2
+    assert evidence["replacement"]["latest_version_at_admission"] == 10
+    assert evidence["replacement"]["first_successor_update"]["base_global_version"] == 24
 
     connection = sqlite3.connect(run_root / "control/syncer_metadata.sqlite3")
     connection.execute(
@@ -693,6 +716,25 @@ def test_authority_oracle_binds_replacement_to_the_expired_stream(tmp_path: Path
     connection.commit()
     connection.close()
     with pytest.raises(RuntimeError, match="expired-stream succession"):
+        module._authority_evidence(
+            run_root=run_root,
+            config=load_config(PACKAGE / "fault_experiment.yaml"),
+            scenario=module.SCENARIOS["learner_failure_simultaneous"],
+            initial_learner_job_ids=[f"{index}.opbs" for index in range(8)],
+            primary_syncer_job_id="100.opbs",
+            successor_syncer_job_id=None,
+            victim=victim,
+            replacement=replacement,
+        )
+
+    connection = sqlite3.connect(run_root / "control/syncer_metadata.sqlite3")
+    connection.execute(
+        "UPDATE learner_instances SET stream_epoch=2 WHERE instance_id='instance-7-replacement'"
+    )
+    connection.execute("UPDATE updates SET base_global_version=9 WHERE update_id='update-25-3'")
+    connection.commit()
+    connection.close()
+    with pytest.raises(RuntimeError, match="admission-time latest version"):
         module._authority_evidence(
             run_root=run_root,
             config=load_config(PACKAGE / "fault_experiment.yaml"),

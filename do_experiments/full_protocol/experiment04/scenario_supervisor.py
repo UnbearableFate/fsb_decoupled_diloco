@@ -678,7 +678,31 @@ def _authority_evidence(
             or int(new[0]["placement_epoch"]) <= int(old[0]["placement_epoch"])
         ):
             raise RuntimeError("replacement does not prove exact expired-stream succession")
-        replacement_evidence = {"request": request, "victim": old[0], "successor": new[0]}
+        admitted_at = float(new[0]["admitted_at"])
+        latest_at_admission = max(
+            int(row["version"]) for row in versions if float(row["committed_at"]) <= admitted_at
+        )
+        successor_updates = sorted(
+            (
+                row
+                for row in updates
+                if ContributorFence.from_dict(json.loads(str(row["fence_json"]))).instance_id
+                == replacement["admitted_instance_id"]
+            ),
+            key=lambda row: (int(row["applied_version"] or GLOBAL_STEPS + 1), row["update_id"]),
+        )
+        if (
+            not successor_updates
+            or int(successor_updates[0]["base_global_version"]) < latest_at_admission
+        ):
+            raise RuntimeError("replacement did not train from its admission-time latest version")
+        replacement_evidence = {
+            "request": request,
+            "victim": old[0],
+            "successor": new[0],
+            "latest_version_at_admission": latest_at_admission,
+            "first_successor_update": successor_updates[0],
+        }
     elif nonbootstrap:
         raise RuntimeError("fault-free scenario created an unexpected capacity launch")
 
@@ -1261,7 +1285,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--log-root", type=Path, required=True)
     parser.add_argument("--evidence-output", type=Path, required=True)
-    parser.add_argument("--timeout-seconds", type=float, default=2100.0)
+    parser.add_argument("--timeout-seconds", type=float, default=1800.0)
     return parser
 
 
