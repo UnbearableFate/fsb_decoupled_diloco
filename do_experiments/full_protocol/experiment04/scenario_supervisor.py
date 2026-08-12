@@ -767,8 +767,9 @@ def _authority_evidence(
         raise RuntimeError("terminal fences do not acknowledge all eight streams")
     for row in fences:
         ContributorFence.from_dict(json.loads(str(row["fence_json"])))
-    if {str(row["stable_contributor_key"]) for row in progress} != expected_streams:
-        raise RuntimeError("contributor progress does not cover all eight streams")
+    progress_streams = {str(row["stable_contributor_key"]) for row in progress}
+    if not progress_streams <= expected_streams:
+        raise RuntimeError("contributor progress contains a stream outside the configured pool")
 
     initial_jobs = {normalize_job_id(job_id) for job_id in initial_learner_job_ids}
     initial_instances = [

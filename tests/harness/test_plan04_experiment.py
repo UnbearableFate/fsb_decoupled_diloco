@@ -170,7 +170,9 @@ def _write_authority(
             "INSERT INTO terminal_contributor_fences VALUES(1, ?, ?, 'acked')",
             (str(stream), json.dumps(terminal_fence)),
         )
-        connection.execute("INSERT INTO contributor_progress VALUES(?)", (str(stream),))
+        # A learner admitted near version 10 may acknowledge terminal before completing a cycle.
+        if stream != 5:
+            connection.execute("INSERT INTO contributor_progress VALUES(?)", (str(stream),))
         _write_attestation(
             run_root,
             actor_kind="learner",
@@ -452,7 +454,7 @@ def test_learner_fault_timeline_binds_qdel_to_an_initial_job_after_sixty_seconds
 
 
 def test_authority_oracle_accepts_exact_normal_and_takeover_histories(tmp_path: Path) -> None:
-    """Terminal acceptance is derived from exact merge, actor, and lease authority rows."""
+    """Terminal acceptance permits an admitted late learner with no completed cycle."""
 
     module = _module()
     normal_root = tmp_path / "normal"
@@ -469,6 +471,30 @@ def test_authority_oracle_accepts_exact_normal_and_takeover_histories(tmp_path: 
     )
     assert normal["integrity_check"] == ["ok"]
     assert normal["merge_counts"] == {version: 4 for version in range(1, 11)}
+    assert {row["stable_contributor_key"] for row in normal["contributor_progress"]} == {
+        str(stream) for stream in range(8) if stream != 5
+    }
+
+    # Progress remains authority evidence and cannot name a stream outside the run scope.
+    connection = sqlite3.connect(normal_root / "control/syncer_metadata.sqlite3")
+    connection.execute("INSERT INTO contributor_progress VALUES('8')")
+    connection.commit()
+    connection.close()
+    with pytest.raises(RuntimeError, match="outside the configured pool"):
+        module._authority_evidence(
+            run_root=normal_root,
+            config=load_config(PACKAGE / "experiment.yaml"),
+            scenario=module.SCENARIOS["normal"],
+            initial_learner_job_ids=[f"{index}.opbs" for index in range(8)],
+            primary_syncer_job_id="100.opbs",
+            successor_syncer_job_id=None,
+            victim=None,
+            replacement=None,
+        )
+    connection = sqlite3.connect(normal_root / "control/syncer_metadata.sqlite3")
+    connection.execute("DELETE FROM contributor_progress WHERE stable_contributor_key='8'")
+    connection.commit()
+    connection.close()
 
     # Scheduler identity must remain bound to the same durable learner incarnation.
     attestation_path = normal_root / "metrics/attestations/learner/instance-0/instance-0.json"
