@@ -20,7 +20,7 @@ python -m fs_diloco.tools.launch_independent_run \
 
 ## plan04 Full Protocol 实验
 
-`do_experiments/full_protocol/experiment04/` 是独立实验启动包。Baseline 和七个实验场景均使用 8 个 Learner、100 个 local step × 10 个 global step、4 个 proposal 的固定 merge 阈值，以及对应的 PBS supervisor、配置和 durable authority oracle。
+`do_experiments/full_protocol/experiment04/` 是独立实验启动包。Baseline 和七个实验场景均使用 8 个 Learner、200 个 local step × 25 个 global step、4 个 proposal 的固定 merge 阈值，以及对应的 PBS supervisor、配置和 durable authority oracle。
 
 在 Miyabi login host 上，通过一条命令提交指定场景：
 
@@ -28,9 +28,9 @@ python -m fs_diloco.tools.launch_independent_run \
 bash do_experiments/full_protocol/experiment04/submit.sh normal
 ```
 
-可用场景为 `baseline`、`normal`、`stagger_4_4`、`stagger_3_3_2`、`learner_failure_simultaneous`、`learner_failure_staggered`、`syncer_failure` 和 `dual_syncer`。启动脚本在提交前要求 formal source scopes clean，并检查全部 agent PBS 脚本的 shell 语法和 literal group。Supervisor 和 actor job 均使用 `regular-g` 与 `00:30:00`。
+可用场景为 `baseline`、`normal`、`stagger_4_4`、`stagger_3_3_2`、`learner_failure_simultaneous`、`learner_failure_staggered`、`syncer_failure` 和 `dual_syncer`。启动脚本在提交前要求 formal source scopes clean，并检查全部 agent PBS 脚本的 shell 语法和 literal group。实验统一使用固定版本的 GPT-2 和 WikiText-2，训练规模为 `local steps 200 × global steps 25`；Baseline DDP 对应 5,000 optimizer steps，periodic average 每 200 steps 同步一次。Supervisor 和 actor job 均使用 `regular-g`，初始 wall-time 为 `00:40:00`，后续可根据运行证据调整。
 
-每个完成的 run 由 `tools/summarize_runs.py` 追加到 `runs/summary.csv`。正式指标比较应先依次提交 3 次 `baseline`，再依次提交 3 次 `normal`；第三个 `normal` artifact 使用同一 source fingerprint 下的两组中位数，计算最终平均 loss 和训练时长的有符号相对差异及 95% bootstrap 区间。任一中位数相对差异的绝对值超过 20% 时，artifact 状态为 `FAIL`。其余场景各提交一次。
+每个完成的 run 由 `tools/summarize_runs.py` 追加到 `runs/summary.csv`。正式指标比较使用 1 次 DDP baseline、1 次 periodic-average baseline 和 1 次 `normal`，比较最终平均 loss 与训练时长；任一指标的相对差异绝对值超过 30% 时，需要调查原因。其余场景各提交 1 次。
 
 运行根目录中的权威状态位于 `control/syncer_metadata.sqlite3`。配置、descriptor、source manifest、artifact policy 和 bootstrap marker 在初始化时不可变发布。Weights、outer optimizer state、receipt、proposal、control publication 和 audit history 通过内容哈希或 authority row 绑定。
 

@@ -100,7 +100,7 @@ def _write_baseline_run(
             "betas": [0.9, 0.95],
             "eps": 1.0e-8,
             "weight_decay": 0.1,
-            "warmup_steps": 10,
+            "warmup_steps": 100,
             "min_lr_ratio": 0.1,
         },
         "distributed": {"periodic_average_interval": 30},
@@ -478,8 +478,8 @@ def test_csv_update_discovers_both_layouts_and_deduplicates(tmp_path: Path) -> N
     assert [row["run_id"] for row in _read_rows(output)] == ["full-protocol-run", "ddp-run"]
 
 
-def test_comparison_flags_twenty_percent_metric_difference(tmp_path: Path) -> None:
-    """Comparison output must flag either metric whose absolute delta exceeds 20%."""
+def test_comparison_flags_thirty_percent_metric_difference(tmp_path: Path) -> None:
+    """Comparison output must flag either metric whose absolute delta exceeds 30%."""
 
     module = _module()
     runs_root = tmp_path / "runs"

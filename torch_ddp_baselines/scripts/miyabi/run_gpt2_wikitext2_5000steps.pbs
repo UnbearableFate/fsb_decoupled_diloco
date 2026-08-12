@@ -1,9 +1,9 @@
 #!/bin/bash
-#PBS -N torch_baseline_2000
-#PBS -q debug-g
+#PBS -N torch_baseline_5000
+#PBS -q regular-g
 #PBS -W group_list=xg24i002
 #PBS -l select=8:mpiprocs=1
-#PBS -l walltime=00:15:00
+#PBS -l walltime=00:40:00
 #PBS -j oe
 #PBS -m ae
 
@@ -25,8 +25,8 @@ module list 2>&1 | cat
 PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
 PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
 PYTHONPATH="$PROJECT_ROOT"
-CONFIG="${CONFIG:-$PROJECT_ROOT/torch_ddp_baselines/configs/gpt2_wikitext2_8n_2000steps.yaml}"
-RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_torch_${MODE}_gpt2_wikitext2_8n_2000}"
+CONFIG="${CONFIG:-$PROJECT_ROOT/torch_ddp_baselines/configs/gpt2_wikitext2_8n_5000steps.yaml}"
+RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_torch_${MODE}_gpt2_wikitext2_8n_5000}"
 RUN_ROOT="${RUN_ROOT:-$PROJECT_ROOT/runs/torch_ddp_baselines/$RUN_ID}"
 LOG_ROOT="${LOG_ROOT:-$PROJECT_ROOT/logs/torch_ddp_baselines/$RUN_ID}"
 CACHE_ROOT="${CACHE_ROOT:-$PROJECT_ROOT/.cache/torch_ddp_baselines}"
@@ -51,7 +51,10 @@ if [[ ! -f "$CONFIG" ]]; then
   echo "Baseline config not found: $CONFIG" >&2
   exit 2
 fi
-source_status="$(git status --porcelain --untracked-files=all -- torch_ddp_baselines pyproject.toml)"
+source_status="$(
+  git status --porcelain --untracked-files=all -- \
+    fs_diloco tools torch_ddp_baselines pyproject.toml
+)"
 if [[ -n "$source_status" ]]; then
   echo "Standalone baseline sources must be committed before submission:" >&2
   printf '%s\n' "$source_status" >&2
@@ -152,3 +155,10 @@ mpirun \
 "$PYTHON_BIN" -m torch_ddp_baselines.health \
   --run-root "$RUN_ROOT" \
   --mode "$MODE" | tee "$LOG_ROOT/final_health.json"
+
+(
+  flock -x 9
+  "$PYTHON_BIN" "$PROJECT_ROOT/tools/summarize_runs.py" \
+    "$RUN_ROOT" \
+    --output "$PROJECT_ROOT/runs/summary.csv"
+) 9>"$PROJECT_ROOT/runs/.summary.lock"

@@ -3,7 +3,7 @@
 set -eEuo pipefail
 
 PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
-PBS_SCRIPT="$PROJECT_ROOT/torch_ddp_baselines/scripts/miyabi/run_gpt2_wikitext2_2000steps.pbs"
+PBS_SCRIPT="$PROJECT_ROOT/torch_ddp_baselines/scripts/miyabi/run_gpt2_wikitext2_5000steps.pbs"
 STAMP="$(date +%Y%m%d_%H%M%S)"
 
 case "$(hostname)" in
@@ -27,7 +27,7 @@ if [[ "$group_directive" != '#PBS -W group_list=xg24i002' ]]; then
 fi
 source_status="$(
   git -C "$PROJECT_ROOT" status --porcelain --untracked-files=all -- \
-    torch_ddp_baselines pyproject.toml
+    fs_diloco tools torch_ddp_baselines pyproject.toml
 )"
 if [[ -n "$source_status" ]]; then
   echo "Standalone baseline sources must be committed before submission:" >&2
@@ -35,10 +35,10 @@ if [[ -n "$source_status" ]]; then
   exit 2
 fi
 
-ddp_run_id="${STAMP}_torch_ddp_gpt2_wikitext2_8n_2000"
-periodic_run_id="${STAMP}_torch_periodic_average_gpt2_wikitext2_8n_2000"
-ddp_job="$(qsub -N torch_ddp_2000 -v "MODE=ddp,RUN_ID=$ddp_run_id" "$PBS_SCRIPT")"
+ddp_run_id="${STAMP}_torch_ddp_gpt2_wikitext2_8n_5000"
+periodic_run_id="${STAMP}_torch_periodic_average_gpt2_wikitext2_8n_5000"
+ddp_job="$(qsub -N torch_ddp_5000 -v "MODE=ddp,RUN_ID=$ddp_run_id" "$PBS_SCRIPT")"
 printf 'DDP_JOB=%s DDP_RUN_ID=%s\n' "$ddp_job" "$ddp_run_id"
-periodic_job="$(qsub -N torch_pavg_2000 -v "MODE=periodic_average,RUN_ID=$periodic_run_id" "$PBS_SCRIPT")"
+periodic_job="$(qsub -N torch_pavg_5000 -v "MODE=periodic_average,RUN_ID=$periodic_run_id" "$PBS_SCRIPT")"
 
 printf 'PERIODIC_JOB=%s PERIODIC_RUN_ID=%s\n' "$periodic_job" "$periodic_run_id"

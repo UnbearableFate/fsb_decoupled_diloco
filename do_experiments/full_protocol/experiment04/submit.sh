@@ -12,7 +12,7 @@ SCENARIO="${1:-}"
 case "$SCENARIO" in
   baseline)
     EXPERIMENT_ID=0
-    CONFIG="$SCRIPT_DIR/baseline.yaml"
+    CONFIG=
     ;;
   normal)
     EXPERIMENT_ID=1
@@ -20,11 +20,11 @@ case "$SCENARIO" in
     ;;
   stagger_4_4)
     EXPERIMENT_ID=2
-    CONFIG="$SCRIPT_DIR/timed_experiment.yaml"
+    CONFIG="$SCRIPT_DIR/experiment.yaml"
     ;;
   stagger_3_3_2)
     EXPERIMENT_ID=3
-    CONFIG="$SCRIPT_DIR/timed_experiment.yaml"
+    CONFIG="$SCRIPT_DIR/experiment.yaml"
     ;;
   learner_failure_simultaneous)
     EXPERIMENT_ID=4
@@ -63,11 +63,16 @@ if [[ -n "${PBS_JOBID:-}" ]]; then
   exit 2
 fi
 
+if [[ "$SCENARIO" == baseline ]]; then
+  PROJECT_ROOT="$PROJECT_ROOT" exec \
+    bash "$PROJECT_ROOT/torch_ddp_baselines/scripts/miyabi/submit_5000steps.sh"
+fi
+
 PYTHON_BIN="$PROJECT_ROOT/.venv/bin/python"
 PBS_SCRIPT="$SCRIPT_DIR/run_experiment.pbs"
 QUEUE=regular-g
-WALLTIME=00:30:00
-TIMEOUT_SECONDS=1200
+WALLTIME=00:40:00
+TIMEOUT_SECONDS=2100
 
 test -x "$PYTHON_BIN"
 test -f "$CONFIG"

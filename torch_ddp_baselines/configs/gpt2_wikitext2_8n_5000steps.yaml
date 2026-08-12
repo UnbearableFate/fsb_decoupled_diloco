@@ -12,7 +12,7 @@ data:
   block_size: 1024
   shuffle_blocks: true
 training:
-  max_steps: 2000
+  max_steps: 5000
   micro_batch_size: 2
   gradient_accumulation_steps: 8
   seed: 1337

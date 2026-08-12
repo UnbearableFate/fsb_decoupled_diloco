@@ -15,7 +15,11 @@ from fs_diloco.core.run_descriptor import DescriptorAuthorityIdentity, LoadedRun
 from fs_diloco.protocol.authority import ProposalDisposition
 from fs_diloco.protocol.contributor import ContributorFence, MembershipScope
 from fs_diloco.protocol.cycle_receipt import CycleReceiptV1, canonical_receipt_relative_path
-from fs_diloco.runtime.syncer import _admit_requests, _ingest_proposals
+from fs_diloco.runtime.syncer import (
+    _admit_requests,
+    _finish_terminal_maintenance,
+    _ingest_proposals,
+)
 from fs_diloco.storage.admission import (
     publish_admission_request_with_sha256,
 )
@@ -59,6 +63,25 @@ def _loaded(paths: RunPaths, *, config_sha256: str) -> LoadedRunDescriptor:
             config_sha256=config_sha256,
         ),
     )
+
+
+def test_terminal_maintenance_waits_for_gc_grace_before_the_final_pass() -> None:
+    """Terminal cleanup must retain the leader lease until old weights become deletable."""
+
+    events: list[object] = []
+    maintenance = SimpleNamespace(
+        tick=lambda *, force: events.append(("tick", force))
+    )
+    renewer = SimpleNamespace(raise_if_failed=lambda: events.append("renew"))
+
+    _finish_terminal_maintenance(
+        maintenance,
+        renewer,
+        orphan_grace_seconds=20.0,
+        sleep=lambda seconds: events.append(("sleep", seconds)),
+    )
+
+    assert events == [("tick", True), ("sleep", 20.0), "renew", ("tick", True)]
 
 
 def test_duplicate_bootstrap_request_is_rejected_after_first_admission(

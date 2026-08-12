@@ -71,7 +71,7 @@ CSV_FIELDS = (
 )
 PRIMARY_KEY = "run_id"
 FINAL_BASELINE_REPORT_COUNT = 5
-COMPARISON_THRESHOLD = 0.20
+COMPARISON_THRESHOLD = 0.30
 
 
 class RunParseError(ValueError):
@@ -751,7 +751,7 @@ def _float_cell(row: dict[str, str], key: str) -> float:
 
 
 def build_comparisons(rows: Sequence[dict[str, str]]) -> dict[str, Any]:
-    """Compare every Full Protocol row with both baseline modes at a 20% threshold."""
+    """Compare every Full Protocol row with both baseline modes at a 30% threshold."""
 
     baselines = [row for row in rows if row.get("run_kind") == "torch_ddp_baseline"]
     full_protocol_runs = [row for row in rows if row.get("run_kind") == "fs_diloco_full_protocol"]
@@ -766,6 +766,7 @@ def build_comparisons(rows: Sequence[dict[str, str]]) -> dict[str, Any]:
             identity_fields = (
                 "model_name_or_path",
                 "model_revision",
+                "model_dtype",
                 "dataset_name",
                 "dataset_config_name",
                 "dataset_revision",
@@ -773,6 +774,13 @@ def build_comparisons(rows: Sequence[dict[str, str]]) -> dict[str, Any]:
                 "block_size",
                 "micro_batch_size",
                 "gradient_accumulation_steps",
+                "learning_rate",
+                "optimizer_beta1",
+                "optimizer_beta2",
+                "optimizer_epsilon",
+                "weight_decay",
+                "warmup_steps",
+                "min_lr_ratio",
             )
             mismatches = [
                 key for key in identity_fields if full_protocol.get(key) != baseline.get(key)

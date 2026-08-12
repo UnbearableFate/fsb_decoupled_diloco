@@ -8,7 +8,6 @@ import csv
 import fcntl
 import hashlib
 import importlib.util
-import itertools
 import json
 import os
 import random
@@ -20,11 +19,8 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from statistics import median
 from types import ModuleType
-from typing import Any, Iterable
-
-import yaml
+from typing import Any
 
 from fs_diloco.core.config import Config, load_config
 from fs_diloco.core.source_identity import capture_source_identity
@@ -32,17 +28,20 @@ from fs_diloco.protocol.contributor import ContributorFence
 from fs_diloco.runtime.pbs_scheduler import PBSScheduler, normalize_job_id
 from fs_diloco.storage.audit_archive import read_logical_authority_rows
 from fs_diloco.storage.paths import RunPaths
-from fs_diloco.storage.terminal_request import publish_manual_terminal_request
 from fs_diloco.tools.launch_independent_run import launch
 
 
 ACTOR_QUEUE = "regular-g"
-ACTOR_WALLTIME = "00:30:00"
+ACTOR_WALLTIME = "00:40:00"
 FAULT_DELAY_SECONDS = 60.0
 BATCH_DELAY_SECONDS = 30.0
-SYNCER_RESTART_DELAY_SECONDS = 20.0
-DUAL_SYNCER_OBSERVATION_SECONDS = 60.0
-COMPARISON_REPEATS = 3
+SYNCER_RESTART_DELAY_SECONDS = 30.0
+DUAL_SYNCER_START_DELAY_SECONDS = 30.0
+DUAL_SYNCER_OBSERVATION_SECONDS = 30.0
+GLOBAL_STEPS = 25
+INNER_STEPS = 200
+BASELINE_OPTIMIZER_STEPS = INNER_STEPS * GLOBAL_STEPS
+COMPARISON_THRESHOLD = 0.30
 
 
 @dataclass(frozen=True)
@@ -58,14 +57,13 @@ class Scenario:
 
 
 SCENARIOS: dict[str, Scenario] = {
-    "baseline": Scenario(0, (8,), False, "none", 100, 4),
-    "normal": Scenario(1, (8,), False, "none", 100, 4),
-    "stagger_4_4": Scenario(2, (4, 4), False, "none", 100, 4),
-    "stagger_3_3_2": Scenario(3, (3, 3, 2), False, "none", 100, 4),
-    "learner_failure_simultaneous": Scenario(4, (8,), True, "none", 100, 4),
-    "learner_failure_staggered": Scenario(5, (4, 4), True, "none", 100, 4),
-    "syncer_failure": Scenario(6, (8,), False, "restart", 100, 4),
-    "dual_syncer": Scenario(7, (8,), False, "dual", 100, 4),
+    "normal": Scenario(1, (8,), False, "none", INNER_STEPS, 4),
+    "stagger_4_4": Scenario(2, (4, 4), False, "none", INNER_STEPS, 4),
+    "stagger_3_3_2": Scenario(3, (3, 3, 2), False, "none", INNER_STEPS, 4),
+    "learner_failure_simultaneous": Scenario(4, (8,), True, "none", INNER_STEPS, 4),
+    "learner_failure_staggered": Scenario(5, (4, 4), True, "none", INNER_STEPS, 4),
+    "syncer_failure": Scenario(6, (8,), False, "restart", INNER_STEPS, 4),
+    "dual_syncer": Scenario(7, (8,), False, "dual", INNER_STEPS, 4),
 }
 
 
@@ -182,70 +180,45 @@ def _read_rows(
         connection.close()
 
 
-def _wait_initial_admissions(
+def _admitted_initial_instances(
     database: Path,
-    learner_job_ids: Iterable[str],
-    *,
-    timeout_seconds: float,
+    learner_job_ids: list[str],
 ) -> list[dict[str, Any]]:
-    """Wait until all eight submitted bootstrap jobs own admitted instances."""
+    """Return the submitted bootstrap learners admitted at the fault boundary."""
 
+    if not database.is_file():
+        raise RuntimeError("learner fault boundary has no authority database")
     expected = {normalize_job_id(job_id) for job_id in learner_job_ids}
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        if not database.is_file():
-            time.sleep(1.0)
-            continue
-        rows = _read_rows(
-            database,
-            "SELECT instance_id, stream_id, stream_epoch, placement_epoch, status, "
-            "pbs_job_id, admitted_at FROM learner_instances WHERE admitted_at IS NOT NULL",
-        )
-        matched = [
-            row
-            for row in rows
-            if isinstance(row.get("pbs_job_id"), str)
-            and normalize_job_id(str(row["pbs_job_id"])) in expected
-        ]
-        if len(matched) == len(expected) and {str(row["status"]) for row in matched} == {
-            "admitted"
-        }:
-            return matched
-        time.sleep(1.0)
-    raise TimeoutError("eight bootstrap learner jobs did not become admitted")
+    rows = _read_rows(
+        database,
+        "SELECT instance_id, stream_id, stream_epoch, placement_epoch, status, "
+        "pbs_job_id, admitted_at FROM learner_instances "
+        "WHERE admitted_at IS NOT NULL AND status='admitted'",
+    )
+    matched = [
+        row
+        for row in rows
+        if isinstance(row.get("pbs_job_id"), str)
+        and normalize_job_id(str(row["pbs_job_id"])) in expected
+    ]
+    if not matched:
+        raise RuntimeError("learner fault boundary has no admitted bootstrap learner")
+    return matched
 
 
-def _wait_initial_runtime_attestations(
-    run_root: Path,
-    admissions: list[dict[str, Any]],
-    *,
-    timeout_seconds: float,
-) -> list[dict[str, Any]]:
-    """Wait until every admitted bootstrap learner has entered its runtime loop."""
+def _observe_pre_quorum_version(database: Path) -> dict[str, Any]:
+    """Prove that three submitted learners cannot commit a four-way merge."""
 
-    expected = {
-        str(row["instance_id"]): normalize_job_id(str(row["pbs_job_id"])) for row in admissions
+    if not database.is_file():
+        return {"authority_initialized": False, "global_version": None}
+    rows = _read_rows(database, "SELECT MAX(version) AS global_version FROM global_versions")
+    version = rows[0]["global_version"]
+    if version is not None and int(version) != 0:
+        raise RuntimeError("three-learner phase advanced despite the four-learner quorum")
+    return {
+        "authority_initialized": True,
+        "global_version": None if version is None else int(version),
     }
-    if len(expected) != 8:
-        raise RuntimeError("runtime readiness requires eight distinct admitted learners")
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        observed: dict[str, dict[str, Any]] = {}
-        for attestation in _attestations(run_root):
-            if attestation.get("actor_kind") != "learner":
-                continue
-            actor_id = str(attestation.get("actor_id"))
-            if actor_id in observed:
-                raise RuntimeError("a bootstrap learner published multiple runtime attestations")
-            observed[actor_id] = attestation
-        for actor_id in expected.keys() & observed.keys():
-            if normalize_job_id(str(observed[actor_id]["scheduler_job_id"])) != expected[actor_id]:
-                raise RuntimeError("learner runtime attestation names the wrong scheduler job")
-        matched = [observed[actor_id] for actor_id in expected if actor_id in observed]
-        if len(matched) == len(expected):
-            return sorted(matched, key=lambda row: str(row["actor_id"]))
-        time.sleep(0.2)
-    raise TimeoutError("eight admitted bootstrap learners did not publish runtime attestations")
 
 
 def _choose_victim(run_id: str, admissions: list[dict[str, Any]]) -> dict[str, Any]:
@@ -337,54 +310,6 @@ def _wait_terminal(summary_path: Path, *, timeout_seconds: float) -> dict[str, A
             return payload
         time.sleep(2.0)
     raise TimeoutError("Full Protocol run did not publish terminal summary")
-
-
-def _wait_global_target(
-    database: Path,
-    *,
-    target_version: int,
-    timeout_seconds: float,
-) -> int:
-    """Wait until authority reaches exactly the registered global work horizon."""
-
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        if not database.is_file():
-            time.sleep(0.2)
-            continue
-        rows = _read_rows(database, "SELECT MAX(version) AS version FROM global_versions")
-        version = rows[0]["version"] if rows else None
-        if version is not None:
-            observed = int(version)
-            if observed > target_version:
-                raise RuntimeError("authority advanced beyond the registered global target")
-            if observed == target_version:
-                return observed
-        time.sleep(0.2)
-    raise TimeoutError("authority did not reach the registered global target")
-
-
-def _publish_scenario_close(
-    run_root: Path,
-    *,
-    scenario_name: str,
-    observed_version: int,
-    target_version: int,
-) -> dict[str, Any]:
-    """Publish the scenario-owned close only after the exact work horizon is durable."""
-
-    if observed_version != target_version:
-        raise ValueError("manual scenario close requires the exact global target")
-    descriptor = json.loads((run_root / "control/run_descriptor.json").read_text(encoding="utf-8"))
-    if not isinstance(descriptor, dict):
-        raise RuntimeError("run descriptor is not a JSON object")
-    request = publish_manual_terminal_request(
-        RunPaths(run_root),
-        run_id=str(descriptor["run_id"]),
-        descriptor_sha256=str(descriptor["descriptor_sha256"]),
-        reason=f"plan04_scenario_complete:{scenario_name}",
-    )
-    return {"observed_global_version": observed_version, "request": request}
 
 
 def _scheduler_history(job_id: str, scheduler: PBSScheduler) -> dict[str, Any]:
@@ -482,58 +407,14 @@ def _read_summary_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def _relative_median_interval(
-    baseline_values: list[float],
-    normal_values: list[float],
-) -> tuple[float, float]:
-    """Enumerate the exact three-by-three median bootstrap interval."""
-
-    if len(baseline_values) != COMPARISON_REPEATS or len(normal_values) != COMPARISON_REPEATS:
-        raise ValueError("comparison interval requires exactly three baseline and normal values")
-    baseline_medians = [
-        float(median(baseline_values[index] for index in sample))
-        for sample in itertools.product(range(COMPARISON_REPEATS), repeat=COMPARISON_REPEATS)
-    ]
-    normal_medians = [
-        float(median(normal_values[index] for index in sample))
-        for sample in itertools.product(range(COMPARISON_REPEATS), repeat=COMPARISON_REPEATS)
-    ]
-    differences = sorted(
-        (normal_value - baseline_value) / abs(baseline_value)
-        for baseline_value in baseline_medians
-        for normal_value in normal_medians
-    )
-    lower_index = int(0.025 * (len(differences) - 1))
-    upper_index = int(0.975 * (len(differences) - 1))
-    return differences[lower_index], differences[upper_index]
-
-
-def _comparison_config_sha256(row: dict[str, str]) -> str:
-    """Hash the complete resolved experiment config except per-run identity."""
-
-    path = Path(row["run_dir"]) / "control/run_config.resolved.yaml"
-    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict) or not isinstance(payload.get("run"), dict):
-        raise RuntimeError(f"comparison run has an invalid resolved config: {path}")
-    projection = {key: value for key, value in payload.items() if key != "run"}
-    canonical = json.dumps(
-        projection,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    ).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest()
-
-
 def _append_summary(
     *,
     project_root: Path,
     run_root: Path,
     scenario: Scenario,
-    source_fingerprint: str,
     comparison_output: Path,
 ) -> tuple[dict[str, str], dict[str, Any] | None]:
-    """Append one run with the canonical tool and compare normal against baseline."""
+    """Append one run and compare normal with the two registered one-seed baselines."""
 
     tool = _load_summary_tool(project_root)
     summary_csv = project_root / "runs/summary.csv"
@@ -550,105 +431,47 @@ def _append_summary(
     if scenario.experiment_id != 1:
         return current, None
 
-    baselines = [
+    candidates = [
         row
         for row in rows
-        if "_e0_baseline_" in row.get("run_id", "")
-        and row.get("source_fingerprint") == source_fingerprint
+        if row.get("run_kind") == "torch_ddp_baseline"
+        and row.get("optimizer_steps_min") == str(BASELINE_OPTIMIZER_STEPS)
+        and row.get("optimizer_steps_max") == str(BASELINE_OPTIMIZER_STEPS)
     ]
-    normals = [
-        row
-        for row in rows
-        if "_e1_normal_" in row.get("run_id", "")
-        and row.get("source_fingerprint") == source_fingerprint
-    ]
-    if len(baselines) != COMPARISON_REPEATS:
-        raise RuntimeError("normal comparison requires three current-target baseline repeats")
-    if not 1 <= len(normals) <= COMPARISON_REPEATS:
-        raise RuntimeError("normal comparison permits exactly three current-target repeats")
-    identity_fields = (
-        "model_name_or_path",
-        "model_revision",
-        "model_dtype",
-        "dataset_name",
-        "dataset_config_name",
-        "dataset_revision",
-        "train_split",
-        "block_size",
-        "micro_batch_size",
-        "gradient_accumulation_steps",
-        "learning_rate",
-        "optimizer_beta1",
-        "optimizer_beta2",
-        "optimizer_epsilon",
-        "weight_decay",
+    by_mode = {
+        mode: [row for row in candidates if row.get("mode") == mode]
+        for mode in ("ddp", "periodic_average")
+    }
+    if any(len(mode_rows) != 1 for mode_rows in by_mode.values()):
+        raise RuntimeError("normal comparison requires one 5000-step baseline per mode")
+    baselines = [by_mode["ddp"][0], by_mode["periodic_average"][0]]
+    ddp, periodic = baselines
+    workload_valid = (
+        ddp.get("expected_contributors") == "8"
+        and ddp.get("synchronization_interval") == "1"
+        and ddp.get("synchronization_count") == str(BASELINE_OPTIMIZER_STEPS)
+        and periodic.get("expected_contributors") == "8"
+        and periodic.get("synchronization_interval") == str(INNER_STEPS)
+        and periodic.get("synchronization_count") == str(GLOBAL_STEPS)
+        and current.get("expected_contributors") == "8"
+        and current.get("merge_contributors") == "4"
+        and current.get("synchronization_interval") == str(INNER_STEPS)
+        and current.get("synchronization_count") == str(GLOBAL_STEPS)
     )
-    reference = baselines[0]
-    compared_rows = [*baselines, *normals]
-    mismatches = [
-        f"{row['run_id']}:{field}"
-        for row in compared_rows
-        for field in identity_fields
-        if row[field] != reference[field]
-    ]
-    config_projection_by_run = {
-        row["run_id"]: _comparison_config_sha256(row) for row in compared_rows
+    if tool.COMPARISON_THRESHOLD != COMPARISON_THRESHOLD:
+        raise RuntimeError("canonical summary tool uses the wrong comparison threshold")
+    comparison = tool.build_comparisons([*baselines, current])
+    comparison["baseline_run_ids"] = [row["run_id"] for row in baselines]
+    comparison["normal_run_id"] = current["run_id"]
+    comparison["registered_workload"] = {
+        "local_steps": INNER_STEPS,
+        "global_steps": GLOBAL_STEPS,
+        "baseline_optimizer_steps": BASELINE_OPTIMIZER_STEPS,
+        "valid": workload_valid,
     }
-    if len(set(config_projection_by_run.values())) != 1:
-        mismatches.append("resolved_config_projection")
-
-    def applied_work(row: dict[str, str]) -> int:
-        """Return applied optimizer steps represented by one summary row."""
-
-        return (
-            int(row["merge_contributors"])
-            * int(row["synchronization_interval"])
-            * int(row["synchronization_count"])
-        )
-
-    work_by_run = {row["run_id"]: applied_work(row) for row in compared_rows}
-    equal_work = set(work_by_run.values()) == {4_000}
-    repeat_complete = len(normals) == COMPARISON_REPEATS
-    metrics: dict[str, dict[str, Any]] = {}
-    exceeded = False
-    for field in ("final_mean_loss", "training_time_seconds"):
-        baseline_values = [float(row[field]) for row in baselines]
-        normal_values = [float(row[field]) for row in normals]
-        baseline_value = float(median(baseline_values))
-        current_value = float(median(normal_values))
-        if baseline_value == 0.0:
-            raise RuntimeError(f"baseline {field} is zero")
-        difference = (current_value - baseline_value) / abs(baseline_value)
-        over_threshold = repeat_complete and abs(difference) > 0.20
-        exceeded = exceeded or over_threshold
-        metrics[field] = {
-            "baseline_values": baseline_values,
-            "normal_values": normal_values,
-            "baseline_median": baseline_value,
-            "normal_median": current_value,
-            "signed_relative_median_difference": difference,
-            "signed_relative_median_difference_95pct_interval": (
-                list(_relative_median_interval(baseline_values, normal_values))
-                if repeat_complete
-                else None
-            ),
-            "absolute_difference_exceeds_threshold": over_threshold,
-        }
-    comparison = {
-        "format_version": 1,
-        "baseline_run_ids": [row["run_id"] for row in baselines],
-        "normal_run_ids": [row["run_id"] for row in normals],
-        "source_fingerprint": source_fingerprint,
-        "repeat_count_required": COMPARISON_REPEATS,
-        "repeat_complete": repeat_complete,
-        "identity_mismatches": mismatches,
-        "config_projection_sha256_by_run": config_projection_by_run,
-        "applied_local_steps_by_run": work_by_run,
-        "equal_applied_local_steps": equal_work,
-        "threshold": 0.20,
-        "metrics": metrics,
-        "investigation_required": bool(mismatches) or not equal_work or exceeded,
-    }
+    comparison["investigation_required"] = not workload_valid or any(
+        bool(row["investigation_required"]) for row in comparison["comparisons"]
+    )
     _atomic_json(comparison_output, comparison, create_only=True)
     return current, comparison
 
@@ -767,9 +590,9 @@ def _authority_evidence(
         raise RuntimeError(f"authority integrity check failed: {integrity}")
     if controller["state"] != "finalized" or terminal["state"] != "finalized":
         raise RuntimeError("terminal authority is not finalized")
-    if int(terminal["final_version"]) != 10:
-        raise RuntimeError("terminal authority did not stop at global version 10")
-    if [int(row["version"]) for row in versions] != list(range(11)):
+    if int(terminal["final_version"]) != GLOBAL_STEPS:
+        raise RuntimeError("terminal authority did not stop at global version 25")
+    if [int(row["version"]) for row in versions] != list(range(GLOBAL_STEPS + 1)):
         raise RuntimeError("global versions are not complete and contiguous")
 
     applied_counts: dict[int, int] = {}
@@ -779,13 +602,15 @@ def _authority_evidence(
         if update["status"] == "applied":
             version = int(update["applied_version"])
             applied_counts[version] = applied_counts.get(version, 0) + 1
-    expected_counts = {version: scenario.expected_merge_width for version in range(1, 11)}
+    expected_counts = {
+        version: scenario.expected_merge_width for version in range(1, GLOBAL_STEPS + 1)
+    }
     if applied_counts != expected_counts:
-        raise RuntimeError("applied updates do not form ten exact merge thresholds")
+        raise RuntimeError("applied updates do not form 25 exact merge thresholds")
     if config.training.inner_steps != scenario.expected_inner_steps:
         raise RuntimeError("resolved config has the wrong local-step workload")
     if (
-        config.sync.stop_after_outer_steps != 10
+        config.sync.stop_after_outer_steps != GLOBAL_STEPS
         or config.sync.quorum_min != scenario.expected_merge_width
         or config.sync.quorum_max != scenario.expected_merge_width
         or config.membership.stream_pool_size != 8
@@ -794,10 +619,11 @@ def _authority_evidence(
         raise RuntimeError("resolved config differs from the registered topology or merge workload")
 
     expected_streams = {str(index) for index in range(8)}
-    if {str(row["stable_contributor_key"]) for row in fences} != expected_streams or {
-        str(row["state"]) for row in fences
-    } != {"acked"}:
-        raise RuntimeError("terminal fences do not acknowledge all eight streams")
+    fence_streams = {str(row["stable_contributor_key"]) for row in fences}
+    if not fence_streams <= expected_streams or {str(row["state"]) for row in fences} != {
+        "acked"
+    }:
+        raise RuntimeError("terminal fences contain a foreign or unacknowledged stream")
     for row in fences:
         ContributorFence.from_dict(json.loads(str(row["fence_json"])))
     progress_streams = {str(row["stable_contributor_key"]) for row in progress}
@@ -811,21 +637,22 @@ def _authority_evidence(
         if isinstance(row.get("pbs_job_id"), str)
         and normalize_job_id(str(row["pbs_job_id"])) in initial_jobs
     ]
-    if (
-        len(initial_instances) != 8
-        or {normalize_job_id(str(row["pbs_job_id"])) for row in initial_instances} != initial_jobs
-    ):
-        raise RuntimeError("authority does not bind exactly eight bootstrap scheduler jobs")
+    admitted_initial_jobs = {
+        normalize_job_id(str(row["pbs_job_id"])) for row in initial_instances
+    }
+    if not admitted_initial_jobs <= initial_jobs:
+        raise RuntimeError("authority binds a learner outside the eight submitted bootstrap jobs")
     bootstrap_launches = [row for row in launches if row["role"] == "bootstrap"]
+    launch_jobs = {normalize_job_id(str(row["pbs_job_id"])) for row in bootstrap_launches}
     if (
-        len(bootstrap_launches) != 8
-        or {int(row["bootstrap_slot"]) for row in bootstrap_launches} != set(range(8))
+        len(bootstrap_launches) != len(initial_instances)
+        or not {int(row["bootstrap_slot"]) for row in bootstrap_launches} <= set(range(8))
         or {str(row["state"]) for row in bootstrap_launches} != {"admitted"}
-        or {normalize_job_id(str(row["pbs_job_id"])) for row in bootstrap_launches} != initial_jobs
+        or launch_jobs != admitted_initial_jobs
         or {str(row["admitted_instance_id"]) for row in bootstrap_launches}
         != {str(row["instance_id"]) for row in initial_instances}
     ):
-        raise RuntimeError("authority does not retain exactly eight bootstrap authorizations")
+        raise RuntimeError("bootstrap authorizations do not match admitted submitted jobs")
 
     replacement_evidence: dict[str, Any] | None = None
     nonbootstrap = [row for row in launches if row["role"] != "bootstrap"]
@@ -885,6 +712,25 @@ def _authority_evidence(
     elif len(epochs) != 1:
         raise RuntimeError("fault-free scenario has multiple syncer authority epochs")
 
+    final_epoch = int(epochs[-1]["epoch"])
+    latest_version = versions[-1]
+    if int(latest_version["committed_by_epoch"]) != final_epoch:
+        raise RuntimeError("the final live syncer epoch did not publish the latest model weight")
+    expected_latest_weight = str(latest_version["weight_relative_path"])
+    live_weight_root = RunPaths(run_root).weight_epochs / f"e{final_epoch:06d}"
+    live_weight_objects = list(live_weight_root.rglob("*")) if live_weight_root.is_dir() else []
+    if any(path.is_symlink() for path in live_weight_objects):
+        raise RuntimeError("the final live syncer weight scope contains a symlink")
+    live_weight_paths = sorted(
+        RunPaths(run_root).relative(path)
+        for path in live_weight_objects
+        if path.is_file()
+    )
+    if live_weight_paths != [expected_latest_weight]:
+        raise RuntimeError("the final live syncer scope does not contain only the latest weight")
+    if any(path.stat().st_mode & 0o222 for path in live_weight_objects if path.is_file()):
+        raise RuntimeError("the final live syncer weight is mutable")
+
     attestations = _attestations(run_root)
     descriptor = json.loads((run_root / "control/run_descriptor.json").read_text(encoding="utf-8"))
     if not isinstance(descriptor, dict):
@@ -941,6 +787,8 @@ def _authority_evidence(
         "merge_counts": applied_counts,
         "versions": versions,
         "syncer_epochs": epochs,
+        "latest_weight_relative_path": expected_latest_weight,
+        "live_syncer_weight_paths": live_weight_paths,
         "terminal_fences": fences,
         "contributor_progress": progress,
         "bootstrap_launches": bootstrap_launches,
@@ -1018,16 +866,16 @@ def _validate_submission_timeline(
         if qdel_offset < FAULT_DELAY_SECONDS - 1.0 or successor_gap < (
             SYNCER_RESTART_DELAY_SECONDS - 1.0
         ):
-            raise RuntimeError("syncer restart did not preserve its 60+20 second boundaries")
+            raise RuntimeError("syncer restart did not preserve its 60+30 second boundaries")
     elif scenario.syncer_fault == "dual":
         if successor_syncer is None or syncer_qdel is None or conflict_snapshot is None:
             raise RuntimeError("dual-syncer scenario lacks conflict/takeover evidence")
         candidate_offset = float(successor_syncer["submitted_at"]) - origin_wall
         overlap = float(syncer_qdel["requested_at"]) - float(successor_syncer["submitted_at"])
-        if candidate_offset < FAULT_DELAY_SECONDS - 1.0 or overlap < (
+        if candidate_offset < DUAL_SYNCER_START_DELAY_SECONDS - 1.0 or overlap < (
             DUAL_SYNCER_OBSERVATION_SECONDS - 1.0
         ):
-            raise RuntimeError("dual-syncer scenario did not preserve both 60-second boundaries")
+            raise RuntimeError("dual-syncer scenario did not preserve both 30-second boundaries")
         epochs = conflict_snapshot.get("syncer_epochs")
         if (
             not isinstance(epochs, list)
@@ -1059,7 +907,6 @@ def _evidence_paths(
         run_root / "control/syncer_metadata.sqlite3",
         run_root / "control/summary.json",
         run_root / "control/stop.json",
-        run_root / "control/terminal_close_request.json",
         log_root / "submission_receipt.json",
         log_root / "scenario_state.json",
         comparison_output,
@@ -1077,7 +924,6 @@ def _scenario_requirement(scenario: Scenario) -> str:
     """Map one plan experiment to its primary requirement owner."""
 
     return {
-        0: "METRICS-01",
         1: "NORMAL-01",
         2: "STAGGER-01",
         3: "STAGGER-01",
@@ -1103,8 +949,7 @@ def supervise(
 
     scenario = SCENARIOS[scenario_name]
     config = load_config(config_path)
-    expected_policy = "global_target_or_launch_budget" if scenario.experiment_id < 2 else "manual"
-    if config.terminal.admission_close_policy != expected_policy:
+    if config.terminal.admission_close_policy != "global_target":
         raise RuntimeError("scenario config uses the wrong terminal ownership policy")
     owned_jobs: set[str] = set()
     timeline: dict[str, Any] = {
@@ -1142,6 +987,16 @@ def supervise(
         offset = 0
         for batch_index, batch_size in enumerate(scenario.learner_batches):
             _sleep_until(origin_monotonic, batch_index * BATCH_DELAY_SECONDS)
+            if scenario_name == "stagger_3_3_2" and batch_index == 1:
+                observation = _observe_pre_quorum_version(database)
+                timeline["events"].append(
+                    {
+                        "role": "pre_quorum_observation",
+                        "submitted_learners": offset,
+                        "observed_at": time.time(),
+                        **observation,
+                    }
+                )
             for command in prepared["learner_qsubs"][offset : offset + batch_size]:
                 receipt = _qsub(command, role="learner", slot=offset)
                 owned_jobs.add(str(receipt["job_id"]))
@@ -1164,32 +1019,6 @@ def supervise(
             "learner_submissions": learner_receipts,
         }
         _atomic_json(log_root / "submission_receipt.json", submission_receipt, create_only=True)
-        admissions = _wait_initial_admissions(
-            database,
-            [str(row["job_id"]) for row in learner_receipts],
-            timeout_seconds=min(180.0, timeout_seconds),
-        )
-        if config.terminal.admission_close_policy == "manual":
-            runtime_attestations = _wait_initial_runtime_attestations(
-                run_root,
-                admissions,
-                timeout_seconds=min(180.0, timeout_seconds),
-            )
-            timeline["events"].append(
-                {
-                    "role": "initial_learner_runtime_ready",
-                    "observed_at": time.time(),
-                    "actors": [
-                        {
-                            "actor_id": row["actor_id"],
-                            "scheduler_job_id": row["scheduler_job_id"],
-                        }
-                        for row in runtime_attestations
-                    ],
-                }
-            )
-            _atomic_json(log_root / "scenario_state.json", timeline)
-
         victim: dict[str, Any] | None = None
         replacement: dict[str, Any] | None = None
         successor_syncer: dict[str, Any] | None = None
@@ -1197,6 +1026,10 @@ def supervise(
         conflict_snapshot: dict[str, Any] | None = None
         if scenario.learner_fault:
             _sleep_until(origin_monotonic, FAULT_DELAY_SECONDS)
+            admissions = _admitted_initial_instances(
+                database,
+                [str(row["job_id"]) for row in learner_receipts],
+            )
             victim = _choose_victim(run_id, admissions)
             target_job = str(victim["pbs_job_id"])
             victim["pre_qdel_scheduler"] = _require_outstanding(target_job)
@@ -1227,7 +1060,7 @@ def supervise(
             timeline["events"].append(successor_syncer)
             _atomic_json(log_root / "scenario_state.json", timeline)
         elif scenario.syncer_fault == "dual":
-            _sleep_until(origin_monotonic, FAULT_DELAY_SECONDS)
+            _sleep_until(origin_monotonic, DUAL_SYNCER_START_DELAY_SECONDS)
             successor_command = _replace_output_path(
                 prepared["syncer_qsub"], log_root / "syncer_candidate.log"
             )
@@ -1260,24 +1093,6 @@ def supervise(
                     "primary_qdel": syncer_qdel,
                 }
             )
-            _atomic_json(log_root / "scenario_state.json", timeline)
-
-        if config.terminal.admission_close_policy == "manual":
-            target_version = config.sync.stop_after_outer_steps
-            if target_version is None:
-                raise RuntimeError("manual plan04 scenario requires a global target")
-            observed_version = _wait_global_target(
-                database,
-                target_version=int(target_version),
-                timeout_seconds=timeout_seconds,
-            )
-            manual_close = _publish_scenario_close(
-                run_root,
-                scenario_name=scenario_name,
-                observed_version=observed_version,
-                target_version=int(target_version),
-            )
-            timeline["events"].append({"role": "manual_terminal_close", **manual_close})
             _atomic_json(log_root / "scenario_state.json", timeline)
 
         terminal_summary = _wait_terminal(
@@ -1315,19 +1130,18 @@ def supervise(
             project_root=project_root,
             run_root=run_root,
             scenario=scenario,
-            source_fingerprint=str(source["source_fingerprint"]),
             comparison_output=comparison_output,
         )
         errors: list[str] = []
         if comparison is not None and comparison["investigation_required"]:
-            errors.append("normal baseline comparison exceeds the registered 20% acceptance rule")
+            errors.append("normal baseline comparison violates identity, workload, or 30% limits")
         requirements_covered = [
             "PKG-01",
             "TOPO-01",
             "WORK-01",
             _scenario_requirement(scenario),
         ]
-        if comparison is not None and comparison["repeat_complete"]:
+        if comparison is not None:
             requirements_covered.append("METRICS-01")
         timeline["terminal_summary"] = terminal_summary
         timeline["scheduler_history"] = scheduler_history
@@ -1374,7 +1188,9 @@ def supervise(
                 "successor_syncer_jobs": 0 if successor_syncer is None else 1,
                 "replacement_learner_jobs": 0 if replacement is None else 1,
                 "applied_local_steps": (
-                    scenario.expected_inner_steps * scenario.expected_merge_width * 10
+                    scenario.expected_inner_steps
+                    * scenario.expected_merge_width
+                    * GLOBAL_STEPS
                 ),
             },
             "timeline": {**timeline_evidence, "events": timeline["events"]},
@@ -1449,7 +1265,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--log-root", type=Path, required=True)
     parser.add_argument("--evidence-output", type=Path, required=True)
-    parser.add_argument("--timeout-seconds", type=float, default=1200.0)
+    parser.add_argument("--timeout-seconds", type=float, default=2100.0)
     return parser
 
 

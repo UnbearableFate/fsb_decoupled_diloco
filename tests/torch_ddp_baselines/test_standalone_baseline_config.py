@@ -7,15 +7,15 @@ import pytest
 from torch_ddp_baselines.config import load_config
 
 
-CONFIG_PATH = Path("torch_ddp_baselines/configs/gpt2_wikitext2_8n_2000steps.yaml")
+CONFIG_PATH = Path("torch_ddp_baselines/configs/gpt2_wikitext2_8n_5000steps.yaml")
 
 
-def test_2000_step_experiment_config_is_complete_and_pinned() -> None:
+def test_5000_step_experiment_config_is_complete_and_pinned() -> None:
     """The submitted experiment must resolve one immutable 8-node workload."""
 
     config = load_config(CONFIG_PATH)
 
-    assert config.training.max_steps == 2000
+    assert config.training.max_steps == 5000
     assert config.distributed.world_size == 8
     assert config.distributed.backend == "nccl"
     assert config.distributed.periodic_average_interval == 200

@@ -2,20 +2,22 @@ config_schema_version: 3
 run:
   name: plan04_full_protocol_fault
 model:
-  name_or_path: synthetic-tiny
-  dtype: float32
-  synthetic_vocab_size: 128
-  synthetic_hidden_size: 32
+  name_or_path: gpt2
+  revision: 607a30d783dfa663caf39e06633721c8d4cfcd7e
+  tokenizer_revision: 607a30d783dfa663caf39e06633721c8d4cfcd7e
+  dtype: bfloat16
 data:
-  dataset_name: synthetic
+  dataset_name: Salesforce/wikitext
+  dataset_config_name: wikitext-2-raw-v1
+  revision: b08601e04326c79dfdd32d625aee71d232d685c3
   train_split: train
-  block_size: 16
+  block_size: 1024
 sync:
   quorum_min: 4
   quorum_max: 4
   staleness_lambda: 0.0
   scan_interval_seconds: 0.5
-  stop_after_outer_steps: 10
+  stop_after_outer_steps: 25
 syncer:
   device: cpu
   compute_dtype: float32
@@ -46,27 +48,29 @@ scaling:
   scheduler_uncertainty_timeout_seconds: 30.0
   starvation_observation_seconds: 10.0
   learner_pbs_script: scripts/miyabi/agent/run_learner.pbs
-  learner_walltime: "00:30:00"
+  learner_walltime: "00:40:00"
   learner_queue: regular-g
 terminal:
-  admission_close_policy: manual
+  admission_close_policy: global_target
   drain_ack_timeout_seconds: 60.0
   registration_visibility_grace_seconds: 2.0
   proposal_visibility_grace_seconds: 5.0
   max_terminal_merges: 0
 training:
-  inner_steps: 100
-  micro_batch_size: 1
-  gradient_accumulation_steps: 2
+  inner_steps: 200
+  micro_batch_size: 2
+  gradient_accumulation_steps: 8
   seed: 1337
+  grad_clip: 1.0
 inner_optimizer:
   name: adamw
   lr: 0.00005
   betas: [0.9, 0.95]
   eps: 1.0e-8
-  weight_decay: 0.0
-  scheduler: none
-  warmup_steps: 0
+  weight_decay: 0.1
+  scheduler: cosine
+  warmup_steps: 100
+  scheduler_total_steps: 5000
   min_lr_ratio: 0.1
 outer_optimizer:
   name: nesterov
@@ -74,7 +78,7 @@ outer_optimizer:
   momentum: 0.9
   weight_decay: 0.0
 io:
-  tensor_dtype: float32
+  tensor_dtype: bfloat16
 learner:
   poll_latest_during_inner_steps: false
   adopt_global_after_upload: true

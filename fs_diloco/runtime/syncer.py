@@ -10,7 +10,7 @@ import signal
 import sqlite3
 import time
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from ..core.run_descriptor import LoadedRunDescriptor, write_actor_attestation
 from ..observability.logging_utils import ActorTelemetryWriter
@@ -56,6 +56,21 @@ if TYPE_CHECKING:
 
 class AdmissionInvariantError(RuntimeError):
     """An internal admission invariant failed and must terminate this candidate."""
+
+
+def _finish_terminal_maintenance(
+    maintenance_service: Any,
+    renewer: Any,
+    *,
+    orphan_grace_seconds: float,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """Archive terminal history, honor reader grace, and delete eligible old artifacts."""
+
+    maintenance_service.tick(force=True)
+    sleep(orphan_grace_seconds)
+    renewer.raise_if_failed()
+    maintenance_service.tick(force=True)
 
 
 def _pause_candidate_at_fault_boundary(
@@ -251,7 +266,13 @@ def run_fenced_syncer(
             )
             terminal = terminal_service.finalize(reason=close_reason)
             control.publish_terminal(terminal)
-            maintenance_service.tick(force=True)
+            _finish_terminal_maintenance(
+                maintenance_service,
+                renewer,
+                orphan_grace_seconds=float(
+                    config.maintenance.publication_orphan_grace_seconds
+                ),
+            )
             telemetry.event("terminal_finalized", terminal=terminal)
             return
         manual_horizon_wait = (

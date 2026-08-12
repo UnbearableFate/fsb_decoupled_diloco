@@ -6,29 +6,33 @@
 - Branch：`new_plan04`
 - Branch point：`f2ec3e886ce77b93497ab6cd3e306e5de13ef6a4`
 - Workflow pin：`f2ec3e886ce77b93497ab6cd3e306e5de13ef6a4`
-- Host：Miyabi login/control plane `miyabi-g3`；项目 runtime 与测试仅在 PBS compute node 运行。
-- Formal source scopes：以 `fs_diloco.core.source_identity.SOURCE_SCOPES` 为唯一来源，包含 `fs_diloco`、`configs`、`do_experiments`、`scripts/miyabi`、`tests`、`tools`、`torch_ddp_baselines`、`pyproject.toml`、`README.md`、`docs`、`plans/00-RESEARCH_PLAN.md`、`website/app` 和 `website/scripts`。
+- Host：Miyabi login/control plane `miyabi-g3`；项目测试和训练仅在 PBS compute node 运行。
+- Formal source scopes：以 `fs_diloco.core.source_identity.SOURCE_SCOPES` 为准，包括 `fs_diloco`、`configs`、`do_experiments`、`scripts/miyabi`、`tests`、`tools`、`torch_ddp_baselines`、`pyproject.toml`、`README.md`、`docs`、`plans/00-RESEARCH_PLAN.md`、`website/app` 和 `website/scripts`。
 
-## 当前状态
+## 当前设计
 
-- 当前产品已有 8 个 scalar learner 加独立 syncer 的 PBS actor 入口、scheduler-backed replacement、leader lease/takeover、terminal authority checker 和统一 run summary 工具。
-- `runs/full_protocol/` 在 INIT 时为空；`runs/summary.csv` 只有两个 8-rank、2,000-step torch baseline 行。Plan 所称已完成 Full Protocol baseline 的原始 run 当前不存在，因此不能把它当作可验证证据；正常场景将作为当前 Full Protocol reference，并与 CSV 中 workload 相同的 periodic-average baseline 比较。
-- `tests/harness/test_plan04_experiment.py` 仍描述已删除的旧 200×10 三场景实验包和旧路径，属于 obsolete harness，必须按当前七场景 100×10 设计重写。
-- 保留当前 protocol、actor PBS 入口和 summary schema；新增一个独立的 `do_experiments/full_protocol/experiment04/` 启动包。删除旧 50×10 命名和只服务旧 plan04 harness 的配置/测试引用。
-- 不修改或清理 `logs/` 中历史诊断数据；它们不进入本 plan 的正式证据。
+- Baseline 只保留 GPT-2/WikiText-2 的 8-rank DDP 与 periodic-average 两种模式。两者均执行 5,000 optimizer steps；periodic-average 每 200 steps 同步一次，共 25 次。
+- Full Protocol 只保留 `experiment.yaml` 与 `fault_experiment.yaml` 两份当前配置。两者均为 GPT-2/WikiText-2、200 local steps、25 global steps、8 个 bootstrap job 和 4 个 proposal 的固定 merge 阈值。
+- `submit.sh baseline` 提交两种 standalone baseline；其余七个场景由一个 supervisor 提交独立 learner/syncer actor。旧 Full Protocol baseline、旧 timed config 和 2,000-step baseline 已删除。
+- Terminal 由 `global_target` 自动关闭，不等待全部 8 个 learner admission。3+3+2 场景在第二批提交前记录低于 quorum 时 global version 未推进的证据。
+- 正常场景使用统一 summary 工具与两种 baseline 比较；模型、数据、优化器身份或注册 workload 不一致时不可比较，最终平均 loss 或训练时间相对差异超过 30% 时要求调查。
+- Terminal maintenance 在 reader grace 后执行第二次清理；正式 oracle 要求最终存活 syncer epoch 的权重作用域只包含最新模型权重。死亡 actor 的遗留物不用于否定通过结论。
 
 ## 验证阶梯与资源预算
 
-1. Login node：CodeGraph/源码盘点、shell 语法、PBS literal group、配置和 source-scope 静态检查。
-2. 单节点 `interact-g`：focused harness/config/summary tests，随后相关或完整测试集；复用同一 allocation。
-3. PREFORMAL：创建 clean candidate commit，按 `plans/review_prompts/review_prompt.md` 完成 current-state 审查并冻结唯一 `FINAL_COMMON_TARGET`。
-4. FORMAL：七个场景各自通过一行 shell 入口提交一个 30 分钟 regular-g supervisor；supervisor 再提交 8 个 scalar learner、1 个 syncer，双-syncer场景提交第二个 syncer。Actor 同样显式使用 `regular-g` 和 `00:30:00`。
-5. 每个场景以 terminal SQLite authority、immutable actor attestations、scheduler history 和 create-only artifact 为 oracle；正常场景另由 `tools/summarize_runs.py` 追加 CSV，并对 workload 相同 baseline 的 final mean loss 与 training time 执行 20% 检查。
+1. Login node：repository-wide current-state 审查、`git diff --check`、Python compile、PBS/Bash 语法与 literal group 检查。
+2. 单节点 `interact-g`：focused plan04、summary、baseline、syncer tests，随后 clean candidate 上运行完整 pytest。
+3. PREFORMAL：提交当前实现，保存 current-state 审查，冻结唯一 `FINAL_COMMON_TARGET` commit、source scopes 与 fingerprint。
+4. FORMAL Baseline：两个 8-node `regular-g` job，初始 walltime 40 分钟，各 1 seed；由 health checker、run summary 和 scheduler history共同判定。
+5. FORMAL Full Protocol：七个 1-node supervisor job；每个 supervisor 提交 8 个独立 learner job 和 1 个 syncer job，双 syncer 场景增加 1 个候选 syncer。Supervisor 与 actor 初始 walltime 40 分钟。
+6. FINAL：逐项核对 create-only artifacts、authority、scheduler history、summary/comparison、source identity 与 cleanup；确认无 active/queued job 后归档 plan 和报告。
+
+40 分钟是用户指定的初始预算。只有实际 scheduler/runtime 证据表明不足或明显过长时才调整；不得以延长 timeout 掩盖产品或 harness 错误。
 
 ## 高风险边界
 
-- Learner fault 只删除 authority 已 admitted 的 bootstrap learner job；replacement 必须由当前 scheduler-authorized launch request 提交并以同一 stream 的更高 epoch 获得 admission。
-- Syncer fault/conflict 以 durable `syncer_epochs`、lease owner/epoch 和 terminal authority为准，不能仅依据进程退出或日志文字。
-- Supervisor 只拥有本次 receipt 中的精确 job ID；失败清理仅允许作用于该集合。
-- 所有正式 gate 必须绑定同一 clean commit、source scopes 和 fingerprint；source scope 变更后重新 PREFORMAL 并重跑全部正式 gate。
-
+- 八个 learner 是提交拓扑，不是 terminal 前必须全部 admission 的屏障。Authority oracle 只接受已 admitted 的提交 job，拒绝外部 actor，并要求实际每个 global version 恰好应用四个 200-step update。
+- Learner fault 只删除故障边界时 authority 中已 admitted 的 bootstrap job；replacement 必须来自 scheduler-authorized launch request，并以同一 stream 的更高 stream/placement epoch admission。
+- Syncer fault/conflict 以 durable `syncer_epochs`、lease owner/epoch、scheduler history 和 terminal authority 为准，不能仅依据日志或进程退出。
+- Supervisor 只拥有 submission receipt 与 authority 中解析出的精确 job ID；失败清理不得影响其他 job。
+- 所有正式 gate 必须绑定同一 clean candidate commit 与 source fingerprint。正式 source scope 发生变化后，已有正式实验失效并返回 PREFORMAL。

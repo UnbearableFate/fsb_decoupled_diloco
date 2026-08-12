@@ -1,10 +1,17 @@
 # plan04 进度
 
-## 2026-08-12 14:40 JST — INIT 盘点
+## 2026-08-12 — INIT 与当前设计更新
 
-- Source：branch `new_plan04`，branch point 与 workflow pin 均为 `f2ec3e886ce77b93497ab6cd3e306e5de13ef6a4`；启动时 source scopes 与 worktree clean。
-- Host 为无 PBS allocation 的 `miyabi-g3` login node；`qstat` 确认项目无 active/queued job，`regular-g` 可提交，literal group 为 `xg24i002`。
-- 当前产品已有独立 actor、replacement、leader takeover、terminal checker 和统一 summary；缺失当前 plan 指定的 100×10 七场景实验包与正式证据。
-- `runs/full_protocol/` 当前为空，`runs/summary.csv` 仅保留两行 2,000-step torch baseline。已将该证据缺口写入执行边界，后续不把不存在的 run 推断为完成。
-- 下一步：按当前 plan 重写 obsolete plan04 harness，建立唯一七场景 supervisor/配置/一行入口并完成静态及 compute-node 验证。
+- Source：branch `new_plan04`；branch point 与 workflow pin 均为 `f2ec3e886ce77b93497ab6cd3e306e5de13ef6a4`。
+- 重新冻结当前 workload：固定版本 GPT-2/WikiText-2，Full Protocol 为 200 local steps × 25 global steps、quorum 4；DDP 与 periodic-average baseline 均为 5,000 optimizer steps。
+- Baseline 与 normal 的初始 PBS walltime 调整为 40 分钟；每项实验只运行 1 seed，normal 相对两种 baseline 的 loss/time 阈值调整为 30%。
+- 删除旧 Full Protocol baseline/timed 配置和 2,000-step baseline 入口；统一 one-line submission、summary 与 comparison 路径。
+- 回滚全部 learner runtime-attestation 启动屏障。Terminal admission 不要求八个提交 job 全部进入 runtime；learner fault 在 60 秒边界只从当前 admitted bootstrap learner 中选择目标。
 
+## 2026-08-12 — IMPLEMENT 与 focused 验证
+
+- Miyabi compute jobs `2540105.opbs`、`2540108.opbs`、`2540120.opbs` 使用 1-node `interact-g` 验证当前变更。
+- 最终 focused 命令覆盖 plan04 harness、syncer composition、summary tool 和 standalone baseline config/artifact/protocol tests，结果为 `49 passed`。
+- 完整 pytest 在未提交 source 上得到 `585 passed, 5 failed`；五项失败均由 harness 正确拒绝 dirty validation source，分类为 `source-invalid`，不作为产品失败。当前实现提交并冻结 clean candidate 后重跑完整测试。
+- Login node 上 `git diff --check`、修改 Python 文件 compile、全部适用 PBS/Bash `bash -n` 检查通过；literal PBS group 均为 `xg24i002`。
+- 当前 `qstat` 无 active/queued job。下一步为提交实现、执行 clean-candidate 全量测试和 PREFORMAL 审查。

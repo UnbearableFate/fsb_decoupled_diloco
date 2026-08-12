@@ -139,11 +139,11 @@ def test_periodic_average_is_bf16_mean_and_preserves_inner_state() -> None:
     assert scheduler.state_dict() == scheduler_before
 
 
-def test_2000_step_schedule_averages_on_all_ten_boundaries() -> None:
-    """The baseline must exercise ten periodic boundaries matching Dynamic Full."""
+def test_5000_step_schedule_averages_on_all_twenty_five_boundaries() -> None:
+    """The baseline must exercise 25 periodic boundaries matching Full Protocol."""
 
-    observed = [step for step in range(1, 2001) if should_average(step, 200)]
-    assert observed == list(range(200, 2001, 200))
+    observed = [step for step in range(1, 5001) if should_average(step, 200)]
+    assert observed == list(range(200, 5001, 200))
 
 
 def _ddp_worker(rank: int, init_file: str, output_dir: str) -> None:

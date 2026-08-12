@@ -14,6 +14,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 from fs_diloco.core.config import load_config
+from torch_ddp_baselines.config import load_config as load_baseline_config
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -79,6 +80,7 @@ def _write_authority(
     *,
     replacement: bool = False,
     takeover: bool = False,
+    admitted_streams: int = 8,
 ) -> tuple[dict[str, object] | None, dict[str, object] | None]:
     """Create a minimal finalized authority that reaches the plan04 oracle."""
 
@@ -116,14 +118,16 @@ def _write_authority(
         CREATE TABLE terminal_contributor_fences(
             generation INTEGER, stable_contributor_key TEXT, fence_json TEXT, state TEXT
         );
-        CREATE TABLE global_versions(version INTEGER, committed_by_epoch INTEGER);
+        CREATE TABLE global_versions(
+            version INTEGER, committed_by_epoch INTEGER, weight_relative_path TEXT
+        );
         CREATE TABLE contributor_progress(stable_contributor_key TEXT);
         CREATE TABLE capacity_observations(observation_seq INTEGER);
         CREATE TABLE updates(
             update_id TEXT, inner_steps INTEGER, status TEXT, applied_version INTEGER
         );
         INSERT INTO controller_state VALUES(1, 1, 'finalized');
-        INSERT INTO terminal_state VALUES(1, 'finalized', 10);
+        INSERT INTO terminal_state VALUES(1, 'finalized', 25);
         """
     )
     if takeover:
@@ -141,7 +145,7 @@ def _write_authority(
 
     victim: dict[str, object] | None = None
     successor: dict[str, object] | None = None
-    for stream in range(8):
+    for stream in range(admitted_streams):
         initial_id = f"instance-{stream}"
         terminal_id = "instance-7-replacement" if replacement and stream == 7 else initial_id
         connection.execute(
@@ -206,20 +210,29 @@ def _write_authority(
             job_id="300",
         )
 
-    for version in range(11):
+    for version in range(26):
+        committed_epoch = 2 if takeover and version >= 6 else 1
+        weight_relative_path = (
+            f"weights/epochs/e{committed_epoch:06d}/owner/"
+            f"global_v{version:06d}_pfixture.safetensors"
+        )
         connection.execute(
-            "INSERT INTO global_versions VALUES(?, ?)",
-            (version, 2 if takeover and version >= 6 else 1),
+            "INSERT INTO global_versions VALUES(?, ?, ?)",
+            (version, committed_epoch, weight_relative_path),
         )
         if version == 0:
             continue
         for contributor in range(4):
             connection.execute(
-                "INSERT INTO updates VALUES(?, 100, 'applied', ?)",
+                "INSERT INTO updates VALUES(?, 200, 'applied', ?)",
                 (f"update-{version}-{contributor}", version),
             )
     connection.commit()
     connection.close()
+    final_weight = run_root / weight_relative_path
+    final_weight.parent.mkdir(parents=True)
+    final_weight.write_bytes(b"latest model weight")
+    final_weight.chmod(0o444)
     _write_attestation(
         run_root,
         actor_kind="syncer",
@@ -248,12 +261,11 @@ def _submission(
 
 
 def test_registry_and_configs_are_the_exact_current_plan04_matrix() -> None:
-    """The package exposes only baseline plus the seven requested experiments."""
+    """The Full Protocol package exposes the seven non-baseline experiments."""
 
     module = _module()
 
     assert tuple(module.SCENARIOS) == (
-        "baseline",
         "normal",
         "stagger_4_4",
         "stagger_3_3_2",
@@ -267,116 +279,64 @@ def test_registry_and_configs_are_the_exact_current_plan04_matrix() -> None:
     assert module.SCENARIOS["syncer_failure"].syncer_fault == "restart"
     assert module.SCENARIOS["dual_syncer"].syncer_fault == "dual"
 
-    baseline = load_config(PACKAGE / "baseline.yaml")
     experiment = load_config(PACKAGE / "experiment.yaml")
-    timed = load_config(PACKAGE / "timed_experiment.yaml")
     fault = load_config(PACKAGE / "fault_experiment.yaml")
-    assert (baseline.training.inner_steps, baseline.sync.quorum_min) == (100, 4)
-    for config in (experiment, timed, fault):
-        assert config.training.inner_steps == 100
-        assert config.sync.stop_after_outer_steps == 10
+    baseline = load_baseline_config(
+        ROOT / "torch_ddp_baselines/configs/gpt2_wikitext2_8n_5000steps.yaml"
+    )
+    for config in (experiment, fault):
+        assert config.model.name_or_path == "gpt2"
+        assert config.model.revision == baseline.model.revision
+        assert config.model.tokenizer_revision == baseline.model.tokenizer_revision
+        assert config.data.dataset_name == "Salesforce/wikitext"
+        assert config.data.dataset_config_name == "wikitext-2-raw-v1"
+        assert config.data.revision == baseline.data.revision
+        assert config.data.block_size == 1024
+        assert config.training.inner_steps == 200
+        assert config.sync.stop_after_outer_steps == 25
         assert config.sync.quorum_min == config.sync.quorum_max == 4
         assert config.membership.stream_pool_size == config.membership.bootstrap_instances == 8
-    for config in (baseline, experiment, timed, fault):
-        assert config.training.gradient_accumulation_steps == 2
+        assert config.training.micro_batch_size == 2
+        assert config.training.gradient_accumulation_steps == 8
         assert config.sync.scan_interval_seconds == 0.5
-    assert baseline.terminal.admission_close_policy == "global_target_or_launch_budget"
-    assert experiment.terminal.admission_close_policy == "global_target_or_launch_budget"
-    assert timed.terminal.admission_close_policy == "manual"
-    assert fault.terminal.admission_close_policy == "manual"
+        assert config.terminal.admission_close_policy == "global_target"
+        assert config.inner_optimizer.scheduler_total_steps == 5000
+        assert config.inner_optimizer.lr == baseline.optimizer.lr
+        assert config.inner_optimizer.betas == baseline.optimizer.betas
+        assert config.inner_optimizer.eps == baseline.optimizer.eps
+        assert config.inner_optimizer.weight_decay == baseline.optimizer.weight_decay
+        assert config.inner_optimizer.warmup_steps == baseline.optimizer.warmup_steps
+        assert config.inner_optimizer.min_lr_ratio == baseline.optimizer.min_lr_ratio
+    assert baseline.training.max_steps == 5000
+    assert baseline.distributed.world_size == 8
+    assert baseline.distributed.periodic_average_interval == 200
     assert experiment.scaling.enabled is False
-    assert timed.scaling.enabled is False
     assert fault.scaling.enabled is True
     assert fault.scaling.learner_queue == "regular-g"
-    assert fault.scaling.learner_walltime == "00:30:00"
+    assert fault.scaling.learner_walltime == "00:40:00"
 
 
-def test_manual_scenario_close_is_bound_to_the_exact_global_target(tmp_path: Path) -> None:
-    """Timed scenarios cannot publish their close request before or after version 10."""
-
-    module = _module()
-    run_root = tmp_path / "run"
-    control = run_root / "control"
-    control.mkdir(parents=True)
-    (control / "run_descriptor.json").write_text(
-        json.dumps({"run_id": "run-current", "descriptor_sha256": "d" * 64}),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(ValueError, match="exact global target"):
-        module._publish_scenario_close(
-            run_root,
-            scenario_name="stagger_3_3_2",
-            observed_version=9,
-            target_version=10,
-        )
-    evidence = module._publish_scenario_close(
-        run_root,
-        scenario_name="stagger_3_3_2",
-        observed_version=10,
-        target_version=10,
-    )
-
-    assert evidence["observed_global_version"] == 10
-    assert evidence["request"]["reason"] == "plan04_scenario_complete:stagger_3_3_2"
-    assert (control / "terminal_close_request.json").is_file()
-
-
-def test_manual_scenario_waits_for_every_admitted_learner_runtime(tmp_path: Path) -> None:
-    """Manual close cannot race a learner that has not consumed its admission response."""
-
-    module = _module()
-    run_root = tmp_path / "run"
-    admissions = []
-    for stream in range(8):
-        actor_id = f"instance-{stream}"
-        job_id = str(stream)
-        admissions.append({"instance_id": actor_id, "pbs_job_id": f"{job_id}.opbs"})
-        _write_attestation(
-            run_root,
-            actor_kind="learner",
-            actor_id=actor_id,
-            job_id=job_id,
-        )
-
-    attestations = module._wait_initial_runtime_attestations(
-        run_root,
-        admissions,
-        timeout_seconds=0.1,
-    )
-
-    assert {row["actor_id"] for row in attestations} == {
-        f"instance-{stream}" for stream in range(8)
-    }
-    assert {row["scheduler_job_id"] for row in attestations} == {
-        f"{stream}.opbs" for stream in range(8)
-    }
-
-    # Scheduler identity is part of readiness and cannot be replaced by actor ID alone.
-    wrong_job = [dict(row) for row in admissions]
-    wrong_job[7]["pbs_job_id"] = "999.opbs"
-    with pytest.raises(RuntimeError, match="wrong scheduler job"):
-        module._wait_initial_runtime_attestations(
-            run_root,
-            wrong_job,
-            timeout_seconds=0.1,
-        )
-
-
-def test_one_line_submitter_freezes_regular_queue_and_thirty_minute_jobs() -> None:
-    """Human-facing submission must enforce the plan's queue, walltime, and static gates."""
+def test_one_line_submitter_freezes_current_baseline_and_full_protocol_jobs() -> None:
+    """One command must route the two baselines and 40-minute Full Protocol jobs."""
 
     submitter = (PACKAGE / "submit.sh").read_text(encoding="utf-8")
     wrapper = (PACKAGE / "run_experiment.pbs").read_text(encoding="utf-8")
+    baseline_wrapper = (
+        ROOT / "torch_ddp_baselines/scripts/miyabi/run_gpt2_wikitext2_5000steps.pbs"
+    ).read_text(encoding="utf-8")
 
     assert "QUEUE=regular-g" in submitter
-    assert "WALLTIME=00:30:00" in submitter
-    assert 'CONFIG="$SCRIPT_DIR/timed_experiment.yaml"' in submitter
+    assert "WALLTIME=00:40:00" in submitter
+    assert "submit_5000steps.sh" in submitter
+    assert 'CONFIG="$SCRIPT_DIR/experiment.yaml"' in submitter
     assert 'bash -n "$PROJECT_ROOT"/scripts/miyabi/agent/*.pbs' in submitter
     assert "#PBS -q regular-g" in wrapper
     assert "#PBS -W group_list=xg24i002" in wrapper
-    assert "#PBS -l walltime=00:30:00" in wrapper
+    assert "#PBS -l walltime=00:40:00" in wrapper
     assert "scenario_supervisor.py" in wrapper
+    assert "#PBS -q regular-g" in baseline_wrapper
+    assert "#PBS -W group_list=xg24i002" in baseline_wrapper
+    assert "#PBS -l walltime=00:40:00" in baseline_wrapper
 
 
 def test_staggered_and_dual_syncer_timelines_preserve_registered_boundaries() -> None:
@@ -413,11 +373,11 @@ def test_staggered_and_dual_syncer_timelines_preserve_registered_boundaries() ->
         origin_wall=origin,
         primary_syncer=_submission(role="syncer_primary", submitted_at=origin),
         learners=simultaneous,
-        successor_syncer=_submission(role="syncer_candidate", submitted_at=origin + 60.0),
-        syncer_qdel={"requested_at": origin + 120.0},
+        successor_syncer=_submission(role="syncer_candidate", submitted_at=origin + 30.0),
+        syncer_qdel={"requested_at": origin + 60.0},
         conflict_snapshot={
             "candidate_scheduler_state": "running",
-            "candidate_running_observed_at": origin + 60.0,
+            "candidate_running_observed_at": origin + 30.0,
             "syncer_epochs": [{"final_state": None}],
         },
         victim=None,
@@ -448,6 +408,32 @@ def test_timeline_rejects_a_short_stagger_delay() -> None:
             conflict_snapshot=None,
             victim=None,
         )
+
+
+def test_three_learner_phase_cannot_advance_the_global_version(tmp_path: Path) -> None:
+    """The 3+3+2 scenario must capture the initial below-quorum boundary."""
+
+    module = _module()
+    missing = module._observe_pre_quorum_version(tmp_path / "missing.sqlite3")
+    assert missing == {"authority_initialized": False, "global_version": None}
+
+    database = tmp_path / "authority.sqlite3"
+    connection = sqlite3.connect(database)
+    connection.execute("CREATE TABLE global_versions(version INTEGER)")
+    connection.execute("INSERT INTO global_versions VALUES(0)")
+    connection.commit()
+    connection.close()
+    assert module._observe_pre_quorum_version(database) == {
+        "authority_initialized": True,
+        "global_version": 0,
+    }
+
+    connection = sqlite3.connect(database)
+    connection.execute("INSERT INTO global_versions VALUES(1)")
+    connection.commit()
+    connection.close()
+    with pytest.raises(RuntimeError, match="three-learner phase advanced"):
+        module._observe_pre_quorum_version(database)
 
 
 def test_learner_fault_timeline_binds_qdel_to_an_initial_job_after_sixty_seconds() -> None:
@@ -511,10 +497,30 @@ def test_authority_oracle_accepts_exact_normal_and_takeover_histories(tmp_path: 
         replacement=None,
     )
     assert normal["integrity_check"] == ["ok"]
-    assert normal["merge_counts"] == {version: 4 for version in range(1, 11)}
+    assert normal["merge_counts"] == {version: 4 for version in range(1, 26)}
     assert {row["stable_contributor_key"] for row in normal["contributor_progress"]} == {
         str(stream) for stream in range(8) if stream != 5
     }
+
+    # A completed live syncer scope must not retain a superseded model publication.
+    obsolete_weight = (
+        normal_root
+        / "weights/epochs/e000001/owner/global_v000024_pfixture.safetensors"
+    )
+    obsolete_weight.write_bytes(b"obsolete model weight")
+    obsolete_weight.chmod(0o444)
+    with pytest.raises(RuntimeError, match="only the latest weight"):
+        module._authority_evidence(
+            run_root=normal_root,
+            config=load_config(PACKAGE / "experiment.yaml"),
+            scenario=module.SCENARIOS["normal"],
+            initial_learner_job_ids=[f"{index}.opbs" for index in range(8)],
+            primary_syncer_job_id="100.opbs",
+            successor_syncer_job_id=None,
+            victim=None,
+            replacement=None,
+        )
+    obsolete_weight.unlink()
 
     # Progress remains authority evidence and cannot name a stream outside the run scope.
     connection = sqlite3.connect(normal_root / "control/syncer_metadata.sqlite3")
@@ -581,6 +587,30 @@ def test_authority_oracle_accepts_exact_normal_and_takeover_histories(tmp_path: 
     ]
 
 
+def test_authority_oracle_does_not_require_all_submitted_learners_to_admit(
+    tmp_path: Path,
+) -> None:
+    """Terminal acceptance separates eight submissions from the admitted quorum."""
+
+    module = _module()
+    run_root = tmp_path / "four-admitted"
+    _write_authority(run_root, admitted_streams=4)
+
+    evidence = module._authority_evidence(
+        run_root=run_root,
+        config=load_config(PACKAGE / "experiment.yaml"),
+        scenario=module.SCENARIOS["normal"],
+        initial_learner_job_ids=[f"{index}.opbs" for index in range(8)],
+        primary_syncer_job_id="100.opbs",
+        successor_syncer_job_id=None,
+        victim=None,
+        replacement=None,
+    )
+
+    assert len(evidence["bootstrap_launches"]) == 4
+    assert len(evidence["terminal_fences"]) == 4
+
+
 def test_authority_oracle_reads_archived_global_version_history(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -593,9 +623,16 @@ def test_authority_oracle_reads_archived_global_version_history(
     database = run_root / "control/syncer_metadata.sqlite3"
     connection = sqlite3.connect(database)
     archived_versions = [
-        dict(zip(("version", "committed_by_epoch"), row, strict=True))
+        dict(
+            zip(
+                ("version", "committed_by_epoch", "weight_relative_path"),
+                row,
+                strict=True,
+            )
+        )
         for row in connection.execute(
-            "SELECT version, committed_by_epoch FROM global_versions ORDER BY version"
+            "SELECT version, committed_by_epoch, weight_relative_path "
+            "FROM global_versions ORDER BY version"
         )
     ]
     connection.execute("DELETE FROM global_versions WHERE version < 10")
@@ -629,7 +666,7 @@ def test_authority_oracle_reads_archived_global_version_history(
         replacement=None,
     )
 
-    assert [row["version"] for row in evidence["versions"]] == list(range(11))
+    assert [row["version"] for row in evidence["versions"]] == list(range(26))
 
 
 def test_authority_oracle_binds_replacement_to_the_expired_stream(tmp_path: Path) -> None:
@@ -695,11 +732,11 @@ def test_cleanup_discovers_authorized_replacement_before_admission(tmp_path: Pat
     }
 
 
-def test_summary_comparison_requires_equal_work_and_enforces_twenty_percent(
+def test_summary_comparison_requires_one_registered_baseline_per_mode(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Normal acceptance compares equal aggregate work and flags material metric drift."""
+    """Normal acceptance binds one 5,000-step DDP and periodic-average baseline."""
 
     module = _module()
     project = tmp_path / "project"
@@ -716,6 +753,8 @@ def test_summary_comparison_requires_equal_work_and_enforces_twenty_percent(
     fields = [
         "run_id",
         "run_dir",
+        "run_kind",
+        "mode",
         "source_fingerprint",
         "model_name_or_path",
         "model_revision",
@@ -732,6 +771,12 @@ def test_summary_comparison_requires_equal_work_and_enforces_twenty_percent(
         "optimizer_beta2",
         "optimizer_epsilon",
         "weight_decay",
+        "warmup_steps",
+        "min_lr_ratio",
+        "expected_contributors",
+        "optimizer_steps_min",
+        "optimizer_steps_max",
+        "global_steps",
         "merge_contributors",
         "synchronization_interval",
         "synchronization_count",
@@ -741,67 +786,103 @@ def test_summary_comparison_requires_equal_work_and_enforces_twenty_percent(
     shared = {
         "run_dir": str(run_root),
         "source_fingerprint": "sha256:" + "f" * 64,
-        "model_name_or_path": "synthetic-tiny",
-        "model_revision": "",
-        "model_dtype": "float32",
-        "dataset_name": "synthetic",
-        "dataset_config_name": "",
-        "dataset_revision": "",
+        "model_name_or_path": "gpt2",
+        "model_revision": "607a30d783dfa663caf39e06633721c8d4cfcd7e",
+        "model_dtype": "bfloat16",
+        "dataset_name": "Salesforce/wikitext",
+        "dataset_config_name": "wikitext-2-raw-v1",
+        "dataset_revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
         "train_split": "train",
-        "block_size": "16",
-        "micro_batch_size": "1",
-        "gradient_accumulation_steps": "2",
+        "block_size": "1024",
+        "micro_batch_size": "2",
+        "gradient_accumulation_steps": "8",
         "learning_rate": "5e-05",
         "optimizer_beta1": "0.9",
         "optimizer_beta2": "0.95",
         "optimizer_epsilon": "1e-08",
-        "weight_decay": "0.0",
-        "synchronization_count": "10",
+        "weight_decay": "0.1",
+        "warmup_steps": "100",
+        "min_lr_ratio": "0.1",
+        "expected_contributors": "8",
+        "optimizer_steps_min": "5000",
+        "optimizer_steps_max": "5000",
     }
     rows = [
-        *[
-            {
-                **shared,
-                "run_id": f"plan04_e0_baseline_repeat{repeat}",
-                "merge_contributors": "4",
-                "synchronization_interval": "100",
-                "final_mean_loss": str(2.0 + repeat * 0.01),
-                "training_time_seconds": str(100.0 + repeat),
-            }
-            for repeat in range(3)
-        ],
-        *[
-            {
-                **shared,
-                "run_id": run_root.name if repeat == 2 else f"plan04_e1_normal_repeat{repeat}",
-                "merge_contributors": "4",
-                "synchronization_interval": "100",
-                "final_mean_loss": str(2.1 + repeat * 0.01),
-                "training_time_seconds": str(113.0 + repeat),
-            }
-            for repeat in range(3)
-        ],
+        {
+            **shared,
+            "run_id": "baseline-ddp",
+            "run_kind": "torch_ddp_baseline",
+            "mode": "ddp",
+            "global_steps": "",
+            "merge_contributors": "8",
+            "synchronization_interval": "1",
+            "synchronization_count": "5000",
+            "final_mean_loss": "3.0",
+            "training_time_seconds": "600.0",
+        },
+        {
+            **shared,
+            "run_id": "baseline-periodic",
+            "run_kind": "torch_ddp_baseline",
+            "mode": "periodic_average",
+            "global_steps": "",
+            "merge_contributors": "8",
+            "synchronization_interval": "200",
+            "synchronization_count": "25",
+            "final_mean_loss": "3.1",
+            "training_time_seconds": "620.0",
+        },
+        {
+            **shared,
+            "run_id": run_root.name,
+            "run_kind": "fs_diloco_full_protocol",
+            "mode": "full_protocol",
+            "global_steps": "25",
+            "merge_contributors": "4",
+            "synchronization_interval": "200",
+            "synchronization_count": "25",
+            "final_mean_loss": "3.2",
+            "training_time_seconds": "650.0",
+        },
     ]
     with (runs / "summary.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         writer.writerows(rows)
+
+    def build_comparisons(selected: list[dict[str, str]]) -> dict[str, object]:
+        """Return a minimal canonical comparison for the selected three rows."""
+
+        assert [row["run_id"] for row in selected] == [
+            "baseline-ddp",
+            "baseline-periodic",
+            run_root.name,
+        ]
+        return {
+            "format_version": 1,
+            "threshold": 0.30,
+            "comparisons": [
+                {"investigation_required": False},
+                {"investigation_required": False},
+            ],
+        }
+
     monkeypatch.setattr(
         module,
         "_load_summary_tool",
-        lambda _root: SimpleNamespace(update_summary_csv=lambda *_args: (0, 1, 2)),
+        lambda _root: SimpleNamespace(
+            COMPARISON_THRESHOLD=0.30,
+            update_summary_csv=lambda *_args: (0, 1, 3),
+            build_comparisons=build_comparisons,
+        ),
     )
 
     _row, comparison = module._append_summary(
         project_root=project,
         run_root=run_root,
         scenario=module.SCENARIOS["normal"],
-        source_fingerprint="sha256:" + "f" * 64,
         comparison_output=tmp_path / "comparison.json",
     )
-    assert comparison["equal_applied_local_steps"] is True
-    assert comparison["repeat_complete"] is True
-    assert comparison["metrics"]["training_time_seconds"][
-        "signed_relative_median_difference_95pct_interval"
-    ]
+    assert comparison["registered_workload"]["valid"] is True
+    assert comparison["baseline_run_ids"] == ["baseline-ddp", "baseline-periodic"]
     assert comparison["investigation_required"] is False

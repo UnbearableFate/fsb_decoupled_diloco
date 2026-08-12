@@ -12,10 +12,10 @@ The two supported modes are:
 
 Run training through `python -m torch_ddp_baselines`. Validate a completed run
 through `python -m torch_ddp_baselines.health`. On Miyabi, submit both pinned
-GPT-2/WikiText-2 8-node, 2,000-step experiments with:
+GPT-2/WikiText-2 8-node, 5,000-step experiments with:
 
 ```bash
-bash torch_ddp_baselines/scripts/miyabi/submit_2000steps.sh
+bash torch_ddp_baselines/scripts/miyabi/submit_5000steps.sh
 ```
 
 Each run refuses to overwrite prior evidence and publishes a manifest, resolved

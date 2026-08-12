@@ -17,7 +17,7 @@ from torch_ddp_baselines.config import load_config
 from torch_ddp_baselines.health import evaluate_health
 
 
-CONFIG_PATH = Path("torch_ddp_baselines/configs/gpt2_wikitext2_8n_2000steps.yaml")
+CONFIG_PATH = Path("torch_ddp_baselines/configs/gpt2_wikitext2_8n_5000steps.yaml")
 COMMIT = "1" * 40
 
 
@@ -53,7 +53,7 @@ def _write_csv(
 
 
 def _build_completed_run(root: Path, *, mode: str, omit_sync_step: int | None = None) -> None:
-    """Materialize the complete 2,000-step run required by the health checker."""
+    """Materialize the complete configured run required by the health checker."""
 
     config = load_config(CONFIG_PATH)
     paths = BaselineRunPaths(root)
@@ -85,10 +85,15 @@ def _build_completed_run(root: Path, *, mode: str, omit_sync_step: int | None = 
                 "parameter_average_count": step // 200 if mode != "ddp" else 0,
                 "last_model_average_step": step // 200 * 200 if mode != "ddp" else 0,
             }
-            for step in range(1, 2001)
+            for step in range(1, config.training.max_steps + 1)
         ]
         _write_csv(paths.rank_metrics(rank), RANK_METRIC_FIELDS, rows)
-    sync_steps = range(1, 2001) if mode == "ddp" else range(200, 2001, 200)
+    interval = config.distributed.periodic_average_interval
+    sync_steps = (
+        range(1, config.training.max_steps + 1)
+        if mode == "ddp"
+        else range(interval, config.training.max_steps + 1, interval)
+    )
     sync_rows = [
         {
             "timestamp": step,
@@ -98,7 +103,7 @@ def _build_completed_run(root: Path, *, mode: str, omit_sync_step: int | None = 
             "duration_seconds": 0.1,
             "flattened_numel": 1,
             "world_size": 8,
-            "cumulative_sync_count": step if mode == "ddp" else step // 200,
+            "cumulative_sync_count": step if mode == "ddp" else step // interval,
         }
         for step in sync_steps
         if step != omit_sync_step
@@ -111,7 +116,7 @@ def _build_completed_run(root: Path, *, mode: str, omit_sync_step: int | None = 
             {
                 "status": "completed",
                 "exit_status": 0,
-                "final_step": 2000,
+                "final_step": config.training.max_steps,
             }
         ),
         encoding="utf-8",
@@ -148,7 +153,7 @@ def test_run_initialization_refuses_to_overwrite_manifest(tmp_path: Path) -> Non
 
 
 def test_health_accepts_complete_ddp_and_periodic_runs(tmp_path: Path) -> None:
-    """Both current modes must produce sufficient evidence after all 2,000 steps."""
+    """Both current modes must produce sufficient evidence after all configured steps."""
 
     ddp_root = tmp_path / "ddp"
     periodic_root = tmp_path / "periodic"
@@ -158,16 +163,16 @@ def test_health_accepts_complete_ddp_and_periodic_runs(tmp_path: Path) -> None:
     assert evaluate_health(ddp_root, mode="ddp")["passed"]
     periodic = evaluate_health(periodic_root, mode="periodic_average")
     assert periodic["passed"]
-    assert periodic["checks"]["observed_sync_steps"] == list(range(200, 2001, 200))
+    assert periodic["checks"]["observed_sync_steps"] == list(range(200, 5001, 200))
 
 
 def test_health_rejects_a_missing_periodic_average(tmp_path: Path) -> None:
     """A terminal run cannot pass if one configured communication boundary is absent."""
 
     root = tmp_path / "missing-sync"
-    _build_completed_run(root, mode="periodic_average", omit_sync_step=2000)
+    _build_completed_run(root, mode="periodic_average", omit_sync_step=5000)
 
     result = evaluate_health(root, mode="periodic_average")
 
     assert not result["passed"]
-    assert any("2000" in failure for failure in result["failures"])
+    assert any("5000" in failure for failure in result["failures"])
