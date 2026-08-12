@@ -789,20 +789,20 @@ def build_comparisons(rows: Sequence[dict[str, str]]) -> dict[str, Any]:
                 key for key in identity_fields if full_protocol.get(key) != baseline.get(key)
             ]
             metrics: dict[str, Any] = {}
-            exceeded = False
+            increase_exceeded = False
             for key in ("final_mean_loss", "training_time_seconds"):
                 baseline_value = _float_cell(baseline, key)
                 full_protocol_value = _float_cell(full_protocol, key)
                 if baseline_value == 0.0:
                     raise RunParseError(f"baseline {baseline['run_id']} has zero {key}")
                 relative = (full_protocol_value - baseline_value) / abs(baseline_value)
-                metric_exceeded = abs(relative) > COMPARISON_THRESHOLD
-                exceeded = exceeded or metric_exceeded
+                metric_exceeded = relative > COMPARISON_THRESHOLD
+                increase_exceeded = increase_exceeded or metric_exceeded
                 metrics[key] = {
                     "baseline": baseline_value,
                     "full_protocol": full_protocol_value,
                     "relative_difference": relative,
-                    "absolute_difference_exceeds_threshold": metric_exceeded,
+                    "increase_exceeds_threshold": metric_exceeded,
                 }
             comparisons.append(
                 {
@@ -822,7 +822,7 @@ def build_comparisons(rows: Sequence[dict[str, str]]) -> dict[str, Any]:
                         ],
                     },
                     "metrics": metrics,
-                    "investigation_required": bool(mismatches) or exceeded,
+                    "investigation_required": bool(mismatches) or increase_exceeded,
                 }
             )
     return {

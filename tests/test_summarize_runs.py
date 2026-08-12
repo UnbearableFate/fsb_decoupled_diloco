@@ -505,8 +505,8 @@ def test_csv_update_discovers_both_layouts_and_deduplicates(tmp_path: Path) -> N
     assert [row["run_id"] for row in _read_rows(output)] == ["full-protocol-run", "ddp-run"]
 
 
-def test_comparison_flags_thirty_percent_metric_difference(tmp_path: Path) -> None:
-    """Comparison output must flag either metric whose absolute delta exceeds 30%."""
+def test_comparison_flags_thirty_percent_metric_increase(tmp_path: Path) -> None:
+    """Comparison output must flag either metric whose increase exceeds 30%."""
 
     module = _module()
     runs_root = tmp_path / "runs"
@@ -528,6 +528,37 @@ def test_comparison_flags_thirty_percent_metric_difference(tmp_path: Path) -> No
     assert payload["comparison_count"] == 2
     assert all(item["comparable_identity"] for item in payload["comparisons"])
     assert all(item["investigation_required"] for item in payload["comparisons"])
+
+
+def test_comparison_accepts_a_metric_decrease_beyond_thirty_percent(tmp_path: Path) -> None:
+    """A faster or lower-loss Full Protocol run is not an abnormal regression."""
+
+    module = _module()
+    runs_root = tmp_path / "runs"
+    ddp = _write_baseline_run(runs_root, "ddp-run", mode="ddp", world_size=8)
+    periodic = _write_baseline_run(
+        runs_root,
+        "periodic-run",
+        mode="periodic_average",
+        world_size=8,
+    )
+    full_protocol = _write_full_protocol_run(runs_root, "full-protocol-run")
+    output = tmp_path / "runs.csv"
+    module.update_summary_csv([ddp, periodic, full_protocol], output)
+    rows = _read_rows(output)
+    for row in rows:
+        if row["run_kind"] == "fs_diloco_full_protocol":
+            row["final_mean_loss"] = "1.0"
+            row["training_time_seconds"] = "10.0"
+
+    payload = module.build_comparisons(rows)
+
+    assert all(not item["investigation_required"] for item in payload["comparisons"])
+    assert all(
+        not metric["increase_exceeds_threshold"]
+        for item in payload["comparisons"]
+        for metric in item["metrics"].values()
+    )
 
 
 def test_comparison_rejects_different_contributor_topologies(tmp_path: Path) -> None:
