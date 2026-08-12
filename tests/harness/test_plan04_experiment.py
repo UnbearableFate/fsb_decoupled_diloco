@@ -338,6 +338,9 @@ def test_one_line_submitter_freezes_current_baseline_and_full_protocol_jobs() ->
     baseline_wrapper = (
         ROOT / "torch_ddp_baselines/scripts/miyabi/run_gpt2_wikitext2_5000steps.pbs"
     ).read_text(encoding="utf-8")
+    baseline_submitter = (
+        ROOT / "torch_ddp_baselines/scripts/miyabi/submit_5000steps.sh"
+    ).read_text(encoding="utf-8")
 
     assert "QUEUE=regular-g" in submitter
     assert "WALLTIME=00:40:00" in submitter
@@ -353,6 +356,11 @@ def test_one_line_submitter_freezes_current_baseline_and_full_protocol_jobs() ->
     assert "#PBS -q regular-g" in baseline_wrapper
     assert "#PBS -W group_list=xg24i002" in baseline_wrapper
     assert "#PBS -l walltime=00:40:00" in baseline_wrapper
+    assert "PROJECT_ROOT=$PROJECT_ROOT,MODE=ddp,RUN_ID=$ddp_run_id" in baseline_submitter
+    assert (
+        "PROJECT_ROOT=$PROJECT_ROOT,MODE=periodic_average,RUN_ID=$periodic_run_id"
+        in baseline_submitter
+    )
 
 
 def test_staggered_and_dual_syncer_timelines_preserve_registered_boundaries() -> None:
@@ -891,7 +899,15 @@ def test_summary_comparison_requires_one_registered_baseline_per_mode(
     with (runs / "summary.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
-        writer.writerows(rows)
+        stale_rows = [
+            {
+                **row,
+                "run_id": f"stale-{row['run_id']}",
+                "source_fingerprint": "sha256:" + "0" * 64,
+            }
+            for row in rows[:2]
+        ]
+        writer.writerows([*stale_rows, *rows])
 
     def build_comparisons(selected: list[dict[str, str]]) -> dict[str, object]:
         """Return a minimal canonical comparison for the selected three rows."""

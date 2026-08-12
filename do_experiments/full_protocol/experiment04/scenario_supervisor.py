@@ -435,6 +435,8 @@ def _append_summary(
         row
         for row in rows
         if row.get("run_kind") == "torch_ddp_baseline"
+        and row.get("git_commit") == current.get("git_commit")
+        and row.get("source_fingerprint") == current.get("source_fingerprint")
         and row.get("optimizer_steps_min") == str(BASELINE_OPTIMIZER_STEPS)
         and row.get("optimizer_steps_max") == str(BASELINE_OPTIMIZER_STEPS)
     ]
