@@ -84,7 +84,12 @@ def _write_baseline_run(
         "world_size": world_size,
         "created_at": 100.0,
         "pbs_job_id": "123.opbs",
-        "source_identity": {"git_commit": "1" * 40},
+        "source_identity": {
+            "git_commit": "1" * 40,
+            "git_dirty": False,
+            "source_fingerprint": "sha256:" + "2" * 64,
+            "source_scopes": ["fs_diloco", "torch_ddp_baselines"],
+        },
     }
     config = {
         **_shared_config(),
@@ -145,6 +150,7 @@ def _write_full_protocol_run(
     hard_crash_stream: int | None = None,
     crash_before_first_receipt: bool = False,
     ack_before_first_cycle_stream: int | None = None,
+    terminal_contributors: int = 8,
 ) -> Path:
     """Create a finalized Full Protocol authority with optional terminal edge cases."""
 
@@ -225,7 +231,7 @@ def _write_full_protocol_run(
         """
     )
     fences: list[str] = []
-    for stream in range(8):
+    for stream in range(terminal_contributors):
         instance_id = f"instance-{stream}"
         fence = json.dumps(
             {
@@ -274,14 +280,14 @@ def _write_full_protocol_run(
             + "\n",
             encoding="utf-8",
         )
-    local_steps = [0] * 8
+    local_steps = [0] * terminal_contributors
     for version in range(1, 11):
         for offset in range(4):
-            stream = (version * 4 + offset) % 8
+            stream = (version * 4 + offset) % terminal_contributors
             if stream == hard_crash_stream and (
                 crash_before_first_receipt or local_steps[stream] >= 600
             ):
-                stream = (stream + 1) % 8
+                stream = (stream + 1) % terminal_contributors
             local_steps[stream] += 200
             connection.execute(
                 "INSERT INTO updates VALUES(?, ?, ?, 200, 'applied', ?)",
@@ -356,6 +362,26 @@ def test_parse_full_protocol_uses_terminal_fences_and_exact_merge_counts(
     assert row["optimizer_steps_max"] == 2000
     assert row["final_report_count"] == 8
     assert row["final_mean_loss"] == pytest.approx(2.35)
+
+
+def test_parse_full_protocol_accepts_an_admitted_quorum_below_the_stream_pool(
+    tmp_path: Path,
+) -> None:
+    """Submitted topology does not require all eight learners to enter terminal scope."""
+
+    module = _module()
+    run = _write_full_protocol_run(
+        tmp_path / "runs",
+        "four-admitted-run",
+        terminal_contributors=4,
+    )
+
+    row = module.parse_completed_run(run)
+
+    assert row["expected_contributors"] == 8
+    assert row["terminal_contributors"] == 4
+    assert row["optimizer_steps_min"] == 2000
+    assert row["optimizer_steps_max"] == 2000
 
 
 def test_parse_full_protocol_accepts_explicitly_unversioned_synthetic_inputs(

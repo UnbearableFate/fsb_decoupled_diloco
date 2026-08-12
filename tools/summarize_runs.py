@@ -303,7 +303,7 @@ def _parse_baseline_run(run_dir: Path) -> dict[str, Any]:
         "status": "completed",
         "mode": mode,
         "git_commit": _text(source, "git_commit", path=manifest_path),
-        "source_fingerprint": "",
+        "source_fingerprint": _text(source, "source_fingerprint", path=manifest_path),
         "pbs_job_ids": _text(manifest, "pbs_job_id", path=manifest_path),
         "model_name_or_path": _text(model, "name_or_path", path=config_path),
         "model_revision": _text(model, "revision", path=config_path),
@@ -474,6 +474,9 @@ def _parse_full_protocol_run(run_dir: Path) -> dict[str, Any]:
     membership = _mapping(config, "membership", path=config_path)
     training = _mapping(config, "training", path=config_path)
     optimizer = _mapping(config, "inner_optimizer", path=config_path)
+    merge_contributors = _integer(sync, "quorum_min", path=config_path)
+    if _integer(sync, "quorum_max", path=config_path) != merge_contributors:
+        raise RunParseError(f"{run_dir}: Full Protocol comparison requires one merge threshold")
     final_version = _integer(summary, "final_version", path=summary_path)
     configured_version = _integer(sync, "stop_after_outer_steps", path=config_path)
     if final_version != configured_version:
@@ -488,9 +491,10 @@ def _parse_full_protocol_run(run_dir: Path) -> dict[str, Any]:
     try:
         fences = _terminal_fences(connection, path=authority_path)
         expected = _integer(membership, "stream_pool_size", path=config_path)
-        if len(fences) != expected:
+        if not merge_contributors <= len(fences) <= expected:
             raise RunParseError(
-                f"{run_dir}: expected {expected} terminal contributors, found {len(fences)}"
+                f"{run_dir}: terminal contributors must be within the merge threshold "
+                f"and configured stream pool, found {len(fences)}"
             )
         logical_updates = read_logical_authority_rows(
             connection,
@@ -539,9 +543,6 @@ def _parse_full_protocol_run(run_dir: Path) -> dict[str, Any]:
         raise RunParseError(f"cannot summarize Full Protocol authority: {authority_path}") from exc
     finally:
         connection.close()
-    merge_contributors = _integer(sync, "quorum_min", path=config_path)
-    if _integer(sync, "quorum_max", path=config_path) != merge_contributors:
-        raise RunParseError(f"{run_dir}: Full Protocol comparison requires one merge threshold")
     expected_counts = [(version, merge_contributors) for version in range(1, final_version + 1)]
     actual_counts = sorted(counts_by_version.items())
     if actual_counts != expected_counts:
@@ -764,6 +765,7 @@ def build_comparisons(rows: Sequence[dict[str, str]]) -> dict[str, Any]:
     for full_protocol in full_protocol_runs:
         for baseline in baselines:
             identity_fields = (
+                "source_fingerprint",
                 "model_name_or_path",
                 "model_revision",
                 "model_dtype",

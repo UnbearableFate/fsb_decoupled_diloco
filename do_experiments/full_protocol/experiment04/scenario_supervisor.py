@@ -983,11 +983,15 @@ def supervise(
             _sleep_until(origin_monotonic, batch_index * BATCH_DELAY_SECONDS)
             if scenario_name == "stagger_3_3_2" and batch_index == 1:
                 observation = _observe_pre_quorum_version(database)
+                first_batch_scheduler = [
+                    _require_outstanding(str(receipt["job_id"])) for receipt in learner_receipts
+                ]
                 timeline["events"].append(
                     {
                         "role": "pre_quorum_observation",
                         "submitted_learners": offset,
                         "observed_at": time.time(),
+                        "scheduler": first_batch_scheduler,
                         **observation,
                     }
                 )

@@ -19,6 +19,12 @@ from torch_ddp_baselines.health import evaluate_health
 
 CONFIG_PATH = Path("torch_ddp_baselines/configs/gpt2_wikitext2_8n_5000steps.yaml")
 COMMIT = "1" * 40
+SOURCE_IDENTITY = {
+    "git_commit": COMMIT,
+    "git_dirty": False,
+    "source_fingerprint": "sha256:" + "2" * 64,
+    "source_scopes": ["fs_diloco", "torch_ddp_baselines"],
+}
 
 
 def _runtimes() -> list[dict[str, Any]]:
@@ -63,7 +69,7 @@ def _build_completed_run(root: Path, *, mode: str, omit_sync_step: int | None = 
         mode=mode,
         run_id=f"test-{mode}",
         runtimes=_runtimes(),
-        source_commit=COMMIT,
+        source_identity=SOURCE_IDENTITY,
     )
     for rank in range(8):
         rows = [
@@ -134,7 +140,7 @@ def test_run_initialization_refuses_to_overwrite_manifest(tmp_path: Path) -> Non
         mode="ddp",
         run_id="exclusive",
         runtimes=_runtimes(),
-        source_commit=COMMIT,
+        source_identity=SOURCE_IDENTITY,
     )
 
     try:
@@ -144,7 +150,7 @@ def test_run_initialization_refuses_to_overwrite_manifest(tmp_path: Path) -> Non
             mode="ddp",
             run_id="exclusive",
             runtimes=_runtimes(),
-            source_commit=COMMIT,
+            source_identity=SOURCE_IDENTITY,
         )
     except FileExistsError:
         pass
@@ -176,3 +182,19 @@ def test_health_rejects_a_missing_periodic_average(tmp_path: Path) -> None:
 
     assert not result["passed"]
     assert any("5000" in failure for failure in result["failures"])
+
+
+def test_health_rejects_source_identity_divergence(tmp_path: Path) -> None:
+    """A completed workload cannot pass when its standalone source artifact diverges."""
+
+    root = tmp_path / "source-divergence"
+    _build_completed_run(root, mode="periodic_average")
+    source_path = BaselineRunPaths(root).source_identity
+    source = json.loads(source_path.read_text(encoding="utf-8"))
+    source["git_dirty"] = True
+    source_path.write_text(json.dumps(source), encoding="utf-8")
+
+    result = evaluate_health(root, mode="periodic_average")
+
+    assert not result["passed"]
+    assert "source identity artifact differs from the manifest" in result["failures"]

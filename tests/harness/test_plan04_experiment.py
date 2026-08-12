@@ -754,6 +754,7 @@ def test_summary_comparison_requires_one_registered_baseline_per_mode(
         "run_dir",
         "run_kind",
         "mode",
+        "git_commit",
         "source_fingerprint",
         "model_name_or_path",
         "model_revision",
@@ -784,6 +785,7 @@ def test_summary_comparison_requires_one_registered_baseline_per_mode(
     ]
     shared = {
         "run_dir": str(run_root),
+        "git_commit": "1" * 40,
         "source_fingerprint": "sha256:" + "f" * 64,
         "model_name_or_path": "gpt2",
         "model_revision": "607a30d783dfa663caf39e06633721c8d4cfcd7e",

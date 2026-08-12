@@ -16,6 +16,8 @@ import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 
+from fs_diloco.core.source_identity import capture_source_identity
+
 from .artifacts import (
     RANK_METRIC_FIELDS,
     SYNC_METRIC_FIELDS,
@@ -134,20 +136,31 @@ def validate_runtimes(
             )
 
 
-def _source_commit() -> str:
-    """Return the clean source commit injected by the PBS launcher."""
+def _source_identity() -> dict[str, Any]:
+    """Capture and validate the canonical clean source used by this baseline."""
 
-    commit = os.environ.get("TORCH_BASELINE_GIT_COMMIT", "")
-    if COMMIT_SHA.fullmatch(commit) is None:
+    expected_commit = os.environ.get("TORCH_BASELINE_GIT_COMMIT", "")
+    if COMMIT_SHA.fullmatch(expected_commit) is None:
         raise RuntimeError("TORCH_BASELINE_GIT_COMMIT must be a 40-character commit SHA")
-    return commit
+    project_root = os.environ.get("PROJECT_ROOT", "")
+    if not project_root:
+        raise RuntimeError("PROJECT_ROOT is required for baseline source identity")
+    captured = capture_source_identity(project_root)
+    if captured["git_commit"] != expected_commit or captured["git_dirty"] is not False:
+        raise RuntimeError("baseline source differs from its clean submitted commit")
+    return {
+        "git_commit": captured["git_commit"],
+        "git_dirty": captured["git_dirty"],
+        "source_fingerprint": captured["source_fingerprint"],
+        "source_scopes": captured["source_scopes"],
+    }
 
 
 def run(args: argparse.Namespace) -> None:
     """Execute one complete distributed baseline experiment."""
 
     config = load_config(args.config)
-    source_commit = _source_commit()
+    source_identity = _source_identity()
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     device = runtime_device(config.distributed.backend, local_rank)
     dist.init_process_group(
@@ -191,7 +204,7 @@ def run(args: argparse.Namespace) -> None:
                     mode=args.mode,
                     run_id=args.run_id,
                     runtimes=runtimes,
-                    source_commit=source_commit,
+                    source_identity=source_identity,
                 )
             except BaseException as exc:
                 setup_error[0] = f"{type(exc).__name__}: {exc}"
@@ -212,7 +225,8 @@ def run(args: argparse.Namespace) -> None:
             device=str(device),
             max_steps=config.training.max_steps,
             periodic_average_interval=config.distributed.periodic_average_interval,
-            git_commit=source_commit,
+            git_commit=source_identity["git_commit"],
+            source_fingerprint=source_identity["source_fingerprint"],
         )
         write_heartbeat(
             paths,

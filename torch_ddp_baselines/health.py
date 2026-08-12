@@ -17,6 +17,8 @@ FATAL_LOG_PATTERN = re.compile(
     r"Traceback \(most recent call last\)|non-finite (?:loss|gradient|parameter)",
     re.IGNORECASE,
 )
+COMMIT_SHA = re.compile(r"[0-9a-f]{40}\Z")
+SOURCE_FINGERPRINT = re.compile(r"sha256:[0-9a-f]{64}\Z")
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
@@ -92,6 +94,22 @@ def evaluate_health(run_root: str | Path, *, mode: str) -> dict[str, Any]:
         item.get("device_type") != "cuda" for item in runtimes
     ):
         failures.append("not every NCCL runtime used CUDA")
+    source_identity = manifest.get("source_identity")
+    if not isinstance(source_identity, dict):
+        failures.append("manifest source identity is missing")
+    else:
+        checks["source_identity"] = source_identity
+        if (
+            COMMIT_SHA.fullmatch(str(source_identity.get("git_commit", ""))) is None
+            or source_identity.get("git_dirty") is not False
+            or SOURCE_FINGERPRINT.fullmatch(str(source_identity.get("source_fingerprint", "")))
+            is None
+            or not isinstance(source_identity.get("source_scopes"), list)
+            or not source_identity["source_scopes"]
+        ):
+            failures.append("manifest source identity is incomplete or dirty")
+        if safe_read_json(paths.source_identity) != source_identity:
+            failures.append("source identity artifact differs from the manifest")
 
     summary = safe_read_json(paths.summary)
     if summary is None:

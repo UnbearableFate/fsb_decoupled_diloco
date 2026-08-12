@@ -27,7 +27,8 @@ if [[ "$group_directive" != '#PBS -W group_list=xg24i002' ]]; then
 fi
 source_status="$(
   git -C "$PROJECT_ROOT" status --porcelain --untracked-files=all -- \
-    fs_diloco tools torch_ddp_baselines pyproject.toml
+    fs_diloco configs do_experiments scripts/miyabi tests tools torch_ddp_baselines \
+    pyproject.toml README.md docs plans/00-RESEARCH_PLAN.md website/app website/scripts
 )"
 if [[ -n "$source_status" ]]; then
   echo "Standalone baseline sources must be committed before submission:" >&2

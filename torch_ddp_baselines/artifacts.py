@@ -193,7 +193,7 @@ def initialize_run(
     mode: str,
     run_id: str,
     runtimes: list[dict[str, Any]],
-    source_commit: str,
+    source_identity: dict[str, Any],
 ) -> None:
     """Claim a fresh run root and record immutable config, source, and topology."""
 
@@ -204,7 +204,16 @@ def initialize_run(
     paths.logs_dir.mkdir(parents=True, exist_ok=True)
     paths.heartbeats_dir.mkdir(parents=True, exist_ok=True)
     paths.final_checkpoint.parent.mkdir(parents=True, exist_ok=True)
-    source_identity = {"git_commit": source_commit}
+    required_source_fields = {
+        "git_commit",
+        "git_dirty",
+        "source_fingerprint",
+        "source_scopes",
+    }
+    if set(source_identity) != required_source_fields:
+        raise ValueError("baseline source identity has the wrong fields")
+    if source_identity["git_dirty"] is not False:
+        raise ValueError("formal baseline source identity must be clean")
     manifest = {
         "format_version": 1,
         "run_id": run_id,
@@ -218,7 +227,7 @@ def initialize_run(
         "periodic_average_interval": config.distributed.periodic_average_interval,
         "created_at": time.time(),
         "pbs_job_id": os.environ.get("PBS_JOBID"),
-        "source_identity": source_identity,
+        "source_identity": dict(source_identity),
         "runtimes": runtimes,
     }
     _exclusive_json(paths.manifest, manifest)
@@ -226,7 +235,7 @@ def initialize_run(
         paths.resolved_config,
         yaml.safe_dump(config_to_dict(config), sort_keys=False),
     )
-    atomic_write_json(paths.source_identity, source_identity)
+    atomic_write_json(paths.source_identity, dict(source_identity))
 
 
 def append_csv(path: Path, row: dict[str, Any], fieldnames: tuple[str, ...]) -> None:
