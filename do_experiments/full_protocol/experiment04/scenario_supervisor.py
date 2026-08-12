@@ -651,10 +651,15 @@ def _authority_evidence(
                 (int(controller["generation"]),),
             )
         ]
-        versions = [
-            dict(row)
-            for row in connection.execute("SELECT * FROM global_versions ORDER BY version")
-        ]
+        versions = sorted(
+            read_logical_authority_rows(
+                connection,
+                RunPaths(run_root),
+                table="global_versions",
+                primary_key="version",
+            ),
+            key=lambda row: int(row["version"]),
+        )
         progress = [
             dict(row)
             for row in connection.execute(

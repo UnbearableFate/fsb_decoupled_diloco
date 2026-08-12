@@ -475,6 +475,57 @@ def test_authority_oracle_accepts_exact_normal_and_takeover_histories(tmp_path: 
     ]
 
 
+def test_authority_oracle_reads_archived_global_version_history(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Terminal acceptance must include archived versions after maintenance compaction."""
+
+    module = _module()
+    run_root = tmp_path / "archived-versions"
+    _write_authority(run_root)
+    database = run_root / "control/syncer_metadata.sqlite3"
+    connection = sqlite3.connect(database)
+    archived_versions = [
+        dict(zip(("version", "committed_by_epoch"), row, strict=True))
+        for row in connection.execute(
+            "SELECT version, committed_by_epoch FROM global_versions ORDER BY version"
+        )
+    ]
+    connection.execute("DELETE FROM global_versions WHERE version < 10")
+    connection.commit()
+    connection.close()
+    original_reader = module.read_logical_authority_rows
+
+    def logical_rows(
+        connection: sqlite3.Connection,
+        paths: object,
+        *,
+        table: str,
+        primary_key: str,
+    ) -> list[dict[str, object]]:
+        """Supply compacted version history while delegating other logical tables."""
+
+        if table == "global_versions":
+            assert primary_key == "version"
+            return archived_versions
+        return original_reader(connection, paths, table=table, primary_key=primary_key)
+
+    monkeypatch.setattr(module, "read_logical_authority_rows", logical_rows)
+    evidence = module._authority_evidence(
+        run_root=run_root,
+        config=load_config(PACKAGE / "experiment.yaml"),
+        scenario=module.SCENARIOS["normal"],
+        initial_learner_job_ids=[f"{index}.opbs" for index in range(8)],
+        primary_syncer_job_id="100.opbs",
+        successor_syncer_job_id=None,
+        victim=None,
+        replacement=None,
+    )
+
+    assert [row["version"] for row in evidence["versions"]] == list(range(11))
+
+
 def test_authority_oracle_binds_replacement_to_the_expired_stream(tmp_path: Path) -> None:
     """Learner recovery requires one authorized higher-epoch successor, not mere completion."""
 
