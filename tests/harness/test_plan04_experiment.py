@@ -504,8 +504,7 @@ def test_authority_oracle_accepts_exact_normal_and_takeover_histories(tmp_path: 
 
     # A completed live syncer scope must not retain a superseded model publication.
     obsolete_weight = (
-        normal_root
-        / "weights/epochs/e000001/owner/global_v000024_pfixture.safetensors"
+        normal_root / "weights/epochs/e000001/owner/global_v000024_pfixture.safetensors"
     )
     obsolete_weight.write_bytes(b"obsolete model weight")
     obsolete_weight.chmod(0o444)

@@ -519,8 +519,7 @@ def test_comparison_rejects_different_contributor_topologies(tmp_path: Path) -> 
     payload = module.build_comparisons(rows)
 
     assert all(
-        item["identity_mismatches"] == ["expected_contributors"]
-        for item in payload["comparisons"]
+        item["identity_mismatches"] == ["expected_contributors"] for item in payload["comparisons"]
     )
     assert all(item["investigation_required"] for item in payload["comparisons"])
 

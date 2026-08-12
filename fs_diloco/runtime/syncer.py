@@ -269,9 +269,7 @@ def run_fenced_syncer(
             _finish_terminal_maintenance(
                 maintenance_service,
                 renewer,
-                orphan_grace_seconds=float(
-                    config.maintenance.publication_orphan_grace_seconds
-                ),
+                orphan_grace_seconds=float(config.maintenance.publication_orphan_grace_seconds),
             )
             telemetry.event("terminal_finalized", terminal=terminal)
             return

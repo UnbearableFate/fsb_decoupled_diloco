@@ -69,9 +69,7 @@ def test_terminal_maintenance_waits_for_gc_grace_before_the_final_pass() -> None
     """Terminal cleanup must retain the leader lease until old weights become deletable."""
 
     events: list[object] = []
-    maintenance = SimpleNamespace(
-        tick=lambda *, force: events.append(("tick", force))
-    )
+    maintenance = SimpleNamespace(tick=lambda *, force: events.append(("tick", force)))
     renewer = SimpleNamespace(raise_if_failed=lambda: events.append("renew"))
 
     _finish_terminal_maintenance(

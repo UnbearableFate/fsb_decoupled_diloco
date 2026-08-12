@@ -620,9 +620,7 @@ def _authority_evidence(
 
     expected_streams = {str(index) for index in range(8)}
     fence_streams = {str(row["stable_contributor_key"]) for row in fences}
-    if not fence_streams <= expected_streams or {str(row["state"]) for row in fences} != {
-        "acked"
-    }:
+    if not fence_streams <= expected_streams or {str(row["state"]) for row in fences} != {"acked"}:
         raise RuntimeError("terminal fences contain a foreign or unacknowledged stream")
     for row in fences:
         ContributorFence.from_dict(json.loads(str(row["fence_json"])))
@@ -637,9 +635,7 @@ def _authority_evidence(
         if isinstance(row.get("pbs_job_id"), str)
         and normalize_job_id(str(row["pbs_job_id"])) in initial_jobs
     ]
-    admitted_initial_jobs = {
-        normalize_job_id(str(row["pbs_job_id"])) for row in initial_instances
-    }
+    admitted_initial_jobs = {normalize_job_id(str(row["pbs_job_id"])) for row in initial_instances}
     if not admitted_initial_jobs <= initial_jobs:
         raise RuntimeError("authority binds a learner outside the eight submitted bootstrap jobs")
     bootstrap_launches = [row for row in launches if row["role"] == "bootstrap"]
@@ -722,9 +718,7 @@ def _authority_evidence(
     if any(path.is_symlink() for path in live_weight_objects):
         raise RuntimeError("the final live syncer weight scope contains a symlink")
     live_weight_paths = sorted(
-        RunPaths(run_root).relative(path)
-        for path in live_weight_objects
-        if path.is_file()
+        RunPaths(run_root).relative(path) for path in live_weight_objects if path.is_file()
     )
     if live_weight_paths != [expected_latest_weight]:
         raise RuntimeError("the final live syncer scope does not contain only the latest weight")
@@ -1188,9 +1182,7 @@ def supervise(
                 "successor_syncer_jobs": 0 if successor_syncer is None else 1,
                 "replacement_learner_jobs": 0 if replacement is None else 1,
                 "applied_local_steps": (
-                    scenario.expected_inner_steps
-                    * scenario.expected_merge_width
-                    * GLOBAL_STEPS
+                    scenario.expected_inner_steps * scenario.expected_merge_width * GLOBAL_STEPS
                 ),
             },
             "timeline": {**timeline_evidence, "events": timeline["events"]},
