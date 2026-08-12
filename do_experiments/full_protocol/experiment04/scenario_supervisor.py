@@ -9,6 +9,7 @@ import fcntl
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import random
 import sqlite3
@@ -42,6 +43,7 @@ GLOBAL_STEPS = 25
 INNER_STEPS = 200
 BASELINE_OPTIMIZER_STEPS = INNER_STEPS * GLOBAL_STEPS
 COMPARISON_THRESHOLD = 0.30
+LOSS_THRESHOLD = 3.5
 
 
 @dataclass(frozen=True)
@@ -299,14 +301,14 @@ def _wait_replacement(
 
 
 def _wait_terminal(summary_path: Path, *, timeout_seconds: float) -> dict[str, Any]:
-    """Wait for create-once terminal control evidence from the protocol authority."""
+    """Wait for the create-once terminal summary without imposing a pass criterion."""
 
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         if summary_path.is_file():
             payload = json.loads(summary_path.read_text(encoding="utf-8"))
-            if not isinstance(payload, dict) or payload.get("all_learners_stopped") is not True:
-                raise RuntimeError("terminal summary does not prove all learners stopped")
+            if not isinstance(payload, dict):
+                raise RuntimeError("terminal summary is not a JSON object")
             return payload
         time.sleep(2.0)
     raise TimeoutError("Full Protocol run did not publish terminal summary")
@@ -355,6 +357,73 @@ def _wait_owned_jobs_finished(
             return histories
         time.sleep(2.0)
     raise TimeoutError("owned actor jobs did not all reach scheduler FINISH")
+
+
+def _final_syncer_job_id(database: Path) -> str:
+    """Return the scheduler job ID of the last authority-owning syncer epoch."""
+
+    rows = _read_rows(
+        database,
+        "SELECT pbs_job_id FROM syncer_epochs ORDER BY epoch DESC LIMIT 1",
+    )
+    if len(rows) != 1 or not isinstance(rows[0].get("pbs_job_id"), str):
+        raise RuntimeError("authority does not identify one final syncer job")
+    return str(rows[0]["pbs_job_id"])
+
+
+def _terminal_acceptance(
+    *,
+    database: Path,
+    scheduler_history: list[dict[str, Any]],
+    summary_row: dict[str, str],
+) -> tuple[dict[str, Any], list[str]]:
+    """Evaluate the sole plan04 gate: clean final syncer, version 25, and loss below 3.5."""
+
+    rows = _read_rows(database, "SELECT final_version FROM terminal_state WHERE singleton=1")
+    final_version: int | None = None
+    if len(rows) == 1:
+        try:
+            final_version = int(rows[0]["final_version"])
+        except (KeyError, TypeError, ValueError):
+            pass
+
+    final_syncer_job_id = normalize_job_id(_final_syncer_job_id(database))
+    matching_histories = [
+        item
+        for item in scheduler_history
+        if normalize_job_id(str(item.get("job_id", ""))) == final_syncer_job_id
+    ]
+    historical = matching_histories[0].get("historical", {}) if len(matching_histories) == 1 else {}
+    historical_fields = historical.get("fields") or {}
+    exit_status = historical_fields.get("Exit_status")
+    syncer_normal_exit = (
+        len(matching_histories) == 1
+        and historical.get("classification") == "finished"
+        and str(exit_status) == "0"
+    )
+
+    try:
+        final_mean_loss = float(summary_row["final_mean_loss"])
+    except (KeyError, TypeError, ValueError):
+        final_mean_loss = math.nan
+    criteria = {
+        "final_syncer_normal_exit": syncer_normal_exit,
+        "global_version_25": final_version == GLOBAL_STEPS,
+        "final_mean_loss_below_3_5": math.isfinite(final_mean_loss)
+        and final_mean_loss < LOSS_THRESHOLD,
+    }
+    errors = [name for name, passed in criteria.items() if not passed]
+    return (
+        {
+            "criteria": criteria,
+            "final_syncer_job_id": final_syncer_job_id,
+            "final_syncer_exit_status": exit_status,
+            "final_version": final_version,
+            "final_mean_loss": final_mean_loss,
+            "loss_threshold": LOSS_THRESHOLD,
+        },
+        errors,
+    )
 
 
 def _discover_authority_jobs(database: Path) -> set[str]:
@@ -1061,14 +1130,24 @@ def supervise(
             victim["qdel"] = _qdel(target_job, reason="plan04_learner_fault")
             timeline["events"].append({"role": "learner_fault", **victim})
             _atomic_json(log_root / "scenario_state.json", timeline)
-            replacement = _wait_replacement(
-                database,
-                victim_instance_id=str(victim["instance_id"]),
-                timeout_seconds=min(300.0, timeout_seconds),
-            )
-            replacement_job_id = str(replacement["pbs_job_id"])
-            owned_jobs.add(replacement_job_id)
-            timeline["events"].append({"role": "learner_replacement", **replacement})
+            try:
+                replacement = _wait_replacement(
+                    database,
+                    victim_instance_id=str(victim["instance_id"]),
+                    timeout_seconds=min(300.0, timeout_seconds),
+                )
+            except TimeoutError as exc:
+                timeline["events"].append(
+                    {
+                        "role": "learner_replacement_observation",
+                        "error": str(exc),
+                        "observed_at": time.time(),
+                    }
+                )
+            else:
+                replacement_job_id = str(replacement["pbs_job_id"])
+                owned_jobs.add(replacement_job_id)
+                timeline["events"].append({"role": "learner_replacement", **replacement})
             _atomic_json(log_root / "scenario_state.json", timeline)
         elif scenario.syncer_fault == "restart":
             _sleep_until(origin_monotonic, FAULT_DELAY_SECONDS)
@@ -1125,41 +1204,55 @@ def supervise(
             timeout_seconds=timeout_seconds,
         )
         owned_jobs.update(_discover_authority_jobs(database))
-        scheduler_history = _wait_owned_jobs_finished(
-            owned_jobs,
+        final_syncer_job_id = _final_syncer_job_id(database)
+        _wait_owned_jobs_finished(
+            {final_syncer_job_id},
             timeout_seconds=min(180.0, timeout_seconds),
         )
-        timeline_evidence = _validate_submission_timeline(
-            scenario=scenario,
-            origin_wall=origin_wall,
-            primary_syncer=primary_syncer,
-            learners=learner_receipts,
-            successor_syncer=successor_syncer,
-            syncer_qdel=syncer_qdel,
-            conflict_snapshot=conflict_snapshot,
-            victim=victim,
-        )
-        authority = _authority_evidence(
-            run_root=run_root,
-            config=config,
-            scenario=scenario,
-            initial_learner_job_ids=[str(row["job_id"]) for row in learner_receipts],
-            primary_syncer_job_id=str(primary_syncer["job_id"]),
-            successor_syncer_job_id=(
-                None if successor_syncer is None else str(successor_syncer["job_id"])
-            ),
-            victim=victim,
-            replacement=replacement,
-        )
+        scheduler = PBSScheduler()
+        scheduler_history = [_scheduler_history(job_id, scheduler) for job_id in sorted(owned_jobs)]
         summary_row, comparison = _append_summary(
             project_root=project_root,
             run_root=run_root,
             scenario=scenario,
             comparison_output=comparison_output,
         )
-        errors: list[str] = []
-        if comparison is not None and comparison["investigation_required"]:
-            errors.append("normal baseline comparison violates identity, workload, or 30% limits")
+        acceptance, errors = _terminal_acceptance(
+            database=database,
+            scheduler_history=scheduler_history,
+            summary_row=summary_row,
+        )
+        diagnostics: list[str] = []
+        try:
+            timeline_evidence = _validate_submission_timeline(
+                scenario=scenario,
+                origin_wall=origin_wall,
+                primary_syncer=primary_syncer,
+                learners=learner_receipts,
+                successor_syncer=successor_syncer,
+                syncer_qdel=syncer_qdel,
+                conflict_snapshot=conflict_snapshot,
+                victim=victim,
+            )
+        except Exception as exc:
+            diagnostics.append(f"timeline: {type(exc).__name__}: {exc}")
+            timeline_evidence = {"error": str(exc)}
+        try:
+            authority = _authority_evidence(
+                run_root=run_root,
+                config=config,
+                scenario=scenario,
+                initial_learner_job_ids=[str(row["job_id"]) for row in learner_receipts],
+                primary_syncer_job_id=str(primary_syncer["job_id"]),
+                successor_syncer_job_id=(
+                    None if successor_syncer is None else str(successor_syncer["job_id"])
+                ),
+                victim=victim,
+                replacement=replacement,
+            )
+        except Exception as exc:
+            diagnostics.append(f"authority: {type(exc).__name__}: {exc}")
+            authority = {"error": str(exc)}
         requirements_covered = [
             "PKG-01",
             "TOPO-01",
@@ -1219,6 +1312,8 @@ def supervise(
             "timeline": {**timeline_evidence, "events": timeline["events"]},
             "authority": authority,
             "scheduler_history": scheduler_history,
+            "acceptance": acceptance,
+            "diagnostics": diagnostics,
             "metrics": {"summary_row": summary_row, "comparison": comparison},
             "errors": errors,
             "evidence_paths": evidence_paths,

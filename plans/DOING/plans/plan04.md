@@ -21,13 +21,13 @@
 - PBS jobs 使用 `-q debug-g -l walltime=00:30:00`；提交前用 `qstat --rscuse` 核对 queue 容量。
 - 每项实验只需提交 1 seed即可,无需重复实验
 - 需要确保实验完成后,存活的 learner和 syncer 的作用域下,只保留最新的model weight, 因为死亡而无法清理model weight是在预料内的.
-- syncer 达到预定的 25 steps 正常结束，并且最终 loss 较 baseline 没有出现异常升高则视为通过。
+- 每项 Full Protocol 实验只使用以下三个通过条件：最终接管训练的 syncer 正常退出、训练达到 25 个 global step、最终平均 loss < 3.5。三个条件必须全部满足。其他检查只作为诊断信息，不影响实验的 PASS/FAIL 结果。
 
 ## 实验
 
 0. **Baseline**：使用 `torch_ddp_baselines` 中准备的两种 baseline，提交 `5000 steps DDP` 训练和 `local steps 200 × global steps 25 periodic_average` 训练。两项 baseline 的 wall-time 均为 30 分钟，后续可根据实际运行证据调整。
 
-1. **正常执行**：同时提交 8 个独立的 learner job 和 1 个 syncer job，按 `local steps 200 × global steps 25` 正常训练至结束。Wall-time 为 30 分钟，后续可根据实际运行证据调整。与 Baseline 比较，如果最终平均 loss、训练时间等关键指标相对 baseline 升高超过 30%，则需要寻找原因并解决。
+1. **正常执行**：同时提交 8 个独立的 learner job 和 1 个 syncer job，按 `local steps 200 × global steps 25` 正常训练至结束。Wall-time 为 30 分钟，后续可根据实际运行证据调整。记录与 Baseline 的最终平均 loss 和训练时间差异；比较结果不作为实验通过条件。
 
 2. **Learner 分批启动**：先提交 4 个 learner job，等待 30 秒后再提交其余 4 个 learner job。
 

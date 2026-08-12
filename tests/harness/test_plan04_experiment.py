@@ -276,6 +276,19 @@ def _submission(
     return {"role": role, "slot": slot, "submitted_at": submitted_at}
 
 
+def _finished_history(job_id: str, *, exit_status: int) -> dict[str, object]:
+    """Return one historical PBS completion record for acceptance checks."""
+
+    return {
+        "job_id": job_id,
+        "current": {"classification": "finished", "fields": {}},
+        "historical": {
+            "classification": "finished",
+            "fields": {"job_state": "F", "Exit_status": str(exit_status)},
+        },
+    }
+
+
 def test_registry_and_configs_are_the_exact_current_plan04_matrix() -> None:
     """The Full Protocol package exposes the seven non-baseline experiments."""
 
@@ -332,8 +345,75 @@ def test_registry_and_configs_are_the_exact_current_plan04_matrix() -> None:
     assert fault.scaling.learner_walltime == "00:30:00"
 
 
+def test_terminal_acceptance_uses_only_syncer_version_and_loss(tmp_path: Path) -> None:
+    """Formal status depends only on the three user-selected terminal measurements."""
+
+    module = _module()
+    run_root = tmp_path / "accepted"
+    _write_authority(run_root)
+
+    acceptance, errors = module._terminal_acceptance(
+        database=run_root / "control/syncer_metadata.sqlite3",
+        scheduler_history=[_finished_history("100.opbs", exit_status=0)],
+        summary_row={"final_mean_loss": "3.499"},
+    )
+
+    assert errors == []
+    assert acceptance["criteria"] == {
+        "final_syncer_normal_exit": True,
+        "global_version_25": True,
+        "final_mean_loss_below_3_5": True,
+    }
+
+
+def test_terminal_acceptance_rejects_each_failed_terminal_measurement(tmp_path: Path) -> None:
+    """A nonzero final syncer exit, short run, or loss at the bound must fail the gate."""
+
+    module = _module()
+    run_root = tmp_path / "rejected"
+    _write_authority(run_root)
+    database = run_root / "control/syncer_metadata.sqlite3"
+    connection = sqlite3.connect(database)
+    connection.execute("UPDATE terminal_state SET final_version=24 WHERE singleton=1")
+    connection.commit()
+    connection.close()
+
+    acceptance, errors = module._terminal_acceptance(
+        database=database,
+        scheduler_history=[_finished_history("100.opbs", exit_status=1)],
+        summary_row={"final_mean_loss": "3.5"},
+    )
+
+    assert errors == [
+        "final_syncer_normal_exit",
+        "global_version_25",
+        "final_mean_loss_below_3_5",
+    ]
+    assert not any(acceptance["criteria"].values())
+
+
+def test_terminal_acceptance_uses_the_successor_syncer_after_takeover(tmp_path: Path) -> None:
+    """Intentional primary termination must not mask a clean final successor exit."""
+
+    module = _module()
+    run_root = tmp_path / "takeover"
+    _write_authority(run_root, takeover=True)
+
+    acceptance, errors = module._terminal_acceptance(
+        database=run_root / "control/syncer_metadata.sqlite3",
+        scheduler_history=[
+            _finished_history("100.opbs", exit_status=137),
+            _finished_history("200.opbs", exit_status=0),
+        ],
+        summary_row={"final_mean_loss": "3.2"},
+    )
+
+    assert errors == []
+    assert acceptance["final_syncer_job_id"] == "200"
+
+
 def test_one_line_submitter_freezes_current_baseline_and_full_protocol_jobs() -> None:
-    """One command must route the two baselines and 40-minute Full Protocol jobs."""
+    """One command must route the two baselines and 30-minute Full Protocol jobs."""
 
     submitter = (PACKAGE / "submit.sh").read_text(encoding="utf-8")
     wrapper = (PACKAGE / "run_experiment.pbs").read_text(encoding="utf-8")
