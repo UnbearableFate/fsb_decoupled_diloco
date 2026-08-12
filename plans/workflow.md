@@ -2,7 +2,7 @@
 
 本文件只规定实施 plan 时必须遵守的最小流程。Plan 负责说明“做什么、达到什么结果”；实施细节必须从当前仓库事实逐步形成，不在 plan 中预先复制架构说明、文件清单、测试数量或完整状态机。
 
-开始前先读 project root 下 `AGENTS.md` 的 `## 最简设计&实现原则` 一节。本文件的全部规则都建立在该节之上。
+开始前先读 project root 下 `AGENTS.md`,所有工作应该尊重其中的指示. 尤其是关注其中的 `## 最简设计&实现原则` 一节.
 
 ## 1. 核心原则
 
@@ -90,12 +90,10 @@ requirement_id,outcome,verification,evidence,status
 当实现、测试设计和便宜/中等成本验证已经稳定时：
 
 1. 创建 clean candidate commit；
-2. 对当前全部源码做一次 current-state 全量审查，而不是只看最后 diff；
+2. 对当前全部源码做一次 current-state 全量审查，参照规则 `plans/review_prompts/review_prompt.md`；
 3. 检查唯一实现路径、obsolete surface、authority、identity、持久化、错误处理、harness oracle、配置、PBS、Checker 和文档一致性；
 4. 修复 blocking finding 并重跑受影响的候选测试；
 5. 冻结唯一 `FINAL_COMMON_TARGET`。
-
-不得先运行正式 9-node、长 soak 或性能比较，再做第一次 current-state 全量审查。
 
 ### 3.5 FORMAL：正式验收
 

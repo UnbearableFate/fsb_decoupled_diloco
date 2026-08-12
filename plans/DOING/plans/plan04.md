@@ -1,4 +1,4 @@
-# Dynamic Full 实验
+# full_protocol 实验
 
 ## 参照
 
@@ -8,23 +8,23 @@
 
 ## 目的
 
-设计并实施 Dynamic Full 实验，验证此前设计在正常训练、错峰启动和任务故障场景下的行为。
+设计并实施 full_protocol 实验，验证此前设计在正常训练、错峰启动和任务故障场景下的行为。
 
 ## 要求
 
-- 如有需要,自行增加实验代码、启动脚本、配置文件
-- 将实验代码、启动脚本等放在 `do_experiments/experiment{id}/` 下。
-- 将配置放在 `configs/dynamic_full/` 下。
-- 启动脚本应尽量支持通过一行 `bash ***.sh` 命令直接提交 job，便于人工复核和重复实验。
-- 每个 Dynamic Full 实验提交 8 个相互独立的 learner job，以及 1 个 syncer job；需要验证双 syncer 的实验可提交 2 个 syncer job。训练规模统一设为 `local steps 200 × global steps 10`，并将 syncer 的 merge 阈值设为 4 个 learner parameter。
-- 使用tools/summarize_runs.py统计实验结果,与 baseline 结果比较。
+- 自行添加/修改/拷贝实验专用代码、启动脚本、配置文件
+- 将本plan中实施实验所需要的实验专用代码、启动脚本,配置文件等放在 `do_experiments/full_protocol/experiment{id}/` 下,将其作为独立的实验启动包.
+- 启动脚本应支持通过一行 `bash ***.sh` 命令直接提交 job，便于人工复核和重复实验。
+- 每个 full_protocol 实验提交 8 个相互独立的 learner job，以及 1 个 syncer job；需要验证双 syncer 的实验可提交 2 个 syncer job。训练规模统一设为 `local steps 100 × global steps 10`，并将 syncer 的 merge 阈值设为 4 个 learner parameter。
+- 使用tools/summarize_runs.py统计实验结果,追加到`runs/summary.csv`,并与baseline 结果比较。
 - 在遇到运行错误,以及需要改进的地方, 自行对代码进行修改.
+- pbs jobs使用 -q regular-g -l walltime=00:30:00
 
 ## 实验
 
-0. **Baseline**：使用 `torch_ddp_baselines` 完成两个 baseline 实验，并使用tools/summarize_runs.py汇总结果。
+0. **Baseline**：已完成,位于`runs/full_protocol`, 统计数据位于`runs/summary.csv`
 
-1. **正常执行**：同时提交 8 个独立的 learner job 和 1 个 syncer job，按 `local steps 200 × global steps 10` 正常训练至结束。与Baseline 比较, 如果关键指标,如最终平均loss,train time等相差超过20%,则需要寻找原因并解决.
+1. **正常执行**：同时提交 8 个独立的 learner job 和 1 个 syncer job，按 `local steps 100 × global steps 10` 正常训练至结束。与Baseline 比较, 如果关键指标,如最终平均loss,train time等相差超过20%,则需要寻找原因并解决.
 
 2. **Learner 分批启动**：先提交 4 个 learner job，等待 30 秒后再提交其余 4 个 learner job。
 
