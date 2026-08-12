@@ -30,7 +30,7 @@ membership:
 scaling:
   enabled: false
 terminal:
-  admission_close_policy: global_target
+  admission_close_policy: global_target_or_launch_budget
   drain_ack_timeout_seconds: 60.0
   registration_visibility_grace_seconds: 2.0
   proposal_visibility_grace_seconds: 5.0

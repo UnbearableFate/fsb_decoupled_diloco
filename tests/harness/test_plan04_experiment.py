@@ -276,6 +276,7 @@ def test_registry_and_configs_are_the_exact_current_plan04_matrix() -> None:
         assert config.membership.stream_pool_size == config.membership.bootstrap_instances == 8
     for config in (baseline, experiment, fault):
         assert config.training.gradient_accumulation_steps == 2
+        assert config.terminal.admission_close_policy == "global_target_or_launch_budget"
     assert experiment.scaling.enabled is False
     assert fault.scaling.enabled is True
     assert fault.scaling.learner_queue == "regular-g"
