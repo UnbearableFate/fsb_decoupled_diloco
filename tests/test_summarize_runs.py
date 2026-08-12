@@ -355,6 +355,28 @@ def test_parse_full_protocol_uses_terminal_fences_and_exact_merge_counts(
     assert row["final_mean_loss"] == pytest.approx(2.35)
 
 
+def test_parse_full_protocol_accepts_explicitly_unversioned_synthetic_inputs(
+    tmp_path: Path,
+) -> None:
+    """Synthetic experiment summaries retain empty revisions instead of inventing Hub IDs."""
+
+    module = _module()
+    run = _write_full_protocol_run(tmp_path / "runs", "synthetic-full-protocol")
+    config_path = run / "control/run_config.resolved.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["model"]["name_or_path"] = "synthetic-tiny"
+    config["model"]["revision"] = None
+    config["data"]["dataset_name"] = "synthetic"
+    config["data"]["dataset_config_name"] = None
+    config["data"]["revision"] = None
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+
+    row = module.parse_completed_run(run)
+
+    assert row["model_revision"] == ""
+    assert row["dataset_revision"] == ""
+
+
 def test_parse_full_protocol_includes_maintenance_archives(tmp_path: Path) -> None:
     """Completed summaries must reconstruct early updates removed from the hot database."""
 

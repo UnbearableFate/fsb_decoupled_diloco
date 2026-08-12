@@ -1,0 +1,12 @@
+requirement_id,outcome,verification,evidence,status
+PKG-01,"A self-contained experiment04 package exposes one-line launchers for all seven scenarios","Static launcher/config checks and focused harness tests","",pending
+TOPO-01,"Every scenario submits eight independent scalar learner jobs and one syncer job; dual-syncer submits a second syncer","Submission receipts, actor attestations, and scheduler history","",pending
+WORK-01,"Every scenario uses 100 local steps, 10 global steps, eight streams, and exact four-contributor merges","Resolved config plus terminal authority merge/update checks","",pending
+NORMAL-01,"Eight simultaneous learners and one syncer train to terminal completion","Experiment 1 terminal artifact and summary row","",pending
+STAGGER-01,"The 4+4 and 3+3+2 schedules preserve their exact 30-second batch boundaries and complete","Experiments 2 and 3 timeline plus terminal artifacts","",pending
+LEARNER-FAULT-01,"Simultaneous and 4+4 launches detect one qdel learner, admit one authorized replacement, and complete","Experiments 4 and 5 scheduler history, launch authority, fence transition, and terminal artifacts","",pending
+SYNCER-FAULT-01,"A replacement syncer takes over after a 60-second fault and 20-second gap, then completes","Experiment 6 lease epochs, qdel receipt, scheduler history, and terminal artifact","",pending
+DUAL-SYNCER-01,"A second live syncer is fenced while the first owns the lease and takes over after the first is deleted","Experiment 7 lease timeline, syncer epochs, scheduler history, and terminal artifact","",pending
+METRICS-01,"Completed runs are appended with tools/summarize_runs.py and normal loss/time differences over 20% versus the comparable baseline are resolved","runs/summary.csv and create-only comparison artifact","",pending
+FINAL-01,"Implementation, tests, configuration, scripts and documentation are current and one reviewed target owns all evidence with no unfinished job","PREFORMAL review, repository-wide cleanup search, FINAL review, qstat and archive mapping","",pending
+

@@ -2,16 +2,6 @@
   "schema_version": 2,
   "surfaces": [
     {
-      "surface": "configs/experiments/gpt2_wikitext2_8l_200x10.yaml",
-      "boundary": "8-stream exact-four merge workload with authorized capacity recovery",
-      "tests": ["tests/test_config.py::test_repository_configs_use_the_one_strict_schema"]
-    },
-    {
-      "surface": "configs/experiments/gpt2_wikitext2_8l_200x10_fixed.yaml",
-      "boundary": "8-stream exact-four merge fixed-capacity control workload",
-      "tests": ["tests/test_config.py::test_repository_configs_use_the_one_strict_schema"]
-    },
-    {
       "surface": "configs/full_protocol.yaml",
       "boundary": "registered 8+1 formal configuration",
       "tests": ["tests/test_config.py::test_repository_configs_use_the_one_strict_schema"]

@@ -1,0 +1,38 @@
+#!/bin/bash
+#PBS -N plan04_full_protocol
+#PBS -q regular-g
+#PBS -W group_list=xg24i002
+#PBS -l select=1:mpiprocs=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+
+set -eEuo pipefail
+trap 'echo "[ERROR] plan04 supervisor failed at line $LINENO" >&2' ERR
+
+: "${SCENARIO:?SCENARIO is required}"
+: "${RUN_ID:?RUN_ID is required}"
+: "${RUN_ROOT:?RUN_ROOT is required}"
+: "${LOG_ROOT:?LOG_ROOT is required}"
+: "${EVIDENCE_OUTPUT:?EVIDENCE_OUTPUT is required}"
+: "${CONFIG:?CONFIG is required}"
+
+PROJECT_ROOT="${PROJECT_ROOT:-${PBS_O_WORKDIR:-$PWD}}"
+PYTHON_BIN="${PYTHON_BIN:-$PROJECT_ROOT/.venv/bin/python}"
+TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-1500}"
+
+export PAGER=cat MODULES_PAGER=cat LMOD_PAGER=cat
+export TOKENIZERS_PARALLELISM=false
+module list 2>&1 | cat
+cd "$PROJECT_ROOT"
+
+exec "$PYTHON_BIN" \
+  "$PROJECT_ROOT/do_experiments/full_protocol/experiment04/scenario_supervisor.py" \
+  --project-root "$PROJECT_ROOT" \
+  --config "$CONFIG" \
+  --scenario "$SCENARIO" \
+  --run-id "$RUN_ID" \
+  --run-root "$RUN_ROOT" \
+  --log-root "$LOG_ROOT" \
+  --evidence-output "$EVIDENCE_OUTPUT" \
+  --timeout-seconds "$TIMEOUT_SECONDS"
+

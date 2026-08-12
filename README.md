@@ -18,6 +18,20 @@ python -m fs_diloco.tools.launch_independent_run \
 
 只有添加 `--submit --actor-queue QUEUE --syncer-walltime HH:MM:SS --learner-walltime HH:MM:SS --log-root /absolute/log/root` 才会提交独立 PBS actor。队列和两个 walltime 必须显式提供，walltime 不得少于 10 分钟。Launcher 为每个 bootstrap slot 提交一条 scalar PBS job，不使用 job array。`configs/full_protocol.yaml` 定义 8 个 Learner、每轮 50 个 local optimizer step 和 10 个 committed global step。
 
+## plan04 Full Protocol 实验
+
+`do_experiments/full_protocol/experiment04/` 是独立实验启动包。启动包包含 baseline、100 个 local step × 10 个 global step 的七个实验场景，以及对应的 PBS supervisor、配置和 durable authority oracle。
+
+在 Miyabi login host 上，通过一条命令提交指定场景：
+
+```bash
+bash do_experiments/full_protocol/experiment04/submit.sh normal
+```
+
+可用场景为 `baseline`、`normal`、`stagger_4_4`、`stagger_3_3_2`、`learner_failure_simultaneous`、`learner_failure_staggered`、`syncer_failure` 和 `dual_syncer`。启动脚本在提交前要求 formal source scopes clean，并检查全部 agent PBS 脚本的 shell 语法和 literal group。Supervisor 和 actor job 均使用 `regular-g` 与 `00:30:00`。
+
+每个完成的 run 由 `tools/summarize_runs.py` 追加到 `runs/summary.csv`。`normal` 场景还会与同一 source fingerprint 的 `baseline` 比较最终平均 loss 和训练时长；任一相对差异超过 20% 时，场景 artifact 状态为 `FAIL`。
+
 运行根目录中的权威状态位于 `control/syncer_metadata.sqlite3`。配置、descriptor、source manifest、artifact policy 和 bootstrap marker 在初始化时不可变发布。Weights、outer optimizer state、receipt、proposal、control publication 和 audit history 通过内容哈希或 authority row 绑定。
 
 网页文档源文件位于 [website](website/README.md)，包含 Overview、Getting Started、Concepts、User Guide、Architecture、Reference，并为 Experiments 保留独立章节。
