@@ -14,7 +14,7 @@ sync:
   quorum_min: 4
   quorum_max: 4
   staleness_lambda: 0.0
-  scan_interval_seconds: 15.0
+  scan_interval_seconds: 0.5
   stop_after_outer_steps: 10
 syncer:
   device: cpu
@@ -49,7 +49,7 @@ scaling:
   learner_walltime: "00:30:00"
   learner_queue: regular-g
 terminal:
-  admission_close_policy: global_target_or_launch_budget
+  admission_close_policy: manual
   drain_ack_timeout_seconds: 60.0
   registration_visibility_grace_seconds: 2.0
   proposal_visibility_grace_seconds: 5.0

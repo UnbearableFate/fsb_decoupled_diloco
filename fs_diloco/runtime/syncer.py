@@ -121,6 +121,7 @@ def run_fenced_syncer(
     import torch
 
     from ..storage.tensor_codec import dtype_from_name, load_outer_state
+    from .learner_control import configured_global_work_target_reached
     from .services import (
         DynamicCapacityService,
         MaintenanceService,
@@ -253,10 +254,18 @@ def run_fenced_syncer(
             maintenance_service.tick(force=True)
             telemetry.event("terminal_finalized", terminal=terminal)
             return
-        outcome = merge_service.merge_once(
-            quorum_min=config.sync.quorum_min,
-            quorum_max=config.sync.quorum_max,
-            purpose="normal",
+        manual_horizon_wait = (
+            config.terminal.admission_close_policy == "manual"
+            and configured_global_work_target_reached(config, latest.version)
+        )
+        outcome = (
+            MergeAttemptStatus.NO_BATCH
+            if manual_horizon_wait
+            else merge_service.merge_once(
+                quorum_min=config.sync.quorum_min,
+                quorum_max=config.sync.quorum_max,
+                purpose="normal",
+            )
         )
         if capacity_service is not None:
             current = authority.read.latest_committed_version()

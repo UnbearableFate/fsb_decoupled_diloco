@@ -277,14 +277,47 @@ def test_registry_and_configs_are_the_exact_current_plan04_matrix() -> None:
         assert config.membership.stream_pool_size == config.membership.bootstrap_instances == 8
     for config in (baseline, experiment, timed, fault):
         assert config.training.gradient_accumulation_steps == 2
-        assert config.terminal.admission_close_policy == "global_target_or_launch_budget"
+        assert config.sync.scan_interval_seconds == 0.5
+    assert baseline.terminal.admission_close_policy == "global_target_or_launch_budget"
+    assert experiment.terminal.admission_close_policy == "global_target_or_launch_budget"
+    assert timed.terminal.admission_close_policy == "manual"
+    assert fault.terminal.admission_close_policy == "manual"
     assert experiment.scaling.enabled is False
     assert timed.scaling.enabled is False
-    assert timed.sync.scan_interval_seconds * timed.sync.stop_after_outer_steps >= 120.0
-    assert fault.sync.scan_interval_seconds * fault.sync.stop_after_outer_steps >= 120.0
     assert fault.scaling.enabled is True
     assert fault.scaling.learner_queue == "regular-g"
     assert fault.scaling.learner_walltime == "00:30:00"
+
+
+def test_manual_scenario_close_is_bound_to_the_exact_global_target(tmp_path: Path) -> None:
+    """Timed scenarios cannot publish their close request before or after version 10."""
+
+    module = _module()
+    run_root = tmp_path / "run"
+    control = run_root / "control"
+    control.mkdir(parents=True)
+    (control / "run_descriptor.json").write_text(
+        json.dumps({"run_id": "run-current", "descriptor_sha256": "d" * 64}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="exact global target"):
+        module._publish_scenario_close(
+            run_root,
+            scenario_name="stagger_3_3_2",
+            observed_version=9,
+            target_version=10,
+        )
+    evidence = module._publish_scenario_close(
+        run_root,
+        scenario_name="stagger_3_3_2",
+        observed_version=10,
+        target_version=10,
+    )
+
+    assert evidence["observed_global_version"] == 10
+    assert evidence["request"]["reason"] == "plan04_scenario_complete:stagger_3_3_2"
+    assert (control / "terminal_close_request.json").is_file()
 
 
 def test_one_line_submitter_freezes_regular_queue_and_thirty_minute_jobs() -> None:

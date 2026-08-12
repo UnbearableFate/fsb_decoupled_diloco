@@ -38,12 +38,12 @@ def test_configured_target_latest_enters_await_close_without_requiring_drain(
 
 
 @pytest.mark.parametrize("policy", ("manual", "deadline"))
-def test_non_global_close_policy_does_not_stop_training_from_latest_alone(policy: str) -> None:
-    """Manual and deadline policies must ignore a global target without their own trigger."""
+def test_all_terminal_policies_preserve_the_configured_work_horizon(policy: str) -> None:
+    """Close ownership cannot authorize learner work past the global horizon."""
 
     current = SimpleNamespace(latest={"version": 100}, drain=None, terminal=None)
 
-    assert configured_global_close_target_visible(_config(policy=policy), current) is False
+    assert configured_global_close_target_visible(_config(policy=policy), current) is True
 
 
 def test_missing_or_pre_target_latest_does_not_enter_await_close() -> None:

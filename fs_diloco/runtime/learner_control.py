@@ -13,26 +13,27 @@ def completed_local_steps_from_cycle(*, next_cycle_seq: int, inner_steps: int) -
     return (next_cycle_seq - 1) * inner_steps
 
 
+def configured_global_work_target_reached(config: Any, version: int) -> bool:
+    """Return whether one committed version reaches the configured work horizon."""
+
+    target = config.sync.stop_after_outer_steps
+    return target is not None and int(version) >= int(target)
+
+
 def configured_global_close_target_visible(
     config: Any,
     current: Any,
 ) -> bool:
-    """Return whether a current latest requires waiting for leader-owned close.
+    """Stop new learner cycles at the work horizon while preserving drain liveness.
 
-    The learner must remain alive to acknowledge the eventual drain, but once a
-    durable configured global target is visible it must not begin another data
-    cycle while the leader advances from latest publication to terminal close.
+    Terminal policy owns when authority closes, but it cannot authorize work past
+    the configured global horizon. The learner therefore remains alive to
+    acknowledge a later manual or automatic drain without starting another cycle.
     """
 
-    if config.terminal.admission_close_policy not in {
-        "global_target",
-        "global_target_or_launch_budget",
-    }:
-        return False
-    target = config.sync.stop_after_outer_steps
-    if target is None or current is None or current.latest is None:
+    if current is None or current.latest is None:
         return False
     version = current.latest.get("version")
-    if isinstance(version, bool) or not isinstance(version, int) or int(version) < int(target):
+    if isinstance(version, bool) or not isinstance(version, int):
         return False
-    return True
+    return configured_global_work_target_reached(config, version)

@@ -32,6 +32,7 @@ from fs_diloco.protocol.contributor import ContributorFence
 from fs_diloco.runtime.pbs_scheduler import PBSScheduler, normalize_job_id
 from fs_diloco.storage.audit_archive import read_logical_authority_rows
 from fs_diloco.storage.paths import RunPaths
+from fs_diloco.storage.terminal_request import publish_manual_terminal_request
 from fs_diloco.tools.launch_independent_run import launch
 
 
@@ -303,6 +304,54 @@ def _wait_terminal(summary_path: Path, *, timeout_seconds: float) -> dict[str, A
             return payload
         time.sleep(2.0)
     raise TimeoutError("Full Protocol run did not publish terminal summary")
+
+
+def _wait_global_target(
+    database: Path,
+    *,
+    target_version: int,
+    timeout_seconds: float,
+) -> int:
+    """Wait until authority reaches exactly the registered global work horizon."""
+
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if not database.is_file():
+            time.sleep(0.2)
+            continue
+        rows = _read_rows(database, "SELECT MAX(version) AS version FROM global_versions")
+        version = rows[0]["version"] if rows else None
+        if version is not None:
+            observed = int(version)
+            if observed > target_version:
+                raise RuntimeError("authority advanced beyond the registered global target")
+            if observed == target_version:
+                return observed
+        time.sleep(0.2)
+    raise TimeoutError("authority did not reach the registered global target")
+
+
+def _publish_scenario_close(
+    run_root: Path,
+    *,
+    scenario_name: str,
+    observed_version: int,
+    target_version: int,
+) -> dict[str, Any]:
+    """Publish the scenario-owned close only after the exact work horizon is durable."""
+
+    if observed_version != target_version:
+        raise ValueError("manual scenario close requires the exact global target")
+    descriptor = json.loads((run_root / "control/run_descriptor.json").read_text(encoding="utf-8"))
+    if not isinstance(descriptor, dict):
+        raise RuntimeError("run descriptor is not a JSON object")
+    request = publish_manual_terminal_request(
+        RunPaths(run_root),
+        run_id=str(descriptor["run_id"]),
+        descriptor_sha256=str(descriptor["descriptor_sha256"]),
+        reason=f"plan04_scenario_complete:{scenario_name}",
+    )
+    return {"observed_global_version": observed_version, "request": request}
 
 
 def _scheduler_history(job_id: str, scheduler: PBSScheduler) -> dict[str, Any]:
@@ -976,6 +1025,7 @@ def _evidence_paths(
         run_root / "control/syncer_metadata.sqlite3",
         run_root / "control/summary.json",
         run_root / "control/stop.json",
+        run_root / "control/terminal_close_request.json",
         log_root / "submission_receipt.json",
         log_root / "scenario_state.json",
         comparison_output,
@@ -1019,6 +1069,9 @@ def supervise(
 
     scenario = SCENARIOS[scenario_name]
     config = load_config(config_path)
+    expected_policy = "global_target_or_launch_budget" if scenario.experiment_id < 2 else "manual"
+    if config.terminal.admission_close_policy != expected_policy:
+        raise RuntimeError("scenario config uses the wrong terminal ownership policy")
     owned_jobs: set[str] = set()
     timeline: dict[str, Any] = {
         "format_version": 1,
@@ -1153,6 +1206,24 @@ def supervise(
                     "primary_qdel": syncer_qdel,
                 }
             )
+            _atomic_json(log_root / "scenario_state.json", timeline)
+
+        if config.terminal.admission_close_policy == "manual":
+            target_version = config.sync.stop_after_outer_steps
+            if target_version is None:
+                raise RuntimeError("manual plan04 scenario requires a global target")
+            observed_version = _wait_global_target(
+                database,
+                target_version=int(target_version),
+                timeout_seconds=timeout_seconds,
+            )
+            manual_close = _publish_scenario_close(
+                run_root,
+                scenario_name=scenario_name,
+                observed_version=observed_version,
+                target_version=int(target_version),
+            )
+            timeline["events"].append({"role": "manual_terminal_close", **manual_close})
             _atomic_json(log_root / "scenario_state.json", timeline)
 
         terminal_summary = _wait_terminal(
