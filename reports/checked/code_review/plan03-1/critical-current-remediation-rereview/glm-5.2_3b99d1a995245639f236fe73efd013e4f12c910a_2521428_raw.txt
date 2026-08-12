@@ -1,1 +1,0 @@
-I'll begin by inspecting the review packet and repository structure to understand the scope of this critical-incremental review.

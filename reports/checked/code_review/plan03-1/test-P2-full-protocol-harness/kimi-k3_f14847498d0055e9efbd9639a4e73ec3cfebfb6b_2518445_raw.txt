@@ -1,4 +1,0 @@
-I'll start by surveying the repository structure and the review packet, then dig into the plan documents and implementation surfaces.
-Now let me read the central harness test and the checker script.
-Now the PBS and launcher scripts.
-Let me re-read the source capture script plus related identity files.
