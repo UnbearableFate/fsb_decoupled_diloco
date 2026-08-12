@@ -143,8 +143,9 @@ def _write_full_protocol_run(
     archive_through_version: int | None = None,
     hard_crash_stream: int | None = None,
     crash_before_first_receipt: bool = False,
+    ack_before_first_cycle_stream: int | None = None,
 ) -> Path:
-    """Create a finalized eight-stream Full Protocol authority and telemetry fixture."""
+    """Create a finalized Full Protocol authority with optional terminal edge cases."""
 
     run = runs_root / "full_protocol" / run_id
     control = run / "control"
@@ -240,23 +241,24 @@ def _write_full_protocol_run(
         )
         fences.append(fence)
         crashed = stream == hard_crash_stream
+        acknowledged_before_cycle = stream == ack_before_first_cycle_stream
         connection.execute(
             "INSERT INTO terminal_contributor_fences VALUES(1, ?, ?, ?, ?, ?)",
             (
                 str(stream),
                 fence,
                 "hard_crash" if crashed else "acked",
-                None if crashed else 10,
+                None if crashed else (0 if acknowledged_before_cycle else 10),
                 3_276_800 if crashed else 0,
             ),
         )
-        if not (crashed and crash_before_first_receipt):
+        if not acknowledged_before_cycle and not (crashed and crash_before_first_receipt):
             connection.execute(
                 "INSERT INTO contributor_progress VALUES(?, ?)",
                 (str(stream), 3 if crashed else 10),
             )
         connection.execute("INSERT INTO learner_instances VALUES(?)", (f"{stream}.opbs",))
-        if crashed:
+        if crashed or acknowledged_before_cycle:
             continue
         metrics = run / "metrics" / "learner" / instance_id
         metrics.mkdir(parents=True)
@@ -427,6 +429,7 @@ def test_parse_full_protocol_accepts_hard_crash_without_progress(tmp_path: Path)
     assert row["optimizer_steps_min"] == 0
     assert row["final_report_count"] == 7
 
+    # Hard-crash updates require a progress row even when none was committed before loss.
     database = run / "control" / "syncer_metadata.sqlite3"
     connection = sqlite3.connect(database)
     fence_json = connection.execute(
@@ -440,6 +443,24 @@ def test_parse_full_protocol_accepts_hard_crash_without_progress(tmp_path: Path)
     connection.close()
     with pytest.raises(module.RunParseError, match="updates have no progress row"):
         module.parse_completed_run(run)
+
+
+def test_parse_full_protocol_accepts_terminal_ack_before_first_cycle(tmp_path: Path) -> None:
+    """A late-admitted learner may acknowledge terminal with zero durable cycles."""
+
+    module = _module()
+    run = _write_full_protocol_run(
+        tmp_path / "runs",
+        "pre-cycle-terminal-ack-run",
+        ack_before_first_cycle_stream=7,
+    )
+
+    row = module.parse_completed_run(run)
+
+    assert row["terminal_contributors"] == 8
+    assert row["optimizer_steps_min"] == 0
+    assert row["final_report_count"] == 7
+    assert "7" not in row["final_report_coordinate"].split(";")
 
 
 def test_csv_update_discovers_both_layouts_and_deduplicates(tmp_path: Path) -> None:

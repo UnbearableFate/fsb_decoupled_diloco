@@ -390,7 +390,7 @@ def _terminal_fences(connection: sqlite3.Connection, *, path: Path) -> list[dict
         if state == "acked" and (
             isinstance(final_cycle_seq, bool)
             or not isinstance(final_cycle_seq, int)
-            or final_cycle_seq < 1
+            or final_cycle_seq < 0
         ):
             raise RunParseError(f"{path}: terminal fence has no valid final cycle sequence")
         if state == "hard_crash" and (
@@ -548,7 +548,14 @@ def _parse_full_protocol_run(run_dir: Path) -> dict[str, Any]:
         raise RunParseError(f"{run_dir}: applied updates do not match every exact merge threshold")
 
     loss_reports = [
-        (fence, _last_proposal_loss(run_dir, fence, required=fence["terminal_state"] == "acked"))
+        (
+            fence,
+            _last_proposal_loss(
+                run_dir,
+                fence,
+                required=(fence["terminal_state"] == "acked" and fence["final_cycle_seq"] > 0),
+            ),
+        )
         for fence in fences
     ]
     available_losses = [loss for _fence, loss in loss_reports if loss is not None]
