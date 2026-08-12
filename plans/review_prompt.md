@@ -24,3 +24,5 @@ Prefer a few high-confidence findings over speculative observations.
 For each finding give severity, exact location, problem, evidence, impact, and recommended fix.
 
 Finally summarize architecture quality, simplification/deletion opportunities, missing tests, and an overall verdict.
+
+Report the results to `reports/reports/DOING/code_review/{current_model_name}_{HEAD commit-id}_{YYMMDD-HHMM}.md`
