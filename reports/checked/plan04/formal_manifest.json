@@ -307,7 +307,7 @@
       "functional_relation": "same training/protocol implementation; acceptance harness, tests, and documentation changes only"
     }
   ],
-  "state": "formal-complete",
+  "state": "completed",
   "validation": {
     "artifact": "artifacts/validation_319081c.json",
     "focused_tests": 271,

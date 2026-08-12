@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "plan_id": "plan04",
+  "plan_final_commit": "d3d608ea35a821dac6c020dc92f3adafee4cd780",
+  "completed_manifest_sha256": "c38c7bdee86a6676fad2251577738d6c0ac51b3c164bb7489de156af2076646c",
+  "prefix_mappings": [
+    {
+      "from": "plans/DOING/plans/plan04.md",
+      "to": "plans/DONE/plan04/plan04.md"
+    },
+    {
+      "from": "reports/DOING/plan04/",
+      "to": "reports/checked/plan04/"
+    },
+    {
+      "from": "reports/DOING/code_review/",
+      "to": "reports/checked/code_review/plan04/"
+    }
+  ]
+}
