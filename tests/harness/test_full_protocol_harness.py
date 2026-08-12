@@ -1212,6 +1212,12 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
     assert "capture_source_identity.py" in independent_checker
     assert "trap publish_blocked_on_exit EXIT" in independent_checker
 
+    independent_submitter = (
+        ROOT / "scripts/miyabi/agent/submit_independent_8l1s_50x10.sh"
+    ).read_text(encoding="utf-8")
+    # The login-node submitter must resolve the repository above scripts/miyabi/agent.
+    assert 'PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/../../.." && pwd -P)"' in independent_submitter
+
     validation_wrapper = (ROOT / "scripts/miyabi/agent/run_validation_suite.pbs").read_text(
         encoding="utf-8"
     )

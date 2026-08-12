@@ -7,7 +7,7 @@ set -eEuo pipefail
 trap 'echo "[ERROR] actor submission failed at line $LINENO" >&2' ERR
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd -P)"
+PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/../../.." && pwd -P)"
 
 case "$(hostname)" in
   miyabi-g*) ;;
