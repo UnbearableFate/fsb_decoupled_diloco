@@ -81,6 +81,7 @@ def _write_authority(
     replacement: bool = False,
     takeover: bool = False,
     admitted_streams: int = 8,
+    hard_crash_streams: tuple[int, ...] = (),
 ) -> tuple[dict[str, object] | None, dict[str, object] | None]:
     """Create a minimal finalized authority that reaches the plan04 oracle."""
 
@@ -174,9 +175,10 @@ def _write_authority(
             ),
         )
         terminal_fence = _fence(terminal_id, stream, epoch=2 if terminal_id != initial_id else 1)
+        terminal_state = "hard_crash" if stream in hard_crash_streams else "acked"
         connection.execute(
-            "INSERT INTO terminal_contributor_fences VALUES(1, ?, ?, 'acked')",
-            (str(stream), json.dumps(terminal_fence)),
+            "INSERT INTO terminal_contributor_fences VALUES(1, ?, ?, ?)",
+            (str(stream), json.dumps(terminal_fence), terminal_state),
         )
         # A learner admitted near version 10 may acknowledge terminal before completing a cycle.
         if stream != 5:
@@ -632,6 +634,32 @@ def test_authority_oracle_does_not_require_all_submitted_learners_to_admit(
 
     assert len(evidence["bootstrap_launches"]) == 4
     assert len(evidence["terminal_fences"]) == 4
+
+
+def test_authority_oracle_accepts_adjudicated_hard_crash_fences(tmp_path: Path) -> None:
+    """Terminal acceptance permits learners that cannot acknowledge shutdown."""
+
+    module = _module()
+    run_root = tmp_path / "hard-crash-terminal"
+    victim, replacement = _write_authority(
+        run_root,
+        replacement=True,
+        hard_crash_streams=(5, 6),
+    )
+
+    evidence = module._authority_evidence(
+        run_root=run_root,
+        config=load_config(PACKAGE / "fault_experiment.yaml"),
+        scenario=module.SCENARIOS["learner_failure_simultaneous"],
+        initial_learner_job_ids=[f"{index}.opbs" for index in range(8)],
+        primary_syncer_job_id="100.opbs",
+        successor_syncer_job_id=None,
+        victim=victim,
+        replacement=replacement,
+    )
+
+    states = {row["stable_contributor_key"]: row["state"] for row in evidence["terminal_fences"]}
+    assert states["5"] == states["6"] == "hard_crash"
 
 
 def test_authority_oracle_reads_archived_global_version_history(

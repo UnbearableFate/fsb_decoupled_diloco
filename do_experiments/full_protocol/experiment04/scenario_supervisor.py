@@ -622,8 +622,9 @@ def _authority_evidence(
 
     expected_streams = {str(index) for index in range(8)}
     fence_streams = {str(row["stable_contributor_key"]) for row in fences}
-    if not fence_streams <= expected_streams or {str(row["state"]) for row in fences} != {"acked"}:
-        raise RuntimeError("terminal fences contain a foreign or unacknowledged stream")
+    terminal_states = {str(row["state"]) for row in fences}
+    if not fence_streams <= expected_streams or not terminal_states <= {"acked", "hard_crash"}:
+        raise RuntimeError("terminal fences contain a foreign or unadjudicated stream")
     for row in fences:
         ContributorFence.from_dict(json.loads(str(row["fence_json"])))
     progress_streams = {str(row["stable_contributor_key"]) for row in progress}
