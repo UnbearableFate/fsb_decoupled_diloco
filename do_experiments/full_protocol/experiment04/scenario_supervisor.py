@@ -31,8 +31,8 @@ from fs_diloco.storage.paths import RunPaths
 from fs_diloco.tools.launch_independent_run import launch
 
 
-ACTOR_QUEUE = "regular-g"
-ACTOR_WALLTIME = "00:40:00"
+ACTOR_QUEUE = "debug-g"
+ACTOR_WALLTIME = "00:30:00"
 FAULT_DELAY_SECONDS = 60.0
 BATCH_DELAY_SECONDS = 30.0
 SYNCER_RESTART_DELAY_SECONDS = 30.0

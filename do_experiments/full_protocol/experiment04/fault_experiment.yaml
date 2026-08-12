@@ -48,8 +48,8 @@ scaling:
   scheduler_uncertainty_timeout_seconds: 30.0
   starvation_observation_seconds: 10.0
   learner_pbs_script: scripts/miyabi/agent/run_learner.pbs
-  learner_walltime: "00:40:00"
-  learner_queue: regular-g
+  learner_walltime: "00:30:00"
+  learner_queue: debug-g
 terminal:
   admission_close_policy: global_target
   drain_ack_timeout_seconds: 60.0

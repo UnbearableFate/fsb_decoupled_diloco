@@ -326,8 +326,8 @@ def test_registry_and_configs_are_the_exact_current_plan04_matrix() -> None:
     assert baseline.distributed.periodic_average_interval == 200
     assert experiment.scaling.enabled is False
     assert fault.scaling.enabled is True
-    assert fault.scaling.learner_queue == "regular-g"
-    assert fault.scaling.learner_walltime == "00:40:00"
+    assert fault.scaling.learner_queue == "debug-g"
+    assert fault.scaling.learner_walltime == "00:30:00"
 
 
 def test_one_line_submitter_freezes_current_baseline_and_full_protocol_jobs() -> None:
@@ -342,20 +342,20 @@ def test_one_line_submitter_freezes_current_baseline_and_full_protocol_jobs() ->
         ROOT / "torch_ddp_baselines/scripts/miyabi/submit_5000steps.sh"
     ).read_text(encoding="utf-8")
 
-    assert "QUEUE=regular-g" in submitter
-    assert "WALLTIME=00:40:00" in submitter
+    assert "QUEUE=debug-g" in submitter
+    assert "WALLTIME=00:30:00" in submitter
     assert "TIMEOUT_SECONDS=1800" in submitter
     assert "submit_5000steps.sh" in submitter
     assert 'CONFIG="$SCRIPT_DIR/experiment.yaml"' in submitter
     assert 'bash -n "$PROJECT_ROOT"/scripts/miyabi/agent/*.pbs' in submitter
-    assert "#PBS -q regular-g" in wrapper
+    assert "#PBS -q debug-g" in wrapper
     assert "#PBS -W group_list=xg24i002" in wrapper
-    assert "#PBS -l walltime=00:40:00" in wrapper
+    assert "#PBS -l walltime=00:30:00" in wrapper
     assert 'TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-1800}"' in wrapper
     assert "scenario_supervisor.py" in wrapper
-    assert "#PBS -q regular-g" in baseline_wrapper
+    assert "#PBS -q debug-g" in baseline_wrapper
     assert "#PBS -W group_list=xg24i002" in baseline_wrapper
-    assert "#PBS -l walltime=00:40:00" in baseline_wrapper
+    assert "#PBS -l walltime=00:30:00" in baseline_wrapper
     assert "PROJECT_ROOT=$PROJECT_ROOT,MODE=ddp,RUN_ID=$ddp_run_id" in baseline_submitter
     assert (
         "PROJECT_ROOT=$PROJECT_ROOT,MODE=periodic_average,RUN_ID=$periodic_run_id"

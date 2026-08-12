@@ -70,8 +70,8 @@ fi
 
 PYTHON_BIN="$PROJECT_ROOT/.venv/bin/python"
 PBS_SCRIPT="$SCRIPT_DIR/run_experiment.pbs"
-QUEUE=regular-g
-WALLTIME=00:40:00
+QUEUE=debug-g
+WALLTIME=00:30:00
 TIMEOUT_SECONDS=1800
 
 test -x "$PYTHON_BIN"

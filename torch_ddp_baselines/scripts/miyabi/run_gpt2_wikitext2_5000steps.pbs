@@ -1,9 +1,9 @@
 #!/bin/bash
 #PBS -N torch_baseline_5000
-#PBS -q regular-g
+#PBS -q debug-g
 #PBS -W group_list=xg24i002
 #PBS -l select=8:mpiprocs=1
-#PBS -l walltime=00:40:00
+#PBS -l walltime=00:30:00
 #PBS -j oe
 #PBS -m ae
 
