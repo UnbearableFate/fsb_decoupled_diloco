@@ -139,7 +139,7 @@ export const apiModuleIndex = [
     "package": "fs_diloco.modeling",
     "counts": {
       "classes": 1,
-      "functions": 7,
+      "functions": 5,
       "methods": 1
     }
   },
@@ -191,7 +191,7 @@ export const apiModuleIndex = [
     "package": "fs_diloco.modeling",
     "counts": {
       "classes": 0,
-      "functions": 11,
+      "functions": 9,
       "methods": 0
     }
   },
@@ -224,14 +224,14 @@ export const apiModuleIndex = [
   {
     "module": "fs_diloco.observability.logging_utils",
     "route": "/reference/fs_diloco/observability/logging_utils",
-    "summary": "将进程事件、异常和运行证明写入 JSONL。",
+    "summary": "将带有唯一 Actor 身份的运行证明写入 JSONL。",
     "isPackage": false,
     "visibility": "public",
     "package": "fs_diloco.observability",
     "counts": {
-      "classes": 2,
-      "functions": 1,
-      "methods": 5
+      "classes": 1,
+      "functions": 0,
+      "methods": 2
     }
   },
   {
@@ -268,9 +268,9 @@ export const apiModuleIndex = [
     "visibility": "public",
     "package": "fs_diloco.protocol",
     "counts": {
-      "classes": 15,
+      "classes": 14,
       "functions": 0,
-      "methods": 14
+      "methods": 13
     }
   },
   {
@@ -352,19 +352,6 @@ export const apiModuleIndex = [
     }
   },
   {
-    "module": "fs_diloco.protocol.selection",
-    "route": "/reference/fs_diloco/protocol/selection",
-    "summary": "按持久服务历史确定性选择 contributor。",
-    "isPackage": false,
-    "visibility": "public",
-    "package": "fs_diloco.protocol",
-    "counts": {
-      "classes": 1,
-      "functions": 0,
-      "methods": 2
-    }
-  },
-  {
     "module": "fs_diloco.protocol.token_accounting",
     "route": "/reference/fs_diloco/protocol/token_accounting",
     "summary": "执行 Learner segment 与 authority token 的确定性记账。",
@@ -412,7 +399,7 @@ export const apiModuleIndex = [
     "package": "fs_diloco.runtime",
     "counts": {
       "classes": 0,
-      "functions": 4,
+      "functions": 3,
       "methods": 0
     }
   },
@@ -516,7 +503,7 @@ export const apiModuleIndex = [
     "package": "fs_diloco.runtime.services",
     "counts": {
       "classes": 1,
-      "functions": 2,
+      "functions": 1,
       "methods": 6
     }
   },
@@ -594,7 +581,7 @@ export const apiModuleIndex = [
     "package": "fs_diloco.storage",
     "counts": {
       "classes": 1,
-      "functions": 14,
+      "functions": 13,
       "methods": 0
     }
   },
@@ -632,7 +619,7 @@ export const apiModuleIndex = [
     "visibility": "public",
     "package": "fs_diloco.storage",
     "counts": {
-      "classes": 3,
+      "classes": 4,
       "functions": 17,
       "methods": 7
     }
@@ -640,26 +627,26 @@ export const apiModuleIndex = [
   {
     "module": "fs_diloco.storage.leader_lease",
     "route": "/reference/fs_diloco/storage/leader_lease",
-    "summary": "定义 leader lease 值对象和本地单调时钟安全边界。",
+    "summary": "定义 leader lease 值对象和过期 fencing 错误。",
     "isPackage": false,
     "visibility": "public",
     "package": "fs_diloco.storage",
     "counts": {
-      "classes": 5,
+      "classes": 4,
       "functions": 0,
-      "methods": 6
+      "methods": 1
     }
   },
   {
     "module": "fs_diloco.storage.object_store",
     "route": "/reference/fs_diloco/storage/object_store",
-    "summary": "按内容身份读取不可变 payload 对象。",
+    "summary": "按 authority 内容身份消费不可变制品。",
     "isPackage": false,
     "visibility": "public",
     "package": "fs_diloco.storage",
     "counts": {
-      "classes": 3,
-      "functions": 6,
+      "classes": 4,
+      "functions": 8,
       "methods": 0
     }
   },
@@ -692,13 +679,13 @@ export const apiModuleIndex = [
   {
     "module": "fs_diloco.storage.tensor_codec",
     "route": "/reference/fs_diloco/storage/tensor_codec",
-    "summary": "使用 Safetensors 编码和读取全局权重、更新向量与外层优化器状态。",
+    "summary": "使用 Safetensors 编码并按内容身份读取全局权重、更新向量与外层优化器状态。",
     "isPackage": false,
     "visibility": "public",
     "package": "fs_diloco.storage",
     "counts": {
       "classes": 0,
-      "functions": 13,
+      "functions": 11,
       "methods": 0
     }
   },
@@ -768,6 +755,19 @@ export const apiModuleIndex = [
     }
   },
   {
+    "module": "fs_diloco.tools.clean_run",
+    "route": "/reference/fs_diloco/tools/clean_run",
+    "summary": "保守地筛选并删除已完成运行中的冗余输出。",
+    "isPackage": false,
+    "visibility": "public",
+    "package": "fs_diloco.tools",
+    "counts": {
+      "classes": 3,
+      "functions": 19,
+      "methods": 2
+    }
+  },
+  {
     "module": "fs_diloco.tools.init_run",
     "route": "/reference/fs_diloco/tools/init_run",
     "summary": "在提交 PBS Actor 前初始化不可变 Full Protocol 运行。",
@@ -824,10 +824,10 @@ export const apiModuleIndex = [
 export const apiReferenceStats = {
   "modules": 63,
   "packages": 9,
-  "classes": 105,
-  "functions": 296,
-  "methods": 329,
+  "classes": 106,
+  "functions": 307,
+  "methods": 320,
   "fields": 560,
   "variables": 51,
-  "symbols": 1341
+  "symbols": 1344
 } as const;

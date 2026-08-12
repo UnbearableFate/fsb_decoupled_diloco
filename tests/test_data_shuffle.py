@@ -1,62 +1,67 @@
-import itertools
+"""Verify the sole resumable production data permutation."""
 
-from fs_diloco.modeling.hf_data import _batched_blocks
+from __future__ import annotations
+
+from itertools import islice
+from types import SimpleNamespace
+
+import torch
+
+from fs_diloco.core.config import Config
+from fs_diloco.modeling.hf_data import build_indexed_batch_iterator
+from fs_diloco.protocol.data_cursor import IndexedBlockCursor
 
 
-def _flatten_block_ids(iterator, batch_count):
-    return [
-        int(row[0])
-        for batch in itertools.islice(iterator, batch_count)
-        for row in batch.input_ids.tolist()
-    ]
+def _config() -> Config:
+    """Build a small synthetic configuration for indexed iterator tests."""
+
+    config = Config()
+    config.data.dataset_name = "synthetic"
+    config.data.block_size = 8
+    config.training.micro_batch_size = 2
+    config.training.seed = 987
+    return config
 
 
-def test_shuffled_block_stream_is_complete_across_nondivisible_batch_boundaries():
-    blocks = [[index, index] for index in range(5)]
-    stream = _batched_blocks(
-        blocks,
-        micro_batch_size=2,
-        shuffle=True,
-        seed=123,
-        learner_index=0,
+def _cursor(*, block_index: int = 0, shard_index: int = 0) -> IndexedBlockCursor:
+    """Build one stable cursor in a two-shard data stream."""
+
+    return IndexedBlockCursor(
+        stable_contributor_key=f"stream-{shard_index}",
+        dataset_identity_sha256="a" * 64,
+        seed=987,
+        block_index=block_index,
+        shard_index=shard_index,
+        shard_count=2,
     )
 
-    flattened = _flatten_block_ids(stream, batch_count=10)
-    epochs = [flattened[start : start + 5] for start in range(0, 20, 5)]
 
-    assert all(sorted(epoch) == list(range(5)) for epoch in epochs)
-    assert all(left != right for left, right in zip(epochs, epochs[1:]))
+def _sample(cursor: IndexedBlockCursor, count: int) -> list[torch.Tensor]:
+    """Collect detached production batches from one explicit cursor."""
 
-
-def test_shuffled_block_stream_is_deterministic_and_learner_specific():
-    blocks = [[index] for index in range(7)]
-
-    def sample(learner_index):
-        return _flatten_block_ids(
-            _batched_blocks(
-                blocks,
-                micro_batch_size=3,
-                shuffle=True,
-                seed=987,
-                learner_index=learner_index,
-            ),
-            batch_count=7,
-        )
-
-    assert sample(0) == sample(0)
-    assert sample(0) != sample(1)
-
-
-def test_shuffle_disabled_cycles_in_source_order():
-    blocks = [[index] for index in range(5)]
-    stream = _batched_blocks(
-        blocks,
-        micro_batch_size=2,
-        shuffle=False,
-        seed=123,
-        learner_index=9,
+    iterator = build_indexed_batch_iterator(
+        _config(),
+        SimpleNamespace(vocab_size=2**20),
+        cursor=cursor,
     )
+    return [batch.input_ids.clone() for batch in islice(iterator, count)]
 
-    batches = [batch.input_ids.flatten().tolist() for batch in itertools.islice(stream, 4)]
 
-    assert batches == [[0, 1], [2, 3], [4, 0], [1, 2]]
+def test_indexed_iterator_replays_and_resumes_the_exact_stream() -> None:
+    """Replacement learners must reproduce the same next batch from authority cursor state."""
+
+    uninterrupted = _sample(_cursor(), 5)
+    replayed = _sample(_cursor(), 5)
+    resumed = _sample(_cursor(block_index=3), 2)
+
+    assert all(torch.equal(left, right) for left, right in zip(uninterrupted, replayed))
+    assert all(torch.equal(left, right) for left, right in zip(uninterrupted[3:], resumed))
+
+
+def test_indexed_iterator_keeps_contributor_shards_distinct() -> None:
+    """Current contributors must not consume the same permuted block positions."""
+
+    first = _sample(_cursor(shard_index=0), 8)
+    second = _sample(_cursor(shard_index=1), 8)
+
+    assert all(not torch.equal(left, right) for left, right in zip(first, second))

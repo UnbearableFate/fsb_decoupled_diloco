@@ -423,7 +423,7 @@ def test_aggregate_checker_accepts_adjudicated_terminal_overshoot(tmp_path: Path
     assert artifact["status"] == "PASS"
     assert artifact["errors"] == []
     assert artifact["source_identity"]["dirty"] is False
-    assert artifact["config_schema_identity"]["version"] == 2
+    assert artifact["config_schema_identity"]["version"] == 3
     assert set(artifact["protocol_schema_identity"]) == {"version", "ddl_sha256"}
     assert artifact["environment"]["pbs_job_id"] == "fixture.opbs"
     assert artifact["environment"]["packages"]["torch"] != "not-installed"
@@ -1226,14 +1226,20 @@ def test_pbs_scripts_bind_literal_group_minimum_walltime_and_one_current_runner(
         encoding="utf-8"
     )
     assert review_runner.count("run_opencode \\") == 1
-    assert 'readonly OPENCODE_MODEL="opencode-go/deepseek-v4-flash"' in review_runner
-    assert 'readonly OPENCODE_REVIEWER_ID="opencode-deepseek-v4-flash"' in review_runner
-    assert "OPENCODE_MODELS" not in review_runner
-    assert "OPENCODE_MODEL_LIST" not in review_runner
-    assert "run_claude" not in review_runner
-    assert "CLAUDE_MODEL" not in review_runner
-    assert 'any(character in raw for character in "*?")' in review_runner
-    assert 'any(character in raw for character in "*?[")' not in review_runner
+    assert "${OPENCODE_MODELS:?OPENCODE_MODELS is required}" in review_runner
+    assert "IFS=';' read -r -a OPENCODE_MODEL_LIST" in review_runner
+    assert "OPENCODE_MODELS must be a semicolon-separated list without empty entries" in (
+        review_runner
+    )
+    assert "OPENCODE_MODELS contains a duplicate model ID" in review_runner
+    assert "declare -A SEEN_OPENCODE_MODELS" in review_runner
+    assert 'for index in "${!OPENCODE_MODEL_LIST[@]}"' in review_runner
+    assert "printf 'opencode-review-%02d'" in review_runner
+    assert 'OPENCODE_SNAPSHOTS+=("$RUN_TMP/repository-$reviewer_id")' in review_runner
+    assert "run_claude &" in review_runner
+    assert 'CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-5}"' in review_runner
+    assert "readonly OPENCODE_MODEL=" not in review_runner
+    assert 'any(character in raw for character in "*?[")' in review_runner
 
 
 def test_pbs_wrapper_publishes_blocked_artifact_when_allocation_exits(

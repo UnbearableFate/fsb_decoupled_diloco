@@ -54,6 +54,9 @@ def test_repository_configs_use_the_one_strict_schema(path: Path) -> None:
     [
         ("membership:\n  mode: static\n", "membership.mode"),
         ("sync:\n  num_learners: 4\n", "sync.num_learners"),
+        ("training:\n  completion_mode: global_only\n", "training.completion_mode"),
+        ("training:\n  max_local_steps: 100\n", "training.max_local_steps"),
+        ("data:\n  shuffle_blocks: true\n", "data.shuffle_blocks"),
     ],
 )
 def test_removed_capacity_fields_are_rejected_as_unknown(
@@ -218,31 +221,6 @@ sync:
     assert config.sync.stop_after_direct_weight_tokens_applied == 100
     assert payload["sync"]["stop_after_direct_weight_tokens_applied"] == 100
     assert yaml.safe_load(resolved_config_bytes(config))["sync"] == payload["sync"]
-
-
-@pytest.mark.parametrize(
-    ("max_local_steps", "outer_steps", "message"),
-    [
-        (None, 10, "requires training.max_local_steps"),
-        (1999, 10, "whole inner cycles"),
-        (2000, None, "requires a global step target"),
-    ],
-)
-def test_local_and_global_completion_requires_two_exact_horizons(
-    max_local_steps: int | None,
-    outer_steps: int | None,
-    message: str,
-) -> None:
-    """The joint completion mode must describe complete local cycles and a global target."""
-
-    config = synthetic_config()
-    config.training.inner_steps = 200
-    config.training.max_local_steps = max_local_steps
-    config.training.completion_mode = "local_and_global"
-    config.sync.stop_after_outer_steps = outer_steps
-
-    with pytest.raises(ValueError, match=message):
-        config.validate()
 
 
 def test_resolution_owns_run_identity_and_path_substitution(

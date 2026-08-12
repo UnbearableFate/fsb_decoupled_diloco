@@ -43,7 +43,7 @@ def test_fresh_schema_initializes_reopens_and_is_integral(tmp_path: Path) -> Non
         tables = set(authority.read.table_names())
         assert authority.read.integrity_check() == ("ok",)
         assert metadata.ddl_sha256 == ddl_bundle_sha256()
-        assert metadata.schema_version == AUTHORITY_SCHEMA_VERSION == 12
+        assert metadata.schema_version == AUTHORITY_SCHEMA_VERSION == 13
         assert {
             "streams",
             "learner_instances",

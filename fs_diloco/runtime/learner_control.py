@@ -16,8 +16,6 @@ def completed_local_steps_from_cycle(*, next_cycle_seq: int, inner_steps: int) -
 def configured_global_close_target_visible(
     config: Any,
     current: Any,
-    *,
-    completed_local_steps: int,
 ) -> bool:
     """Return whether a current latest requires waiting for leader-owned close.
 
@@ -37,9 +35,4 @@ def configured_global_close_target_visible(
     version = current.latest.get("version")
     if isinstance(version, bool) or not isinstance(version, int) or int(version) < int(target):
         return False
-    if config.training.completion_mode != "local_and_global":
-        return True
-    local_target = config.training.max_local_steps
-    if local_target is None:
-        raise RuntimeError("local_and_global completion has no local step target")
-    return completed_local_steps >= int(local_target)
+    return True

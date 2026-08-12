@@ -1,4 +1,4 @@
-config_schema_version: 2
+config_schema_version: 3
 run:
   name: full_protocol_gpt2_wikitext2_8l_200x10
 model:
@@ -13,7 +13,6 @@ data:
   revision: b08601e04326c79dfdd32d625aee71d232d685c3
   train_split: train
   block_size: 1024
-  shuffle_blocks: true
 sync:
   quorum_min: 4
   quorum_max: 4
@@ -62,7 +61,6 @@ training:
   inner_steps: 200
   micro_batch_size: 2
   gradient_accumulation_steps: 8
-  completion_mode: global_only
   seed: 1337
   grad_clip: 1.0
 inner_optimizer:

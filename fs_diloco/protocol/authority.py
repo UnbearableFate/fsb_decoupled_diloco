@@ -275,31 +275,6 @@ class Admission:
 
 
 @dataclass(frozen=True)
-class VisibilityDecision:
-    status: ReadStatus
-    stable_failure_count: int
-    terminal_disposition: str | None
-    observation_id: int | None
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.status, ReadStatus):
-            raise ValueError("visibility decision status must be a ReadStatus")
-        strict_int(self.stable_failure_count, name="stable_failure_count", minimum=0)
-        if self.terminal_disposition not in {
-            None,
-            "missing",
-            "malformed",
-            "identity_mismatch",
-            "manual_review",
-        }:
-            raise ValueError("invalid visibility terminal disposition")
-        if self.observation_id is not None:
-            strict_int(self.observation_id, name="observation_id", minimum=1)
-        if (self.terminal_disposition is None) != (self.observation_id is None):
-            raise ValueError("terminal visibility decisions require an observation ID")
-
-
-@dataclass(frozen=True)
 class RetireIncarnation:
     instance_id: str
     reason: str

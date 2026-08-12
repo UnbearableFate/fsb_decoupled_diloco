@@ -78,29 +78,6 @@ def atomic_write_json(path: str | Path, payload: dict[str, Any], mode: int = 0o6
     return atomic_write_text(path, text, mode=mode)
 
 
-def atomic_write_with_writer(
-    path: str | Path, writer: Callable[[Path], None], mode: int = 0o644
-) -> Path:
-    path = Path(path)
-    ensure_dir(path.parent)
-    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
-    os.close(fd)
-    tmp_path = Path(tmp_name)
-    try:
-        writer(tmp_path)
-        with tmp_path.open("rb") as handle:
-            os.fsync(handle.fileno())
-        os.chmod(tmp_path, mode)
-        os.replace(tmp_path, path)
-        _fsync_directory(path.parent)
-    except Exception:
-        try:
-            tmp_path.unlink(missing_ok=True)
-        finally:
-            raise
-    return path
-
-
 def publish_immutable_with_writer(
     path: str | Path,
     writer: Callable[[Path], None],

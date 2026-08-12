@@ -39,6 +39,14 @@ class ReceiptBarrierResult:
     payload: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class LatestBarrierResult:
+    """Return either an initial committed version or the terminal control that won."""
+
+    kind: Literal["latest", "terminal"]  # The control condition that ended the wait.
+    payload: dict[str, Any]  # The validated latest or terminal control payload.
+
+
 class ControlPublisher:
     def __init__(
         self,
@@ -249,7 +257,9 @@ def wait_for_current_latest(
     poll_seconds: float,
     max_clock_skew_seconds: float,
     newer_than: int = -1,
-) -> dict[str, Any]:
+) -> LatestBarrierResult:
+    """Wait for initial model state while returning terminal close as normal control flow."""
+
     deadline = time.monotonic() + float(timeout_seconds)
     while time.monotonic() < deadline:
         current = read_current_control(
@@ -259,9 +269,9 @@ def wait_for_current_latest(
         )
         if current is not None:
             if current.terminal is not None:
-                raise StopIteration(current.terminal)
+                return LatestBarrierResult("terminal", current.terminal)
             if current.latest is not None and int(current.latest["version"]) > newer_than:
-                return current.latest
+                return LatestBarrierResult("latest", current.latest)
         time.sleep(float(poll_seconds))
     raise TimeoutError("timed out waiting for current fenced global version")
 

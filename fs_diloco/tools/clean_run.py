@@ -1,4 +1,4 @@
-"""Conservatively prune redundant output from one completed run.
+"""Provide the installed command for pruning redundant output from a completed run.
 
 The cleaner intentionally accepts only an exact run directory and a matching
 PASS evidence artifact bound to the current terminal version.  It preserves

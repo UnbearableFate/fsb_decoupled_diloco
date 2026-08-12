@@ -10,9 +10,10 @@ from fs_diloco.modeling.training import (
 )
 
 
-def _cosine_config(*, completion_mode: str = "local_or_global") -> Config:
+def _cosine_config() -> Config:
+    """Build the current global-horizon configuration for scheduler tests."""
+
     config = Config()
-    config.training.completion_mode = completion_mode
     config.inner_optimizer.scheduler = "cosine"
     config.inner_optimizer.lr = 1.0
     config.inner_optimizer.warmup_steps = 2
@@ -79,14 +80,6 @@ def test_rebuilding_inner_state_restores_cumulative_scheduler_phase():
             0.1,
         ]
     )
-
-
-def test_completion_mode_does_not_change_scheduler_curve():
-    local = _cosine_config(completion_mode="local_or_global")
-    global_only = _cosine_config(completion_mode="global_only")
-    assert [inner_lr_multiplier(local, step) for step in range(9)] == [
-        inner_lr_multiplier(global_only, step) for step in range(9)
-    ]
 
 
 def test_cosine_scheduler_requires_independent_horizon(tmp_path):

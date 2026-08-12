@@ -118,13 +118,10 @@ def test_replace_returns_reset_adoption_outcome():
     assert action.adoption.preserve_inner_state is False
 
 
-def test_joint_horizon_skips_impossible_post_target_latest_wait() -> None:
-    """Version 10 has no successor while learners finish the remaining local cycles."""
+def test_global_horizon_skips_impossible_post_target_latest_wait() -> None:
+    """A learner at the sole global target must not wait for a forbidden successor."""
 
     config = _config()
-    config.training.completion_mode = "local_and_global"
-    config.training.max_local_steps = 2000
-    config.training.inner_steps = 200
     config.sync.stop_after_outer_steps = 10
     calls: list[float] = []
 
@@ -168,7 +165,7 @@ def test_joint_horizon_skips_impossible_post_target_latest_wait() -> None:
         ),
     ],
 )
-def test_joint_horizon_does_not_start_state_requiring_version_eleven(
+def test_global_horizon_does_not_start_state_requiring_version_eleven(
     strategy_type,
     strategy_name: str,
     skip_event: str,
@@ -176,9 +173,6 @@ def test_joint_horizon_does_not_start_state_requiring_version_eleven(
     """Stateful adoption modes must not create work that can only reconcile with v11."""
 
     config = _config(strategy_name)
-    config.training.completion_mode = "local_and_global"
-    config.training.max_local_steps = 2000
-    config.training.inner_steps = 200
     config.sync.stop_after_outer_steps = 10
     calls: list[str] = []
 

@@ -123,7 +123,6 @@ class DataSection(ConfigSection):
     train_split: str = "train"
     block_size: int = 16
     cache_dir: str | None = None
-    shuffle_blocks: bool = True
 
 
 @dataclass
@@ -197,8 +196,6 @@ class TrainingSection(ConfigSection):
     inner_steps: int = 100
     micro_batch_size: int = 2
     gradient_accumulation_steps: int = 8
-    max_local_steps: int | None = None
-    completion_mode: str = "local_or_global"
     seed: int = 1337
     grad_clip: float | None = None
 
@@ -473,14 +470,6 @@ def _normalize_and_validate(config: Config) -> Config:
         configured = getattr(config.syncer, field_name)
         if configured not in allowed_dtypes:
             raise ValueError(f"unsupported syncer.{field_name}: {configured}")
-    if config.training.completion_mode not in {
-        "local_or_global",
-        "global_only",
-        "local_and_global",
-    }:
-        raise ValueError(f"unsupported training.completion_mode: {config.training.completion_mode}")
-    if config.training.max_local_steps is not None and config.training.max_local_steps <= 0:
-        raise ValueError("training.max_local_steps must be > 0 when set")
     if config.training.grad_clip is not None and config.training.grad_clip <= 0.0:
         raise ValueError("training.grad_clip must be > 0 when set")
     if config.inner_optimizer.name != "adamw":
@@ -631,22 +620,8 @@ def _normalize_and_validate(config: Config) -> Config:
         raise ValueError("sync.stop_after_direct_weight_tokens_applied must be > 0")
     if config.sync.stop_after_outer_steps is not None and config.sync.stop_after_outer_steps <= 0:
         raise ValueError("sync.stop_after_outer_steps must be > 0 when set")
-    if config.training.completion_mode == "local_and_global":
-        local_target = config.training.max_local_steps
-        if local_target is None:
-            raise ValueError("local_and_global completion requires training.max_local_steps")
-        if local_target % config.training.inner_steps != 0:
-            raise ValueError(
-                "local_and_global training.max_local_steps must contain whole inner cycles"
-            )
-        if config.sync.stop_after_outer_steps is None:
-            raise ValueError("local_and_global completion requires a global step target")
-    if (
-        config.training.completion_mode == "global_only"
-        and config.sync.stop_after_outer_steps is None
-        and direct_token_target is None
-    ):
-        raise ValueError("global_only completion requires a global stop target")
+    if config.sync.stop_after_outer_steps is None and direct_token_target is None:
+        raise ValueError("Full Protocol training requires a global stop target")
     if terminal.admission_close_policy not in {
         "global_target_or_launch_budget",
         "global_target",

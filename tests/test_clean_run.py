@@ -10,7 +10,7 @@ import pytest
 
 from fs_diloco.storage.artifact_policy import build_artifact_policy
 from fs_diloco.storage.paths import RunPaths
-from tools.clean_run import (
+from fs_diloco.tools.clean_run import (
     CleanupRefusedError,
     build_cleanup_plan,
     execute_cleanup,

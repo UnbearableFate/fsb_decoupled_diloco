@@ -10,6 +10,7 @@ import os
 import stat
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import Callable, TypeVar
 
 import torch
 from safetensors import SafetensorError, safe_open
@@ -27,6 +28,12 @@ _TRANSIENT_ERRNOS = {
     errno.ESTALE,
     errno.ETIMEDOUT,
 }
+
+_T = TypeVar("_T")
+
+
+class ArtifactIdentityError(ValueError):
+    """Report that an artifact no longer matches its authority-owned identity."""
 
 
 @dataclass(frozen=True)
@@ -56,6 +63,8 @@ class VerifiedArtifact:
 
 
 def resolve_run_relative_path(run_root: str | Path, relative_path: str) -> Path:
+    """Resolve one canonical artifact path without following parent symlinks."""
+
     root = Path(run_root).resolve(strict=True)
     pure = PurePosixPath(relative_path)
     if (
@@ -80,6 +89,102 @@ def resolve_run_relative_path(run_root: str | Path, relative_path: str) -> Path:
     ):
         raise ValueError("artifact path escaped the canonical run root")
     return candidate
+
+
+def consume_verified_artifact(
+    run_root: str | Path,
+    relative_path: str,
+    *,
+    expected_size: int,
+    expected_sha256: str,
+    consumer: Callable[[str], _T],
+    chunk_size: int = 1024 * 1024,
+) -> _T:
+    """Consume exact authority-bound bytes through one stable open descriptor.
+
+    The callback receives a ``/proc/self/fd`` path naming the already verified
+    descriptor. The artifact is rehashed and its directory entry is rechecked
+    before the callback result is released, so path replacement or in-place
+    mutation fails closed at the point of use.
+    """
+
+    if expected_size < 1:
+        raise ValueError("expected artifact size must be positive")
+    if len(expected_sha256) != 64 or any(
+        character not in "0123456789abcdef" for character in expected_sha256
+    ):
+        raise ValueError("expected artifact SHA-256 must be a lowercase digest")
+    path = resolve_run_relative_path(run_root, relative_path)
+    before = path.lstat()
+    if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
+        raise ArtifactIdentityError("artifact must be a regular non-symlink file")
+    descriptor = os.open(
+        path,
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0),
+    )
+    try:
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode) or (before.st_dev, before.st_ino) != (
+            opened.st_dev,
+            opened.st_ino,
+        ):
+            raise ArtifactIdentityError("artifact identity changed during open")
+        if opened.st_size != expected_size:
+            raise ArtifactIdentityError(
+                f"artifact size mismatch: expected {expected_size}, got {opened.st_size}"
+            )
+        digest = _hash_open_file(descriptor, file_size=opened.st_size, chunk_size=chunk_size)
+        if digest != expected_sha256:
+            raise ArtifactIdentityError("artifact SHA-256 mismatch")
+        result = consumer(f"/proc/self/fd/{descriptor}")
+        verification_digest = _hash_open_file(
+            descriptor,
+            file_size=opened.st_size,
+            chunk_size=chunk_size,
+        )
+        final = os.fstat(descriptor)
+        named = path.lstat()
+        identity_before = (
+            opened.st_dev,
+            opened.st_ino,
+            opened.st_size,
+            opened.st_mtime_ns,
+            opened.st_ctime_ns,
+        )
+        identity_after = (
+            final.st_dev,
+            final.st_ino,
+            final.st_size,
+            final.st_mtime_ns,
+            final.st_ctime_ns,
+        )
+        if verification_digest != digest:
+            raise ArtifactIdentityError("artifact content changed while it was consumed")
+        if identity_before != identity_after or (named.st_dev, named.st_ino) != (
+            final.st_dev,
+            final.st_ino,
+        ):
+            raise ArtifactIdentityError("artifact identity changed while it was consumed")
+        return result
+    finally:
+        os.close(descriptor)
+
+
+def _hash_open_file(descriptor: int, *, file_size: int, chunk_size: int) -> str:
+    """Hash exactly one stable open-file extent without changing its offset."""
+
+    digest = hashlib.sha256()
+    offset = 0
+    while offset < file_size:
+        chunk = os.pread(descriptor, min(chunk_size, file_size - offset), offset)
+        if not chunk:
+            raise ArtifactIdentityError("artifact became truncated while it was consumed")
+        digest.update(chunk)
+        offset += len(chunk)
+    return digest.hexdigest()
 
 
 def verify_proposal_payload(

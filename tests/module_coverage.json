@@ -73,8 +73,8 @@
     },
     {
       "surface": "fs_diloco/modeling/hf_data.py",
-      "boundary": "revision-pinned data loading and deterministic blocks",
-      "tests": ["tests/test_hf_revision_pinning.py::test_hf_dataset_loads_the_declared_repository_and_revision"]
+      "boundary": "revision-pinned data loading and sole deterministic indexed stream",
+      "tests": ["tests/test_data_shuffle.py::test_indexed_iterator_replays_and_resumes_the_exact_stream"]
     },
     {
       "surface": "fs_diloco/modeling/hf_identity.py",
@@ -155,11 +155,6 @@
       "surface": "fs_diloco/protocol/scheduler.py",
       "boundary": "scheduler observation and launch-request rules",
       "tests": ["tests/runtime/test_dynamic_capacity_service.py::test_lost_qsub_result_never_resubmits_and_ends_in_manual_review"]
-    },
-    {
-      "surface": "fs_diloco/protocol/selection.py",
-      "boundary": "persistent deterministic fair selection",
-      "tests": ["tests/protocol/test_accounting_selection_cursor.py::test_persistent_fair_selector_meets_frozen_1000_round_gate"]
     },
     {
       "surface": "fs_diloco/protocol/token_accounting.py",
@@ -273,8 +268,8 @@
     },
     {
       "surface": "fs_diloco/storage/object_store.py",
-      "boundary": "identity-bound proposal object verification",
-      "tests": ["tests/storage/test_object_store.py::test_payload_rename_race_fails_identity_check"]
+      "boundary": "identity-bound artifact verification and point-of-use consumption",
+      "tests": ["tests/storage/test_object_store.py::test_point_of_use_consumer_rejects_name_replacement_during_deserialization"]
     },
     {
       "surface": "fs_diloco/storage/paths.py",
@@ -293,8 +288,8 @@
     },
     {
       "surface": "fs_diloco/storage/tensor_codec.py",
-      "boundary": "immutable tensor serialization and load",
-      "tests": ["tests/test_tensor_codec.py::test_update_vector_bfloat16_storage_loads_as_float32"]
+      "boundary": "identity-bound tensor serialization and consumption",
+      "tests": ["tests/test_tensor_codec.py::test_checkpoint_readers_bind_bytes_and_theta_before_model_mutation"]
     },
     {
       "surface": "fs_diloco/storage/tensor_identity.py",
@@ -320,6 +315,11 @@
       "surface": "fs_diloco/tools/analysis.py",
       "boundary": "read-only current authority inspection",
       "tests": ["tests/tools/test_analysis.py::test_summarize_run_projects_current_read_only_authority"]
+    },
+    {
+      "surface": "fs_diloco/tools/clean_run.py",
+      "boundary": "installed identity-bound completed-run cleanup command",
+      "tests": ["tests/test_clean_run.py::test_cli_has_one_explicit_dry_run_and_execute_interface"]
     },
     {
       "surface": "fs_diloco/tools/init_run.py",

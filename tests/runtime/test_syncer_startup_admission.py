@@ -165,7 +165,7 @@ def test_candidate_cleanup_preserves_primary_failure_and_surfaces_release_failur
     """Candidate cleanup preserves a primary failure and otherwise surfaces release loss."""
 
     config_path = tmp_path / "resolved.yaml"
-    config_path.write_text("config_schema_version: 2\n", encoding="utf-8")
+    config_path.write_text("config_schema_version: 3\n", encoding="utf-8")
     token = SimpleNamespace(epoch=1, owner_id="owner-1")
     closed: list[bool] = []
     release_calls: list[bool] = []

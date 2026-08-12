@@ -7,7 +7,7 @@ from typing import Any
 
 import torch
 
-from ..storage.atomic_io import atomic_write_json, read_json
+from ..storage.atomic_io import read_json
 from ..core.versions import PARAM_INDEX_FORMAT_VERSION
 
 
@@ -41,10 +41,6 @@ def build_param_index(
         "total_numel": offset,
         "params": params,
     }
-
-
-def save_param_index(param_index: dict[str, Any], path: str | Path) -> Path:
-    return atomic_write_json(path, param_index)
 
 
 def load_param_index(path: str | Path) -> dict[str, Any]:
@@ -129,6 +125,8 @@ def load_flat_into_model(
 def flat_to_named_tensors(
     flat: torch.Tensor, param_index: dict[str, Any]
 ) -> dict[str, torch.Tensor]:
+    """Split one validated flat tensor according to the sole parameter index."""
+
     if int(flat.numel()) != int(param_index["total_numel"]):
         raise ValueError(
             f"flat tensor has {flat.numel()} values, expected {param_index['total_numel']}"
@@ -141,24 +139,6 @@ def flat_to_named_tensors(
             flat[offset : offset + numel].reshape(tuple(entry["shape"])).detach().cpu()
         )
     return tensors
-
-
-def named_tensors_to_flat(
-    named_tensors: dict[str, torch.Tensor],
-    param_index: dict[str, Any],
-    *,
-    device: torch.device | str = "cpu",
-    dtype: torch.dtype = torch.float32,
-) -> torch.Tensor:
-    chunks = []
-    for entry in param_index["params"]:
-        tensor = named_tensors[entry["name"]].detach().to(device=device, dtype=dtype).reshape(-1)
-        if int(tensor.numel()) != int(entry["numel"]):
-            raise ValueError(f"tensor size mismatch for {entry['name']}")
-        chunks.append(tensor)
-    if not chunks:
-        return torch.empty(0, dtype=dtype, device=device)
-    return torch.cat(chunks).contiguous()
 
 
 def validate_matching_index(param_index: dict[str, Any], other: dict[str, Any]) -> None:

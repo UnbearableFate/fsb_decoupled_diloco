@@ -10,101 +10,12 @@ from pathlib import Path
 import pytest
 from hypothesis import given, strategies as st
 
-from fs_diloco.protocol.authority import ReadResult, ReadStatus
 from fs_diloco.protocol.contributor import MembershipScope
-from fs_diloco.protocol.cycle_receipt import CycleReceiptV1
 from fs_diloco.storage.authority import AuthorityIdentity, LeaderAuthority, initialize_authority
 from tests.storage.test_proposal_adjudication import (
     build_cycle,
     open_authority,
 )
-from tests.support.protocol import admit_contributor, receipt_payload
-
-
-@pytest.mark.state_machine
-@given(
-    st.lists(
-        st.sampled_from(
-            [
-                ReadStatus.OK,
-                ReadStatus.NOT_FOUND,
-                ReadStatus.TRANSIENT_IO,
-                ReadStatus.MALFORMED,
-                ReadStatus.IDENTITY_MISMATCH,
-            ]
-        ),
-        min_size=1,
-        max_size=40,
-    )
-)
-def test_visibility_state_machine_is_bounded_and_terminal_is_sticky(
-    events: list[ReadStatus],
-) -> None:
-    """Visibility storage remains bounded and terminal decisions remain sticky."""
-
-    with tempfile.TemporaryDirectory() as directory:
-        root = Path(directory)
-        now = [100.0]
-        identity = AuthorityIdentity(
-            "run-current", "source-fingerprint", hashlib.sha256(b"config").hexdigest()
-        )
-        scope = MembershipScope(1)
-        database = root / "authority.sqlite3"
-        initialize_authority(database, identity, scope, wall_clock=lambda: now[0])
-        with LeaderAuthority(database, identity, scope, wall_clock=lambda: now[0]) as authority:
-            token = authority.acquire_leader(owner_id="owner", hostname="host", pid=1)
-            leader = authority.open_leader(token)
-            fence = admit_contributor(leader)
-            receipt = CycleReceiptV1.from_dict(receipt_payload(fence=fence.as_dict()))
-            leader.ingest_cycle_receipt(command_id="receipt-1", receipt=receipt)
-            terminal_observation: int | None = None
-            for index, status in enumerate(events):
-                now[0] += 1.0
-                result = (
-                    ReadResult(status, value=object())
-                    if status is ReadStatus.OK
-                    else ReadResult(
-                        status,
-                        diagnostic=status.value,
-                        fingerprint=("a" * 64 if status is ReadStatus.MALFORMED else None),
-                    )
-                )
-                decision = leader.observe_proposal_visibility(
-                    command_id=f"observe-{index}",
-                    stable_contributor_key="0",
-                    cycle_seq=1,
-                    update_id="00000000-0000-4000-8000-000000000001",
-                    object_identity="proposal-object",
-                    pointer_signature="pointer-signature",
-                    pointer_sequence=1,
-                    source_relative_path="updates/latest/0.json",
-                    result=result,
-                    grace_seconds=2.0,
-                    operator_deadline_seconds=5.0,
-                    max_archived_signatures=4,
-                )
-                if terminal_observation is None and decision.observation_id is not None:
-                    terminal_observation = decision.observation_id
-                if terminal_observation is not None:
-                    assert decision.observation_id == terminal_observation
-                connection = sqlite3.connect(database)
-                try:
-                    assert (
-                        connection.execute("SELECT COUNT(*) FROM proposal_visibility").fetchone()[0]
-                        <= 1
-                    )
-                    assert (
-                        connection.execute(
-                            "SELECT COUNT(*) FROM proposal_visibility_archive"
-                        ).fetchone()[0]
-                        <= 4
-                    )
-                    assert (
-                        connection.execute("SELECT COUNT(*) FROM proposal_quarantine").fetchone()[0]
-                        <= 1
-                    )
-                finally:
-                    connection.close()
 
 
 @pytest.mark.state_machine

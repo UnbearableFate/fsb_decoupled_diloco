@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import math
-import threading
-import time
 from dataclasses import dataclass
-from typing import Callable
 
 
 class LeaseUnavailableError(RuntimeError):
@@ -44,49 +41,3 @@ class CommittedLeaderLease:
             or self.heartbeat_seq < 1
         ):
             raise ValueError("leader lease heartbeat_seq must be a positive integer")
-
-
-class LeaseSafetyTracker:
-    """Thread-safe local monotonic boundary shared by renewer and business writes."""
-
-    def __init__(
-        self,
-        token: LeaderToken,
-        *,
-        lease_duration_seconds: float,
-        max_clock_skew_seconds: float,
-        monotonic_clock: Callable[[], float] = time.monotonic,
-    ) -> None:
-        self.token = token
-        self.safe_duration_seconds = float(lease_duration_seconds) - float(max_clock_skew_seconds)
-        if self.safe_duration_seconds <= 0.0:
-            raise ValueError("lease safety duration must be > 0")
-        self._monotonic_clock = monotonic_clock
-        self._lock = threading.Lock()
-        self._last_successful_renew = float(monotonic_clock())
-
-    def mark_renewed(self, token: LeaderToken) -> None:
-        self._check_token(token)
-        with self._lock:
-            self._last_successful_renew = float(self._monotonic_clock())
-
-    def assert_safe(self, token: LeaderToken) -> None:
-        self._check_token(token)
-        now = float(self._monotonic_clock())
-        with self._lock:
-            elapsed = now - self._last_successful_renew
-        if elapsed < 0.0 or elapsed > self.safe_duration_seconds:
-            raise StaleLeaderTokenError("leader token crossed its local monotonic safety boundary")
-
-    def remaining_safe_seconds(self, token: LeaderToken) -> float:
-        self._check_token(token)
-        now = float(self._monotonic_clock())
-        with self._lock:
-            elapsed = now - self._last_successful_renew
-        if elapsed < 0.0:
-            return 0.0
-        return max(0.0, self.safe_duration_seconds - elapsed)
-
-    def _check_token(self, token: LeaderToken) -> None:
-        if token != self.token:
-            raise StaleLeaderTokenError("lease safety tracker token mismatch")

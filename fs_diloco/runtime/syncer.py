@@ -127,7 +127,6 @@ def run_fenced_syncer(
         MergeAttemptStatus,
         MergeService,
         TerminalService,
-        configured_target_waiting_for_local_completion,
         terminal_close_reason,
     )
 
@@ -161,7 +160,7 @@ def run_fenced_syncer(
     )
     telemetry.event("syncer_runtime_ready", epoch=token.epoch, device=str(device))
     renewer.raise_if_failed()
-    leader.reconcile_publications(command_id=f"reconcile-publications-e{token.epoch}")
+    leader.reconcile_merge_attempts(command_id=f"reconcile-merge-attempts-e{token.epoch}")
     latest = authority.read.latest_committed_version()
     if latest is None:
         latest, theta, outer_state, param_index = _initialize_genesis(
@@ -173,7 +172,11 @@ def run_fenced_syncer(
     else:
         param_index = json.loads(paths.param_index_json.read_text(encoding="utf-8"))
         theta, outer_state = load_outer_state(
-            paths.shared_root / latest.optim_relative_path,
+            paths.shared_root,
+            latest.optim_relative_path,
+            expected_size=latest.optim_size,
+            expected_sha256=latest.optim_sha256,
+            expected_theta_sha256=latest.theta_sha256,
             device=device,
             dtype=dtype_from_name(config.syncer.compute_dtype),
         )
@@ -250,19 +253,10 @@ def run_fenced_syncer(
             maintenance_service.tick(force=True)
             telemetry.event("terminal_finalized", terminal=terminal)
             return
-        waiting_for_local_completion = configured_target_waiting_for_local_completion(
-            loaded,
-            authority,
-            version=latest.version,
-        )
-        outcome = (
-            MergeAttemptStatus.NO_BATCH
-            if waiting_for_local_completion
-            else merge_service.merge_once(
-                quorum_min=config.sync.quorum_min,
-                quorum_max=config.sync.quorum_max,
-                purpose="normal",
-            )
+        outcome = merge_service.merge_once(
+            quorum_min=config.sync.quorum_min,
+            quorum_max=config.sync.quorum_max,
+            purpose="normal",
         )
         if capacity_service is not None:
             current = authority.read.latest_committed_version()
@@ -270,9 +264,7 @@ def run_fenced_syncer(
             actions = capacity_service.tick(
                 global_version=current.version,
                 eligible_contributors=len(authority.read.current_contributor_fences()),
-                selected_contributors=(
-                    0 if waiting_for_local_completion else merge_service.last_selected_contributors
-                ),
+                selected_contributors=merge_service.last_selected_contributors,
             )
             for action in actions:
                 telemetry.event("dynamic_capacity_action", action=action)
@@ -360,7 +352,11 @@ def _initialize_genesis(
     if isinstance(committed, MergeFenceConflict):
         raise RuntimeError("genesis unexpectedly encountered a membership fence conflict")
     committed_theta, committed_outer_state = load_outer_state(
-        loaded.paths.shared_root / committed.optim_relative_path,
+        loaded.paths.shared_root,
+        committed.optim_relative_path,
+        expected_size=committed.optim_size,
+        expected_sha256=committed.optim_sha256,
+        expected_theta_sha256=committed.theta_sha256,
         device=device,
         dtype=dtype_from_name(config.syncer.compute_dtype),
     )

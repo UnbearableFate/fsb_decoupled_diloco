@@ -1,6 +1,6 @@
 CREATE TABLE schema_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-    schema_version INTEGER NOT NULL CHECK (schema_version = 12),
+    schema_version INTEGER NOT NULL CHECK (schema_version = 13),
     protocol_version INTEGER NOT NULL CHECK (protocol_version = 5),
     ddl_sha256 TEXT NOT NULL CHECK (length(ddl_sha256) = 64),
     schema_fingerprint TEXT NOT NULL CHECK (length(schema_fingerprint) = 64),
@@ -145,43 +145,6 @@ CREATE TABLE proposal_frontiers (
     updated_by_epoch INTEGER NOT NULL CHECK (updated_by_epoch >= 1),
     updated_at REAL NOT NULL,
     PRIMARY KEY(run_id, stable_contributor_key)
-);
-
-CREATE TABLE proposal_visibility (
-    visibility_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    stable_contributor_key TEXT NOT NULL,
-    cycle_seq INTEGER NOT NULL CHECK (cycle_seq >= 1),
-    update_id TEXT NOT NULL,
-    object_identity TEXT NOT NULL,
-    pointer_signature TEXT NOT NULL,
-    pointer_sequence INTEGER NOT NULL CHECK (pointer_sequence >= 0),
-    first_observed_at REAL NOT NULL,
-    first_stable_failure_at REAL,
-    last_observed_at REAL NOT NULL,
-    stable_failure_count INTEGER NOT NULL CHECK (stable_failure_count >= 0),
-    last_read_status TEXT NOT NULL CHECK (last_read_status IN (
-        'ok', 'not_found', 'transient_io', 'malformed', 'identity_mismatch'
-    )),
-    last_fingerprint TEXT,
-    bounded_diagnostic TEXT,
-    terminal_disposition TEXT CHECK (terminal_disposition IN (
-        'missing', 'malformed', 'identity_mismatch', 'manual_review'
-    )),
-    terminal_observation_id INTEGER REFERENCES proposal_observations(observation_id),
-    UNIQUE(stable_contributor_key, object_identity, pointer_signature)
-);
-
-CREATE TABLE proposal_visibility_archive (
-    archive_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    stable_contributor_key TEXT NOT NULL,
-    object_identity TEXT NOT NULL,
-    pointer_signature TEXT NOT NULL,
-    last_read_status TEXT NOT NULL,
-    stable_failure_count INTEGER NOT NULL CHECK (stable_failure_count >= 0),
-    last_fingerprint TEXT,
-    terminal_disposition TEXT,
-    archived_at REAL NOT NULL,
-    UNIQUE(stable_contributor_key, object_identity, pointer_signature)
 );
 
 CREATE TABLE proposal_quarantine (
@@ -387,11 +350,6 @@ CREATE INDEX idx_pending_update_per_contributor
 CREATE INDEX idx_updates_status ON updates(status, base_global_version);
 CREATE INDEX idx_observations_contributor
     ON proposal_observations(stable_contributor_key, observation_id);
-CREATE INDEX idx_visibility_contributor
-    ON proposal_visibility(stable_contributor_key, pointer_sequence);
-CREATE INDEX idx_visibility_archive_contributor
-    ON proposal_visibility_archive(stable_contributor_key, archive_id);
-
 CREATE TABLE token_fates (
     receipt_id TEXT PRIMARY KEY REFERENCES cycle_receipts(receipt_id),
     stable_contributor_key TEXT NOT NULL,

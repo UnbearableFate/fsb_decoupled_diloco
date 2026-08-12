@@ -14,7 +14,12 @@ import pytest
 
 from fs_diloco.protocol.authority import ReadStatus
 from fs_diloco.protocol.proposal import FullUpdateProposalV2
-from fs_diloco.storage.object_store import tensor_schema_sha256, verify_proposal_payload
+from fs_diloco.storage.object_store import (
+    ArtifactIdentityError,
+    consume_verified_artifact,
+    tensor_schema_sha256,
+    verify_proposal_payload,
+)
 from fs_diloco.storage import object_store
 from tests.support.protocol import proposal_payload
 
@@ -172,6 +177,35 @@ def test_payload_rename_race_fails_identity_check(tmp_path: Path, monkeypatch: A
         message in str(result.diagnostic)
         for message in ("name changed", "changed while its tensor schema")
     )
+
+
+def test_point_of_use_consumer_rejects_name_replacement_during_deserialization(
+    tmp_path: Path,
+) -> None:
+    """A consumer result is not released when its verified directory entry changes."""
+
+    relative_path = "objects/artifact.bin"
+    path = tmp_path / relative_path
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"accepted")
+    replacement = path.with_name("replacement.bin")
+    replacement.write_bytes(b"accepted")
+
+    def replace_after_read(descriptor_path: str) -> bytes:
+        """Read accepted bytes, then swap the name before returning them."""
+
+        value = Path(descriptor_path).read_bytes()
+        replacement.replace(path)
+        return value
+
+    with pytest.raises(ArtifactIdentityError, match="identity changed"):
+        consume_verified_artifact(
+            tmp_path,
+            relative_path,
+            expected_size=len(b"accepted"),
+            expected_sha256=hashlib.sha256(b"accepted").hexdigest(),
+            consumer=replace_after_read,
+        )
 
 
 def test_payload_mutation_during_schema_inspection_fails_identity_check(

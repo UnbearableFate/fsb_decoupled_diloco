@@ -290,15 +290,11 @@ class GlobalAdoptionStrategy(ABC):
         return False
 
     @staticmethod
-    def _final_global_horizon_reached(ctx: AdoptionContext) -> bool:
-        """Return whether joint completion forbids any successor global version."""
+    def _global_horizon_reached(ctx: AdoptionContext) -> bool:
+        """Return whether the sole configured global horizon forbids a successor."""
 
         global_target = ctx.config.sync.stop_after_outer_steps
-        return (
-            ctx.config.training.completion_mode == "local_and_global"
-            and global_target is not None
-            and ctx.last_loaded_global_version >= int(global_target)
-        )
+        return global_target is not None and ctx.last_loaded_global_version >= int(global_target)
 
     def _poll_after_publish(self, ctx: AdoptionContext, update_id: str) -> dict[str, Any] | None:
         """Read or wait for a successor unless the configured final horizon forbids one."""
@@ -310,7 +306,7 @@ class GlobalAdoptionStrategy(ABC):
             found_version=maybe_latest.get("version") if maybe_latest else None,
         )
         wait_seconds = ctx.config.learner.post_publish_latest_wait_seconds
-        if maybe_latest is None and self._final_global_horizon_reached(ctx):
+        if maybe_latest is None and self._global_horizon_reached(ctx):
             ctx.logger.event(
                 "post_publish_latest_wait_skipped_at_global_horizon",
                 current_version=ctx.last_loaded_global_version,
@@ -471,7 +467,7 @@ class RebaseGlobalAdoptionStrategy(GlobalAdoptionStrategy):
         maybe_latest = self._poll_after_publish(ctx, publish_result.update_id)
         if maybe_latest is not None:
             return self._direct_adoption(ctx, maybe_latest, update_id=publish_result.update_id)
-        if self._final_global_horizon_reached(ctx):
+        if self._global_horizon_reached(ctx):
             ctx.logger.event(
                 "local_rebase_anchor_skipped_at_global_horizon",
                 update_id=publish_result.update_id,
@@ -603,7 +599,7 @@ class PredictGlobalAdoptionStrategy(GlobalAdoptionStrategy):
         prepared_reference: Any | None = None
         prepared_stats: dict[str, Any] | None = None
         if maybe_latest is None:
-            if self._final_global_horizon_reached(ctx):
+            if self._global_horizon_reached(ctx):
                 ctx.logger.event(
                     "global_prediction_start_skipped_at_global_horizon",
                     update_id=publish_result.update_id,

@@ -7,7 +7,6 @@ import pytest
 from fs_diloco.core.config import Config
 from fs_diloco.protocol.data_cursor import IndexedBlockCursor
 from fs_diloco.protocol.merge import normalized_update_weights
-from fs_diloco.protocol.selection import PersistentFairSelector
 from fs_diloco.protocol.token_accounting import TrainingSegmentAccumulator
 
 
@@ -129,79 +128,6 @@ def test_predict_rebase_retains_work_without_loss_or_double_count() -> None:
     assert accounting.local_discarded_tokens == 0
     assert accounting.retained_tokens_since_base == 8
     assert accounting.segment.mean_loss == 3.0
-
-
-def test_persistent_fair_selector_meets_frozen_1000_round_gate() -> None:
-    keys = tuple(f"learner-{index}" for index in range(8))
-    selector = PersistentFairSelector()
-    counts = {key: 0 for key in keys}
-    waits = {key: 0 for key in keys}
-    maximum_wait = 0
-    lineage: list[tuple[str, ...]] = []
-    for version in range(1, 1001):
-        selected = selector.select(keys, quorum_max=3)
-        lineage.append(selected)
-        for key in keys:
-            if key in selected:
-                counts[key] += 1
-                waits[key] = 0
-            else:
-                waits[key] += 1
-                maximum_wait = max(maximum_wait, waits[key])
-        selector.commit(selected, committed_version=version)
-
-    values = tuple(counts.values())
-    jain = sum(values) ** 2 / (len(values) * sum(value * value for value in values))
-    assert max(values) - min(values) <= 1
-    assert maximum_wait <= math.ceil(8 / 3) + 1
-    assert jain >= 0.95
-    replay = PersistentFairSelector()
-    replay_lineage = []
-    for version in range(1, 1001):
-        selected = replay.select(keys, quorum_max=3)
-        replay_lineage.append(selected)
-        replay.commit(selected, committed_version=version)
-    assert replay_lineage == lineage
-
-
-def test_persistent_fair_selector_has_deterministic_balanced_prefix() -> None:
-    keys = tuple(f"learner-{index}" for index in range(8))
-    expected_cycle = (
-        ("learner-0", "learner-1", "learner-2"),
-        ("learner-3", "learner-4", "learner-5"),
-        ("learner-6", "learner-7", "learner-0"),
-        ("learner-1", "learner-2", "learner-3"),
-        ("learner-4", "learner-5", "learner-6"),
-        ("learner-7", "learner-0", "learner-1"),
-        ("learner-2", "learner-3", "learner-4"),
-        ("learner-5", "learner-6", "learner-7"),
-    )
-    selector = PersistentFairSelector()
-    actual: list[tuple[str, ...]] = []
-    for version in range(1, 17):
-        selected = selector.select(keys, quorum_max=3)
-        actual.append(selected)
-        selector.commit(selected, committed_version=version)
-
-    assert tuple(actual) == expected_cycle * 2
-
-
-def test_persistent_fair_selector_does_not_charge_failed_selection() -> None:
-    selector = PersistentFairSelector()
-    selected = selector.select(("learner-0", "learner-1"), quorum_max=1)
-
-    assert selected == ("learner-0",)
-    assert selector.select(("learner-0", "learner-1"), quorum_max=1) == selected
-    assert selector.committed_service_count == {}
-
-
-def test_full_quorum_keeps_stable_set_and_reduction_order() -> None:
-    keys = ("learner-3", "learner-1", "learner-2", "learner-0")
-    selector = PersistentFairSelector()
-    for version in range(1, 5):
-        selected = selector.select(keys, quorum_max=len(keys))
-        assert selected == tuple(sorted(keys))
-        selector.commit(selected, committed_version=version)
 
 
 def test_indexed_cursor_is_explicit_stable_and_resumable() -> None:

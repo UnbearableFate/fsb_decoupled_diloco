@@ -19,6 +19,13 @@ from fs_diloco.storage.authority import AuthorityIdentity, LeaderAuthority, init
 from fs_diloco.storage.leader_lease import StaleLeaderTokenError
 from fs_diloco.storage.tensor_codec import tensor_content_sha256
 import fs_diloco.storage.atomic_io as atomic_io_module
+from tests.support.protocol import (
+    admit_contributor,
+    proposal,
+    publish_checkpoint_pair,
+    publish_proposal_payload,
+    receipt,
+)
 
 
 @dataclass
@@ -265,7 +272,7 @@ def test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe(
 
         with pytest.raises(StaleLeaderTokenError):
             first.commit_merge(command_id="stale-commit", publication_id="publication-v0")
-        assert second.reconcile_publications(command_id="reconcile") == ("publication-v0",)
+        second.reconcile_merge_attempts(command_id="reconcile")
         assert second.claim_orphan_gc(command_id="claim-too-early") == ()
         clock.now = 280.0
         authority.renew_leader(second_token)
@@ -294,6 +301,62 @@ def test_takeover_reconciles_predecessor_intent_and_orphan_grace_is_lease_safe(
                 ).fetchone()[0]
                 == 2
             )
+        finally:
+            connection.close()
+
+
+def test_takeover_releases_selection_that_never_reached_publication_intent(
+    tmp_path: Path,
+) -> None:
+    """A successor must make every predecessor-selected update eligible again."""
+
+    clock = Clock()
+    with open_authority(tmp_path, clock) as authority:
+        first = authority.open_leader(
+            authority.acquire_leader(owner_id="owner-1", hostname="host", pid=1)
+        )
+        checkpoint = publish_checkpoint_pair(tmp_path, version=0)
+        first.initialize_genesis(
+            command_id="genesis",
+            publication_id="publication-genesis",
+            **checkpoint,
+        )
+        fence = admit_contributor(first)
+        cycle_receipt = receipt(fence=fence.as_dict())
+        update = proposal(
+            fence=fence.as_dict(),
+            receipt_sha256=cycle_receipt.immutable_sha256(),
+        )
+        first.ingest_cycle_receipt(command_id="receipt", receipt=cycle_receipt)
+        publish_proposal_payload(tmp_path, update)
+        first.ingest_proposal(command_id="proposal", proposal=update)
+        selected = first.try_select_batch(
+            command_id="select-predecessor",
+            quorum_min=1,
+            quorum_max=1,
+        )
+        assert selected.batch is not None
+
+        clock.now = 193.0
+        second = authority.open_leader(
+            authority.acquire_leader(owner_id="owner-2", hostname="host", pid=2)
+        )
+        second.reconcile_merge_attempts(command_id="reconcile-successor")
+        retried = second.try_select_batch(
+            command_id="select-successor",
+            quorum_min=1,
+            quorum_max=1,
+        )
+
+        assert retried.batch is not None
+        assert retried.batch.candidates[0].proposal.update_id == update.update_id
+        connection = sqlite3.connect(tmp_path / "authority.sqlite3")
+        try:
+            predecessor_state = connection.execute(
+                "SELECT state FROM selection_batches WHERE batch_id=?",
+                (selected.batch.batch_id,),
+            ).fetchone()[0]
+            assert predecessor_state == "abandoned"
         finally:
             connection.close()
 

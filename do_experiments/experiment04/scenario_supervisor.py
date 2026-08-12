@@ -502,12 +502,10 @@ def _formal_workload_contract(config: Config) -> dict[str, int]:
         config.data.dataset_config_name,
         config.data.revision,
         config.data.train_split,
-        config.data.shuffle_blocks,
         config.sync.staleness_lambda,
         config.syncer.device,
         config.syncer.compute_dtype,
         config.syncer.publish_dtype,
-        config.training.completion_mode,
         config.training.grad_clip,
         config.inner_optimizer.name,
         config.inner_optimizer.lr,
@@ -536,12 +534,10 @@ def _formal_workload_contract(config: Config) -> dict[str, int]:
         "wikitext-2-raw-v1",
         "b08601e04326c79dfdd32d625aee71d232d685c3",
         "train",
-        True,
         0.0,
         "cpu",
         "float32",
         "bfloat16",
-        "global_only",
         1.0,
         "adamw",
         0.00005,
@@ -562,9 +558,7 @@ def _formal_workload_contract(config: Config) -> dict[str, int]:
         "replace",
     )
     if identity != expected_identity:
-        raise RuntimeError(
-            "formal model, data, optimizer, or completion identity differs from Plan05"
-        )
+        raise RuntimeError("formal model, data, optimizer, or runtime identity differs from Plan05")
     return {
         **actual,
         "cursor_advance_per_cycle": (actual["inner_steps"] * actual["gradient_accumulation_steps"]),

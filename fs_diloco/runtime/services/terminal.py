@@ -16,39 +16,6 @@ from ...storage.terminal_request import read_manual_terminal_request
 from .merge import MergeAttemptStatus, MergeService
 
 
-def configured_target_waiting_for_local_completion(
-    loaded: LoadedRunDescriptor,
-    authority: LeaderAuthority,
-    *,
-    version: int,
-) -> bool:
-    """Return whether a reached global target must wait for every local horizon."""
-
-    config = loaded.config
-    if config.training.completion_mode != "local_and_global":
-        return False
-    if config.terminal.admission_close_policy not in {
-        "global_target",
-        "global_target_or_launch_budget",
-    }:
-        return False
-    target = config.sync.stop_after_outer_steps
-    if target is None or version < int(target):
-        return False
-    local_target = config.training.max_local_steps
-    if local_target is None:
-        raise RuntimeError("local_and_global completion has no local step target")
-    required_cycles = int(local_target) // int(config.training.inner_steps)
-    fences = authority.read.current_contributor_fences()
-    if not fences:
-        return True
-    for fence in fences:
-        progress = authority.read.contributor_progress(fence.stable_contributor_key)
-        if progress is None or int(progress.last_cycle_seq) < required_cycles:
-            return True
-    return False
-
-
 def terminal_close_reason(
     loaded: LoadedRunDescriptor,
     authority: LeaderAuthority,
@@ -69,15 +36,7 @@ def terminal_close_reason(
         token_target is not None
         and authority.read.token_ledger_summary().direct_applied >= token_target
     )
-    if (
-        policy in {"global_target", "global_target_or_launch_budget"}
-        and target_reached
-        and not configured_target_waiting_for_local_completion(
-            loaded,
-            authority,
-            version=version,
-        )
-    ):
+    if policy in {"global_target", "global_target_or_launch_budget"} and target_reached:
         return "configured_target"
     if policy == "manual":
         request = read_manual_terminal_request(

@@ -62,16 +62,6 @@ from ..storage.tensor_codec import (
 )
 
 
-def _latest_with_absolute_paths(
-    loaded: LoadedRunDescriptor, latest: dict[str, Any]
-) -> dict[str, Any]:
-    return {
-        **latest,
-        "weight_path": str(loaded.paths.shared_root / str(latest["weight_path"])),
-        "optim_path": str(loaded.paths.shared_root / str(latest["optim_path"])),
-    }
-
-
 def _wait_for_newer(
     loaded: LoadedRunDescriptor,
     version: int,
@@ -191,18 +181,29 @@ def run_admitted_learner(
     )
     telemetry.event("admitted", fence=admission.fence.as_dict(), device=str(device))
 
-    latest = wait_for_current_latest(
+    initial = wait_for_current_latest(
         paths,
         run_id=str(config.run.run_id),
         timeout_seconds=loaded.config.leader.learner_recovery_wait_seconds,
         poll_seconds=config.sync.scan_interval_seconds,
         max_clock_skew_seconds=loaded.config.leader.max_clock_skew_seconds,
     )
+    if initial.kind == "terminal":
+        telemetry.event("terminal_observed", terminal=initial.payload)
+        return
+    latest = initial.payload
     param_index = load_param_index(paths.param_index_json)
     local_index = build_param_index(model, model_name_or_path=config.model.name_or_path)
     validate_matching_index(param_index, local_index)
-    weight_path = paths.shared_root / str(latest["weight_path"])
-    load_global_weights_into_model(weight_path, model, param_index)
+    load_global_weights_into_model(
+        paths.shared_root,
+        str(latest["weight_path"]),
+        model,
+        param_index,
+        expected_size=int(latest["weight_size_bytes"]),
+        expected_sha256=str(latest["weight_sha256"]),
+        expected_theta_sha256=str(latest["theta_sha256"]),
+    )
     base_version = int(latest["version"])
     resumed_local_steps = completed_local_steps_from_cycle(
         next_cycle_seq=admission.resume.next_cycle_seq,
@@ -246,9 +247,13 @@ def run_admitted_learner(
         device: torch.device,
     ) -> int:
         load_global_weights_into_model(
-            paths.shared_root / str(latest["weight_path"]),
+            paths.shared_root,
+            str(latest["weight_path"]),
             model,
             param_index,
+            expected_size=int(latest["weight_size_bytes"]),
+            expected_sha256=str(latest["weight_sha256"]),
+            expected_theta_sha256=str(latest["theta_sha256"]),
         )
         model.to(device)
         return int(latest["version"])
@@ -277,8 +282,12 @@ def run_admitted_learner(
             dtype=compute_dtype,
         )
         global_flat = load_global_weights_flat(
-            paths.shared_root / str(latest["weight_path"]),
+            paths.shared_root,
+            str(latest["weight_path"]),
             param_index,
+            expected_size=int(latest["weight_size_bytes"]),
+            expected_sha256=str(latest["weight_sha256"]),
+            expected_theta_sha256=str(latest["theta_sha256"]),
             device=device,
             dtype=compute_dtype,
         )
@@ -310,15 +319,22 @@ def run_admitted_learner(
             device=device,
             dtype=compute_dtype,
         )
-        absolute = _latest_with_absolute_paths(loaded, cached_latest)
         global_flat = load_global_weights_flat(
-            absolute["weight_path"],
+            paths.shared_root,
+            str(cached_latest["weight_path"]),
             param_index,
+            expected_size=int(cached_latest["weight_size_bytes"]),
+            expected_sha256=str(cached_latest["weight_sha256"]),
+            expected_theta_sha256=str(cached_latest["theta_sha256"]),
             device=device,
             dtype=compute_dtype,
         )
         outer_theta, outer_state = load_outer_state(
-            absolute["optim_path"],
+            paths.shared_root,
+            str(cached_latest["optim_path"]),
+            expected_size=int(cached_latest["optim_size_bytes"]),
+            expected_sha256=str(cached_latest["optim_sha256"]),
+            expected_theta_sha256=str(cached_latest["theta_sha256"]),
             device=device,
             dtype=compute_dtype,
         )
@@ -489,11 +505,6 @@ def run_admitted_learner(
     local_step = resumed_local_steps
     awaiting_configured_close = False
     while True:
-        max_steps = config.training.max_local_steps
-        local_limit_reached = max_steps is not None and local_step >= max_steps
-        if local_limit_reached and config.training.completion_mode == "local_or_global":
-            telemetry.event("local_limit_reached", local_step=local_step)
-            return
         current = read_current_control(
             paths,
             run_id=str(config.run.run_id),
@@ -512,7 +523,6 @@ def run_admitted_learner(
         if configured_global_close_target_visible(
             config,
             current,
-            completed_local_steps=local_step,
         ):
             if not awaiting_configured_close:
                 assert current is not None and current.latest is not None
@@ -525,9 +535,6 @@ def run_admitted_learner(
                 )
             awaiting_configured_close = True
         if awaiting_configured_close:
-            time.sleep(config.sync.scan_interval_seconds)
-            continue
-        if local_limit_reached and config.training.completion_mode == "local_and_global":
             time.sleep(config.sync.scan_interval_seconds)
             continue
         cycle_id = str(uuid.uuid4())

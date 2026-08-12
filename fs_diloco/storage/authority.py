@@ -35,7 +35,6 @@ from ..protocol.authority import (
     SelectionCandidate,
     TerminalState,
     TokenLedgerSummary,
-    VisibilityDecision,
 )
 from ..protocol.contributor import ContributorFence, MembershipScope
 from ..protocol.cycle_receipt import CycleReceiptV1
@@ -751,7 +750,6 @@ class LeaderAuthority:
         orphan_grace_seconds: float | None = None,
         max_quarantine_records_per_contributor: int = 64,
         wall_clock: Callable[[], float] = time.time,
-        lease_safety_check: Callable[[LeaderToken], None] | None = None,
     ) -> None:
         """Open one validated writable authority and configure its lease boundary."""
 
@@ -801,7 +799,6 @@ class LeaderAuthority:
             connection.close()
             raise ValueError("max quarantine records per contributor must be positive")
         self._max_quarantine_records_per_contributor = max_quarantine_records_per_contributor
-        self._lease_safety_check = lease_safety_check
         self.metadata = metadata
         self.read = AuthorityReadModel(self)
 
@@ -997,8 +994,6 @@ class LeaderAuthority:
     def _verify_token(self, token: LeaderToken, *, require_safe_expiry: bool = True) -> sqlite3.Row:
         if token.run_id != self._identity.run_id:
             raise StaleLeaderTokenError("leader token belongs to another run")
-        if self._lease_safety_check is not None:
-            self._lease_safety_check(token)
         row = self._connection.execute(
             """
             SELECT * FROM syncer_leader
@@ -1394,334 +1389,6 @@ class LeaderSession:
 
         result = self._command(command_id, "ingest_proposal", request, operation)
         return ProposalDisposition(result["disposition"])
-
-    def observe_proposal_visibility(
-        self,
-        *,
-        command_id: str,
-        stable_contributor_key: str,
-        cycle_seq: int,
-        update_id: str,
-        object_identity: str,
-        pointer_signature: str,
-        pointer_sequence: int,
-        source_relative_path: str,
-        result: ReadResult[Any],
-        grace_seconds: float,
-        operator_deadline_seconds: float,
-        max_archived_signatures: int = 32,
-    ) -> VisibilityDecision:
-        """Persist one typed read result and apply stable terminal thresholds."""
-
-        for name, value in (
-            ("stable_contributor_key", stable_contributor_key),
-            ("update_id", update_id),
-            ("object_identity", object_identity),
-            ("pointer_signature", pointer_signature),
-        ):
-            validate_identity(value, name=name)
-        if isinstance(cycle_seq, bool) or not isinstance(cycle_seq, int) or cycle_seq < 1:
-            raise ValueError("cycle_seq must be a positive integer")
-        if (
-            isinstance(pointer_sequence, bool)
-            or not isinstance(pointer_sequence, int)
-            or pointer_sequence < 0
-        ):
-            raise ValueError("pointer_sequence must be a non-negative integer")
-        if grace_seconds < 0.0 or operator_deadline_seconds < grace_seconds:
-            raise ValueError("visibility deadlines must satisfy 0 <= grace <= operator deadline")
-        if max_archived_signatures < 1:
-            raise ValueError("max_archived_signatures must be positive")
-        if (
-            not source_relative_path
-            or source_relative_path.startswith("/")
-            or ".." in Path(source_relative_path).parts
-        ):
-            raise ValueError("source_relative_path must be normalized and run-root-relative")
-        diagnostic = (result.diagnostic or "")[:512]
-        raw_fingerprint = result.fingerprint or diagnostic or result.status.value
-        fingerprint = (
-            raw_fingerprint
-            if len(raw_fingerprint) == 64
-            and all(item in "0123456789abcdef" for item in raw_fingerprint)
-            else hashlib.sha256(raw_fingerprint.encode("utf-8")).hexdigest()
-        )
-        request = {
-            "stable_contributor_key": stable_contributor_key,
-            "cycle_seq": cycle_seq,
-            "update_id": update_id,
-            "object_identity": object_identity,
-            "pointer_signature": pointer_signature,
-            "pointer_sequence": pointer_sequence,
-            "source_relative_path": source_relative_path,
-            "status": result.status.value,
-            "diagnostic": diagnostic,
-            "fingerprint": fingerprint,
-            "grace_seconds": float(grace_seconds),
-            "operator_deadline_seconds": float(operator_deadline_seconds),
-            "max_archived_signatures": max_archived_signatures,
-        }
-
-        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
-            self._require_visibility_receipt(
-                connection,
-                stable_contributor_key=stable_contributor_key,
-                cycle_seq=cycle_seq,
-                update_id=update_id,
-            )
-            now = float(self._authority._wall_clock())
-            newest = connection.execute(
-                """
-                SELECT * FROM proposal_visibility
-                WHERE stable_contributor_key=? AND object_identity=?
-                ORDER BY pointer_sequence DESC, visibility_id DESC LIMIT 1
-                """,
-                (stable_contributor_key, object_identity),
-            ).fetchone()
-            if newest is not None and pointer_sequence < int(newest["pointer_sequence"]):
-                return {
-                    "status": result.status.value,
-                    "stable_failure_count": 0,
-                    "terminal_disposition": None,
-                    "observation_id": None,
-                }
-            if (
-                newest is not None
-                and pointer_sequence == int(newest["pointer_sequence"])
-                and str(newest["pointer_signature"]) != pointer_signature
-            ):
-                collision_fingerprint = hashlib.sha256(
-                    _canonical_json(
-                        {
-                            "object_identity": object_identity,
-                            "pointer_sequence": pointer_sequence,
-                            "existing_signature": str(newest["pointer_signature"]),
-                            "incoming_signature": pointer_signature,
-                        }
-                    ).encode("utf-8")
-                ).hexdigest()
-                collision_diagnostic = "pointer sequence was reused with a different signature"
-                observation_id = self._record_visibility_terminal(
-                    connection,
-                    stable_contributor_key=stable_contributor_key,
-                    cycle_seq=cycle_seq,
-                    update_id=update_id,
-                    pointer_sequence=pointer_sequence,
-                    disposition=ProposalDisposition.IDENTITY_MISMATCH,
-                    diagnostic=collision_diagnostic,
-                    source_relative_path=source_relative_path,
-                    fingerprint=collision_fingerprint,
-                )
-                self._advance_frontier_values(
-                    connection,
-                    stable_contributor_key=stable_contributor_key,
-                    cycle_seq=cycle_seq,
-                    observation_id=observation_id,
-                )
-                return {
-                    "status": ReadStatus.IDENTITY_MISMATCH.value,
-                    "stable_failure_count": 1,
-                    "terminal_disposition": "identity_mismatch",
-                    "observation_id": observation_id,
-                }
-            if newest is not None and str(newest["pointer_signature"]) != pointer_signature:
-                connection.execute(
-                    """
-                    INSERT INTO proposal_visibility_archive(
-                        stable_contributor_key, object_identity, pointer_signature,
-                        last_read_status, stable_failure_count, last_fingerprint,
-                        terminal_disposition, archived_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(stable_contributor_key, object_identity, pointer_signature)
-                    DO UPDATE SET last_read_status=excluded.last_read_status,
-                        stable_failure_count=excluded.stable_failure_count,
-                        last_fingerprint=excluded.last_fingerprint,
-                        terminal_disposition=excluded.terminal_disposition,
-                        archived_at=excluded.archived_at
-                    """,
-                    (
-                        stable_contributor_key,
-                        object_identity,
-                        newest["pointer_signature"],
-                        newest["last_read_status"],
-                        newest["stable_failure_count"],
-                        newest["last_fingerprint"],
-                        newest["terminal_disposition"],
-                        now,
-                    ),
-                )
-                connection.execute(
-                    "DELETE FROM proposal_visibility WHERE visibility_id=?",
-                    (newest["visibility_id"],),
-                )
-                newest = None
-            previous = connection.execute(
-                """
-                SELECT * FROM proposal_visibility
-                WHERE stable_contributor_key=? AND object_identity=? AND pointer_signature=?
-                """,
-                (stable_contributor_key, object_identity, pointer_signature),
-            ).fetchone()
-            if previous is not None and previous["terminal_disposition"] is not None:
-                return {
-                    "status": result.status.value,
-                    "stable_failure_count": int(previous["stable_failure_count"]),
-                    "terminal_disposition": str(previous["terminal_disposition"]),
-                    "observation_id": int(previous["terminal_observation_id"]),
-                }
-            first_observed = now if previous is None else float(previous["first_observed_at"])
-            first_failure: float | None = None
-            count = 0
-            if result.status is ReadStatus.NOT_FOUND:
-                same = previous is not None and previous["last_read_status"] == "not_found"
-                count = int(previous["stable_failure_count"]) + 1 if same else 1
-                first_failure = (
-                    float(previous["first_stable_failure_at"])
-                    if same and previous["first_stable_failure_at"] is not None
-                    else now
-                )
-            elif result.status is ReadStatus.MALFORMED:
-                same = (
-                    previous is not None
-                    and previous["last_read_status"] == "malformed"
-                    and previous["last_fingerprint"] == fingerprint
-                )
-                count = int(previous["stable_failure_count"]) + 1 if same else 1
-                first_failure = (
-                    float(previous["first_stable_failure_at"])
-                    if same and previous["first_stable_failure_at"] is not None
-                    else now
-                )
-            elif result.status is ReadStatus.TRANSIENT_IO:
-                same = previous is not None and previous["last_read_status"] == "transient_io"
-                first_failure = (
-                    float(previous["first_stable_failure_at"])
-                    if same and previous["first_stable_failure_at"] is not None
-                    else now
-                )
-            terminal: str | None = None
-            if result.status is ReadStatus.IDENTITY_MISMATCH:
-                terminal = "identity_mismatch"
-            elif (
-                result.status is ReadStatus.NOT_FOUND
-                and count >= 3
-                and first_failure is not None
-                and now - first_failure >= grace_seconds
-            ):
-                terminal = "missing"
-            elif (
-                result.status is ReadStatus.MALFORMED
-                and count >= 2
-                and first_failure is not None
-                and now - first_failure >= grace_seconds
-            ):
-                terminal = "malformed"
-            elif (
-                result.status is ReadStatus.TRANSIENT_IO
-                and first_failure is not None
-                and now - first_failure >= operator_deadline_seconds
-            ):
-                terminal = "manual_review"
-            connection.execute(
-                """
-                INSERT INTO proposal_visibility(
-                    stable_contributor_key, cycle_seq, update_id, object_identity,
-                    pointer_signature, pointer_sequence, first_observed_at,
-                    first_stable_failure_at, last_observed_at, stable_failure_count,
-                    last_read_status, last_fingerprint, bounded_diagnostic
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(stable_contributor_key, object_identity, pointer_signature)
-                DO UPDATE SET cycle_seq=excluded.cycle_seq, update_id=excluded.update_id,
-                    pointer_sequence=excluded.pointer_sequence,
-                    first_stable_failure_at=excluded.first_stable_failure_at,
-                    last_observed_at=excluded.last_observed_at,
-                    stable_failure_count=excluded.stable_failure_count,
-                    last_read_status=excluded.last_read_status,
-                    last_fingerprint=excluded.last_fingerprint,
-                    bounded_diagnostic=excluded.bounded_diagnostic
-                """,
-                (
-                    stable_contributor_key,
-                    cycle_seq,
-                    update_id,
-                    object_identity,
-                    pointer_signature,
-                    pointer_sequence,
-                    first_observed,
-                    first_failure,
-                    now,
-                    count,
-                    result.status.value,
-                    fingerprint,
-                    diagnostic,
-                ),
-            )
-            observation_id: int | None = None
-            if terminal is not None:
-                disposition = {
-                    "missing": ProposalDisposition.MISSING,
-                    "malformed": ProposalDisposition.MALFORMED,
-                    "identity_mismatch": ProposalDisposition.IDENTITY_MISMATCH,
-                    "manual_review": ProposalDisposition.MANUAL_REVIEW,
-                }[terminal]
-                observation_id = self._record_visibility_terminal(
-                    connection,
-                    stable_contributor_key=stable_contributor_key,
-                    cycle_seq=cycle_seq,
-                    update_id=update_id,
-                    pointer_sequence=pointer_sequence,
-                    disposition=disposition,
-                    diagnostic=diagnostic,
-                    source_relative_path=source_relative_path,
-                    fingerprint=fingerprint,
-                )
-                connection.execute(
-                    """
-                    UPDATE proposal_visibility SET terminal_disposition=?,
-                        terminal_observation_id=?
-                    WHERE stable_contributor_key=? AND object_identity=?
-                        AND pointer_signature=?
-                    """,
-                    (
-                        terminal,
-                        observation_id,
-                        stable_contributor_key,
-                        object_identity,
-                        pointer_signature,
-                    ),
-                )
-                self._advance_frontier_values(
-                    connection,
-                    stable_contributor_key=stable_contributor_key,
-                    cycle_seq=cycle_seq,
-                    observation_id=observation_id,
-                )
-            connection.execute(
-                """
-                DELETE FROM proposal_visibility_archive
-                WHERE archive_id IN (
-                    SELECT archive_id FROM proposal_visibility_archive
-                    WHERE stable_contributor_key=? ORDER BY archive_id DESC LIMIT -1 OFFSET ?
-                )
-                """,
-                (stable_contributor_key, max_archived_signatures),
-            )
-            return {
-                "status": result.status.value,
-                "stable_failure_count": count,
-                "terminal_disposition": terminal,
-                "observation_id": observation_id,
-            }
-
-        payload = self._command(command_id, "observe_proposal_visibility", request, operation)
-        return VisibilityDecision(
-            status=ReadStatus(payload["status"]),
-            stable_failure_count=int(payload["stable_failure_count"]),
-            terminal_disposition=payload["terminal_disposition"],
-            observation_id=(
-                None if payload["observation_id"] is None else int(payload["observation_id"])
-            ),
-        )
 
     def initialize_genesis(
         self,
@@ -3299,12 +2966,65 @@ class LeaderSession:
         result = self._command(command_id, "abandon_publication", request, operation)
         return _decode_publication_intent(result)
 
-    def reconcile_publications(self, *, command_id: str) -> tuple[str, ...]:
-        """Abandon prepared intents owned by an expired predecessor epoch."""
+    def abandon_unprepared_batch(
+        self,
+        *,
+        command_id: str,
+        batch_id: str,
+        reason: str,
+        invalid_update_ids: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        """Release same-epoch selected work when merge preparation cannot finish.
+
+        A batch that reached ``prepared`` is deliberately left to publication
+        reconciliation; only the pre-intent ``selected`` phase is abandoned here.
+        """
+
+        validate_identity(batch_id, name="batch_id")
+        for update_id in invalid_update_ids:
+            validate_identity(update_id, name="invalid_update_id")
+        if len(set(invalid_update_ids)) != len(invalid_update_ids):
+            raise ValueError("invalid update IDs must be unique")
+        if not reason or len(reason) > 128:
+            raise ValueError("batch abandonment reason must contain at most 128 characters")
+        request = {
+            "batch_id": batch_id,
+            "reason": reason,
+            "invalid_update_ids": list(invalid_update_ids),
+        }
+
+        def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            """Reset a selected batch only while this leader still owns its epoch."""
+
+            row = connection.execute(
+                "SELECT state, owner_epoch FROM selection_batches WHERE batch_id=?",
+                (batch_id,),
+            ).fetchone()
+            if row is None:
+                raise ValueError("selection batch does not exist")
+            if row["state"] != "selected":
+                return {"reset_pending_update_ids": []}
+            if int(row["owner_epoch"]) != self.token.epoch:
+                raise MembershipFenceError("only the selecting epoch can abandon this batch")
+            reset = self._reconcile_invalid_batch(
+                connection,
+                batch_id=batch_id,
+                invalid_update_ids=invalid_update_ids,
+                reason=reason,
+            )
+            return {"reset_pending_update_ids": list(reset)}
+
+        result = self._command(command_id, "abandon_unprepared_batch", request, operation)
+        return tuple(str(item) for item in result["reset_pending_update_ids"])
+
+    def reconcile_merge_attempts(self, *, command_id: str) -> None:
+        """Recover every incomplete merge phase owned by predecessor epochs."""
 
         request: dict[str, Any] = {}
 
         def operation(connection: sqlite3.Connection) -> dict[str, Any]:
+            """Abandon prepared publications and selected batches in one transaction."""
+
             rows = connection.execute(
                 """
                 SELECT * FROM publication_intents
@@ -3312,7 +3032,6 @@ class LeaderSession:
                 """,
                 (self.token.epoch,),
             ).fetchall()
-            reconciled: list[str] = []
             now = float(self._authority._wall_clock())
             for row in rows:
                 publication_id = str(row["publication_id"])
@@ -3330,11 +3049,31 @@ class LeaderSession:
                         invalid_update_ids=(),
                         reason="predecessor_epoch_expired",
                     )
-                reconciled.append(publication_id)
-            return {"publication_ids": reconciled}
+            selected_batches = connection.execute(
+                """
+                SELECT b.batch_id FROM selection_batches AS b
+                WHERE b.state='selected' AND b.owner_epoch<>?
+                  AND NOT EXISTS (
+                    SELECT 1 FROM publication_intents AS p
+                    WHERE p.selection_batch_id=b.batch_id
+                  )
+                ORDER BY b.batch_id
+                """,
+                (self.token.epoch,),
+            ).fetchall()
+            for batch in selected_batches:
+                self._reconcile_invalid_batch(
+                    connection,
+                    batch_id=str(batch["batch_id"]),
+                    invalid_update_ids=(),
+                    reason="predecessor_epoch_expired_before_prepare",
+                )
+            return {
+                "prepared_publications": len(rows),
+                "selected_batches": len(selected_batches),
+            }
 
-        result = self._command(command_id, "reconcile_publications", request, operation)
-        return tuple(str(item) for item in result["publication_ids"])
+        self._command(command_id, "reconcile_merge_attempts", request, operation)
 
     def claim_orphan_gc(self, *, command_id: str, limit: int = 64) -> tuple[dict[str, Any], ...]:
         """Claim only lease-safe artifact paths with immutable deletion identity."""
@@ -5534,10 +5273,6 @@ def _audit_history_records(
               AND NOT EXISTS (
                 SELECT 1 FROM proposal_frontiers AS f
                 WHERE f.terminal_observation_id=o.observation_id
-              )
-              AND NOT EXISTS (
-                SELECT 1 FROM proposal_visibility AS v
-                WHERE v.terminal_observation_id=o.observation_id
               )
             ORDER BY o.observation_id
             """,

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import itertools
-import random
 from dataclasses import dataclass
 from typing import Any, Iterator
 
@@ -26,32 +24,6 @@ class Batch:
             labels=self.labels.to(device),
             num_tokens=self.num_tokens,
             num_examples=self.num_examples,
-        )
-
-
-def synthetic_batches(
-    *,
-    vocab_size: int,
-    block_size: int,
-    micro_batch_size: int,
-    seed: int,
-    learner_index: int,
-) -> Iterator[Batch]:
-    generator = torch.Generator()
-    generator.manual_seed(seed + learner_index * 100_003)
-    while True:
-        input_ids = torch.randint(
-            low=0,
-            high=vocab_size,
-            size=(micro_batch_size, block_size),
-            generator=generator,
-            dtype=torch.long,
-        )
-        yield Batch(
-            input_ids=input_ids,
-            labels=input_ids.clone(),
-            num_tokens=int(input_ids.numel()),
-            num_examples=micro_batch_size,
         )
 
 
@@ -94,41 +66,6 @@ def _splitmix64(value: int) -> int:
     value = ((value ^ (value >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
     value = ((value ^ (value >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
     return value ^ (value >> 31)
-
-
-def _batched_blocks(
-    blocks: list[list[int]],
-    micro_batch_size: int,
-    *,
-    shuffle: bool,
-    seed: int,
-    learner_index: int,
-) -> Iterator[Batch]:
-    if not blocks:
-        raise ValueError("tokenized dataset produced zero blocks")
-
-    if not shuffle:
-        block_indices: Iterator[int] = (index % len(blocks) for index in itertools.count())
-    else:
-        base_seed = _splitmix64(int(seed) ^ _splitmix64(int(learner_index)))
-
-        def shuffled_indices() -> Iterator[int]:
-            for epoch in itertools.count():
-                indices = list(range(len(blocks)))
-                random.Random(_splitmix64(base_seed + epoch)).shuffle(indices)
-                yield from indices
-
-        block_indices = shuffled_indices()
-
-    while True:
-        batch_blocks = [blocks[next(block_indices)] for _ in range(micro_batch_size)]
-        input_ids = torch.tensor(batch_blocks, dtype=torch.long)
-        yield Batch(
-            input_ids=input_ids,
-            labels=input_ids.clone(),
-            num_tokens=int(input_ids.numel()),
-            num_examples=len(batch_blocks),
-        )
 
 
 def build_indexed_batch_iterator(

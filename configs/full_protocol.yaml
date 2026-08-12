@@ -1,4 +1,4 @@
-config_schema_version: 2
+config_schema_version: 3
 run:
   name: full_protocol
 model:
@@ -10,7 +10,6 @@ data:
   dataset_name: synthetic
   train_split: train
   block_size: 16
-  shuffle_blocks: true
 sync:
   quorum_min: 8
   quorum_max: 8
@@ -40,7 +39,6 @@ training:
   inner_steps: 50
   micro_batch_size: 1
   gradient_accumulation_steps: 1
-  completion_mode: global_only
   seed: 1337
 inner_optimizer:
   name: adamw

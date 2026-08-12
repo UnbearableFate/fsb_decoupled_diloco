@@ -37,11 +37,6 @@ from fs_diloco.storage.authority import (
     MembershipFenceError,
     initialize_authority,
 )
-from fs_diloco.storage.leader_lease import (
-    LeaderToken,
-    LeaseSafetyTracker,
-    StaleLeaderTokenError,
-)
 from fs_diloco.storage.paths import RunPaths
 from tests.support.protocol import (
     admit_contributor,
@@ -416,29 +411,6 @@ def test_sql_fair_selection_uses_committed_count_before_version_ties(tmp_path: P
             ("2", "3", "4"),
             ("5", "6", "7"),
         ]
-
-
-def test_process_elapsed_safety_is_monotonic_despite_wall_clock_jumps() -> None:
-    """Lease safety elapsed time depends on monotonic time, not wall-clock jumps."""
-
-    wall_clock = Clock()
-    monotonic_now = [100.0]
-    token = LeaderToken(run_id="run-current", epoch=1, owner_id="owner")
-    tracker = LeaseSafetyTracker(
-        token,
-        lease_duration_seconds=90.0,
-        max_clock_skew_seconds=2.0,
-        monotonic_clock=lambda: monotonic_now[0],
-    )
-
-    initial = tracker.remaining_safe_seconds(token)
-    wall_clock.now += 3600.0
-    assert tracker.remaining_safe_seconds(token) == initial
-    wall_clock.now -= 7200.0
-    assert tracker.remaining_safe_seconds(token) == initial
-    monotonic_now[0] += 88.001
-    with pytest.raises(StaleLeaderTokenError, match="monotonic safety boundary"):
-        tracker.assert_safe(token)
 
 
 def test_replacement_returns_full_contiguous_resume_state(tmp_path: Path) -> None:
