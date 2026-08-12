@@ -8,6 +8,7 @@ import csv
 import fcntl
 import hashlib
 import importlib.util
+import itertools
 import json
 import os
 import random
@@ -19,8 +20,11 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from statistics import median
 from types import ModuleType
 from typing import Any, Iterable
+
+import yaml
 
 from fs_diloco.core.config import Config, load_config
 from fs_diloco.core.source_identity import capture_source_identity
@@ -37,6 +41,7 @@ FAULT_DELAY_SECONDS = 60.0
 BATCH_DELAY_SECONDS = 30.0
 SYNCER_RESTART_DELAY_SECONDS = 20.0
 DUAL_SYNCER_OBSERVATION_SECONDS = 60.0
+COMPARISON_REPEATS = 3
 
 
 @dataclass(frozen=True)
@@ -52,7 +57,7 @@ class Scenario:
 
 
 SCENARIOS: dict[str, Scenario] = {
-    "baseline": Scenario(0, (8,), False, "none", 50, 8),
+    "baseline": Scenario(0, (8,), False, "none", 100, 4),
     "normal": Scenario(1, (8,), False, "none", 100, 4),
     "stagger_4_4": Scenario(2, (4, 4), False, "none", 100, 4),
     "stagger_3_3_2": Scenario(3, (3, 3, 2), False, "none", 100, 4),
@@ -234,6 +239,28 @@ def _require_outstanding(job_id: str) -> dict[str, Any]:
     }
 
 
+def _wait_scheduler_running(job_id: str, *, timeout_seconds: float) -> dict[str, Any]:
+    """Wait until an owned actor is executing so overlap evidence is not queue time."""
+
+    scheduler = PBSScheduler()
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        observation = scheduler.query(job_id)
+        if observation.classification == "running":
+            return {
+                "job_id": job_id,
+                "classification": observation.classification,
+                "fields": observation.fields,
+                "observed_at": time.time(),
+            }
+        if not observation.outstanding:
+            raise RuntimeError(
+                f"syncer candidate ended before running: {observation.classification}"
+            )
+        time.sleep(1.0)
+    raise TimeoutError("syncer candidate did not begin running")
+
+
 def _wait_replacement(
     database: Path,
     *,
@@ -331,7 +358,8 @@ def _discover_authority_jobs(database: Path) -> set[str]:
     rows = _read_rows(
         database,
         "SELECT pbs_job_id FROM learner_instances WHERE pbs_job_id IS NOT NULL "
-        "UNION SELECT pbs_job_id FROM syncer_epochs WHERE pbs_job_id IS NOT NULL",
+        "UNION SELECT pbs_job_id FROM syncer_epochs WHERE pbs_job_id IS NOT NULL "
+        "UNION SELECT pbs_job_id FROM launch_requests WHERE pbs_job_id IS NOT NULL",
     )
     return {str(row["pbs_job_id"]) for row in rows}
 
@@ -372,6 +400,49 @@ def _read_summary_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+def _relative_median_interval(
+    baseline_values: list[float],
+    normal_values: list[float],
+) -> tuple[float, float]:
+    """Enumerate the exact three-by-three median bootstrap interval."""
+
+    if len(baseline_values) != COMPARISON_REPEATS or len(normal_values) != COMPARISON_REPEATS:
+        raise ValueError("comparison interval requires exactly three baseline and normal values")
+    baseline_medians = [
+        float(median(baseline_values[index] for index in sample))
+        for sample in itertools.product(range(COMPARISON_REPEATS), repeat=COMPARISON_REPEATS)
+    ]
+    normal_medians = [
+        float(median(normal_values[index] for index in sample))
+        for sample in itertools.product(range(COMPARISON_REPEATS), repeat=COMPARISON_REPEATS)
+    ]
+    differences = sorted(
+        (normal_value - baseline_value) / abs(baseline_value)
+        for baseline_value in baseline_medians
+        for normal_value in normal_medians
+    )
+    lower_index = int(0.025 * (len(differences) - 1))
+    upper_index = int(0.975 * (len(differences) - 1))
+    return differences[lower_index], differences[upper_index]
+
+
+def _comparison_config_sha256(row: dict[str, str]) -> str:
+    """Hash the complete resolved experiment config except per-run identity."""
+
+    path = Path(row["run_dir"]) / "control/run_config.resolved.yaml"
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or not isinstance(payload.get("run"), dict):
+        raise RuntimeError(f"comparison run has an invalid resolved config: {path}")
+    projection = {key: value for key, value in payload.items() if key != "run"}
+    canonical = json.dumps(
+        projection,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
 def _append_summary(
     *,
     project_root: Path,
@@ -403,9 +474,16 @@ def _append_summary(
         if "_e0_baseline_" in row.get("run_id", "")
         and row.get("source_fingerprint") == source_fingerprint
     ]
-    if len(baselines) != 1:
-        raise RuntimeError("normal comparison requires one current-target plan04 baseline row")
-    baseline = baselines[0]
+    normals = [
+        row
+        for row in rows
+        if "_e1_normal_" in row.get("run_id", "")
+        and row.get("source_fingerprint") == source_fingerprint
+    ]
+    if len(baselines) != COMPARISON_REPEATS:
+        raise RuntimeError("normal comparison requires three current-target baseline repeats")
+    if not 1 <= len(normals) <= COMPARISON_REPEATS:
+        raise RuntimeError("normal comparison permits exactly three current-target repeats")
     identity_fields = (
         "model_name_or_path",
         "model_revision",
@@ -423,45 +501,71 @@ def _append_summary(
         "optimizer_epsilon",
         "weight_decay",
     )
-    mismatches = [field for field in identity_fields if baseline[field] != current[field]]
-    baseline_work = (
-        int(baseline["merge_contributors"])
-        * int(baseline["synchronization_interval"])
-        * int(baseline["synchronization_count"])
-    )
-    current_work = (
-        int(current["merge_contributors"])
-        * int(current["synchronization_interval"])
-        * int(current["synchronization_count"])
-    )
+    reference = baselines[0]
+    compared_rows = [*baselines, *normals]
+    mismatches = [
+        f"{row['run_id']}:{field}"
+        for row in compared_rows
+        for field in identity_fields
+        if row[field] != reference[field]
+    ]
+    config_projection_by_run = {
+        row["run_id"]: _comparison_config_sha256(row) for row in compared_rows
+    }
+    if len(set(config_projection_by_run.values())) != 1:
+        mismatches.append("resolved_config_projection")
+
+    def applied_work(row: dict[str, str]) -> int:
+        """Return applied optimizer steps represented by one summary row."""
+
+        return (
+            int(row["merge_contributors"])
+            * int(row["synchronization_interval"])
+            * int(row["synchronization_count"])
+        )
+
+    work_by_run = {row["run_id"]: applied_work(row) for row in compared_rows}
+    equal_work = set(work_by_run.values()) == {4_000}
+    repeat_complete = len(normals) == COMPARISON_REPEATS
     metrics: dict[str, dict[str, Any]] = {}
     exceeded = False
     for field in ("final_mean_loss", "training_time_seconds"):
-        baseline_value = float(baseline[field])
-        current_value = float(current[field])
+        baseline_values = [float(row[field]) for row in baselines]
+        normal_values = [float(row[field]) for row in normals]
+        baseline_value = float(median(baseline_values))
+        current_value = float(median(normal_values))
         if baseline_value == 0.0:
             raise RuntimeError(f"baseline {field} is zero")
         difference = (current_value - baseline_value) / abs(baseline_value)
-        over_threshold = abs(difference) > 0.20
+        over_threshold = repeat_complete and abs(difference) > 0.20
         exceeded = exceeded or over_threshold
         metrics[field] = {
-            "baseline": baseline_value,
-            "normal": current_value,
-            "relative_difference": difference,
+            "baseline_values": baseline_values,
+            "normal_values": normal_values,
+            "baseline_median": baseline_value,
+            "normal_median": current_value,
+            "signed_relative_median_difference": difference,
+            "signed_relative_median_difference_95pct_interval": (
+                list(_relative_median_interval(baseline_values, normal_values))
+                if repeat_complete
+                else None
+            ),
             "absolute_difference_exceeds_threshold": over_threshold,
         }
     comparison = {
         "format_version": 1,
-        "baseline_run_id": baseline["run_id"],
-        "normal_run_id": current["run_id"],
+        "baseline_run_ids": [row["run_id"] for row in baselines],
+        "normal_run_ids": [row["run_id"] for row in normals],
         "source_fingerprint": source_fingerprint,
+        "repeat_count_required": COMPARISON_REPEATS,
+        "repeat_complete": repeat_complete,
         "identity_mismatches": mismatches,
-        "baseline_applied_local_steps": baseline_work,
-        "normal_applied_local_steps": current_work,
-        "equal_applied_local_steps": baseline_work == current_work,
+        "config_projection_sha256_by_run": config_projection_by_run,
+        "applied_local_steps_by_run": work_by_run,
+        "equal_applied_local_steps": equal_work,
         "threshold": 0.20,
         "metrics": metrics,
-        "investigation_required": bool(mismatches) or baseline_work != current_work or exceeded,
+        "investigation_required": bool(mismatches) or not equal_work or exceeded,
     }
     _atomic_json(comparison_output, comparison, create_only=True)
     return current, comparison
@@ -625,9 +729,14 @@ def _authority_evidence(
     ):
         raise RuntimeError("authority does not bind exactly eight bootstrap scheduler jobs")
     bootstrap_launches = [row for row in launches if row["role"] == "bootstrap"]
-    if len(bootstrap_launches) != 8 or {
-        int(row["bootstrap_slot"]) for row in bootstrap_launches
-    } != set(range(8)):
+    if (
+        len(bootstrap_launches) != 8
+        or {int(row["bootstrap_slot"]) for row in bootstrap_launches} != set(range(8))
+        or {str(row["state"]) for row in bootstrap_launches} != {"admitted"}
+        or {normalize_job_id(str(row["pbs_job_id"])) for row in bootstrap_launches} != initial_jobs
+        or {str(row["admitted_instance_id"]) for row in bootstrap_launches}
+        != {str(row["instance_id"]) for row in initial_instances}
+    ):
         raise RuntimeError("authority does not retain exactly eight bootstrap authorizations")
 
     replacement_evidence: dict[str, Any] | None = None
@@ -643,6 +752,11 @@ def _authority_evidence(
         if (
             request["request_id"] != replacement["request_id"]
             or request["replace_instance_id"] != victim["instance_id"]
+            or request["admitted_instance_id"] != replacement["admitted_instance_id"]
+            or normalize_job_id(str(request["pbs_job_id"]))
+            != normalize_job_id(str(replacement["pbs_job_id"]))
+            or normalize_job_id(str(request["pbs_job_id"])) in initial_jobs
+            or float(request["created_at"]) < float(victim["qdel"]["requested_at"]) - 1.0
             or request["reason"] != "confirmed_scheduler_terminal_after_progress_stall"
             or request["state"] != "admitted"
             or len(old) != 1
@@ -694,18 +808,44 @@ def _authority_evidence(
         for row in attestations
     ):
         raise RuntimeError("actor attestation identity differs from the run descriptor")
-    attested_jobs = [
-        normalize_job_id(str(row["scheduler_job_id"]))
-        for row in attestations
-        if isinstance(row.get("scheduler_job_id"), str) and row["scheduler_job_id"]
-    ]
-    authority_jobs = {
-        normalize_job_id(str(row["pbs_job_id"]))
-        for row in [*instances, *epochs]
-        if isinstance(row.get("pbs_job_id"), str) and row["pbs_job_id"]
+    expected_actors = {
+        ("learner", str(row["instance_id"])): (
+            str(row["instance_id"]),
+            normalize_job_id(str(row["pbs_job_id"])),
+        )
+        for row in instances
     }
-    if len(attested_jobs) != len(set(attested_jobs)) or set(attested_jobs) != authority_jobs:
-        raise RuntimeError("actor attestations are not one-to-one with authority scheduler jobs")
+    expected_actors.update(
+        {
+            ("syncer", str(row["owner_id"])): (
+                None,
+                normalize_job_id(str(row["pbs_job_id"])),
+            )
+            for row in epochs
+        }
+    )
+    observed_actors: dict[tuple[str, str], tuple[str, str]] = {}
+    for row in attestations:
+        key = (str(row.get("actor_kind")), str(row.get("actor_id")))
+        attempt_id = row.get("attempt_id")
+        scheduler_job_id = row.get("scheduler_job_id")
+        if (
+            key in observed_actors
+            or not isinstance(attempt_id, str)
+            or not attempt_id
+            or not isinstance(scheduler_job_id, str)
+            or not scheduler_job_id
+        ):
+            raise RuntimeError("actor attestations do not contain unique complete actor attempts")
+        observed_actors[key] = (attempt_id, normalize_job_id(scheduler_job_id))
+    if set(observed_actors) != set(expected_actors):
+        raise RuntimeError("actor attestations do not cover the exact authority actors")
+    for key, (expected_attempt, expected_job) in expected_actors.items():
+        actual_attempt, actual_job = observed_actors[key]
+        if actual_job != expected_job or (
+            expected_attempt is not None and actual_attempt != expected_attempt
+        ):
+            raise RuntimeError("actor attestation identity is not bound to its authority row")
     return {
         "integrity_check": [row[0] for row in integrity],
         "controller": controller,
@@ -732,8 +872,9 @@ def _validate_submission_timeline(
     successor_syncer: dict[str, Any] | None,
     syncer_qdel: dict[str, Any] | None,
     conflict_snapshot: dict[str, Any] | None,
+    victim: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Validate exact batch and syncer-fault timing from scheduler receipts."""
+    """Validate exact batch, learner-fault, and syncer-fault scheduler timing."""
 
     if len(learners) != 8 or [int(row["slot"]) for row in learners] != list(range(8)):
         raise RuntimeError("submission timeline does not contain eight ordered learner slots")
@@ -763,6 +904,24 @@ def _validate_submission_timeline(
     if abs(float(primary_syncer["submitted_at"]) - origin_wall) > 10.0:
         raise RuntimeError("primary syncer was not submitted at the initial boundary")
 
+    if scenario.learner_fault:
+        if victim is None or not isinstance(victim.get("qdel"), dict):
+            raise RuntimeError("learner fault lacks qdel timeline evidence")
+        qdel = victim["qdel"]
+        learner_jobs = {
+            normalize_job_id(str(row["job_id"]))
+            for row in learners
+            if isinstance(row.get("job_id"), str)
+        }
+        qdel_job = normalize_job_id(str(qdel.get("job_id", "")))
+        if (
+            qdel_job not in learner_jobs
+            or float(qdel["requested_at"]) - origin_wall < FAULT_DELAY_SECONDS - 1.0
+        ):
+            raise RuntimeError("learner fault did not delete an initial job after 60 seconds")
+    elif victim is not None:
+        raise RuntimeError("fault-free scenario contains learner qdel evidence")
+
     if scenario.syncer_fault == "restart":
         if successor_syncer is None or syncer_qdel is None:
             raise RuntimeError("syncer restart lacks successor or qdel evidence")
@@ -786,13 +945,10 @@ def _validate_submission_timeline(
             not isinstance(epochs, list)
             or len(epochs) != 1
             or epochs[0].get("final_state") is not None
-            or conflict_snapshot.get("candidate_scheduler_state")
-            not in {
-                "queued",
-                "prologue",
-                "running",
-                "suspended",
-            }
+            or conflict_snapshot.get("candidate_scheduler_state") != "running"
+            or float(syncer_qdel["requested_at"])
+            - float(conflict_snapshot.get("candidate_running_observed_at", 0.0))
+            < DUAL_SYNCER_OBSERVATION_SECONDS - 1.0
         ):
             raise RuntimeError("second syncer was not fenced behind the live primary lease")
     return {"batch_boundaries": boundaries}
@@ -967,14 +1123,18 @@ def supervise(
             owned_jobs.add(str(successor_syncer["job_id"]))
             timeline["events"].append(successor_syncer)
             _atomic_json(log_root / "scenario_state.json", timeline)
-            _sleep_until(
-                origin_monotonic,
-                FAULT_DELAY_SECONDS + DUAL_SYNCER_OBSERVATION_SECONDS,
+            candidate_running = _wait_scheduler_running(
+                str(successor_syncer["job_id"]),
+                timeout_seconds=min(180.0, timeout_seconds),
             )
+            running_origin = time.monotonic()
+            _sleep_until(running_origin, DUAL_SYNCER_OBSERVATION_SECONDS)
             candidate = _require_outstanding(str(successor_syncer["job_id"]))
             conflict_snapshot = {
                 "observed_at": time.time(),
                 "candidate_scheduler_state": candidate["classification"],
+                "candidate_running_observed_at": candidate_running["observed_at"],
+                "candidate_running_observation": candidate_running,
                 "syncer_epochs": _read_rows(database, "SELECT * FROM syncer_epochs ORDER BY epoch"),
             }
             _require_outstanding(str(primary_syncer["job_id"]))
@@ -1007,6 +1167,7 @@ def supervise(
             successor_syncer=successor_syncer,
             syncer_qdel=syncer_qdel,
             conflict_snapshot=conflict_snapshot,
+            victim=victim,
         )
         authority = _authority_evidence(
             run_root=run_root,
@@ -1030,6 +1191,14 @@ def supervise(
         errors: list[str] = []
         if comparison is not None and comparison["investigation_required"]:
             errors.append("normal baseline comparison exceeds the registered 20% acceptance rule")
+        requirements_covered = [
+            "PKG-01",
+            "TOPO-01",
+            "WORK-01",
+            _scenario_requirement(scenario),
+        ]
+        if comparison is not None and comparison["repeat_complete"]:
+            requirements_covered.append("METRICS-01")
         timeline["terminal_summary"] = terminal_summary
         timeline["scheduler_history"] = scheduler_history
         _atomic_json(log_root / "scenario_state.json", timeline)
@@ -1045,12 +1214,7 @@ def supervise(
             "gate": f"plan04_experiment_{scenario.experiment_id}",
             "experiment_id": str(scenario.experiment_id),
             "scenario": scenario_name,
-            "requirements_covered": [
-                "PKG-01",
-                "TOPO-01",
-                "WORK-01",
-                _scenario_requirement(scenario),
-            ],
+            "requirements_covered": sorted(set(requirements_covered)),
             "source": {
                 "commit": source["git_commit"],
                 "dirty": source["git_dirty"],
@@ -1155,7 +1319,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--log-root", type=Path, required=True)
     parser.add_argument("--evidence-output", type=Path, required=True)
-    parser.add_argument("--timeout-seconds", type=float, default=1500.0)
+    parser.add_argument("--timeout-seconds", type=float, default=1200.0)
     return parser
 
 

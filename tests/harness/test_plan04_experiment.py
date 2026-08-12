@@ -110,7 +110,8 @@ def _write_authority(
         );
         CREATE TABLE launch_requests(
             request_id TEXT, role TEXT, bootstrap_slot INTEGER, created_at REAL,
-            replace_instance_id TEXT, reason TEXT, state TEXT
+            replace_instance_id TEXT, reason TEXT, state TEXT, pbs_job_id TEXT,
+            admitted_instance_id TEXT
         );
         CREATE TABLE terminal_contributor_fences(
             generation INTEGER, stable_contributor_key TEXT, fence_json TEXT, state TEXT
@@ -155,8 +156,14 @@ def _write_authority(
         )
         connection.execute(
             "INSERT INTO launch_requests VALUES(?, 'bootstrap', ?, ?, NULL, "
-            "'initial_bootstrap', 'admitted')",
-            (f"bootstrap-{stream}", stream, float(stream)),
+            "'initial_bootstrap', 'admitted', ?, ?)",
+            (
+                f"bootstrap-{stream}",
+                stream,
+                float(stream),
+                f"{stream}.opbs",
+                initial_id,
+            ),
         )
         terminal_fence = _fence(terminal_id, stream, epoch=2 if terminal_id != initial_id else 1)
         connection.execute(
@@ -178,9 +185,13 @@ def _write_authority(
         connection.execute(
             "INSERT INTO launch_requests VALUES("
             "'replacement-request', 'replacement', NULL, 90.0, 'instance-7', "
-            "'confirmed_scheduler_terminal_after_progress_stall', 'admitted')"
+            "'confirmed_scheduler_terminal_after_progress_stall', 'admitted', '300.opbs', "
+            "'instance-7-replacement')"
         )
-        victim = {"instance_id": "instance-7"}
+        victim = {
+            "instance_id": "instance-7",
+            "qdel": {"job_id": "7.opbs", "requested_at": 60.0},
+        }
         successor = {
             "request_id": "replacement-request",
             "admitted_instance_id": "instance-7-replacement",
@@ -257,12 +268,14 @@ def test_registry_and_configs_are_the_exact_current_plan04_matrix() -> None:
     baseline = load_config(PACKAGE / "baseline.yaml")
     experiment = load_config(PACKAGE / "experiment.yaml")
     fault = load_config(PACKAGE / "fault_experiment.yaml")
-    assert (baseline.training.inner_steps, baseline.sync.quorum_min) == (50, 8)
+    assert (baseline.training.inner_steps, baseline.sync.quorum_min) == (100, 4)
     for config in (experiment, fault):
         assert config.training.inner_steps == 100
         assert config.sync.stop_after_outer_steps == 10
         assert config.sync.quorum_min == config.sync.quorum_max == 4
         assert config.membership.stream_pool_size == config.membership.bootstrap_instances == 8
+    for config in (baseline, experiment, fault):
+        assert config.training.gradient_accumulation_steps == 2
     assert experiment.scaling.enabled is False
     assert fault.scaling.enabled is True
     assert fault.scaling.learner_queue == "regular-g"
@@ -305,6 +318,7 @@ def test_staggered_and_dual_syncer_timelines_preserve_registered_boundaries() ->
         successor_syncer=None,
         syncer_qdel=None,
         conflict_snapshot=None,
+        victim=None,
     )
     assert [row["size"] for row in evidence["batch_boundaries"]] == [4, 4]
 
@@ -321,8 +335,10 @@ def test_staggered_and_dual_syncer_timelines_preserve_registered_boundaries() ->
         syncer_qdel={"requested_at": origin + 120.0},
         conflict_snapshot={
             "candidate_scheduler_state": "running",
+            "candidate_running_observed_at": origin + 60.0,
             "syncer_epochs": [{"final_state": None}],
         },
+        victim=None,
     )
     assert dual["batch_boundaries"][0]["size"] == 8
 
@@ -348,6 +364,51 @@ def test_timeline_rejects_a_short_stagger_delay() -> None:
             successor_syncer=None,
             syncer_qdel=None,
             conflict_snapshot=None,
+            victim=None,
+        )
+
+
+def test_learner_fault_timeline_binds_qdel_to_an_initial_job_after_sixty_seconds() -> None:
+    """Fault acceptance requires a real bootstrap-job deletion at the registered boundary."""
+
+    module = _module()
+    origin = 1_000.0
+    learners = [
+        {
+            **_submission(role="learner", slot=slot, submitted_at=origin + slot * 0.1),
+            "job_id": f"{slot}.opbs",
+        }
+        for slot in range(8)
+    ]
+    victim = {
+        "qdel": {
+            "job_id": "3.opbs",
+            "requested_at": origin + module.FAULT_DELAY_SECONDS,
+        }
+    }
+    evidence = module._validate_submission_timeline(
+        scenario=module.SCENARIOS["learner_failure_simultaneous"],
+        origin_wall=origin,
+        primary_syncer=_submission(role="syncer_primary", submitted_at=origin),
+        learners=learners,
+        successor_syncer=None,
+        syncer_qdel=None,
+        conflict_snapshot=None,
+        victim=victim,
+    )
+    assert evidence["batch_boundaries"][0]["size"] == 8
+
+    victim["qdel"]["requested_at"] = origin + 30.0
+    with pytest.raises(RuntimeError, match="after 60 seconds"):
+        module._validate_submission_timeline(
+            scenario=module.SCENARIOS["learner_failure_simultaneous"],
+            origin_wall=origin,
+            primary_syncer=_submission(role="syncer_primary", submitted_at=origin),
+            learners=learners,
+            successor_syncer=None,
+            syncer_qdel=None,
+            conflict_snapshot=None,
+            victim=victim,
         )
 
 
@@ -369,6 +430,32 @@ def test_authority_oracle_accepts_exact_normal_and_takeover_histories(tmp_path: 
     )
     assert normal["integrity_check"] == ["ok"]
     assert normal["merge_counts"] == {version: 4 for version in range(1, 11)}
+
+    # Scheduler identity must remain bound to the same durable learner incarnation.
+    attestation_path = normal_root / "metrics/attestations/learner/instance-0/instance-0.json"
+    attestation = json.loads(attestation_path.read_text(encoding="utf-8"))
+    attestation["scheduler_job_id"] = "999.opbs"
+    attestation["attestation_sha256"] = hashlib.sha256(
+        json.dumps(
+            {key: value for key, value in attestation.items() if key != "attestation_sha256"},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    attestation_path.chmod(0o644)
+    attestation_path.write_text(json.dumps(attestation), encoding="utf-8")
+    attestation_path.chmod(0o444)
+    with pytest.raises(RuntimeError, match="bound to its authority row"):
+        module._authority_evidence(
+            run_root=normal_root,
+            config=load_config(PACKAGE / "experiment.yaml"),
+            scenario=module.SCENARIOS["normal"],
+            initial_learner_job_ids=[f"{index}.opbs" for index in range(8)],
+            primary_syncer_job_id="100.opbs",
+            successor_syncer_job_id=None,
+            victim=None,
+            replacement=None,
+        )
 
     takeover_root = tmp_path / "takeover"
     _write_authority(takeover_root, takeover=True)
@@ -425,6 +512,32 @@ def test_authority_oracle_binds_replacement_to_the_expired_stream(tmp_path: Path
         )
 
 
+def test_cleanup_discovers_authorized_replacement_before_admission(tmp_path: Path) -> None:
+    """Failure cleanup must own a submitted replacement even before it registers."""
+
+    module = _module()
+    database = tmp_path / "authority.sqlite3"
+    connection = sqlite3.connect(database)
+    connection.executescript(
+        """
+        CREATE TABLE learner_instances(pbs_job_id TEXT);
+        CREATE TABLE syncer_epochs(pbs_job_id TEXT);
+        CREATE TABLE launch_requests(pbs_job_id TEXT);
+        INSERT INTO learner_instances VALUES('101.opbs');
+        INSERT INTO syncer_epochs VALUES('102.opbs');
+        INSERT INTO launch_requests VALUES('103.opbs');
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    assert module._discover_authority_jobs(database) == {
+        "101.opbs",
+        "102.opbs",
+        "103.opbs",
+    }
+
+
 def test_summary_comparison_requires_equal_work_and_enforces_twenty_percent(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -437,8 +550,15 @@ def test_summary_comparison_requires_equal_work_and_enforces_twenty_percent(
     runs.mkdir(parents=True)
     run_root = runs / "full_protocol" / "plan04_e1_normal_current"
     run_root.mkdir(parents=True)
+    control = run_root / "control"
+    control.mkdir()
+    (control / "run_config.resolved.yaml").write_text(
+        (PACKAGE / "experiment.yaml").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     fields = [
         "run_id",
+        "run_dir",
         "source_fingerprint",
         "model_name_or_path",
         "model_revision",
@@ -462,6 +582,7 @@ def test_summary_comparison_requires_equal_work_and_enforces_twenty_percent(
         "training_time_seconds",
     ]
     shared = {
+        "run_dir": str(run_root),
         "source_fingerprint": "sha256:" + "f" * 64,
         "model_name_or_path": "synthetic-tiny",
         "model_revision": "",
@@ -472,7 +593,7 @@ def test_summary_comparison_requires_equal_work_and_enforces_twenty_percent(
         "train_split": "train",
         "block_size": "16",
         "micro_batch_size": "1",
-        "gradient_accumulation_steps": "1",
+        "gradient_accumulation_steps": "2",
         "learning_rate": "5e-05",
         "optimizer_beta1": "0.9",
         "optimizer_beta2": "0.95",
@@ -481,22 +602,28 @@ def test_summary_comparison_requires_equal_work_and_enforces_twenty_percent(
         "synchronization_count": "10",
     }
     rows = [
-        {
-            **shared,
-            "run_id": "plan04_e0_baseline_current",
-            "merge_contributors": "8",
-            "synchronization_interval": "50",
-            "final_mean_loss": "2.0",
-            "training_time_seconds": "100.0",
-        },
-        {
-            **shared,
-            "run_id": run_root.name,
-            "merge_contributors": "4",
-            "synchronization_interval": "100",
-            "final_mean_loss": "2.1",
-            "training_time_seconds": "115.0",
-        },
+        *[
+            {
+                **shared,
+                "run_id": f"plan04_e0_baseline_repeat{repeat}",
+                "merge_contributors": "4",
+                "synchronization_interval": "100",
+                "final_mean_loss": str(2.0 + repeat * 0.01),
+                "training_time_seconds": str(100.0 + repeat),
+            }
+            for repeat in range(3)
+        ],
+        *[
+            {
+                **shared,
+                "run_id": run_root.name if repeat == 2 else f"plan04_e1_normal_repeat{repeat}",
+                "merge_contributors": "4",
+                "synchronization_interval": "100",
+                "final_mean_loss": str(2.1 + repeat * 0.01),
+                "training_time_seconds": str(113.0 + repeat),
+            }
+            for repeat in range(3)
+        ],
     ]
     with (runs / "summary.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
@@ -516,4 +643,8 @@ def test_summary_comparison_requires_equal_work_and_enforces_twenty_percent(
         comparison_output=tmp_path / "comparison.json",
     )
     assert comparison["equal_applied_local_steps"] is True
+    assert comparison["repeat_complete"] is True
+    assert comparison["metrics"]["training_time_seconds"][
+        "signed_relative_median_difference_95pct_interval"
+    ]
     assert comparison["investigation_required"] is False

@@ -67,7 +67,7 @@ PYTHON_BIN="$PROJECT_ROOT/.venv/bin/python"
 PBS_SCRIPT="$SCRIPT_DIR/run_experiment.pbs"
 QUEUE=regular-g
 WALLTIME=00:30:00
-TIMEOUT_SECONDS=1500
+TIMEOUT_SECONDS=1200
 
 test -x "$PYTHON_BIN"
 test -f "$CONFIG"
@@ -143,4 +143,3 @@ printf '%s\n' \
   "log_root=$LOG_ROOT" \
   "evidence_output=$EVIDENCE_OUTPUT" \
   "supervisor_log=$SUPERVISOR_LOG"
-

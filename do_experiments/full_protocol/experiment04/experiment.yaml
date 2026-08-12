@@ -38,7 +38,7 @@ terminal:
 training:
   inner_steps: 100
   micro_batch_size: 1
-  gradient_accumulation_steps: 1
+  gradient_accumulation_steps: 2
   seed: 1337
 inner_optimizer:
   name: adamw
@@ -75,4 +75,3 @@ maintenance:
   recent_batch_dedup_count: 64
   quarantine_records_per_contributor: 64
   publication_orphan_grace_seconds: 20.0
-
