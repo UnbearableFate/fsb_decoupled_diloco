@@ -1,0 +1,85 @@
+{
+  "artifact_version": 1,
+  "cleanup": {
+    "actions": [],
+    "eligible": false,
+    "owned_job_ids": [
+      "2540915.opbs",
+      "2540917.opbs",
+      "2540923.opbs",
+      "2540927.opbs",
+      "2540962.opbs",
+      "2540963.opbs",
+      "2540964.opbs",
+      "2540967.opbs",
+      "2540968.opbs"
+    ],
+    "owner": "plan04:plan04_e3_stagger_3_3_2_20260812_220533"
+  },
+  "config": {
+    "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/do_experiments/full_protocol/experiment04/experiment.yaml"
+  },
+  "environment": {
+    "hostname": "mg0857",
+    "pbs_job_id": "2540901.opbs",
+    "python": "3.13.13 (main, May 10 2026, 19:28:34) [Clang 22.1.3 ]"
+  },
+  "errors": [
+    "RuntimeError: terminal fences contain a foreign or unacknowledged stream"
+  ],
+  "evidence_paths": [
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e3_stagger_3_3_2_20260812_220533/bootstrap_000.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e3_stagger_3_3_2_20260812_220533/bootstrap_001.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e3_stagger_3_3_2_20260812_220533/bootstrap_002.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e3_stagger_3_3_2_20260812_220533/bootstrap_003.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e3_stagger_3_3_2_20260812_220533/bootstrap_004.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e3_stagger_3_3_2_20260812_220533/bootstrap_005.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e3_stagger_3_3_2_20260812_220533/bootstrap_006.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e3_stagger_3_3_2_20260812_220533/bootstrap_007.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e3_stagger_3_3_2_20260812_220533/scenario_state.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e3_stagger_3_3_2_20260812_220533/submission_receipt.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e3_stagger_3_3_2_20260812_220533/syncer.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e3_stagger_3_3_2_20260812_220533/control/run_config.resolved.yaml",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e3_stagger_3_3_2_20260812_220533/control/run_descriptor.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e3_stagger_3_3_2_20260812_220533/control/run_source_manifest.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e3_stagger_3_3_2_20260812_220533/control/stop.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e3_stagger_3_3_2_20260812_220533/control/summary.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e3_stagger_3_3_2_20260812_220533/control/syncer_metadata.sqlite3",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e3_stagger_3_3_2_20260812_220533/metrics/attestations/learner/learner_li_2813959b-eb61-4396-93bc-af4025f5f124/learner_li_2813959b-eb61-4396-93bc-af4025f5f124.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e3_stagger_3_3_2_20260812_220533/metrics/attestations/learner/learner_li_68e590fd-a8bf-4420-aa85-61012dc910d2/learner_li_68e590fd-a8bf-4420-aa85-61012dc910d2.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e3_stagger_3_3_2_20260812_220533/metrics/attestations/learner/learner_li_86c8b9a2-4a7f-4df9-a2ce-b6f89b7016c0/learner_li_86c8b9a2-4a7f-4df9-a2ce-b6f89b7016c0.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e3_stagger_3_3_2_20260812_220533/metrics/attestations/learner/learner_li_9110405a-ed3f-4953-ab66-05582da59f0d/learner_li_9110405a-ed3f-4953-ab66-05582da59f0d.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e3_stagger_3_3_2_20260812_220533/metrics/attestations/learner/learner_li_c197168a-b4ab-4442-90fb-7cceb0ec1547/learner_li_c197168a-b4ab-4442-90fb-7cceb0ec1547.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e3_stagger_3_3_2_20260812_220533/metrics/attestations/syncer/syncer-3eedc898-123e-4df2-aef1-5e720147c2af/attempt-4dc2c3ef-8f5e-4460-9a8e-0618786c71ce.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/summary.csv"
+  ],
+  "experiment_id": "3",
+  "gate": "plan04_experiment_3",
+  "metrics": {},
+  "requirements_covered": [
+    "STAGGER-01"
+  ],
+  "scenario": "stagger_3_3_2",
+  "source": {
+    "commit": "7145197f3209fa67727bb0d458d0db38a81eb86d",
+    "dirty": false,
+    "fingerprint": "sha256:fcecd04f3ca5720cc3cd576889d8c20ad5d3f9dd9dd5725c7415b0549cdffa35",
+    "scopes": [
+      "fs_diloco",
+      "configs",
+      "do_experiments",
+      "scripts/miyabi",
+      "tests",
+      "tools",
+      "torch_ddp_baselines",
+      "pyproject.toml",
+      "README.md",
+      "docs",
+      "plans/00-RESEARCH_PLAN.md",
+      "website/app",
+      "website/scripts"
+    ]
+  },
+  "status": "FAIL",
+  "workload": null
+}

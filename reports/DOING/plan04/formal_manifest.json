@@ -1,0 +1,318 @@
+{
+  "acceptance_policy": {
+    "other_checks": "diagnostic-only",
+    "pass_formula": "final syncer Exit_status=0 AND terminal final_version=25 AND final_mean_loss<3.5"
+  },
+  "evidence_policy": "Per user direction, queue/walltime and harness-only changes do not invalidate completed training results; only training or protocol functional changes require reruns.",
+  "gates": [
+    {
+      "artifact": "runs/torch_ddp_baselines/20260812_214048_torch_ddp_gpt2_wikitext2_8n_5000",
+      "id": "baseline-ddp",
+      "kind": "baseline",
+      "metrics": {
+        "final_mean_loss": 2.935435099899769,
+        "synchronization_count": 5000,
+        "training_time_seconds": 1127.7917544841766
+      },
+      "run_id": "20260812_214048_torch_ddp_gpt2_wikitext2_8n_5000",
+      "source": {
+        "commit": "7145197f3209fa67727bb0d458d0db38a81eb86d",
+        "fingerprint": "sha256:fcecd04f3ca5720cc3cd576889d8c20ad5d3f9dd9dd5725c7415b0549cdffa35"
+      },
+      "status": "PASS",
+      "supervisor_job_id": "2540694.opbs"
+    },
+    {
+      "artifact": "runs/torch_ddp_baselines/20260812_214048_torch_periodic_average_gpt2_wikitext2_8n_5000",
+      "id": "baseline-periodic-average",
+      "kind": "baseline",
+      "metrics": {
+        "final_mean_loss": 2.9985041730105877,
+        "synchronization_count": 25,
+        "training_time_seconds": 1040.5639867782593
+      },
+      "run_id": "20260812_214048_torch_periodic_average_gpt2_wikitext2_8n_5000",
+      "source": {
+        "commit": "7145197f3209fa67727bb0d458d0db38a81eb86d",
+        "fingerprint": "sha256:fcecd04f3ca5720cc3cd576889d8c20ad5d3f9dd9dd5725c7415b0549cdffa35"
+      },
+      "status": "PASS",
+      "supervisor_job_id": "2540695.opbs"
+    },
+    {
+      "acceptance": {
+        "criteria": {
+          "final_mean_loss_below_3_5": true,
+          "final_syncer_normal_exit": true,
+          "global_version_25": true
+        },
+        "final_syncer_exit_status": 0,
+        "final_syncer_job_id": "2540864",
+        "final_version": 25,
+        "loss_threshold": 3.5
+      },
+      "artifact": "artifacts/20260812_220108_e1_normal.json",
+      "id": "normal",
+      "kind": "full",
+      "metrics": {
+        "final_mean_loss": 3.196270148959011,
+        "synchronization_count": 25,
+        "training_time_seconds": 605.5071256160736
+      },
+      "run_id": "plan04_e1_normal_20260812_220108",
+      "source": {
+        "commit": "7145197f3209fa67727bb0d458d0db38a81eb86d",
+        "fingerprint": "sha256:fcecd04f3ca5720cc3cd576889d8c20ad5d3f9dd9dd5725c7415b0549cdffa35"
+      },
+      "status": "PASS",
+      "supervisor_job_id": "2540861.opbs",
+      "weights": {
+        "optimizer_file_count": 1,
+        "weight_file_count": 1
+      }
+    },
+    {
+      "acceptance": {
+        "criteria": {
+          "final_mean_loss_below_3_5": true,
+          "final_syncer_normal_exit": true,
+          "global_version_25": true
+        },
+        "final_syncer_exit_status": 0,
+        "final_syncer_job_id": "2541161",
+        "final_version": 25,
+        "loss_threshold": 3.5
+      },
+      "artifact": "artifacts/20260812_223229_e2_stagger_4_4.json",
+      "id": "stagger-4-4",
+      "kind": "full",
+      "metrics": {
+        "final_mean_loss": 3.1973454820364715,
+        "synchronization_count": 25,
+        "training_time_seconds": 617.3845114707947
+      },
+      "run_id": "plan04_e2_stagger_4_4_20260812_223229",
+      "source": {
+        "commit": "7145197f3209fa67727bb0d458d0db38a81eb86d",
+        "fingerprint": "sha256:fcecd04f3ca5720cc3cd576889d8c20ad5d3f9dd9dd5725c7415b0549cdffa35"
+      },
+      "status": "PASS",
+      "supervisor_job_id": "2541158.opbs",
+      "weights": {
+        "optimizer_file_count": 1,
+        "weight_file_count": 1
+      }
+    },
+    {
+      "acceptance": {
+        "criteria": {
+          "final_mean_loss_below_3_5": true,
+          "final_syncer_normal_exit": true,
+          "global_version_25": true
+        },
+        "final_syncer_exit_status": 0,
+        "final_syncer_job_id": "2541236",
+        "final_version": 25,
+        "loss_threshold": 3.5
+      },
+      "artifact": "artifacts/20260812_224411_e3_stagger_3_3_2.json",
+      "id": "stagger-3-3-2",
+      "kind": "full",
+      "metrics": {
+        "final_mean_loss": 3.167654231786728,
+        "synchronization_count": 25,
+        "training_time_seconds": 647.6084022521973
+      },
+      "run_id": "plan04_e3_stagger_3_3_2_20260812_224411",
+      "source": {
+        "commit": "7145197f3209fa67727bb0d458d0db38a81eb86d",
+        "fingerprint": "sha256:fcecd04f3ca5720cc3cd576889d8c20ad5d3f9dd9dd5725c7415b0549cdffa35"
+      },
+      "status": "PASS",
+      "supervisor_job_id": "2541231.opbs",
+      "weights": {
+        "optimizer_file_count": 1,
+        "weight_file_count": 1
+      }
+    },
+    {
+      "acceptance": {
+        "criteria": {
+          "final_mean_loss_below_3_5": true,
+          "final_syncer_normal_exit": true,
+          "global_version_25": true
+        },
+        "final_syncer_exit_status": 0,
+        "final_syncer_job_id": "2541649",
+        "final_version": 25,
+        "loss_threshold": 3.5
+      },
+      "artifact": "artifacts/20260812_233703_e4_learner_failure_simultaneous.json",
+      "id": "learner-fault-simultaneous",
+      "kind": "full",
+      "metrics": {
+        "final_mean_loss": 3.2886466048657894,
+        "synchronization_count": 25,
+        "training_time_seconds": 1008.2547128200531
+      },
+      "run_id": "plan04_e4_learner_failure_simultaneous_20260812_233703",
+      "source": {
+        "commit": "a064ef8837ca033db883fe60879c4578b921b09c",
+        "fingerprint": "sha256:a0479788d97f5418cbc8e35c1816712e7795fe8ce05a2adce9291a16b251d296"
+      },
+      "status": "PASS",
+      "supervisor_job_id": "2541648.opbs",
+      "weights": {
+        "optimizer_file_count": 1,
+        "weight_file_count": 1
+      }
+    },
+    {
+      "acceptance": {
+        "criteria": {
+          "final_mean_loss_below_3_5": true,
+          "final_syncer_normal_exit": true,
+          "global_version_25": true
+        },
+        "final_syncer_exit_status": 0,
+        "final_syncer_job_id": "2541825",
+        "final_version": 25,
+        "loss_threshold": 3.5
+      },
+      "artifact": "artifacts/20260813_000324_e5_learner_failure_staggered.json",
+      "id": "learner-fault-staggered",
+      "kind": "full",
+      "metrics": {
+        "final_mean_loss": 3.3055529114603996,
+        "synchronization_count": 25,
+        "training_time_seconds": 909.0739281177521
+      },
+      "run_id": "plan04_e5_learner_failure_staggered_20260813_000324",
+      "source": {
+        "commit": "319081c8d57411a3e1b8ee724c82f810f25a3228",
+        "fingerprint": "sha256:5ab9a68956dc718db713938957a0ab390cd00b0b5956e1740c6547154d772ebf"
+      },
+      "status": "PASS",
+      "supervisor_job_id": "2541824.opbs",
+      "weights": {
+        "optimizer_file_count": 1,
+        "weight_file_count": 1
+      }
+    },
+    {
+      "acceptance": {
+        "criteria": {
+          "final_mean_loss_below_3_5": true,
+          "final_syncer_normal_exit": true,
+          "global_version_25": true
+        },
+        "final_syncer_exit_status": 0,
+        "final_syncer_job_id": "2541896",
+        "final_version": 25,
+        "loss_threshold": 3.5
+      },
+      "artifact": "artifacts/20260813_002004_e6_syncer_failure.json",
+      "id": "syncer-failure",
+      "kind": "full",
+      "metrics": {
+        "final_mean_loss": 3.2434299961850046,
+        "synchronization_count": 25,
+        "training_time_seconds": 934.1939141750336
+      },
+      "run_id": "plan04_e6_syncer_failure_20260813_002004",
+      "source": {
+        "commit": "319081c8d57411a3e1b8ee724c82f810f25a3228",
+        "fingerprint": "sha256:5ab9a68956dc718db713938957a0ab390cd00b0b5956e1740c6547154d772ebf"
+      },
+      "status": "PASS",
+      "supervisor_job_id": "2541871.opbs",
+      "weights": {
+        "optimizer_file_count": 1,
+        "weight_file_count": 1
+      }
+    },
+    {
+      "acceptance": {
+        "criteria": {
+          "final_mean_loss_below_3_5": true,
+          "final_syncer_normal_exit": true,
+          "global_version_25": true
+        },
+        "final_syncer_exit_status": 0,
+        "final_syncer_job_id": "2541950",
+        "final_version": 25,
+        "loss_threshold": 3.5
+      },
+      "artifact": "artifacts/20260813_003704_e7_dual_syncer.json",
+      "id": "dual-syncer",
+      "kind": "full",
+      "metrics": {
+        "final_mean_loss": 3.2451633641682567,
+        "synchronization_count": 25,
+        "training_time_seconds": 982.3854846954346
+      },
+      "run_id": "plan04_e7_dual_syncer_20260813_003704",
+      "source": {
+        "commit": "319081c8d57411a3e1b8ee724c82f810f25a3228",
+        "fingerprint": "sha256:5ab9a68956dc718db713938957a0ab390cd00b0b5956e1740c6547154d772ebf"
+      },
+      "status": "PASS",
+      "supervisor_job_id": "2541938.opbs",
+      "weights": {
+        "optimizer_file_count": 1,
+        "weight_file_count": 1
+      }
+    }
+  ],
+  "manifest_version": 1,
+  "plan_id": "plan04",
+  "scenario_diagnostics": {
+    "dual_syncer": "candidate started near 30 seconds, observed behind the sole live primary epoch, and took epoch 2 after primary qdel near 60 seconds",
+    "learner_fault_simultaneous": "one admitted bootstrap learner was qdel near 60 seconds and replacement job 2541665 was admitted",
+    "learner_fault_staggered": "one admitted bootstrap learner was qdel near 60 seconds and replacement job 2541839 was admitted",
+    "stagger_3_3_2": "batch offsets were 0.07, 32.02, and 60.00 seconds; no global version existed during the initial three-learner phase",
+    "stagger_4_4": "batch offsets were 0.07 and 30.00 seconds",
+    "syncer_failure": "primary was qdel near 60 seconds and successor was submitted about 30 seconds later, took epoch 2, and completed"
+  },
+  "source_lineage": [
+    {
+      "commit": "7145197f3209fa67727bb0d458d0db38a81eb86d",
+      "evidence": [
+        "baseline-ddp",
+        "baseline-periodic-average",
+        "normal",
+        "stagger-4-4",
+        "stagger-3-3-2"
+      ],
+      "fingerprint": "sha256:fcecd04f3ca5720cc3cd576889d8c20ad5d3f9dd9dd5725c7415b0549cdffa35",
+      "functional_relation": "reference training/protocol implementation"
+    },
+    {
+      "commit": "a064ef8837ca033db883fe60879c4578b921b09c",
+      "evidence": [
+        "learner-fault-simultaneous"
+      ],
+      "fingerprint": "sha256:a0479788d97f5418cbc8e35c1816712e7795fe8ce05a2adce9291a16b251d296",
+      "functional_relation": "same training/protocol implementation; queue/walltime and diagnostic-oracle changes only"
+    },
+    {
+      "commit": "319081c8d57411a3e1b8ee724c82f810f25a3228",
+      "evidence": [
+        "learner-fault-staggered",
+        "syncer-failure",
+        "dual-syncer",
+        "validation"
+      ],
+      "fingerprint": "sha256:5ab9a68956dc718db713938957a0ab390cd00b0b5956e1740c6547154d772ebf",
+      "functional_relation": "same training/protocol implementation; acceptance harness, tests, and documentation changes only"
+    }
+  ],
+  "state": "formal-complete",
+  "validation": {
+    "artifact": "artifacts/validation_319081c.json",
+    "focused_tests": 271,
+    "full_tests": 599,
+    "pbs_job_id": "2541809.opbs",
+    "status": "PASS"
+  }
+}

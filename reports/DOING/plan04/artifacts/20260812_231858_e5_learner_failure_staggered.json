@@ -1,0 +1,142 @@
+{
+  "artifact_version": 1,
+  "cleanup": {
+    "actions": [
+      {
+        "job_id": "2541537.opbs",
+        "job_id_normalized": "2541537",
+        "reason": "supervisor_failure_cleanup",
+        "requested_at": 1786544705.6722543,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "job_id": "2541539.opbs",
+        "job_id_normalized": "2541539",
+        "reason": "supervisor_failure_cleanup",
+        "requested_at": 1786544707.4980948,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "job_id": "2541540.opbs",
+        "job_id_normalized": "2541540",
+        "reason": "supervisor_failure_cleanup",
+        "requested_at": 1786544708.6215332,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "job_id": "2541541.opbs",
+        "job_id_normalized": "2541541",
+        "reason": "supervisor_failure_cleanup",
+        "requested_at": 1786544709.94661,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "job_id": "2541544.opbs",
+        "job_id_normalized": "2541544",
+        "reason": "supervisor_failure_cleanup",
+        "requested_at": 1786544711.0672317,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "job_id": "2541545.opbs",
+        "job_id_normalized": "2541545",
+        "reason": "supervisor_failure_cleanup",
+        "requested_at": 1786544712.1614122,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      }
+    ],
+    "eligible": false,
+    "owned_job_ids": [
+      "2541537.opbs",
+      "2541538.opbs",
+      "2541539.opbs",
+      "2541540.opbs",
+      "2541541.opbs",
+      "2541544.opbs",
+      "2541545.opbs",
+      "2541546.opbs",
+      "2541547.opbs",
+      "2541553"
+    ],
+    "owner": "plan04:plan04_e5_learner_failure_staggered_20260812_231858"
+  },
+  "config": {
+    "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/do_experiments/full_protocol/experiment04/fault_experiment.yaml"
+  },
+  "environment": {
+    "hostname": "mg0012",
+    "pbs_job_id": "2541535.opbs",
+    "python": "3.13.13 (main, May 10 2026, 19:28:34) [Clang 22.1.3 ]"
+  },
+  "errors": [
+    "TimeoutError: production capacity service did not admit the replacement learner"
+  ],
+  "evidence_paths": [
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e5_learner_failure_staggered_20260812_231858/bootstrap_000.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e5_learner_failure_staggered_20260812_231858/bootstrap_001.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e5_learner_failure_staggered_20260812_231858/bootstrap_002.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e5_learner_failure_staggered_20260812_231858/bootstrap_003.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e5_learner_failure_staggered_20260812_231858/bootstrap_004.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e5_learner_failure_staggered_20260812_231858/bootstrap_005.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e5_learner_failure_staggered_20260812_231858/bootstrap_006.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e5_learner_failure_staggered_20260812_231858/bootstrap_007.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e5_learner_failure_staggered_20260812_231858/scenario_state.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e5_learner_failure_staggered_20260812_231858/submission_receipt.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e5_learner_failure_staggered_20260812_231858/syncer.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e5_learner_failure_staggered_20260812_231858/control/run_config.resolved.yaml",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e5_learner_failure_staggered_20260812_231858/control/run_descriptor.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e5_learner_failure_staggered_20260812_231858/control/run_source_manifest.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e5_learner_failure_staggered_20260812_231858/control/syncer_metadata.sqlite3",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e5_learner_failure_staggered_20260812_231858/metrics/attestations/learner/learner_li_1b59fc68-f9af-4715-afd6-05e975bc04f6/learner_li_1b59fc68-f9af-4715-afd6-05e975bc04f6.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e5_learner_failure_staggered_20260812_231858/metrics/attestations/learner/learner_li_1ffe40fe-a6f2-4d90-acc3-b161a8bc6d43/learner_li_1ffe40fe-a6f2-4d90-acc3-b161a8bc6d43.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e5_learner_failure_staggered_20260812_231858/metrics/attestations/learner/learner_li_2a66095a-b43b-4359-a99c-4d834439d403/learner_li_2a66095a-b43b-4359-a99c-4d834439d403.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e5_learner_failure_staggered_20260812_231858/metrics/attestations/learner/learner_li_4777ed2c-7343-4f77-a026-ca02b62d500b/learner_li_4777ed2c-7343-4f77-a026-ca02b62d500b.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e5_learner_failure_staggered_20260812_231858/metrics/attestations/learner/learner_li_4ce4352e-d944-4186-8e5b-41c60bec7ae8/learner_li_4ce4352e-d944-4186-8e5b-41c60bec7ae8.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e5_learner_failure_staggered_20260812_231858/metrics/attestations/learner/learner_li_502c6a7e-e4f4-4d8c-9dce-6a5cdffa8bce/learner_li_502c6a7e-e4f4-4d8c-9dce-6a5cdffa8bce.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e5_learner_failure_staggered_20260812_231858/metrics/attestations/learner/learner_li_68b7cf9c-357b-4f31-a76e-335d9d934ca3/learner_li_68b7cf9c-357b-4f31-a76e-335d9d934ca3.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e5_learner_failure_staggered_20260812_231858/metrics/attestations/learner/learner_li_f408cc98-29fe-466b-82df-d2dcbb90c743/learner_li_f408cc98-29fe-466b-82df-d2dcbb90c743.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e5_learner_failure_staggered_20260812_231858/metrics/attestations/syncer/syncer-57eed67f-b7b7-492e-8ef2-144411969fbe/attempt-51e16c97-4abe-48ee-b395-242e8a86989b.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/summary.csv"
+  ],
+  "experiment_id": "5",
+  "gate": "plan04_experiment_5",
+  "metrics": {},
+  "requirements_covered": [
+    "LEARNER-FAULT-01"
+  ],
+  "scenario": "learner_failure_staggered",
+  "source": {
+    "commit": "d2117d0c83f205eabd2246feec82a77c2e0230c0",
+    "dirty": false,
+    "fingerprint": "sha256:2c651ee95fda24539fa597b85753706f16d40b847cde4cbeedba208f01a7998d",
+    "scopes": [
+      "fs_diloco",
+      "configs",
+      "do_experiments",
+      "scripts/miyabi",
+      "tests",
+      "tools",
+      "torch_ddp_baselines",
+      "pyproject.toml",
+      "README.md",
+      "docs",
+      "plans/00-RESEARCH_PLAN.md",
+      "website/app",
+      "website/scripts"
+    ]
+  },
+  "status": "FAIL",
+  "workload": null
+}

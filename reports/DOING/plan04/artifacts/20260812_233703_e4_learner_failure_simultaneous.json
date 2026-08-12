@@ -1,0 +1,91 @@
+{
+  "artifact_version": 1,
+  "cleanup": {
+    "actions": [],
+    "eligible": false,
+    "owned_job_ids": [
+      "2541649.opbs",
+      "2541650.opbs",
+      "2541651.opbs",
+      "2541652.opbs",
+      "2541653.opbs",
+      "2541654.opbs",
+      "2541655.opbs",
+      "2541656.opbs",
+      "2541657.opbs",
+      "2541665",
+      "2541665.opbs"
+    ],
+    "owner": "plan04:plan04_e4_learner_failure_simultaneous_20260812_233703"
+  },
+  "config": {
+    "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/do_experiments/full_protocol/experiment04/fault_experiment.yaml"
+  },
+  "environment": {
+    "hostname": "mg0019",
+    "pbs_job_id": "2541648.opbs",
+    "python": "3.13.13 (main, May 10 2026, 19:28:34) [Clang 22.1.3 ]"
+  },
+  "errors": [
+    "RuntimeError: replacement does not prove exact expired-stream succession"
+  ],
+  "evidence_paths": [
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e4_learner_failure_simultaneous_20260812_233703/bootstrap_000.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e4_learner_failure_simultaneous_20260812_233703/bootstrap_001.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e4_learner_failure_simultaneous_20260812_233703/bootstrap_002.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e4_learner_failure_simultaneous_20260812_233703/bootstrap_003.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e4_learner_failure_simultaneous_20260812_233703/bootstrap_004.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e4_learner_failure_simultaneous_20260812_233703/bootstrap_005.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e4_learner_failure_simultaneous_20260812_233703/bootstrap_006.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e4_learner_failure_simultaneous_20260812_233703/bootstrap_007.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e4_learner_failure_simultaneous_20260812_233703/scenario_state.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e4_learner_failure_simultaneous_20260812_233703/submission_receipt.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e4_learner_failure_simultaneous_20260812_233703/syncer.log",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e4_learner_failure_simultaneous_20260812_233703/control/run_config.resolved.yaml",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e4_learner_failure_simultaneous_20260812_233703/control/run_descriptor.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e4_learner_failure_simultaneous_20260812_233703/control/run_source_manifest.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e4_learner_failure_simultaneous_20260812_233703/control/stop.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e4_learner_failure_simultaneous_20260812_233703/control/summary.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e4_learner_failure_simultaneous_20260812_233703/control/syncer_metadata.sqlite3",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e4_learner_failure_simultaneous_20260812_233703/metrics/attestations/learner/learner_li_16724830-2ac2-419b-bad0-a1136f0ad1f1/learner_li_16724830-2ac2-419b-bad0-a1136f0ad1f1.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e4_learner_failure_simultaneous_20260812_233703/metrics/attestations/learner/learner_li_1ae25af8-ef91-4896-8f3b-b115a4a4cf90/learner_li_1ae25af8-ef91-4896-8f3b-b115a4a4cf90.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e4_learner_failure_simultaneous_20260812_233703/metrics/attestations/learner/learner_li_4e97529f-222a-4fab-b995-d2ad7618485d/learner_li_4e97529f-222a-4fab-b995-d2ad7618485d.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e4_learner_failure_simultaneous_20260812_233703/metrics/attestations/learner/learner_li_71fb291f-447e-45a6-a051-3e630e874ba7/learner_li_71fb291f-447e-45a6-a051-3e630e874ba7.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e4_learner_failure_simultaneous_20260812_233703/metrics/attestations/learner/learner_li_b90ac69c-a506-41d9-988a-b459770e252a/learner_li_b90ac69c-a506-41d9-988a-b459770e252a.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e4_learner_failure_simultaneous_20260812_233703/metrics/attestations/learner/learner_li_c7d53346-7206-4a3f-9e0c-9bcceeddb444/learner_li_c7d53346-7206-4a3f-9e0c-9bcceeddb444.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e4_learner_failure_simultaneous_20260812_233703/metrics/attestations/learner/learner_li_de4846c6-0400-4c2f-918c-41243173fd55/learner_li_de4846c6-0400-4c2f-918c-41243173fd55.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e4_learner_failure_simultaneous_20260812_233703/metrics/attestations/learner/learner_li_ee27db98-5bfa-4293-b38b-cabc8960b848/learner_li_ee27db98-5bfa-4293-b38b-cabc8960b848.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e4_learner_failure_simultaneous_20260812_233703/metrics/attestations/learner/learner_li_f3cffb4a-c652-4554-95b3-c0748c164d52/learner_li_f3cffb4a-c652-4554-95b3-c0748c164d52.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e4_learner_failure_simultaneous_20260812_233703/metrics/attestations/syncer/syncer-503618f5-46b2-48ba-9e0b-0c26d2e68180/attempt-90b64b3c-7c3b-4045-ae89-16f989848290.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/summary.csv"
+  ],
+  "experiment_id": "4",
+  "gate": "plan04_experiment_4",
+  "metrics": {},
+  "requirements_covered": [
+    "LEARNER-FAULT-01"
+  ],
+  "scenario": "learner_failure_simultaneous",
+  "source": {
+    "commit": "a064ef8837ca033db883fe60879c4578b921b09c",
+    "dirty": false,
+    "fingerprint": "sha256:a0479788d97f5418cbc8e35c1816712e7795fe8ce05a2adce9291a16b251d296",
+    "scopes": [
+      "fs_diloco",
+      "configs",
+      "do_experiments",
+      "scripts/miyabi",
+      "tests",
+      "tools",
+      "torch_ddp_baselines",
+      "pyproject.toml",
+      "README.md",
+      "docs",
+      "plans/00-RESEARCH_PLAN.md",
+      "website/app",
+      "website/scripts"
+    ]
+  },
+  "status": "FAIL",
+  "workload": null
+}

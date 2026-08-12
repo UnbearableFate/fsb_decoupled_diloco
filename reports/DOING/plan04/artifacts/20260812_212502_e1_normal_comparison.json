@@ -1,0 +1,83 @@
+{
+  "baseline_run_ids": [
+    "20260812_210252_torch_ddp_gpt2_wikitext2_8n_5000",
+    "20260812_210252_torch_periodic_average_gpt2_wikitext2_8n_5000"
+  ],
+  "comparison_count": 2,
+  "comparisons": [
+    {
+      "baseline_mode": "ddp",
+      "baseline_run_id": "20260812_210252_torch_ddp_gpt2_wikitext2_8n_5000",
+      "comparable_identity": true,
+      "full_protocol_run_id": "plan04_e1_normal_20260812_212502",
+      "identity_mismatches": [],
+      "investigation_required": true,
+      "metrics": {
+        "final_mean_loss": {
+          "absolute_difference_exceeds_threshold": false,
+          "baseline": 2.9355232790112495,
+          "full_protocol": 3.1977347279898822,
+          "relative_difference": 0.08932358017850617
+        },
+        "training_time_seconds": {
+          "absolute_difference_exceeds_threshold": true,
+          "baseline": 1129.1148765087128,
+          "full_protocol": 604.3269917964935,
+          "relative_difference": -0.46477811569970023
+        }
+      },
+      "optimizer_step_ranges": {
+        "baseline": [
+          5000,
+          5000
+        ],
+        "full_protocol": [
+          2600,
+          2800
+        ]
+      }
+    },
+    {
+      "baseline_mode": "periodic_average",
+      "baseline_run_id": "20260812_210252_torch_periodic_average_gpt2_wikitext2_8n_5000",
+      "comparable_identity": true,
+      "full_protocol_run_id": "plan04_e1_normal_20260812_212502",
+      "identity_mismatches": [],
+      "investigation_required": true,
+      "metrics": {
+        "final_mean_loss": {
+          "absolute_difference_exceeds_threshold": false,
+          "baseline": 2.9989499770104886,
+          "full_protocol": 3.1977347279898822,
+          "relative_difference": 0.06628478384209421
+        },
+        "training_time_seconds": {
+          "absolute_difference_exceeds_threshold": true,
+          "baseline": 1058.3736109733582,
+          "full_protocol": 604.3269917964935,
+          "relative_difference": -0.42900410069681344
+        }
+      },
+      "optimizer_step_ranges": {
+        "baseline": [
+          5000,
+          5000
+        ],
+        "full_protocol": [
+          2600,
+          2800
+        ]
+      }
+    }
+  ],
+  "format_version": 1,
+  "investigation_required": true,
+  "normal_run_id": "plan04_e1_normal_20260812_212502",
+  "registered_workload": {
+    "baseline_optimizer_steps": 5000,
+    "global_steps": 25,
+    "local_steps": 200,
+    "valid": true
+  },
+  "threshold": 0.3
+}

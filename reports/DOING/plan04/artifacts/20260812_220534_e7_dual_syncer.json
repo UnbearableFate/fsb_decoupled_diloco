@@ -1,0 +1,160 @@
+{
+  "artifact_version": 1,
+  "cleanup": {
+    "actions": [
+      {
+        "job_id": "2540919.opbs",
+        "job_id_normalized": "2540919",
+        "reason": "supervisor_failure_cleanup",
+        "requested_at": 1786540176.890633,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "job_id": "2540924.opbs",
+        "job_id_normalized": "2540924",
+        "reason": "supervisor_failure_cleanup",
+        "requested_at": 1786540178.012918,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "job_id": "2540928.opbs",
+        "job_id_normalized": "2540928",
+        "reason": "supervisor_failure_cleanup",
+        "requested_at": 1786540179.0813186,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "job_id": "2540932.opbs",
+        "job_id_normalized": "2540932",
+        "reason": "supervisor_failure_cleanup",
+        "requested_at": 1786540180.3477988,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "job_id": "2540937.opbs",
+        "job_id_normalized": "2540937",
+        "reason": "supervisor_failure_cleanup",
+        "requested_at": 1786540181.4514196,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "job_id": "2540939.opbs",
+        "job_id_normalized": "2540939",
+        "reason": "supervisor_failure_cleanup",
+        "requested_at": 1786540182.5188866,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "job_id": "2540942.opbs",
+        "job_id_normalized": "2540942",
+        "reason": "supervisor_failure_cleanup",
+        "requested_at": 1786540183.5870206,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "job_id": "2540946.opbs",
+        "job_id_normalized": "2540946",
+        "reason": "supervisor_failure_cleanup",
+        "requested_at": 1786540184.8683634,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "job_id": "2540948.opbs",
+        "job_id_normalized": "2540948",
+        "reason": "supervisor_failure_cleanup",
+        "requested_at": 1786540185.9409943,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "job_id": "2540958.opbs",
+        "job_id_normalized": "2540958",
+        "reason": "supervisor_failure_cleanup",
+        "requested_at": 1786540187.0084949,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      }
+    ],
+    "eligible": false,
+    "owned_job_ids": [
+      "2540919.opbs",
+      "2540924.opbs",
+      "2540928.opbs",
+      "2540932.opbs",
+      "2540937.opbs",
+      "2540939.opbs",
+      "2540942.opbs",
+      "2540946.opbs",
+      "2540948.opbs",
+      "2540958.opbs"
+    ],
+    "owner": "plan04:plan04_e7_dual_syncer_20260812_220534"
+  },
+  "config": {
+    "path": "/work/xg24i002/x10041/fsb_decoupled_diloco/do_experiments/full_protocol/experiment04/fault_experiment.yaml"
+  },
+  "environment": {
+    "hostname": "mg0905",
+    "pbs_job_id": "2540906.opbs",
+    "python": "3.13.13 (main, May 10 2026, 19:28:34) [Clang 22.1.3 ]"
+  },
+  "errors": [
+    "TimeoutError: syncer candidate did not begin running"
+  ],
+  "evidence_paths": [
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e7_dual_syncer_20260812_220534/scenario_state.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/logs/plan04/plan04_e7_dual_syncer_20260812_220534/submission_receipt.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e7_dual_syncer_20260812_220534/control/run_config.resolved.yaml",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e7_dual_syncer_20260812_220534/control/run_descriptor.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e7_dual_syncer_20260812_220534/control/run_source_manifest.json",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/full_protocol/plan04_e7_dual_syncer_20260812_220534/control/syncer_metadata.sqlite3",
+    "/work/xg24i002/x10041/fsb_decoupled_diloco/runs/summary.csv"
+  ],
+  "experiment_id": "7",
+  "gate": "plan04_experiment_7",
+  "metrics": {},
+  "requirements_covered": [
+    "DUAL-SYNCER-01"
+  ],
+  "scenario": "dual_syncer",
+  "source": {
+    "commit": "7145197f3209fa67727bb0d458d0db38a81eb86d",
+    "dirty": false,
+    "fingerprint": "sha256:fcecd04f3ca5720cc3cd576889d8c20ad5d3f9dd9dd5725c7415b0549cdffa35",
+    "scopes": [
+      "fs_diloco",
+      "configs",
+      "do_experiments",
+      "scripts/miyabi",
+      "tests",
+      "tools",
+      "torch_ddp_baselines",
+      "pyproject.toml",
+      "README.md",
+      "docs",
+      "plans/00-RESEARCH_PLAN.md",
+      "website/app",
+      "website/scripts"
+    ]
+  },
+  "status": "FAIL",
+  "workload": null
+}

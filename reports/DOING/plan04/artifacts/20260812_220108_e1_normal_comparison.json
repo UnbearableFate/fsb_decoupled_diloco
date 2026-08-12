@@ -1,0 +1,83 @@
+{
+  "baseline_run_ids": [
+    "20260812_214048_torch_ddp_gpt2_wikitext2_8n_5000",
+    "20260812_214048_torch_periodic_average_gpt2_wikitext2_8n_5000"
+  ],
+  "comparison_count": 2,
+  "comparisons": [
+    {
+      "baseline_mode": "ddp",
+      "baseline_run_id": "20260812_214048_torch_ddp_gpt2_wikitext2_8n_5000",
+      "comparable_identity": true,
+      "full_protocol_run_id": "plan04_e1_normal_20260812_220108",
+      "identity_mismatches": [],
+      "investigation_required": false,
+      "metrics": {
+        "final_mean_loss": {
+          "baseline": 2.935435099899769,
+          "full_protocol": 3.196270148959011,
+          "increase_exceeds_threshold": false,
+          "relative_difference": 0.08885737213817073
+        },
+        "training_time_seconds": {
+          "baseline": 1127.7917544841766,
+          "full_protocol": 605.5071256160736,
+          "increase_exceeds_threshold": false,
+          "relative_difference": -0.46310378382486295
+        }
+      },
+      "optimizer_step_ranges": {
+        "baseline": [
+          5000,
+          5000
+        ],
+        "full_protocol": [
+          2600,
+          2800
+        ]
+      }
+    },
+    {
+      "baseline_mode": "periodic_average",
+      "baseline_run_id": "20260812_214048_torch_periodic_average_gpt2_wikitext2_8n_5000",
+      "comparable_identity": true,
+      "full_protocol_run_id": "plan04_e1_normal_20260812_220108",
+      "identity_mismatches": [],
+      "investigation_required": false,
+      "metrics": {
+        "final_mean_loss": {
+          "baseline": 2.9985041730105877,
+          "full_protocol": 3.196270148959011,
+          "increase_exceeds_threshold": false,
+          "relative_difference": 0.06595487767817926
+        },
+        "training_time_seconds": {
+          "baseline": 1040.5639867782593,
+          "full_protocol": 605.5071256160736,
+          "increase_exceeds_threshold": false,
+          "relative_difference": -0.4180971729659666
+        }
+      },
+      "optimizer_step_ranges": {
+        "baseline": [
+          5000,
+          5000
+        ],
+        "full_protocol": [
+          2600,
+          2800
+        ]
+      }
+    }
+  ],
+  "format_version": 1,
+  "investigation_required": false,
+  "normal_run_id": "plan04_e1_normal_20260812_220108",
+  "registered_workload": {
+    "baseline_optimizer_steps": 5000,
+    "global_steps": 25,
+    "local_steps": 200,
+    "valid": true
+  },
+  "threshold": 0.3
+}
