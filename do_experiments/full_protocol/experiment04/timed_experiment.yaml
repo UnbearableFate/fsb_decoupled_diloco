@@ -1,6 +1,6 @@
 config_schema_version: 3
 run:
-  name: plan04_full_protocol_fault
+  name: plan04_full_protocol_timed
 model:
   name_or_path: synthetic-tiny
   dtype: float32
@@ -28,26 +28,7 @@ membership:
   registration_request_ttl_seconds: 30.0
   heartbeat_dead_after_seconds: 10.0
 scaling:
-  enabled: true
-  desired_contributors: 8
-  low_contributor_threshold: 7
-  consecutive_low_windows: 2
-  productive_window_count: 2
-  startup_grace_seconds: 60.0
-  productive_upload_grace_factor: 2.0
-  productive_upload_grace_min_seconds: 10.0
-  productive_upload_grace_max_seconds: 60.0
-  cooldown_seconds: 5.0
-  max_pending_launch_requests: 1
-  max_total_launch_requests: 1
-  launch_request_ttl_seconds: 60.0
-  capacity_observation_retention_count: 32
-  scheduler_reconcile_interval_seconds: 2.0
-  scheduler_uncertainty_timeout_seconds: 30.0
-  starvation_observation_seconds: 10.0
-  learner_pbs_script: scripts/miyabi/agent/run_learner.pbs
-  learner_walltime: "00:30:00"
-  learner_queue: regular-g
+  enabled: false
 terminal:
   admission_close_policy: global_target_or_launch_budget
   drain_ack_timeout_seconds: 60.0

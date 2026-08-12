@@ -267,17 +267,21 @@ def test_registry_and_configs_are_the_exact_current_plan04_matrix() -> None:
 
     baseline = load_config(PACKAGE / "baseline.yaml")
     experiment = load_config(PACKAGE / "experiment.yaml")
+    timed = load_config(PACKAGE / "timed_experiment.yaml")
     fault = load_config(PACKAGE / "fault_experiment.yaml")
     assert (baseline.training.inner_steps, baseline.sync.quorum_min) == (100, 4)
-    for config in (experiment, fault):
+    for config in (experiment, timed, fault):
         assert config.training.inner_steps == 100
         assert config.sync.stop_after_outer_steps == 10
         assert config.sync.quorum_min == config.sync.quorum_max == 4
         assert config.membership.stream_pool_size == config.membership.bootstrap_instances == 8
-    for config in (baseline, experiment, fault):
+    for config in (baseline, experiment, timed, fault):
         assert config.training.gradient_accumulation_steps == 2
         assert config.terminal.admission_close_policy == "global_target_or_launch_budget"
     assert experiment.scaling.enabled is False
+    assert timed.scaling.enabled is False
+    assert timed.sync.scan_interval_seconds * timed.sync.stop_after_outer_steps >= 120.0
+    assert fault.sync.scan_interval_seconds * fault.sync.stop_after_outer_steps >= 120.0
     assert fault.scaling.enabled is True
     assert fault.scaling.learner_queue == "regular-g"
     assert fault.scaling.learner_walltime == "00:30:00"
@@ -291,6 +295,7 @@ def test_one_line_submitter_freezes_regular_queue_and_thirty_minute_jobs() -> No
 
     assert "QUEUE=regular-g" in submitter
     assert "WALLTIME=00:30:00" in submitter
+    assert 'CONFIG="$SCRIPT_DIR/timed_experiment.yaml"' in submitter
     assert 'bash -n "$PROJECT_ROOT"/scripts/miyabi/agent/*.pbs' in submitter
     assert "#PBS -q regular-g" in wrapper
     assert "#PBS -W group_list=xg24i002" in wrapper

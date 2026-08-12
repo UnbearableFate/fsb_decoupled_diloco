@@ -20,11 +20,11 @@ case "$SCENARIO" in
     ;;
   stagger_4_4)
     EXPERIMENT_ID=2
-    CONFIG="$SCRIPT_DIR/experiment.yaml"
+    CONFIG="$SCRIPT_DIR/timed_experiment.yaml"
     ;;
   stagger_3_3_2)
     EXPERIMENT_ID=3
-    CONFIG="$SCRIPT_DIR/experiment.yaml"
+    CONFIG="$SCRIPT_DIR/timed_experiment.yaml"
     ;;
   learner_failure_simultaneous)
     EXPERIMENT_ID=4
