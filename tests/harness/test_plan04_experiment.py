@@ -322,6 +322,47 @@ def test_manual_scenario_close_is_bound_to_the_exact_global_target(tmp_path: Pat
     assert (control / "terminal_close_request.json").is_file()
 
 
+def test_manual_scenario_waits_for_every_admitted_learner_runtime(tmp_path: Path) -> None:
+    """Manual close cannot race a learner that has not consumed its admission response."""
+
+    module = _module()
+    run_root = tmp_path / "run"
+    admissions = []
+    for stream in range(8):
+        actor_id = f"instance-{stream}"
+        job_id = str(stream)
+        admissions.append({"instance_id": actor_id, "pbs_job_id": f"{job_id}.opbs"})
+        _write_attestation(
+            run_root,
+            actor_kind="learner",
+            actor_id=actor_id,
+            job_id=job_id,
+        )
+
+    attestations = module._wait_initial_runtime_attestations(
+        run_root,
+        admissions,
+        timeout_seconds=0.1,
+    )
+
+    assert {row["actor_id"] for row in attestations} == {
+        f"instance-{stream}" for stream in range(8)
+    }
+    assert {row["scheduler_job_id"] for row in attestations} == {
+        f"{stream}.opbs" for stream in range(8)
+    }
+
+    # Scheduler identity is part of readiness and cannot be replaced by actor ID alone.
+    wrong_job = [dict(row) for row in admissions]
+    wrong_job[7]["pbs_job_id"] = "999.opbs"
+    with pytest.raises(RuntimeError, match="wrong scheduler job"):
+        module._wait_initial_runtime_attestations(
+            run_root,
+            wrong_job,
+            timeout_seconds=0.1,
+        )
+
+
 def test_one_line_submitter_freezes_regular_queue_and_thirty_minute_jobs() -> None:
     """Human-facing submission must enforce the plan's queue, walltime, and static gates."""
 

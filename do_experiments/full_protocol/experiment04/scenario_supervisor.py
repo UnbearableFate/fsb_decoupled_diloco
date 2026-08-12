@@ -215,6 +215,39 @@ def _wait_initial_admissions(
     raise TimeoutError("eight bootstrap learner jobs did not become admitted")
 
 
+def _wait_initial_runtime_attestations(
+    run_root: Path,
+    admissions: list[dict[str, Any]],
+    *,
+    timeout_seconds: float,
+) -> list[dict[str, Any]]:
+    """Wait until every admitted bootstrap learner has entered its runtime loop."""
+
+    expected = {
+        str(row["instance_id"]): normalize_job_id(str(row["pbs_job_id"])) for row in admissions
+    }
+    if len(expected) != 8:
+        raise RuntimeError("runtime readiness requires eight distinct admitted learners")
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        observed: dict[str, dict[str, Any]] = {}
+        for attestation in _attestations(run_root):
+            if attestation.get("actor_kind") != "learner":
+                continue
+            actor_id = str(attestation.get("actor_id"))
+            if actor_id in observed:
+                raise RuntimeError("a bootstrap learner published multiple runtime attestations")
+            observed[actor_id] = attestation
+        for actor_id in expected.keys() & observed.keys():
+            if normalize_job_id(str(observed[actor_id]["scheduler_job_id"])) != expected[actor_id]:
+                raise RuntimeError("learner runtime attestation names the wrong scheduler job")
+        matched = [observed[actor_id] for actor_id in expected if actor_id in observed]
+        if len(matched) == len(expected):
+            return sorted(matched, key=lambda row: str(row["actor_id"]))
+        time.sleep(0.2)
+    raise TimeoutError("eight admitted bootstrap learners did not publish runtime attestations")
+
+
 def _choose_victim(run_id: str, admissions: list[dict[str, Any]]) -> dict[str, Any]:
     """Choose a reproducible random admitted learner for destructive injection."""
 
@@ -1136,6 +1169,26 @@ def supervise(
             [str(row["job_id"]) for row in learner_receipts],
             timeout_seconds=min(180.0, timeout_seconds),
         )
+        if config.terminal.admission_close_policy == "manual":
+            runtime_attestations = _wait_initial_runtime_attestations(
+                run_root,
+                admissions,
+                timeout_seconds=min(180.0, timeout_seconds),
+            )
+            timeline["events"].append(
+                {
+                    "role": "initial_learner_runtime_ready",
+                    "observed_at": time.time(),
+                    "actors": [
+                        {
+                            "actor_id": row["actor_id"],
+                            "scheduler_job_id": row["scheduler_job_id"],
+                        }
+                        for row in runtime_attestations
+                    ],
+                }
+            )
+            _atomic_json(log_root / "scenario_state.json", timeline)
 
         victim: dict[str, Any] | None = None
         replacement: dict[str, Any] | None = None
