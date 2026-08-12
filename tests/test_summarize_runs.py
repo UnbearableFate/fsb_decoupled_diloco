@@ -59,6 +59,7 @@ def _write_baseline_run(
     *,
     mode: str = "ddp",
     status: str = "completed",
+    world_size: int = 2,
 ) -> Path:
     """Create one small current baseline run with six complete report steps."""
 
@@ -71,7 +72,7 @@ def _write_baseline_run(
         "run_id": run_id,
         "mode": mode,
         "backend": "nccl",
-        "world_size": 2,
+        "world_size": world_size,
         "max_steps": 60,
         "final_step": 60,
         "gradient_sync_count": 2 if mode == "ddp" else 0,
@@ -80,7 +81,7 @@ def _write_baseline_run(
     }
     manifest = {
         "run_id": run_id,
-        "world_size": 2,
+        "world_size": world_size,
         "created_at": 100.0,
         "pbs_job_id": "123.opbs",
         "source_identity": {"git_commit": "1" * 40},
@@ -108,7 +109,7 @@ def _write_baseline_run(
     (run / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
     (run / "training_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     (run / "resolved_config.yaml").write_text(yaml.safe_dump(config), encoding="utf-8")
-    for rank in range(2):
+    for rank in range(world_size):
         events = [
             {
                 "event_type": "optimizer_step",
@@ -483,8 +484,13 @@ def test_comparison_flags_thirty_percent_metric_difference(tmp_path: Path) -> No
 
     module = _module()
     runs_root = tmp_path / "runs"
-    ddp = _write_baseline_run(runs_root, "ddp-run", mode="ddp")
-    periodic = _write_baseline_run(runs_root, "periodic-run", mode="periodic_average")
+    ddp = _write_baseline_run(runs_root, "ddp-run", mode="ddp", world_size=8)
+    periodic = _write_baseline_run(
+        runs_root,
+        "periodic-run",
+        mode="periodic_average",
+        world_size=8,
+    )
     full_protocol = _write_full_protocol_run(runs_root, "full-protocol-run")
     output = tmp_path / "runs.csv"
     comparison = tmp_path / "comparison.json"
@@ -495,6 +501,27 @@ def test_comparison_flags_thirty_percent_metric_difference(tmp_path: Path) -> No
     payload = json.loads(comparison.read_text(encoding="utf-8"))
     assert payload["comparison_count"] == 2
     assert all(item["comparable_identity"] for item in payload["comparisons"])
+    assert all(item["investigation_required"] for item in payload["comparisons"])
+
+
+def test_comparison_rejects_different_contributor_topologies(tmp_path: Path) -> None:
+    """A two-rank diagnostic baseline cannot certify an eight-learner experiment."""
+
+    module = _module()
+    runs_root = tmp_path / "runs"
+    ddp = _write_baseline_run(runs_root, "ddp-run", mode="ddp")
+    periodic = _write_baseline_run(runs_root, "periodic-run", mode="periodic_average")
+    full_protocol = _write_full_protocol_run(runs_root, "full-protocol-run")
+    output = tmp_path / "runs.csv"
+    module.update_summary_csv([ddp, periodic, full_protocol], output)
+
+    rows = _read_rows(output)
+    payload = module.build_comparisons(rows)
+
+    assert all(
+        item["identity_mismatches"] == ["expected_contributors"]
+        for item in payload["comparisons"]
+    )
     assert all(item["investigation_required"] for item in payload["comparisons"])
 
 

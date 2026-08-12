@@ -781,6 +781,7 @@ def build_comparisons(rows: Sequence[dict[str, str]]) -> dict[str, Any]:
                 "weight_decay",
                 "warmup_steps",
                 "min_lr_ratio",
+                "expected_contributors",
             )
             mismatches = [
                 key for key in identity_fields if full_protocol.get(key) != baseline.get(key)

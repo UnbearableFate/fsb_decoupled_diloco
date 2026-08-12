@@ -15,3 +15,11 @@
 - 完整 pytest 在未提交 source 上得到 `585 passed, 5 failed`；五项失败均由 harness 正确拒绝 dirty validation source，分类为 `source-invalid`，不作为产品失败。当前实现提交并冻结 clean candidate 后重跑完整测试。
 - Login node 上 `git diff --check`、修改 Python 文件 compile、全部适用 PBS/Bash `bash -n` 检查通过；literal PBS group 均为 `xg24i002`。
 - 当前 `qstat` 无 active/queued job。下一步为提交实现、执行 clean-candidate 全量测试和 PREFORMAL 审查。
+
+## 2026-08-12 — Clean candidate 全量验证
+
+- Candidate commit：`4e905f31a8b136dd2a6f210944552ff6bbaa5aff`。
+- Miyabi compute job：`2540212.opbs`，1-node `interact-g`，默认模块 `nvidia/25.9` 与 `nv-hpcx/25.9`。
+- 命令：`.venv/bin/python -m pytest -q`。
+- 结果：`591 passed in 34.74s`；PBS 使用 walltime 约 1 分 50 秒。
+- 下一步：完成 PREFORMAL current-state 审查并冻结正式 target；随后提交两种 5,000-step baseline。
