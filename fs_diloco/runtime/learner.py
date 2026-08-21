@@ -47,10 +47,7 @@ from .adoption import (
     StrategyAction,
     make_global_adoption_strategy,
 )
-from .learner_control import (
-    completed_local_steps_from_cycle,
-    configured_global_close_target_visible,
-)
+from .learner_control import completed_local_steps_from_cycle
 from ..storage.atomic_io import atomic_write_json, publish_immutable_bytes
 from ..storage.object_store import tensor_schema_sha256
 from ..storage.tensor_codec import (
@@ -503,7 +500,6 @@ def run_admitted_learner(
     previous_receipt_sha256 = admission.resume.last_receipt_sha256
     last_cycle_update_id = admission.resume.last_update_id
     local_step = resumed_local_steps
-    awaiting_configured_close = False
     while True:
         current = read_current_control(
             paths,
@@ -520,23 +516,6 @@ def run_admitted_learner(
                 final_update_id=last_cycle_update_id,
             )
             return
-        if configured_global_close_target_visible(
-            config,
-            current,
-        ):
-            if not awaiting_configured_close:
-                assert current is not None and current.latest is not None
-                telemetry.event(
-                    "configured_global_close_target_observed",
-                    target_version=int(config.sync.stop_after_outer_steps),
-                    observed_version=int(current.latest["version"]),
-                    final_cycle_seq=cycle_seq - 1,
-                    final_update_id=last_cycle_update_id,
-                )
-            awaiting_configured_close = True
-        if awaiting_configured_close:
-            time.sleep(config.sync.scan_interval_seconds)
-            continue
         cycle_id = str(uuid.uuid4())
         update_id = str(uuid.uuid4())
         cursor_start = cursor

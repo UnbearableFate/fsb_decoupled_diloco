@@ -18,22 +18,3 @@ def configured_global_work_target_reached(config: Any, version: int) -> bool:
 
     target = config.sync.stop_after_outer_steps
     return target is not None and int(version) >= int(target)
-
-
-def configured_global_close_target_visible(
-    config: Any,
-    current: Any,
-) -> bool:
-    """Stop new learner cycles at the work horizon while preserving drain liveness.
-
-    Terminal policy owns when authority closes, but it cannot authorize work past
-    the configured global horizon. The learner therefore remains alive to
-    acknowledge a later manual or automatic drain without starting another cycle.
-    """
-
-    if current is None or current.latest is None:
-        return False
-    version = current.latest.get("version")
-    if isinstance(version, bool) or not isinstance(version, int):
-        return False
-    return configured_global_work_target_reached(config, version)

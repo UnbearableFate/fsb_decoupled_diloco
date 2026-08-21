@@ -168,8 +168,8 @@
     },
     {
       "surface": "fs_diloco/runtime/learner_control.py",
-      "boundary": "learner terminal close observation",
-      "tests": ["tests/runtime/test_learner_control.py::test_configured_target_latest_enters_await_close_without_requiring_drain"]
+      "boundary": "global work-target and learner recovery step decisions",
+      "tests": ["tests/runtime/test_learner_control.py::test_configured_work_target_compares_the_committed_version", "tests/runtime/test_learner_control.py::test_replacement_resumes_the_stable_stream_local_step_coordinate"]
     },
     {
       "surface": "fs_diloco/runtime/learner_entrypoint.py",

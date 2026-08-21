@@ -25,4 +25,4 @@ For each finding give severity, exact location, problem, evidence, impact, and r
 
 Finally summarize architecture quality, simplification/deletion opportunities, missing tests, and an overall verdict.
 
-Report the results to `reports/reports/DOING/code_review/{current_model_name}_{HEAD commit-id}_{YYMMDD-HHMM}.md`
+Report the results to `reports/DOING/code_review/{current_model_name}_{HEAD commit-id}_{YYMMDD-HHMM}.md`

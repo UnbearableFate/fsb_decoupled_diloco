@@ -8,66 +8,29 @@ import pytest
 
 from fs_diloco.runtime.learner_control import (
     completed_local_steps_from_cycle,
-    configured_global_close_target_visible,
+    configured_global_work_target_reached,
 )
 from fs_diloco.storage import control as control_module
 
 
 def _config(
     *,
-    policy: str = "global_target",
     target: int | None = 2,
 ):
-    """Build the control-only subset needed for close-target decisions."""
+    """Build the control-only subset needed for work-target decisions."""
 
-    return SimpleNamespace(
-        terminal=SimpleNamespace(admission_close_policy=policy),
-        sync=SimpleNamespace(stop_after_outer_steps=target),
-    )
+    return SimpleNamespace(sync=SimpleNamespace(stop_after_outer_steps=target))
 
 
-@pytest.mark.parametrize("version", (2, 3))
-def test_configured_target_latest_enters_await_close_without_requiring_drain(
+@pytest.mark.parametrize(("version", "expected"), [(1, False), (2, True), (3, True)])
+def test_configured_work_target_compares_the_committed_version(
     version: int,
+    expected: bool,
 ) -> None:
-    """A visible configured global target is sufficient for global-only completion."""
+    """Syncer manual-close waiting starts only at the configured work horizon."""
 
-    current = SimpleNamespace(latest={"version": version}, drain=None, terminal=None)
-
-    assert configured_global_close_target_visible(_config(), current) is True
-
-
-@pytest.mark.parametrize("policy", ("manual", "deadline"))
-def test_all_terminal_policies_preserve_the_configured_work_horizon(policy: str) -> None:
-    """Close ownership cannot authorize learner work past the global horizon."""
-
-    current = SimpleNamespace(latest={"version": 100}, drain=None, terminal=None)
-
-    assert configured_global_close_target_visible(_config(policy=policy), current) is True
-
-
-def test_missing_or_pre_target_latest_does_not_enter_await_close() -> None:
-    """Missing, disabled, or pre-target global state must keep the learner active."""
-
-    assert configured_global_close_target_visible(_config(), None) is False
-    assert (
-        configured_global_close_target_visible(
-            _config(), SimpleNamespace(latest=None, drain=None, terminal=None)
-        )
-        is False
-    )
-    assert (
-        configured_global_close_target_visible(
-            _config(), SimpleNamespace(latest={"version": 1}, drain=None, terminal=None)
-        )
-        is False
-    )
-    assert (
-        configured_global_close_target_visible(
-            _config(target=None), SimpleNamespace(latest={"version": 100})
-        )
-        is False
-    )
+    assert configured_global_work_target_reached(_config(), version) is expected
+    assert configured_global_work_target_reached(_config(target=None), version) is False
 
 
 def test_replacement_resumes_the_stable_stream_local_step_coordinate() -> None:
